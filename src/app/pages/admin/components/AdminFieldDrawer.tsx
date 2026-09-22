@@ -8,6 +8,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   ChevronDown,
@@ -40,6 +41,9 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   HelpCircle,
+  Layers,
+  PlusCircle,
+  MoreVertical,
 } from "lucide-react";
 import type {
   FieldDefinition,
@@ -75,12 +79,24 @@ import { getStoredTeamMembers, TeamMember, TEAM_STORE_EVENT } from "../../../../
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import { FieldInputRenderer } from "../../../components/fields/FieldInputRenderer";
 import { AdminSelect } from "../../../components/ui/AdminSelect";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { MediaFormatDropdown } from "./MediaFormatDropdown";
 import {
   getAllMediaFormats,
   DEFAULT_MEDIA_PRESETS,
   MediaCategory,
 } from "../../../../lib/mediaFormatsStore";
+import {
+  AdvanceListDefinition,
+  AdvanceListColumn,
+  AdvanceListRow,
+  getStoredAdvanceLists,
+  getStoredAdvanceListById,
+  ADVANCE_LIST_STORE_EVENT,
+  generateSampleCsvContent,
+  downloadCsvFile,
+} from "../../../../lib/advanceListStore";
+import { AdvanceListDrawer } from "./AdvanceListDrawer";
 import { toast } from "sonner";
 
 // MODULE_OPTIONS values must EXACTLY match normalizeModuleKey() recognised strings.
@@ -144,7 +160,7 @@ const CONSOLIDATED_FIELD_TYPES: {
     category: "Options & Logic",
     items: [
       { id: "list", label: "List", description: "Typed options, search filters, sorting, and 2-way sync" },
-      { id: "new_list", label: "New List", description: "Manual options or composite-linked option list with row overrides" },
+      { id: "new_list", label: "New List", description: "Basic List, Advanced List, or Advance 2 with row overrides" },
       { id: "yes_no", label: "Yes / No", description: "Binary boolean toggle" },
     ],
   },
@@ -201,6 +217,127 @@ const LIST_OPTION_VALUE_TYPES: { value: ListValueType; label: string; category: 
       category: grp.category,
     }))
 );
+
+function OptionRowMenu({
+  isDefault,
+  onToggleDefault,
+  onDelete,
+  disabled = false,
+}: {
+  isDefault?: boolean;
+  onToggleDefault: () => void;
+  onDelete: () => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const toggleMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setMenuPos({
+        top: rect.bottom + 4,
+        right: Math.max(12, window.innerWidth - rect.right),
+      });
+      setOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClose = (e: MouseEvent) => {
+      if (buttonRef.current && buttonRef.current.contains(e.target as Node)) {
+        return;
+      }
+      setOpen(false);
+    };
+    const handleScrollOrResize = () => {
+      setOpen(false);
+    };
+    window.addEventListener("click", handleClose);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+    return () => {
+      window.removeEventListener("click", handleClose);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+    };
+  }, [open]);
+
+  if (disabled) return null;
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={toggleMenu}
+        className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${
+          open
+            ? "bg-slate-100 text-slate-800"
+            : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+        }`}
+        title="More actions"
+      >
+        <MoreVertical className="w-3.5 h-3.5" />
+      </button>
+
+      {open &&
+        menuPos &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: menuPos.top,
+              right: menuPos.right,
+              zIndex: 100050,
+            }}
+            className="w-40 p-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                onToggleDefault();
+                setOpen(false);
+              }}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs font-medium transition-colors cursor-pointer ${
+                isDefault
+                  ? "text-amber-700 bg-amber-50 hover:bg-amber-100/80 font-semibold"
+                  : "text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              <Star
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  isDefault ? "fill-amber-500 text-amber-500" : "text-slate-400"
+                }`}
+              />
+              <span>{isDefault ? "Remove Default" : "Set as Default"}</span>
+            </button>
+            <div className="my-1 border-t border-slate-100" />
+            <button
+              type="button"
+              onClick={() => {
+                onDelete();
+                setOpen(false);
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+              <span>Delete Option</span>
+            </button>
+          </div>,
+          document.body
+        )}
+    </>
+  );
+}
 
 export function formatCompositePreview(val: any): string {
   if (val === undefined || val === null || val === "") return "";
@@ -460,13 +597,17 @@ export function convertCsvRowsToOptions(
   });
 
   if (colIndexMap.size === 0) {
-    errors.push(
-      `Could not match any CSV headers (${headers.join(", ")}) to composite columns (${columns.map((c) => c.name).join(", ")}).`
-    );
-    return { options: [], errors, warnings };
+    if (columns.length === 1) {
+      colIndexMap.set(0, columns[0]);
+    } else {
+      errors.push(
+        `Could not match any CSV headers (${headers.join(", ")}) to columns (${columns.map((c) => c.name).join(", ")}).`
+      );
+      return { options: [], errors, warnings };
+    }
   }
 
-  if (unmappedHeaders.length > 0) {
+  if (unmappedHeaders.length > 0 && columns.length > 1) {
     warnings.push(`Ignored ${unmappedHeaders.length} unmapped column(s): ${unmappedHeaders.join(", ")}`);
   }
 
@@ -479,6 +620,7 @@ export function convertCsvRowsToOptions(
   }
 
   const generatedOptions: FieldOption[] = [];
+  const isSingleColumn = columns.length === 1;
 
   rows.forEach((row, rowIdx) => {
     if (row.length === 0 || row.every((c) => !c || c.trim() === "")) return;
@@ -534,13 +676,13 @@ export function convertCsvRowsToOptions(
       label = Array.isArray(primaryVal) ? primaryVal.join(", ") : String(primaryVal);
     } else {
       const firstNonEmpty = Object.values(rowVals).find((v) => v !== undefined && v !== null && String(v).trim() !== "");
-      label = firstNonEmpty ? (Array.isArray(firstNonEmpty) ? firstNonEmpty.join(", ") : String(firstNonEmpty)) : `Row ${rowIdx + 1}`;
+      label = firstNonEmpty ? (Array.isArray(firstNonEmpty) ? firstNonEmpty.join(", ") : String(firstNonEmpty)) : `Option ${rowIdx + 1}`;
     }
 
     generatedOptions.push({
       id: Date.now() + rowIdx + Math.floor(Math.random() * 10000),
-      label: label,
-      value: rowVals,
+      label: label.trim(),
+      value: isSingleColumn ? label.trim() : rowVals,
       index: rowIdx + 1,
     });
   });
@@ -975,9 +1117,11 @@ interface FieldFormState {
 
   // New List configuration
   newListSourceMode: NewListSourceMode;
-  newListManualType: "single" | "multiple" | "open_list";
+  newListManualType: "single" | "multiple";
   newListSourceCompositeKey: string;
   newListColumnConfigs: OptionListColumnConfig[];
+  advanceListId: string;
+  allowCustomOptions?: boolean;
 
   // CRM Bind configuration
   crmBindModule: CrmBindModule;
@@ -1087,11 +1231,13 @@ function defaultForm(module: Exclude<FieldModule, "deal">, initialCategory: Prim
     allowSearch: true,
     sortOrder: "manual",
     liveLinkedFieldKey: "",
+    allowCustomOptions: false,
     // New List
     newListSourceMode: "manual",
     newListManualType: "single",
     newListSourceCompositeKey: "",
     newListColumnConfigs: [],
+    advanceListId: "",
     // CRM Bind
     crmBindModule: "teamMember",
     crmBindSelectionMode: "single",
@@ -1217,14 +1363,16 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     liveSync: Boolean(f.listConfig?.liveLinkedFieldKey),
     options: typedOptions,
     selectionMode: isMultiSelect ? "multiple" : "single",
-    allowSearch: f.listConfig?.allowSearch !== false,
-    sortOrder: f.listConfig?.sortOrder || "manual",
+    allowSearch: f.listConfig?.allowSearch !== false && f.newListConfig?.allowSearch !== false,
+    sortOrder: f.listConfig?.sortOrder || f.newListConfig?.sortOrder || "manual",
     liveLinkedFieldKey: f.listConfig?.liveLinkedFieldKey || "",
+    allowCustomOptions: Boolean(f.newListConfig?.allowCustomOptions ?? f.listConfig?.allowCustomOptions),
     // New List
     newListSourceMode: f.newListConfig?.sourceMode || (f.newListConfig?.optionList?.sourceCompositeFieldKey ? "option_list" : "manual"),
-    newListManualType: f.newListConfig?.manualType || (isMultiSelect ? "multiple" : (f.listEntryType === "plain_text" ? "open_list" : "single")),
+    newListManualType: f.newListConfig?.manualType || (isMultiSelect ? "multiple" : "single"),
     newListSourceCompositeKey: f.newListConfig?.optionList?.sourceCompositeFieldKey || "",
     newListColumnConfigs: f.newListConfig?.optionList?.columns || [],
+    advanceListId: f.newListConfig?.advanceListId || "",
     // CRM Bind
     crmBindModule: f.crmBindConfig?.sourceModule || "teamMember",
     crmBindSelectionMode: f.crmBindConfig?.selectionMode || "single",
@@ -1286,18 +1434,51 @@ export function AdminFieldDrawer({
   );
 
   const [form, setForm] = useState<FieldFormState>(() => {
+    const stored = getStoredProcesses();
+    const targetProc = stored.find(
+      (p) =>
+        (activeProcessId && (p.id === activeProcessId || p.name === activeProcessId)) ||
+        (activeProcessName &&
+          (p.name.toLowerCase() === activeProcessName.toLowerCase() || p.id === activeProcessName))
+    );
+
+    let inheritedRules: ScopingRule[] = [];
+    if (targetProc) {
+      if (targetProc.scopingRules && targetProc.scopingRules.length > 0) {
+        inheritedRules = targetProc.scopingRules.map((r, i) => ({
+          id: `rule_inherited_${i}_${Date.now()}`,
+          industryCategory: r.industryCategory || "All",
+          industries: r.industries || [],
+          locations: r.locations || [],
+        }));
+      } else if (targetProc.industryCategory || targetProc.industry || (targetProc.locations && targetProc.locations.length > 0)) {
+        inheritedRules = [{
+          id: `rule_inherited_${Date.now()}`,
+          industryCategory: targetProc.industryCategory || "All",
+          industries: targetProc.industry && targetProc.industry !== "All" ? [targetProc.industry] : [],
+          locations: targetProc.locations && !targetProc.locations.includes("All") ? targetProc.locations : [],
+        }];
+      }
+    }
+
     if (isEdit) {
       const init = initFormFromField(field!);
-      if (activeProcessId && (!init.processIds || init.processIds.length === 0)) {
-        return { ...init, processIds: [activeProcessId] };
-      }
-      return init;
+      const finalProcessIds = activeProcessId && (!init.processIds || init.processIds.length === 0)
+        ? [activeProcessId]
+        : (targetProc && (!init.processIds || init.processIds.length === 0) ? [targetProc.id] : init.processIds);
+      const finalRules = (!init.scopingRules || init.scopingRules.length === 0) && inheritedRules.length > 0
+        ? inheritedRules
+        : init.scopingRules;
+      return { ...init, processIds: finalProcessIds, scopingRules: finalRules };
     }
+
     const def = defaultForm(initialModule, initialCategory || "text");
-    if (activeProcessId) {
-      return { ...def, processIds: [activeProcessId] };
-    }
-    return def;
+    const resolvedProcessIds = activeProcessId ? [activeProcessId] : (targetProc ? [targetProc.id] : def.processIds);
+    return {
+      ...def,
+      processIds: resolvedProcessIds,
+      scopingRules: inheritedRules.length > 0 ? inheritedRules : def.scopingRules,
+    };
   });
 
   const [typePickerOpen, setTypePickerOpen] = useState(false);
@@ -1310,6 +1491,62 @@ export function AdminFieldDrawer({
   const [csvImportModalOpen, setCsvImportModalOpen] = useState(false);
   const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
   const [errors, setErrors] = useState<{ label?: string }>({});
+
+  // Advance List 2 State & Store Listener
+  const [advanceLists, setAdvanceLists] = useState<AdvanceListDefinition[]>(() => getStoredAdvanceLists());
+  const [advanceListDrawerOpen, setAdvanceListDrawerOpen] = useState(false);
+  const [advanceListEditingDef, setAdvanceListEditingDef] = useState<AdvanceListDefinition | null>(null);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e?.detail && Array.isArray(e.detail)) {
+        setAdvanceLists(e.detail);
+      } else {
+        setAdvanceLists(getStoredAdvanceLists());
+      }
+    };
+    window.addEventListener(ADVANCE_LIST_STORE_EVENT, handler);
+    return () => window.removeEventListener(ADVANCE_LIST_STORE_EVENT, handler);
+  }, []);
+
+  const selectedAdvanceListDef = useMemo(() => {
+    if (!form.advanceListId) return undefined;
+    return advanceLists.find((l) => l.id === form.advanceListId);
+  }, [advanceLists, form.advanceListId]);
+
+  const handleSelectAdvanceList = (listId: string) => {
+    const targetList = advanceLists.find((l) => l.id === listId);
+    if (!targetList) {
+      setForm((p) => ({
+        ...p,
+        advanceListId: "",
+        options: [],
+      }));
+      return;
+    }
+
+    const primaryCol = targetList.columns.find((c) => c.isPrimary) || targetList.columns[0];
+    const listOptions: FieldOption[] = (targetList.rows || []).map((row, idx) => {
+      const primaryVal = row.values[primaryCol?.id || ""];
+      const label = primaryVal !== undefined && primaryVal !== null && String(primaryVal).trim() !== ""
+        ? String(primaryVal)
+        : row.label || `Item #${idx + 1}`;
+
+      return {
+        id: row.id || Date.now() + idx,
+        label,
+        value: row.values,
+        index: idx + 1,
+        isDefault: Boolean(row.isDefault),
+      };
+    });
+
+    setForm((p) => ({
+      ...p,
+      advanceListId: listId,
+      options: listOptions,
+    }));
+  };
 
   const typePickerRef = useRef<HTMLDivElement>(null);
   const modulePickerRef = useRef<HTMLDivElement>(null);
@@ -1420,12 +1657,37 @@ export function AdminFieldDrawer({
 
   const targetProcessesForRequirement = useMemo(() => {
     if (!form.selectedModules.includes("process") && form.module !== "process") return [];
+
+    // 1. Explicit active process context by ID or name
+    if (activeProcessId || activeProcessName) {
+      const target = allProcesses.find(
+        (p) =>
+          (activeProcessId && (p.id === activeProcessId || p.name === activeProcessId)) ||
+          (activeProcessName &&
+            (p.name.toLowerCase() === activeProcessName.toLowerCase() || p.id === activeProcessName))
+      );
+      if (target) return [target];
+    }
+
+    // 2. Explicit processStages passed directly
+    if (processStages && processStages.length > 0) {
+      return [{
+        id: activeProcessId || "active_proc",
+        name: activeProcessName || "Active Process",
+        stages: processStages.map((st) => ({ id: st.id || st.name, name: st.name, color: st.color })),
+        assignedToUserId: 0,
+        description: "",
+        aiSettings: {} as any,
+      }];
+    }
+
+    // 3. Scoped processIds if specified
     if (form.processIds && form.processIds.length > 0 && !form.processIds.includes("all")) {
       const filtered = availableProcesses.filter((p) => form.processIds.includes(p.id) || form.processIds.includes(p.name));
       if (filtered.length > 0) return filtered;
     }
     return availableProcesses.length > 0 ? availableProcesses : allProcesses;
-  }, [form.selectedModules, form.module, form.processIds, availableProcesses, allProcesses]);
+  }, [form.selectedModules, form.module, form.processIds, availableProcesses, allProcesses, activeProcessId, activeProcessName, processStages]);
 
   // Existing fields in current primary module
   const allFieldsInPrimaryModule = useMemo(() => {
@@ -1797,10 +2059,14 @@ export function AdminFieldDrawer({
       requiredStages: (form.selectedModules.includes("process") || form.module === "process") && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
       showAlways: form.showAlways,
       userVisibility: form.userVisibility,
-      visibleToUserIds: form.userVisibility !== false && form.visibleToUserIds.length > 0 ? form.visibleToUserIds : undefined,
+      visibleToUserIds: !isAdmin && form.userVisibility !== false && form.visibleToUserIds.length > 0 ? form.visibleToUserIds : undefined,
       sectionId: form.sectionId || undefined,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
-      processIds: (form.selectedModules.includes("process") || form.module === "process") ? (form.processIds.length > 0 ? form.processIds : (activeProcessId ? [activeProcessId] : undefined)) : undefined,
+      processIds: (form.selectedModules.includes("process") || form.module === "process")
+        ? (form.processIds && form.processIds.length > 0
+            ? form.processIds
+            : (activeProcessId ? [activeProcessId] : (activeProcessName ? [activeProcessName] : undefined)))
+        : undefined,
       isReusable: additionalModules.length > 0,
       reusableModules: additionalModules.length > 0 ? additionalModules : undefined,
       permissions: form.permissions,
@@ -1864,19 +2130,16 @@ export function AdminFieldDrawer({
         : undefined,
       selectionMode: form.primaryCategory === "crm_bind"
         ? form.crmBindSelectionMode
-        : form.primaryCategory === "list"
+        : (form.primaryCategory === "list" || form.primaryCategory === "new_list")
         ? form.selectionMode
-        : form.primaryCategory === "new_list"
-        ? (form.newListSourceMode === "manual" ? (form.newListManualType === "multiple" ? "multiple" : "single") : form.selectionMode)
-        : undefined,
-      listEntryType: (form.primaryCategory === "new_list" && form.newListSourceMode === "manual" && form.newListManualType === "open_list")
-        ? "plain_text"
         : undefined,
       listConfig: form.primaryCategory === "list" ? {
         valueType: form.listValueType,
         inheritedFieldKey: form.inheritedFieldKey.trim() || undefined,
         allowSearch: form.allowSearch,
         sortOrder: form.sortOrder,
+        allowCustomOptions: Boolean(form.allowCustomOptions),
+        selectionMode: form.selectionMode,
         liveLinkedFieldKey: (form.liveSync && (form.liveLinkedFieldKey.trim() || form.inheritedFieldKey.trim()))
           ? (form.liveLinkedFieldKey.trim() || form.inheritedFieldKey.trim())
           : undefined,
@@ -1885,12 +2148,12 @@ export function AdminFieldDrawer({
       // New List Config
       newListConfig: form.primaryCategory === "new_list" ? {
         sourceMode: form.newListSourceMode,
-        manualType: form.newListSourceMode === "manual" ? form.newListManualType : undefined,
-        selectionMode: form.newListSourceMode === "manual"
-          ? (form.newListManualType === "multiple" ? "multiple" : "single")
-          : form.selectionMode,
+        advanceListId: form.newListSourceMode === "advance_2" ? form.advanceListId : undefined,
+        manualType: form.selectionMode,
+        selectionMode: form.selectionMode,
         allowSearch: form.allowSearch,
         sortOrder: form.sortOrder,
+        allowCustomOptions: Boolean(form.allowCustomOptions),
         optionList: form.newListSourceMode === "option_list" ? {
           sourceCompositeFieldKey: form.newListSourceCompositeKey,
           columns: form.newListColumnConfigs,
@@ -2005,6 +2268,48 @@ export function AdminFieldDrawer({
     }
     return CONSOLIDATED_FIELD_TYPES[0].items[0];
   }, [form.primaryCategory]);
+
+  const isCompositeOptionList =
+    form.primaryCategory === "new_list" &&
+    form.newListSourceMode === "option_list" &&
+    selectedCompositeColumns.length > 0;
+
+  const isAdvance2OptionList =
+    form.primaryCategory === "new_list" &&
+    form.newListSourceMode === "advance_2" &&
+    Boolean(selectedAdvanceListDef && selectedAdvanceListDef.columns.length > 0);
+
+  const csvColumns: SubFieldConfig[] = useMemo(() => {
+    if (isCompositeOptionList) {
+      return selectedCompositeColumns;
+    }
+    if (isAdvance2OptionList && selectedAdvanceListDef) {
+      return selectedAdvanceListDef.columns.map((c) => ({
+        id: c.id,
+        name: c.name,
+        inputType: c.type === "number" ? "number" : "text",
+        placeholder: c.name,
+      }));
+    }
+    return [
+      {
+        id: "option",
+        name: "Option",
+        inputType: "text",
+        placeholder: "e.g. Option 1",
+      },
+    ];
+  }, [isCompositeOptionList, selectedCompositeColumns, isAdvance2OptionList, selectedAdvanceListDef]);
+
+  const csvModalTitle = useMemo(() => {
+    if (isCompositeOptionList) {
+      return selectedCompositeDef?.label || form.label || "Composite Options";
+    }
+    if (isAdvance2OptionList && selectedAdvanceListDef) {
+      return selectedAdvanceListDef.name || form.label || "Advance List 2 Options";
+    }
+    return form.label ? `${form.label} Options` : "List Options";
+  }, [isCompositeOptionList, selectedCompositeDef, isAdvance2OptionList, selectedAdvanceListDef, form.label]);
 
   const inputCls = (err?: string) => `w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs font-medium text-slate-800 transition-all ${err ? "border-red-300 focus:ring-2 focus:ring-red-500/20 focus:border-red-500" : "border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"}`;
   const roCls = "border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed";
@@ -3112,19 +3417,36 @@ export function AdminFieldDrawer({
                   </div>
 
                   {!isReadOnly && canClientAddOptions && (
-                    <button
-                      type="button"
-                      onClick={form.inheritedFieldKey ? addOption : undefined}
-                      disabled={!form.inheritedFieldKey}
-                      title={!form.inheritedFieldKey ? "Select an existing field or click '+ Add Field' above first" : undefined}
-                      className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-colors ${
-                        form.inheritedFieldKey
-                          ? "text-blue-600 hover:text-blue-700 cursor-pointer bg-blue-50 border-blue-200"
-                          : "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-60"
-                      }`}
-                    >
-                      <Plus className="w-3 h-3" /> Add Option
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setCsvImportModalOpen(true)}
+                        disabled={!form.inheritedFieldKey}
+                        title={!form.inheritedFieldKey ? "Select an existing field first" : "Import options from a CSV file"}
+                        className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-colors shadow-2xs ${
+                          form.inheritedFieldKey
+                            ? "text-indigo-600 hover:text-indigo-700 cursor-pointer bg-indigo-50 hover:bg-indigo-100/70 border-indigo-200"
+                            : "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-60"
+                        }`}
+                      >
+                        <Upload className="w-3 h-3" />
+                        <span>Import CSV</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={form.inheritedFieldKey ? addOption : undefined}
+                        disabled={!form.inheritedFieldKey}
+                        title={!form.inheritedFieldKey ? "Select an existing field or click '+ Add Field' above first" : undefined}
+                        className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-colors ${
+                          form.inheritedFieldKey
+                            ? "text-blue-600 hover:text-blue-700 cursor-pointer bg-blue-50 border-blue-200"
+                            : "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-60"
+                        }`}
+                      >
+                        <Plus className="w-3 h-3" /> Add Option
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -3199,14 +3521,33 @@ export function AdminFieldDrawer({
                                   >
                                     <ChevronDown className="w-3.5 h-3.5" />
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => removeOption(idx)}
-                                    className="p-1 text-slate-300 hover:text-red-500 cursor-pointer rounded"
-                                    title="Delete option"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  <OptionRowMenu
+                                    isDefault={opt.isDefault}
+                                    onToggleDefault={() => {
+                                      const isCurrentlyDefault = opt.isDefault;
+                                      if (isCurrentlyDefault) {
+                                        updateOption(idx, { isDefault: false });
+                                        if (form.defaultValue === opt.value || form.defaultValue === opt.label) {
+                                          setForm((p) => ({ ...p, defaultValue: undefined }));
+                                        }
+                                      } else {
+                                        if (form.selectionMode === "single") {
+                                          const updated = form.options.map((o, i) => ({
+                                            ...o,
+                                            isDefault: i === idx,
+                                          }));
+                                          setForm((p) => ({
+                                            ...p,
+                                            options: updated,
+                                            defaultValue: opt.value || opt.label,
+                                          }));
+                                        } else {
+                                          updateOption(idx, { isDefault: true });
+                                        }
+                                      }
+                                    }}
+                                    onDelete={() => removeOption(idx)}
+                                  />
                                 </div>
                               )}
                             </div>
@@ -3273,6 +3614,14 @@ export function AdminFieldDrawer({
                               />
                             </div>
 
+                            {/* Subtle Default Badge */}
+                            {opt.isDefault && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200/80 shrink-0">
+                                <Star className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
+                                <span>Default</span>
+                              </span>
+                            )}
+
                             {!isReadOnly && (
                               <div className="flex items-center gap-0.5 shrink-0">
                                 <button
@@ -3293,14 +3642,33 @@ export function AdminFieldDrawer({
                                 >
                                   <ChevronDown className="w-3.5 h-3.5" />
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => removeOption(idx)}
-                                  className="p-1 text-slate-300 hover:text-red-500 cursor-pointer rounded"
-                                  title="Delete option"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                <OptionRowMenu
+                                  isDefault={opt.isDefault}
+                                  onToggleDefault={() => {
+                                    const isCurrentlyDefault = opt.isDefault;
+                                    if (isCurrentlyDefault) {
+                                      updateOption(idx, { isDefault: false });
+                                      if (form.defaultValue === opt.value || form.defaultValue === opt.label) {
+                                        setForm((p) => ({ ...p, defaultValue: undefined }));
+                                      }
+                                    } else {
+                                      if (form.selectionMode === "single") {
+                                        const updated = form.options.map((o, i) => ({
+                                          ...o,
+                                          isDefault: i === idx,
+                                        }));
+                                        setForm((p) => ({
+                                          ...p,
+                                          options: updated,
+                                          defaultValue: opt.value || opt.label,
+                                        }));
+                                      } else {
+                                        updateOption(idx, { isDefault: true });
+                                      }
+                                    }
+                                  }}
+                                  onDelete={() => removeOption(idx)}
+                                />
                               </div>
                             )}
                           </div>
@@ -3336,7 +3704,28 @@ export function AdminFieldDrawer({
                   </label>
                 </div>
 
-                {/* 2. Sorting Order Dropdown */}
+                {/* 2. Checkbox: Add options if not available */}
+                <div className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <PlusCircle className="w-4 h-4 text-blue-600 shrink-0" />
+                    <div>
+                      <span className="text-xs font-semibold text-slate-800 block">Allow adding custom options if not available</span>
+                      <span className="text-[10px] text-slate-500 block">Users can type any new option at runtime to add and select it</span>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer select-none shrink-0 ml-3">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.allowCustomOptions)}
+                      disabled={isReadOnly}
+                      onChange={(e) => setForm((p) => ({ ...p, allowCustomOptions: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                {/* 3. Sorting Order & Selection Mode */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <div className="flex items-center gap-1.5 mb-1.5">
@@ -3359,7 +3748,6 @@ export function AdminFieldDrawer({
                     />
                   </div>
 
-                  {/* 3. Selection Mode */}
                   <div>
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <label className="block text-xs font-semibold text-slate-700">
@@ -3419,82 +3807,54 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* 3H-2. NEW LIST FIELD CONFIGURATION (Manual List vs Option List) */}
+          {/* 3H-2. NEW LIST FIELD CONFIGURATION (Basic List vs Advanced List vs Advance 2) */}
           {form.primaryCategory === "new_list" && (
-            <div className="p-4 bg-slate-50/70 border border-slate-200 rounded-xl space-y-4">
-              {/* SOURCE MODE DROPDOWN */}
+            <div className="p-4 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3.5">
+              {/* LIST TYPE SELECTOR */}
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Source Mode <span className="text-red-500">*</span>
-                  </label>
-                  <InfoTooltip
-                    text="Choose between defining manual options or referencing an existing Composite field."
-                    size="sm"
-                  />
+                  <label className="block text-xs font-semibold text-slate-700">List Type</label>
+                  <InfoTooltip text="Choose between Basic List, Advanced List, or Advance 2." size="sm" />
                 </div>
                 <AdminSelect
                   value={form.newListSourceMode}
                   disabled={isReadOnly}
                   onChange={(val) => setForm((p) => ({ ...p, newListSourceMode: val as any }))}
                   options={[
-                    { value: "manual", label: "Manual List" },
-                    { value: "option_list", label: "Option List" },
+                    { value: "manual", label: "Basic List" },
+                    { value: "option_list", label: "Advanced List" },
+                    { value: "advance_2", label: "Advance 2" },
                   ]}
                 />
               </div>
 
               {/* ─────────────────────────────────────────────────────────────
-                  MODE 1 — MANUAL LIST (Reusing exact List manual-option UI/logic)
+                  MODE 1 — BASIC LIST (Defined Options with Default Toggle)
                  ───────────────────────────────────────────────────────────── */}
               {form.newListSourceMode === "manual" && (
-                <div className="space-y-4 pt-1">
-                  {/* Manual Type Choice (Single / Multi / Open-List) */}
-                  <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <label className="text-xs font-semibold text-slate-800">Manual Selection Type</label>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { id: "single", label: "Single Select" },
-                        { id: "multiple", label: "Multi-Select" },
-                        { id: "open_list", label: "Open-List" },
-                      ].map((t) => {
-                        const isSelected = form.newListManualType === t.id;
-                        return (
-                          <button
-                            key={t.id}
-                            type="button"
-                            disabled={isReadOnly}
-                            onClick={() =>
-                              setForm((p) => ({
-                                ...p,
-                                newListManualType: t.id as any,
-                                selectionMode: t.id === "multiple" ? "multiple" : "single",
-                              }))
-                            }
-                            className={`py-2 px-3 rounded-lg border text-center transition-all cursor-pointer text-xs font-semibold ${
-                              isSelected
-                                ? "bg-blue-50 border-blue-400 text-blue-800"
-                                : "bg-slate-50/60 border-slate-200 text-slate-600 hover:bg-slate-100"
-                            }`}
-                          >
-                            {t.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Options List Builder (Reused exact logic from List) */}
-                  {form.newListManualType !== "open_list" ? (
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          Defined Options ({form.options.length})
+                <div className="space-y-3 pt-1">
+                  {/* Options List Builder */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-slate-700">
+                          Options ({form.options.length})
                         </span>
+                        <InfoTooltip text="Add options and optionally set one as default value." size="sm" />
+                      </div>
 
-                        {!isReadOnly && canClientAddOptions && (
+                      {!isReadOnly && canClientAddOptions && (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCsvImportModalOpen(true)}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border text-indigo-600 hover:text-indigo-700 cursor-pointer bg-indigo-50 hover:bg-indigo-100/70 border-indigo-200 transition-colors shadow-2xs"
+                            title="Import options from a CSV file (or download template)"
+                          >
+                            <Upload className="w-3 h-3" />
+                            <span>Import CSV</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => {
@@ -3516,125 +3876,108 @@ export function AdminFieldDrawer({
                           >
                             <Plus className="w-3 h-3" /> Add Option
                           </button>
-                        )}
-                      </div>
+                        </div>
+                      )}
+                    </div>
 
-                      <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                        {form.options.length === 0 ? (
-                          <div className="p-4 bg-white border border-slate-200 border-dashed rounded-xl text-xs text-slate-400 text-center">
-                            No options defined yet.
-                          </div>
-                        ) : (
-                          form.options.map((opt, idx) => (
-                            <div
-                              key={opt.id || idx}
-                              className="flex items-center gap-2 p-2.5 bg-white border border-slate-200 rounded-xl shadow-2xs hover:border-slate-300 transition-colors"
-                            >
-                              <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
-                                #{idx + 1}
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                      {form.options.length === 0 ? (
+                        <div className="p-4 bg-white border border-slate-200 border-dashed rounded-xl text-xs text-slate-400 text-center">
+                          No options defined yet. Click &ldquo;+ Add Option&rdquo; above.
+                        </div>
+                      ) : (
+                        form.options.map((opt, idx) => (
+                          <div
+                            key={opt.id || idx}
+                            className={`flex items-center gap-2 p-2.5 bg-white border rounded-xl shadow-2xs transition-colors ${
+                              opt.isDefault ? "border-blue-300 bg-blue-50/20" : "border-slate-200 hover:border-slate-300"
+                            }`}
+                          >
+                            <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                              #{idx + 1}
+                            </span>
+
+                            <div className="flex-1 min-w-0">
+                              <input
+                                type="text"
+                                value={typeof opt.value === "string" ? opt.value : opt.label || ""}
+                                disabled={isReadOnly}
+                                placeholder={`Option #${idx + 1}...`}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  updateOption(idx, { value: val, label: val });
+                                }}
+                                className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 font-medium text-slate-800"
+                              />
+                            </div>
+
+                            {/* Subtle Default Badge */}
+                            {opt.isDefault && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200/80 shrink-0">
+                                <Star className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
+                                <span>Default</span>
                               </span>
+                            )}
 
-                              <div className="flex-1 min-w-0">
-                                <input
-                                  type="text"
-                                  value={typeof opt.value === "string" ? opt.value : opt.label || ""}
-                                  disabled={isReadOnly}
-                                  placeholder={`Option #${idx + 1}...`}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    updateOption(idx, { value: val, label: val });
+                            {!isReadOnly && (
+                              <div className="flex items-center gap-0.5 shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => moveOption(idx, -1)}
+                                  className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                  title="Move up"
+                                >
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === form.options.length - 1}
+                                  onClick={() => moveOption(idx, 1)}
+                                  className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                  title="Move down"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                                <OptionRowMenu
+                                  isDefault={opt.isDefault}
+                                  onToggleDefault={() => {
+                                    const isCurrentlyDefault = opt.isDefault;
+                                    if (isCurrentlyDefault) {
+                                      updateOption(idx, { isDefault: false });
+                                      if (form.defaultValue === opt.value || form.defaultValue === opt.label) {
+                                        setForm((p) => ({ ...p, defaultValue: undefined }));
+                                      }
+                                    } else {
+                                      if (form.selectionMode === "single") {
+                                        const updated = form.options.map((o, i) => ({
+                                          ...o,
+                                          isDefault: i === idx,
+                                        }));
+                                        setForm((p) => ({
+                                          ...p,
+                                          options: updated,
+                                          defaultValue: opt.value || opt.label,
+                                        }));
+                                      } else {
+                                        updateOption(idx, { isDefault: true });
+                                      }
+                                    }
                                   }}
-                                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 font-medium text-slate-800"
+                                  onDelete={() => removeOption(idx)}
                                 />
                               </div>
-
-                              {!isReadOnly && (
-                                <div className="flex items-center gap-0.5 shrink-0">
-                                  <button
-                                    type="button"
-                                    disabled={idx === 0}
-                                    onClick={() => moveOption(idx, -1)}
-                                    className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
-                                    title="Move up"
-                                  >
-                                    <ChevronUp className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={idx === form.options.length - 1}
-                                    onClick={() => moveOption(idx, 1)}
-                                    className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
-                                    title="Move down"
-                                  >
-                                    <ChevronDown className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => removeOption(idx)}
-                                    className="p-1 text-slate-300 hover:text-red-500 cursor-pointer rounded"
-                                    title="Delete option"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-white border border-slate-200 rounded-xl text-xs text-slate-600">
-                      <span className="font-semibold text-slate-800">Open-List Mode:</span> Users can enter custom tags at runtime.
-                    </div>
-                  )}
-
-                  {/* List Search & Sorting Configuration */}
-                  <div className="pt-3 border-t border-slate-200/80 space-y-3">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      List Behavior & Sorting
-                    </div>
-
-                    <div className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl">
-                      <div className="flex items-center gap-1.5">
-                        <Search className="w-3.5 h-3.5 text-slate-500" />
-                        <span className="text-xs font-semibold text-slate-800">Allow Search Bar</span>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={form.allowSearch}
-                          disabled={isReadOnly}
-                          onChange={(e) => setForm((p) => ({ ...p, allowSearch: e.target.checked }))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
-                        <label className="block text-xs font-semibold text-slate-700">Sorting Order</label>
-                      </div>
-                      <AdminSelect
-                        value={form.sortOrder}
-                        disabled={isReadOnly}
-                        onChange={(val) => setForm((p) => ({ ...p, sortOrder: val as any }))}
-                        options={[
-                          { value: "manual", label: "Manual Order" },
-                          { value: "alphabetical_asc", label: "Alphabetical (A - Z)" },
-                          { value: "alphabetical_desc", label: "Alphabetical (Z - A)" },
-                          { value: "recent", label: "Most Recently Added First" },
-                        ]}
-                      />
+                            )}
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>
               )}
 
               {/* ─────────────────────────────────────────────────────────────
-                  MODE 2 — OPTION LIST (Linked to Existing Composite Field)
+                  MODE 2 — ADVANCED LIST (Linked to Existing Composite Field)
                  ───────────────────────────────────────────────────────────── */}
               {form.newListSourceMode === "option_list" && (
                 <div className="space-y-4 pt-1">
@@ -3940,12 +4283,22 @@ export function AdminFieldDrawer({
                             return (
                               <div
                                 key={opt.id || optIdx}
-                                className="p-3 bg-slate-50/60 border border-slate-200 rounded-xl space-y-2 hover:border-slate-300 transition-colors"
+                                className={`p-3 bg-slate-50/60 border rounded-xl space-y-2 transition-colors ${
+                                  opt.isDefault ? "border-blue-300 bg-blue-50/20" : "border-slate-200 hover:border-slate-300"
+                                }`}
                               >
                                 <div className="flex items-center justify-between">
-                                  <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded">
-                                    Row #{optIdx + 1}
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded">
+                                      Row #{optIdx + 1}
+                                    </span>
+                                    {opt.isDefault && (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200/80">
+                                        <Star className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
+                                        <span>Default Row</span>
+                                      </span>
+                                    )}
+                                  </div>
 
                                   {!isReadOnly && (
                                     <div className="flex items-center gap-0.5">
@@ -3967,14 +4320,33 @@ export function AdminFieldDrawer({
                                       >
                                         <ChevronDown className="w-3.5 h-3.5" />
                                       </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => removeOption(optIdx)}
-                                        className="p-1 text-slate-300 hover:text-red-500 cursor-pointer rounded"
-                                        title="Delete row"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
+                                      <OptionRowMenu
+                                        isDefault={opt.isDefault}
+                                        onToggleDefault={() => {
+                                          const isCurrentlyDefault = opt.isDefault;
+                                          if (isCurrentlyDefault) {
+                                            updateOption(optIdx, { isDefault: false });
+                                            if (form.defaultValue === opt.id || form.defaultValue === opt.value) {
+                                              setForm((p) => ({ ...p, defaultValue: undefined }));
+                                            }
+                                          } else {
+                                            if (form.selectionMode === "single") {
+                                              const updated = form.options.map((o, i) => ({
+                                                ...o,
+                                                isDefault: i === optIdx,
+                                              }));
+                                              setForm((p) => ({
+                                                ...p,
+                                                options: updated,
+                                                defaultValue: opt.id || opt.value,
+                                              }));
+                                            } else {
+                                              updateOption(optIdx, { isDefault: true });
+                                            }
+                                          }
+                                        }}
+                                        onDelete={() => removeOption(optIdx)}
+                                      />
                                     </div>
                                   )}
                                 </div>
@@ -4023,71 +4395,435 @@ export function AdminFieldDrawer({
                       )}
                     </div>
                   )}
+                </div>
+              )}
 
-                  {/* Option List Render & Selection Settings */}
-                  <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      Option List Behavior & Selection
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      {/* Selection Mode */}
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <label className="block text-xs font-semibold text-slate-700">Selection Mode</label>
-                        </div>
-                        <AdminSelect
-                          value={form.selectionMode}
-                          disabled={isReadOnly}
-                          onChange={(val) => setForm((p) => ({ ...p, selectionMode: val as "single" | "multiple" }))}
-                          options={[
-                            { value: "single", label: "Single Selection (1 Row Block)" },
-                            { value: "multiple", label: "Multiple Selection (Multi-Row Blocks)" },
-                          ]}
-                        />
-                      </div>
-
-                      {/* Sorting Order */}
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
-                          <label className="block text-xs font-semibold text-slate-700">Sorting Order</label>
-                        </div>
-                        <AdminSelect
-                          value={form.sortOrder}
-                          disabled={isReadOnly}
-                          onChange={(val) => setForm((p) => ({ ...p, sortOrder: val as any }))}
-                          options={[
-                            { value: "manual", label: "Source Row Order" },
-                            { value: "alphabetical_asc", label: "Primary Column (A - Z)" },
-                            { value: "alphabetical_desc", label: "Primary Column (Z - A)" },
-                            { value: "recent", label: "Most Recent First" },
-                          ]}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Allow Search Bar */}
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                      <div className="flex items-center gap-1.5">
-                        <Search className="w-3.5 h-3.5 text-slate-500" />
-                        <span className="text-xs font-semibold text-slate-800">Allow Search Bar</span>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={form.allowSearch}
-                          disabled={isReadOnly}
-                          onChange={(e) => setForm((p) => ({ ...p, allowSearch: e.target.checked }))}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+              {/* ─────────────────────────────────────────────────────────────
+                  MODE 3 — ADVANCE 2 (Custom Schema Columns & CSV Dataset)
+                 ───────────────────────────────────────────────────────────── */}
+              {/* ─────────────────────────────────────────────────────────────
+                  MODE 3 — ADVANCE 2 (Custom Schema Columns & CSV Dataset)
+                 ───────────────────────────────────────────────────────────── */}
+              {form.newListSourceMode === "advance_2" && (
+                <div className="space-y-4 pt-1">
+                  {/* Advance List Selector Card */}
+                  <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Advance List 2 <span className="text-red-500">*</span></span>
                       </label>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdvanceListEditingDef(null);
+                            setAdvanceListDrawerOpen(true);
+                          }}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100/70 border border-blue-200/80 px-2 py-0.5 rounded-md cursor-pointer transition-colors"
+                        >
+                          <Plus className="w-3 h-3 stroke-[2.5]" />
+                          <span>Create New List</span>
+                        </button>
+                      )}
                     </div>
+
+                    {advanceLists.length > 0 ? (
+                      <div className="space-y-2">
+                        <AdminSelect
+                          value={form.advanceListId}
+                          disabled={isReadOnly}
+                          onChange={(val) => handleSelectAdvanceList(val)}
+                          placeholder="— Select an Advance List —"
+                          options={[
+                            { value: "", label: "— Select an Advance List —" },
+                            ...advanceLists.map((l) => ({
+                              value: l.id,
+                              label: l.name,
+                              subtitle: `${l.columns.length} columns • ${l.rows?.length || 0} rows`,
+                            })),
+                          ]}
+                        />
+
+                        {/* Connected List Details Card */}
+                        {form.advanceListId && selectedAdvanceListDef && (
+                          <div className="p-2.5 bg-blue-50/50 border border-blue-200/70 rounded-lg flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <div>
+                                <div className="text-xs font-bold text-slate-800">
+                                  {selectedAdvanceListDef.name}
+                                </div>
+                                <div className="text-[10px] text-slate-500">
+                                  {selectedAdvanceListDef.columns.length} columns (
+                                  {selectedAdvanceListDef.columns.map((c) => c.name).join(", ")})
+                                </div>
+                              </div>
+                            </div>
+
+                            {!isReadOnly && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAdvanceListEditingDef(selectedAdvanceListDef);
+                                  setAdvanceListDrawerOpen(true);
+                                }}
+                                className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer flex items-center gap-1 shrink-0"
+                              >
+                                <span>Edit Schema</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl text-center space-y-2.5">
+                        <p className="text-xs font-medium text-slate-600">No Advance Lists available yet.</p>
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAdvanceListEditingDef(null);
+                              setAdvanceListDrawerOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Create New List</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Advance List Column Properties Matrix Preview */}
+                  {selectedAdvanceListDef && selectedAdvanceListDef.columns.length > 0 && (
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          Column Behavior Properties
+                        </span>
+                        <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-medium">
+                          {selectedAdvanceListDef.columns.length} Columns
+                        </span>
+                      </div>
+
+                      <div className="border border-slate-200 rounded-lg overflow-x-auto">
+                        <table className="w-full min-w-[440px] text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100/80 border-b border-slate-200 text-[11px] font-bold text-slate-700">
+                              <th className="px-3 py-2 min-w-[140px]">Column Name</th>
+                              <th className="px-2 py-2 text-center w-24">Type</th>
+                              <th className="px-2 py-2 text-center w-20">
+                                <span className="text-blue-700">Primary</span>
+                              </th>
+                              <th className="px-2 py-2 text-center w-20">
+                                <span className="text-emerald-700">Editable</span>
+                              </th>
+                              <th className="px-2 py-2 text-center w-20">
+                                <span className="text-slate-600">Disable</span>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {selectedAdvanceListDef.columns.map((col) => {
+                              return (
+                                <tr key={col.id} className="hover:bg-slate-50/60 transition-colors">
+                                  <td className="px-3 py-2">
+                                    <div className="font-semibold text-slate-800 text-xs">{col.name}</div>
+                                    <div className="text-[10px] font-mono text-slate-400">{col.id}</div>
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    <span className="text-[10px] font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 uppercase">
+                                      {col.type}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    {col.isPrimary ? (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                        <Star className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
+                                        <span>Primary</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300">—</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    {col.isEditable ? (
+                                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                        Yes
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300">—</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    {col.isDisable ? (
+                                      <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                        Locked
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Defined Option Items / Records for Advance List 2 */}
+                  {selectedAdvanceListDef && selectedAdvanceListDef.columns.length > 0 && (
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          Defined Option Rows ({form.options.length})
+                        </span>
+
+                        {!isReadOnly && canClientAddOptions && (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setCsvImportModalOpen(true)}
+                              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border text-indigo-600 hover:text-indigo-700 cursor-pointer bg-indigo-50 hover:bg-indigo-100/70 border-indigo-200 transition-colors shadow-2xs"
+                              title="Import option rows from a CSV file (or download template)"
+                            >
+                              <Upload className="w-3 h-3" />
+                              <span>Import CSV</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newIdx = form.options.length + 1;
+                                const initialRowVals: Record<string, any> = {};
+                                selectedAdvanceListDef.columns.forEach((c) => {
+                                  initialRowVals[c.id] = c.type === "number" ? 0 : "";
+                                });
+                                setForm((p) => ({
+                                  ...p,
+                                  options: [
+                                    ...p.options,
+                                    {
+                                      id: Date.now() + newIdx,
+                                      label: "",
+                                      value: initialRowVals,
+                                      index: newIdx,
+                                    },
+                                  ],
+                                }));
+                              }}
+                              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border text-blue-600 hover:text-blue-700 cursor-pointer bg-blue-50 hover:bg-blue-100/70 border-blue-200 transition-colors shadow-2xs"
+                            >
+                              <Plus className="w-3 h-3" /> Add Option Row
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {form.options.length === 0 ? (
+                        <div className="p-4 bg-white border border-slate-200 border-dashed rounded-xl text-xs text-slate-400 text-center">
+                          No option rows defined yet. Click &ldquo;+ Add Option Row&rdquo; or &ldquo;Import CSV&rdquo; above.
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                          {form.options.map((opt, optIdx) => {
+                            const primaryCol = selectedAdvanceListDef.columns.find((c) => c.isPrimary) || selectedAdvanceListDef.columns[0];
+                            const rowVals: Record<string, any> =
+                              typeof opt.value === "object" && opt.value !== null
+                                ? opt.value
+                                : { [primaryCol?.id || "col_1"]: opt.label || opt.value || "" };
+
+                            return (
+                              <div
+                                key={opt.id || optIdx}
+                                className={`p-3 bg-slate-50/60 border rounded-xl space-y-2 transition-colors ${
+                                  opt.isDefault ? "border-blue-300 bg-blue-50/20" : "border-slate-200 hover:border-slate-300"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded">
+                                      Row #{optIdx + 1}
+                                    </span>
+                                    {opt.isDefault && (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200/80">
+                                        <Star className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
+                                        <span>Default Row</span>
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {!isReadOnly && (
+                                    <div className="flex items-center gap-0.5">
+                                      <button
+                                        type="button"
+                                        disabled={optIdx === 0}
+                                        onClick={() => moveOption(optIdx, -1)}
+                                        className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                        title="Move up"
+                                      >
+                                        <ChevronUp className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={optIdx === form.options.length - 1}
+                                        onClick={() => moveOption(optIdx, 1)}
+                                        className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                        title="Move down"
+                                      >
+                                        <ChevronDown className="w-3.5 h-3.5" />
+                                      </button>
+                                      <OptionRowMenu
+                                        isDefault={opt.isDefault}
+                                        onToggleDefault={() => {
+                                          const isCurrentlyDefault = opt.isDefault;
+                                          if (isCurrentlyDefault) {
+                                            updateOption(optIdx, { isDefault: false });
+                                            if (form.defaultValue === opt.id || form.defaultValue === opt.value) {
+                                              setForm((p) => ({ ...p, defaultValue: undefined }));
+                                            }
+                                          } else {
+                                            if (form.selectionMode === "single") {
+                                              const updated = form.options.map((o, i) => ({
+                                                ...o,
+                                                isDefault: i === optIdx,
+                                              }));
+                                              setForm((p) => ({
+                                                ...p,
+                                                options: updated,
+                                                defaultValue: opt.id || opt.value,
+                                              }));
+                                            } else {
+                                              updateOption(optIdx, { isDefault: true });
+                                            }
+                                          }
+                                        }}
+                                        onDelete={() => removeOption(optIdx)}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                  {selectedAdvanceListDef.columns.map((col) => {
+                                    const isPrimary = col.isPrimary;
+                                    const currentVal = rowVals[col.id] ?? (isPrimary ? opt.label : "");
+
+                                    return (
+                                      <div key={col.id} className="space-y-1">
+                                        <label className="text-[10px] font-semibold text-slate-600 flex items-center justify-between">
+                                          <div className="flex items-center gap-1">
+                                            <span>{col.name}</span>
+                                            {isPrimary && (
+                                              <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.2 rounded font-normal">
+                                                Primary
+                                              </span>
+                                            )}
+                                          </div>
+                                          <span className="text-[9px] font-mono text-slate-400 uppercase">{col.type}</span>
+                                        </label>
+                                        <input
+                                          type={col.type === "number" ? "number" : "text"}
+                                          value={currentVal}
+                                          disabled={isReadOnly}
+                                          placeholder={`${col.name}...`}
+                                          onChange={(e) => {
+                                            const rawVal = e.target.value;
+                                            const nextVal = col.type === "number" ? (rawVal === "" ? 0 : isNaN(parseFloat(rawVal)) ? 0 : parseFloat(rawVal)) : rawVal;
+                                            const nextVals = { ...rowVals, [col.id]: nextVal };
+                                            const primaryColId = primaryCol?.id || selectedAdvanceListDef.columns[0]?.id;
+                                            const updatedLabel = isPrimary ? String(nextVal) : (nextVals[primaryColId] || opt.label || String(nextVal));
+                                            updateOption(optIdx, {
+                                              label: updatedLabel,
+                                              value: nextVals,
+                                            });
+                                          }}
+                                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-500 font-medium text-slate-800"
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+          )}
+
+          {/* 3H-3. COMMON LIST FIELD SETTINGS (Outside the border div, direct drawer items) */}
+          {form.primaryCategory === "new_list" && (
+            <>
+              {/* 1. Selection Type */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">Selection Type</label>
+                  <InfoTooltip text="Choose whether users can pick a single choice or select multiple options." size="sm" />
+                </div>
+                <AdminSelect
+                  value={form.selectionMode}
+                  disabled={isReadOnly}
+                  onChange={(val) =>
+                    setForm((p) => ({
+                      ...p,
+                      selectionMode: val as "single" | "multiple",
+                      newListManualType: val as "single" | "multiple",
+                    }))
+                  }
+                  options={[
+                    { value: "single", label: "Single Select" },
+                    { value: "multiple", label: "Multi-Select" },
+                  ]}
+                />
+              </div>
+
+              {/* 2. Search Bar Toggle */}
+              <div className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <Search className="w-4 h-4 text-slate-500 shrink-0" />
+                  <span className="text-xs text-slate-700 font-medium">Search Bar</span>
+                  <InfoTooltip text="Enable search input within the dropdown." size="sm" />
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.allowSearch}
+                    disabled={isReadOnly}
+                    onChange={(e) => setForm((p) => ({ ...p, allowSearch: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              {/* 4. Allow Custom Options Toggle */}
+              <div className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <PlusCircle className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span className="text-xs text-slate-700 font-medium">Allow Custom Options</span>
+                  <InfoTooltip text="Allow users to type and add new options at runtime." size="sm" />
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.allowCustomOptions)}
+                    disabled={isReadOnly}
+                    onChange={(e) => setForm((p) => ({ ...p, allowCustomOptions: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+            </>
           )}
 
           {/* 3I. Currency Picker for Money fields */}
@@ -4183,8 +4919,8 @@ export function AdminFieldDrawer({
             />
           </div>
 
-          {/* 5. Default Value Configurator */}
-          {!isReadOnly && form.primaryCategory !== "signature" && form.primaryCategory !== "media" && (
+          {/* 5. Default Value Configurator (Not shown for lists as defaults are configured per-option) */}
+          {!isReadOnly && form.primaryCategory !== "signature" && form.primaryCategory !== "media" && form.primaryCategory !== "new_list" && form.primaryCategory !== "list" && (
             <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -4227,12 +4963,7 @@ export function AdminFieldDrawer({
                   },
                   options: form.options,
                   currency: form.currency || "INR",
-                  selectionMode: form.primaryCategory === "list" ? form.selectionMode : (form.crmBindSelectionMode || "single"),
-                  listConfig: form.primaryCategory === "list" ? {
-                    allowSearch: form.allowSearch,
-                    sortOrder: form.sortOrder,
-                    liveLinkedFieldKey: form.liveLinkedFieldKey || undefined,
-                  } : undefined,
+                  selectionMode: form.crmBindSelectionMode || "single",
                   crmBindConfig: form.primaryCategory === "crm_bind" ? {
                     sourceModule: form.crmBindModule || "teamMember",
                     displayField: "name",
@@ -4377,8 +5108,8 @@ export function AdminFieldDrawer({
                                     Required at Stages ({selectedStagesInProc.length} of {procStages.length})
                                   </label>
                                   
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                    {procStages.map((st) => {
+                                  <div className="space-y-1.5">
+                                    {procStages.map((st, sIdx) => {
                                       const isChecked = form.requiredStages.includes(st.name);
                                       return (
                                         <button
@@ -4386,14 +5117,24 @@ export function AdminFieldDrawer({
                                           type="button"
                                           disabled={isReadOnly}
                                           onClick={() => toggleStage(st.name)}
-                                          className={`px-2.5 py-1.5 rounded-lg border text-left text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                                          className={`w-full px-3 py-2 rounded-xl border text-left text-xs flex items-center justify-between gap-3 transition-all cursor-pointer ${
                                             isChecked
                                               ? "bg-amber-100/90 border-amber-300 text-amber-950 font-semibold shadow-2xs"
-                                              : "bg-white/80 border-slate-200 text-slate-700 hover:bg-white"
+                                              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                                           }`}
                                         >
-                                          <span className="truncate">{st.name}</span>
-                                          <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                          <div className="flex items-center gap-2.5 min-w-0">
+                                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                                              isChecked
+                                                ? "bg-amber-600 text-white"
+                                                : "bg-slate-100 text-slate-600 border border-slate-200"
+                                            }`}>
+                                              {sIdx + 1}
+                                            </span>
+                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: (st as any).color || '#3b82f6' }} />
+                                            <span className="truncate">{st.name}</span>
+                                          </div>
+                                          <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
                                             isChecked ? "bg-amber-600 border-amber-600 text-white" : "border-slate-300 bg-white"
                                           }`}>
                                             {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
@@ -4799,20 +5540,32 @@ export function AdminFieldDrawer({
         </div>
 
         {/* CSV Option List Import Popup (Scoped inside drawer container) */}
-        {csvImportModalOpen && selectedCompositeColumns.length > 0 && (
+        {csvImportModalOpen && (
           <CsvOptionListImportModal
             isOpen={csvImportModalOpen}
             onClose={() => setCsvImportModalOpen(false)}
-            compositeName={selectedCompositeDef?.label || form.label || "Composite Options"}
-            columns={selectedCompositeColumns}
+            compositeName={csvModalTitle}
+            columns={csvColumns}
             primaryColumnId={
-              form.newListColumnConfigs.find((c) => c.isPrimary)?.columnId || selectedCompositeColumns[0]?.id
+              form.newListColumnConfigs.find((c) => c.isPrimary)?.columnId || csvColumns[0]?.id
             }
             currentOptionsCount={form.options.length}
             onImport={(newOptions, mode) => {
+              const formatted = newOptions.map((opt, idx) => ({
+                id: opt.id || Date.now() + idx,
+                label: opt.label || (typeof opt.value === "string" ? opt.value : ""),
+                value: isCompositeOptionList
+                  ? opt.value
+                  : (typeof opt.value === "string" ? opt.value : (opt.label || "")),
+                index: idx + 1,
+                isDefault: false,
+              }));
               setForm((p) => ({
                 ...p,
-                options: mode === "replace" ? newOptions : [...p.options, ...newOptions],
+                options:
+                  mode === "replace"
+                    ? formatted.map((o, i) => ({ ...o, index: i + 1 }))
+                    : [...p.options, ...formatted].map((o, i) => ({ ...o, index: i + 1 })),
               }));
             }}
           />
@@ -4842,6 +5595,24 @@ export function AdminFieldDrawer({
                 inheritedFieldKey: createdField.key,
               }));
             }
+          }}
+        />
+      )}
+      {/* Advance List 2 Drawer */}
+      {advanceListDrawerOpen && (
+        <AdvanceListDrawer
+          isOpen={advanceListDrawerOpen}
+          editingList={advanceListEditingDef}
+          zIndex={zIndex + 30}
+          onClose={() => {
+            setAdvanceListDrawerOpen(false);
+            setAdvanceListEditingDef(null);
+          }}
+          onSaved={(savedList) => {
+            setAdvanceListDrawerOpen(false);
+            setAdvanceListEditingDef(null);
+            setAdvanceLists(getStoredAdvanceLists());
+            handleSelectAdvanceList(savedList.id);
           }}
         />
       )}

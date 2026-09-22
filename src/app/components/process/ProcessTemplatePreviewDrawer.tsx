@@ -806,15 +806,22 @@ export default function ProcessTemplatePreviewDrawer({
               </div>
 
               <div className="space-y-1.5">
-                {stages.map((st) => {
+                {stages.map((st, sIdx) => {
                   const isChecked = Boolean(stageReqModalField.requiredStages?.includes(st.name));
 
                   return (
                     <label
                       key={st.id}
-                      className="p-2.5 bg-white border border-slate-200 rounded-xl flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                      className={`p-2.5 bg-white border rounded-xl flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors ${
+                        isChecked ? "border-blue-300 bg-blue-50/40" : "border-slate-200"
+                      }`}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                          isChecked ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 border border-slate-200"
+                        }`}>
+                          {sIdx + 1}
+                        </span>
                         <span
                           className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: st.color || "#3b82f6" }}

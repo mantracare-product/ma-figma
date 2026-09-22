@@ -111,8 +111,6 @@ interface SectionFormState {
   module: Exclude<FieldModule, "deal">;
   selectedModules: Exclude<FieldModule, "deal">[];
   fieldKeys: string[];
-  required: boolean;
-  requiredStages: string[];
   showAlways: boolean;
   userVisibility: boolean;
   visibleToUserIds: string[];
@@ -129,8 +127,6 @@ function defaultSectionForm(module: Exclude<FieldModule, "deal">): SectionFormSt
     module,
     selectedModules: [module],
     fieldKeys: [],
-    required: false,
-    requiredStages: [],
     showAlways: true,
     userVisibility: true,
     visibleToUserIds: [],
@@ -169,8 +165,6 @@ function sectionToForm(s: SectionDefinition): SectionFormState {
     module: primaryMod,
     selectedModules,
     fieldKeys: s.fieldKeys ?? [],
-    required: Boolean(s.required),
-    requiredStages: s.requiredStages ? [...s.requiredStages] : [],
     showAlways: s.showAlways !== false,
     userVisibility: s.userVisibility !== false,
     visibleToUserIds: s.visibleToUserIds ? s.visibleToUserIds.map(String) : [],
@@ -215,18 +209,51 @@ export function AdminSectionDrawer({
   );
 
   const [form, setForm] = useState<SectionFormState>(() => {
+    const stored = getStoredProcesses();
+    const targetProc = stored.find(
+      (p) =>
+        (activeProcessId && (p.id === activeProcessId || p.name === activeProcessId)) ||
+        (activeProcessName &&
+          (p.name.toLowerCase() === activeProcessName.toLowerCase() || p.id === activeProcessName))
+    );
+
+    let inheritedRules: ScopingRule[] = [];
+    if (targetProc) {
+      if (targetProc.scopingRules && targetProc.scopingRules.length > 0) {
+        inheritedRules = targetProc.scopingRules.map((r, i) => ({
+          id: `rule_inherited_${i}_${Date.now()}`,
+          industryCategory: r.industryCategory || "All",
+          industries: r.industries || [],
+          locations: r.locations || [],
+        }));
+      } else if (targetProc.industryCategory || targetProc.industry || (targetProc.locations && targetProc.locations.length > 0)) {
+        inheritedRules = [{
+          id: `rule_inherited_${Date.now()}`,
+          industryCategory: targetProc.industryCategory || "All",
+          industries: targetProc.industry && targetProc.industry !== "All" ? [targetProc.industry] : [],
+          locations: targetProc.locations && !targetProc.locations.includes("All") ? targetProc.locations : [],
+        }];
+      }
+    }
+
     if (isEdit) {
       const init = sectionToForm(section!);
-      if (activeProcessId && (!init.processIds || init.processIds.length === 0)) {
-        return { ...init, processIds: [activeProcessId] };
-      }
-      return init;
+      const finalProcessIds = activeProcessId && (!init.processIds || init.processIds.length === 0)
+        ? [activeProcessId]
+        : (targetProc && (!init.processIds || init.processIds.length === 0) ? [targetProc.id] : init.processIds);
+      const finalRules = (!init.scopingRules || init.scopingRules.length === 0) && inheritedRules.length > 0
+        ? inheritedRules
+        : init.scopingRules;
+      return { ...init, processIds: finalProcessIds, scopingRules: finalRules };
     }
+
     const def = defaultSectionForm(initialModule);
-    if (activeProcessId) {
-      return { ...def, processIds: [activeProcessId] };
-    }
-    return def;
+    const resolvedProcessIds = activeProcessId ? [activeProcessId] : (targetProc ? [targetProc.id] : def.processIds);
+    return {
+      ...def,
+      processIds: resolvedProcessIds,
+      scopingRules: inheritedRules.length > 0 ? inheritedRules : def.scopingRules,
+    };
   });
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => getStoredTeamMembers());
   const [teamPickerOpen, setTeamPickerOpen] = useState(false);
@@ -521,11 +548,9 @@ export function AdminSectionDrawer({
       source: isEdit && section ? section.source : targetSource,
       createdIn: isEdit && section ? section.createdIn : targetCreatedIn,
       fieldKeys: form.fieldKeys,
-      required: form.required,
-      requiredStages: (form.selectedModules.includes("process") || form.module === "process") && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
       showAlways: form.showAlways,
       userVisibility: form.userVisibility,
-      visibleToUserIds: form.userVisibility !== false && form.visibleToUserIds.length > 0 ? form.visibleToUserIds : undefined,
+      visibleToUserIds: !isAdmin && form.userVisibility !== false && form.visibleToUserIds.length > 0 ? form.visibleToUserIds : undefined,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
       processIds: (form.selectedModules.includes("process") || form.module === "process") ? (form.processIds.length > 0 ? form.processIds : (activeProcessId ? [activeProcessId] : undefined)) : undefined,
       isReusable: additionalModules.length > 0,
@@ -1057,11 +1082,6 @@ export function AdminSectionDrawer({
                         {isAdmin ? "Global Rules" : "Section Settings"}
                       </span>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {form.required && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                            Required
-                          </span>
-                        )}
                         {form.showAlways && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                             Show Always
@@ -1089,142 +1109,7 @@ export function AdminSectionDrawer({
 
               {sectionSettingsOpen && (
                 <div className="p-4 space-y-4 border-t border-gray-100 bg-white">
-                  {/* 1. Required Section */}
-                  <div className="space-y-2">
-                    <div className="flex items-center">
-                      <label className="flex items-center gap-2 select-none cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={form.required}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setForm((p) => ({
-                              ...p,
-                              required: checked,
-                              ...(checked ? { showAlways: true } : {}),
-                            }));
-                          }}
-                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        />
-                        <span className="text-xs font-semibold text-gray-800">Required section</span>
-                      </label>
-                      <InfoTooltip text="Users must complete all required fields within this section." size="sm" />
-                    </div>
-
-                    {form.required && isProcessActive && (
-                      <div className="mt-2.5 ml-6 space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900">
-                            Process Stage Requirements
-                          </span>
-                          <span className="text-[10px] font-medium text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md">
-                            {targetProcessesForRequirement.length} {targetProcessesForRequirement.length === 1 ? "Process" : "Processes"}
-                          </span>
-                        </div>
-
-                        <div className="space-y-2.5">
-                          {targetProcessesForRequirement.map((proc) => {
-                            const procStages = proc.stages && proc.stages.length > 0 ? proc.stages : [
-                              { id: "initial", name: "Initial Contact" },
-                              { id: "review", name: "Insurance Verify" },
-                              { id: "schedule", name: "Schedule Appointment" },
-                              { id: "last", name: "last stage" },
-                            ];
-                            const selectedStagesInProc = procStages.filter((st) => form.requiredStages.includes(st.name));
-                            const allStagesSelected = selectedStagesInProc.length === procStages.length;
-
-                            const toggleSelectAllStagesInProc = () => {
-                              setForm((p) => {
-                                const currentStages = p.requiredStages || [];
-                                if (allStagesSelected) {
-                                  const remaining = currentStages.filter((st) => !procStages.some((s) => s.name === st));
-                                  return { ...p, requiredStages: remaining };
-                                } else {
-                                  const procStageNames = procStages.map((s) => s.name);
-                                  const otherStages = currentStages.filter((st) => !procStageNames.includes(st));
-                                  return { ...p, requiredStages: [...otherStages, ...procStageNames] };
-                                }
-                              });
-                            };
-
-                            const toggleStage = (stageName: string) => {
-                              setForm((p) => {
-                                const currentStages = p.requiredStages || [];
-                                const exists = currentStages.includes(stageName);
-                                const next = exists
-                                  ? currentStages.filter((s) => s !== stageName)
-                                  : [...currentStages, stageName];
-                                return { ...p, requiredStages: next };
-                              });
-                            };
-
-                            return (
-                              <div key={proc.id} className="p-3 bg-amber-50/70 border border-amber-200/90 rounded-xl space-y-2.5">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
-                                    <span className="text-xs font-bold text-gray-900 truncate" title={proc.name}>
-                                      {proc.name}
-                                    </span>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={toggleSelectAllStagesInProc}
-                                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
-                                  >
-                                    {allStagesSelected ? "Deselect All" : "Select All"}
-                                  </button>
-                                </div>
-
-                                <div className="space-y-1.5">
-                                  <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-                                    Required at Stages ({selectedStagesInProc.length} of {procStages.length})
-                                  </label>
-                                  
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                    {procStages.map((st) => {
-                                      const isChecked = form.requiredStages.includes(st.name);
-                                      return (
-                                        <button
-                                          key={st.id || st.name}
-                                          type="button"
-                                          onClick={() => toggleStage(st.name)}
-                                          className={`px-2.5 py-1.5 rounded-lg border text-left text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
-                                            isChecked
-                                              ? "bg-amber-100/90 border-amber-300 text-amber-950 font-semibold shadow-2xs"
-                                              : "bg-white/80 border-gray-200 text-gray-700 hover:bg-white"
-                                          }`}
-                                        >
-                                          <span className="truncate">{st.name}</span>
-                                          <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                                            isChecked ? "bg-amber-600 border-amber-600 text-white" : "border-gray-300 bg-white"
-                                          }`}>
-                                            {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                                          </div>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                <p className="text-[10px] text-amber-800/80 leading-relaxed">
-                                  {selectedStagesInProc.length === 0 ? (
-                                    <span className="text-gray-400 italic">No stages selected for this process workflow.</span>
-                                  ) : allStagesSelected ? (
-                                    <>Mandatory across <strong>all {procStages.length} stages</strong> in {proc.name}.</>
-                                  ) : (
-                                    <>Mandatory when entering <strong>{selectedStagesInProc.map((s) => s.name).join(", ")}</strong> in {proc.name}.</>
-                                  )}
-                                </p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 2. Show Always Checkbox */}
+                  {/* 1. Show Always Checkbox */}
                   <div className="flex items-center">
                     <label className="flex items-center gap-2 select-none cursor-pointer">
                       <input
