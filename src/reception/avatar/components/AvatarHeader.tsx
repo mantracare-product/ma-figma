@@ -57,7 +57,7 @@ export const AvatarHeader: React.FC<AvatarHeaderProps> = ({
           <h1 className="text-sm sm:text-base font-bold text-white tracking-tight flex items-center gap-2 font-['Outfit']">
             {clinicName}
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 font-medium">
-              Self Check-in
+              AI Receptionist
             </span>
           </h1>
           <p className="text-xs text-slate-400 hidden sm:block">AI Virtual Concierge</p>

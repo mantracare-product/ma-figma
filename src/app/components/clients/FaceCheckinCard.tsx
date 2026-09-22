@@ -135,7 +135,7 @@ export const FaceCheckinCard: React.FC<FaceCheckinCardProps> = ({
             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
               Biometric Face Check-in
             </h4>
-            <p className="text-[11px] text-slate-500">Autonomous kiosk patient identification</p>
+            <p className="text-[11px] text-slate-500">Autonomous AI Receptionist patient identification</p>
           </div>
         </div>
 

@@ -1,7 +1,7 @@
 # Mantra AI Receptionist: Backend Handoff & Production Architecture Specification
 
 ## 1. Overview
-This specification details the backend architecture, security protocols, API contracts, and biometric compliance requirements for transitioning Mantra AI Receptionist from the current client-side prototype to a production-grade distributed backend service.
+This specification details the backend architecture, security protocols, API contracts, and biometric compliance requirements for transitioning Mantra AI Receptionist from the client-side prototype to a production-grade distributed backend service.
 
 ---
 
@@ -13,7 +13,7 @@ This specification details the backend architecture, security protocols, API con
 ### 2.1 Biometric Security Principles & Production Storage
 1. **Server-Side Encrypted Vector Storage**:
    - Production storage of face templates requires server-side encrypted storage using hardware security modules (HSM) or KMS envelope encryption (AES-256-GCM) with tenant-isolated encryption keys.
-   - Client devices (tablets/kiosks) calculate face embedding vectors or capture single-session ephemeral frames sent over TLS 1.3 to the backend inference microservice.
+   - Client displays capture single-session ephemeral frames sent over TLS 1.3 to the backend inference microservice.
    - Raw photographic images are **never stored** on disk or transmitted beyond the ephemeral TLS stream buffer.
    - Vectors are stored strictly as mathematical embeddings decoupled from patient identifiers.
 2. **Explicit Informed Consent Record**:
@@ -28,9 +28,20 @@ This specification details the backend architecture, security protocols, API con
 5. **ISO/IEC 30107-3 Liveness & Presentation Attack Detection (PAD)**:
    - Must incorporate passive and active PAD (blink detection, micro-nod, 3D structure analysis) to prevent replay and spoof attacks.
 6. **Privacy-Gate Verification Flow**:
-   - The kiosk display must only reveal the patient's first name upon biometric match (*"Hi Sunita, is this you?"*). Full appointment details and clinical room assignments are only surfaced following patient confirmation.
+   - The AI Receptionist display must only reveal the patient's first name upon biometric match (*"Hi Sunita, is this you?"*). Full appointment details and clinical room assignments are only surfaced following patient confirmation.
 7. **Zero PHI in Logs or URLs**:
    - Vector values, raw embeddings, and biometric tokens must never appear in HTTP query params, server application logs, or telemetry.
+
+### 2.2 Ambient Presence Detection & Healthcare Waiting Area Signage
+1. **Anonymous & Disposable Optical Presence Sensing**:
+   - The `AMBIENT` screen activates the local camera stream **purely for presence detection** (measuring face-height to viewport-height bounding box ratio as a distance proxy).
+   - **Zero Biometric Matching or Storage**: No template extraction, vector matching, identification lookup, video recording, or image frame caching is ever performed on `AMBIENT`.
+   - Bounding box coordinates and size heuristics remain in volatile browser/device memory and are discarded immediately after each detection tick (~5 FPS).
+2. **Waiting Area Signage & Consent Review**:
+   - Production deployments utilizing camera-driven ambient presence detection must be reviewed against local municipal, state, and national regulations governing always-on optical sensors and video capture devices in healthcare waiting facilities.
+   - Physical prominent signage (e.g. *"Optical sensors in use for automated reception greeting; no recordings or biometric profiles are retained"*) should be posted at entryways in accordance with local healthcare privacy and surveillance disclosure laws.
+3. **Continuous Visual Patient Disclosure**:
+   - On-screen visual indicators (`● Camera active for greeting only`) and one-time non-blocking session disclosures (*"I use the camera to notice when someone's here. Nothing is recorded or saved."*) must remain persistent and unambiguous to patients at all times.
 
 ---
 
@@ -47,12 +58,13 @@ MantraAssist (MA) remains the single source of truth for:
 ### 3.2 Key Production Endpoints
 | Method | Route | Description |
 |---|---|---|
-| `POST` | `/api/v1/reception/auth/device` | Kiosk device registration & scoped token issuance |
 | `POST` | `/api/v1/reception/biometrics/match` | Match ephemeral vector against encrypted templates |
 | `POST` | `/api/v1/reception/biometrics/enroll` | Enroll new template with verified patient consent |
 | `DELETE` | `/api/v1/reception/biometrics/:clientId` | Permanent deletion and audit log of biometric template |
 | `GET` | `/api/v1/reception/visit-summary/:clientId` | Single-query composite summary of patient, appointment & room |
 | `POST` | `/api/v1/reception/appointments/checkin` | Atomic check-in, journey instantiation & queue ticket issuance |
+| `POST` | `/api/v1/reception/walkin/checkin` | Atomic walk-in client create, appointment book, & token issuance |
+| `POST` | `/api/v1/reception/tickets/complete` | Complete stage and transition journey to subsequent station |
 | `WS` | `/api/v1/reception/queue/stream` | WebSocket real-time queue state broadcasts |
 
 ---

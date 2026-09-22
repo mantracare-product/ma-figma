@@ -99,7 +99,7 @@ export const VisitJourneyCard: React.FC<VisitJourneyCardProps> = ({
         // Find target station
         const targetStation = stations.find((s) => s.type === nextStationType);
         if (targetStation) {
-          await maClient.transferTicket(activeTicket.id, targetStation.id, 1);
+          await maClient.completeTicket(activeTicket.id, [targetStation.id]);
           toast.success(`Patient moved to ${targetStation.name}.`);
         } else {
           await maClient.completeTicket(activeTicket.id, []);

@@ -36,9 +36,6 @@ import Claims from "./pages/Claims";
 import AdminCustomFields from "./pages/admin/AdminCustomFields";
 import AdminIndustries from "./pages/admin/AdminIndustries";
 import AdminProcessTemplates from "./pages/admin/AdminProcessTemplates";
-import KioskApp from "../reception/kiosk/KioskApp";
-import DisplayApp from "../reception/display/DisplayApp";
-import ConsoleApp from "../reception/console/ConsoleApp";
 import { AvatarReceptionView } from "../reception/avatar/AvatarReceptionView";
 
 export const router = createBrowserRouter([
@@ -49,30 +46,6 @@ export const router = createBrowserRouter([
   {
     path: "/reception/avatar",
     Component: AvatarReceptionView,
-  },
-  {
-    path: "/reception/kiosk",
-    Component: KioskApp,
-  },
-  {
-    path: "/kiosk",
-    Component: KioskApp,
-  },
-  {
-    path: "/reception/display",
-    Component: DisplayApp,
-  },
-  {
-    path: "/display",
-    Component: DisplayApp,
-  },
-  {
-    path: "/reception/console",
-    Component: ConsoleApp,
-  },
-  {
-    path: "/console",
-    Component: ConsoleApp,
   },
   {
     path: "/login",

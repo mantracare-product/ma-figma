@@ -42,6 +42,7 @@ import {
   ChevronRight,
   Send,
   RefreshCw,
+  Mic,
 } from 'lucide-react';
 import { AnimatedAvatar, type AvatarState } from './components/AnimatedAvatar';
 import { getMaClient } from '../lib/api/maClient';
@@ -56,6 +57,7 @@ import '../styles/navodyaTokens.css';
 import '../styles/avatarStage.css';
 
 export type ScreenState =
+  | 'AMBIENT'
   | 'IDLE'
   | 'VERIFY_CHOICE'
   | 'FACE_CONSENT'
@@ -73,12 +75,52 @@ export type ScreenState =
   | 'TOKEN_ISSUED'
   | 'MY_VISIT';
 
+export type AmbientPhase = 'dormant' | 'noticed' | 'greeting' | 'listening' | 'routing';
 export type FaceScanPhase = 'idle' | 'starting' | 'scanning' | 'success' | 'no_match' | 'denied';
 export type FaceRegistrationPhase = 'intro' | 'capturing' | 'duplicate_found' | 'success' | 'denied';
 
 export type FlowType = 'SCHEDULED' | 'WALK_IN' | 'MY_VISIT' | null;
 
 const INACTIVITY_TIMEOUT_SECONDS = 60;
+
+// Presence detection thresholds (face-size ratio proxy for distance)
+// NOTE: faceHeightRatio is a heuristic proxy (face.height / video.videoHeight), not a real physical distance measurement.
+// Calibration per camera lens and room geometry will be required in production.
+const NOTICED_RATIO = 0.14; // Roughly a person a few steps away
+const CLOSE_RATIO = 0.30;   // Heuristic proxy for under ~1 meter
+const AMBIENT_DWELL_COUNT = 2; // 2 consecutive detections required to avoid flicker
+
+// Keyword intent matcher dictionaries (English and Hindi equivalents)
+const APPOINTMENT_WORDS = [
+  'appointment',
+  'booked',
+  'scheduled',
+  'check in',
+  'checkin',
+  'my doctor',
+  'my visit',
+  'visit',
+  'अपॉइंटमेंट',
+  'चेक इन',
+  'चेकिन',
+  'बुक',
+  'डॉक्टर',
+];
+
+const WALKIN_WORDS = [
+  'walk in',
+  'walk-in',
+  'new patient',
+  'no appointment',
+  'register',
+  'first time',
+  'वॉक इन',
+  'वॉक-इन',
+  'नया मरीज',
+  'नया पेशेंट',
+  'रजिस्टर',
+  'पहली बार',
+];
 
 export interface ActionStackProps {
   primary?: {
@@ -146,10 +188,26 @@ export const ActionStack: React.FC<ActionStackProps> = ({ primary, secondary, cl
 export const AvatarReceptionView: React.FC = () => {
   const maClient = getMaClient();
 
-  // Navigation & Flow State (Landing screen is default on load/reset)
-  const [screen, setScreen] = useState<ScreenState>('IDLE');
+  // Navigation & Flow State (AMBIENT is default on load/reset)
+  const [screen, setScreen] = useState<ScreenState>('AMBIENT');
   const [flowType, setFlowType] = useState<FlowType>(null);
   const [currentLanguage, setCurrentLanguage] = useState<'en' | 'hi'>('en');
+
+  // AMBIENT Presence & Greeting Sub-state Machine
+  const [ambientPhase, setAmbientPhase] = useState<AmbientPhase>('dormant');
+  const [ambientCameraActive, setAmbientCameraActive] = useState<boolean>(false);
+  const [ambientCameraDenied, setAmbientCameraDenied] = useState<boolean>(false);
+  const [ambientDisclosureVisible, setAmbientDisclosureVisible] = useState<boolean>(false);
+  const ambientDisclosureShownRef = useRef<boolean>(false);
+  const ambientVideoRef = useRef<HTMLVideoElement | null>(null);
+  const ambientLostTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const ambientPhaseRef = useRef<AmbientPhase>(ambientPhase);
+  ambientPhaseRef.current = ambientPhase;
+  const greetingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const ambientSpeechRecognitionRef = useRef<any>(null);
+  const noticedDwellRef = useRef<number>(0);
+  const closeDwellRef = useRef<number>(0);
+  const lastFaceSeenTimeRef = useRef<number>(0);
 
   // Avatar & Voice State
   const [avatarState, setAvatarState] = useState<AvatarState>('idle');
@@ -214,15 +272,6 @@ export const AvatarReceptionView: React.FC = () => {
     if (facePhase === 'scanning') return liveHint;
     return "Tap Start scanning when you're ready";
   }, [facePosition, facePhase, liveHint]);
-
-  // Expose test hook for face position
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      (window as any).__setFacePosition = (pos: 'aligned' | 'too_close' | 'too_far' | 'off_center' | 'idle') => {
-        setFacePosition(pos);
-      };
-    }
-  }, []);
 
   // Real-time Face Detection Loop: Only runs on FACE_SCAN and throttled to ~8 fps (125ms)
   useEffect(() => {
@@ -329,8 +378,128 @@ export const AvatarReceptionView: React.FC = () => {
   // Load clinic services and providers
   useEffect(() => {
     maClient.getServices().then(setServices).catch(console.error);
-    maClient.getProviders().then(setProviders).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (selectedServiceId) {
+      maClient.getProviders(undefined, selectedServiceId).then(setProviders).catch(console.error);
+    } else {
+      maClient.getProviders().then(setProviders).catch(console.error);
+    }
+  }, [selectedServiceId]);
+
+  // Voice synthesis: Prioritized Female Voice Selection & Caching
+  const cachedVoicesRef = useRef<Record<string, SpeechSynthesisVoice | null>>({});
+
+  const getFemaleVoice = useCallback((lang: string): SpeechSynthesisVoice | null => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return null;
+
+    if (cachedVoicesRef.current[lang]) {
+      return cachedVoicesRef.current[lang];
+    }
+
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) return null;
+
+    const targetLangPrefix = lang === 'hi' ? 'hi' : lang === 'es' ? 'es' : 'en';
+    const matchingLangVoices = voices.filter((v) => v.lang.toLowerCase().startsWith(targetLangPrefix));
+
+    const preferences: Record<string, string[]> = {
+      en: [
+        'Google US English Female',
+        'Microsoft Aria Online (Natural) - English (United States)',
+        'Microsoft Jenny Online (Natural) - English (United States)',
+        'Microsoft Zira - English (United States)',
+        'Microsoft Zira Desktop - English (United States)',
+        'Samantha',
+        'Victoria',
+        'Karen',
+        'Moira',
+        'Fiona',
+        'Tessa',
+        'Google UK English Female',
+        'en-US-Standard-C',
+        'en-US-Wavenet-C',
+        'en-US-Wavenet-F',
+        'Aria',
+        'Jenny',
+        'Zira',
+      ],
+      hi: [
+        'Google हिन्दी',
+        'Microsoft Swara Online (Natural) - Hindi (India)',
+        'Microsoft Heera - Hindi (India)',
+        'Kalpana',
+        'Swara',
+        'Heera',
+        'hi-IN-Standard-A',
+        'hi-IN-Wavenet-A',
+      ],
+      es: [
+        'Google español',
+        'Microsoft Laura Online (Natural) - Spanish (Spain)',
+        'Microsoft Helena - Spanish (Spain)',
+        'Paulina',
+        'Monica',
+        'Laura',
+        'Helena',
+      ],
+    };
+
+    const prefs = preferences[lang] || preferences.en;
+
+    // 1. Check exact or substring match in preferences
+    for (const pref of prefs) {
+      const found = matchingLangVoices.find(
+        (v) => v.name.toLowerCase() === pref.toLowerCase() || v.name.toLowerCase().includes(pref.toLowerCase())
+      );
+      if (found) {
+        cachedVoicesRef.current[lang] = found;
+        console.log(`[TTS] Selected preferred female voice for '${lang}': ${found.name}`);
+        return found;
+      }
+    }
+
+    // 2. Keyword heuristic search for "female", "woman", "natural"
+    const femaleKeywordVoice = matchingLangVoices.find(
+      (v) =>
+        v.name.toLowerCase().includes('female') ||
+        v.name.toLowerCase().includes('woman') ||
+        v.name.toLowerCase().includes('natural')
+    );
+    if (femaleKeywordVoice) {
+      cachedVoicesRef.current[lang] = femaleKeywordVoice;
+      console.log(`[TTS] Selected keyword female voice for '${lang}': ${femaleKeywordVoice.name}`);
+      return femaleKeywordVoice;
+    }
+
+    // 3. Fallback to first matching language voice
+    if (matchingLangVoices.length > 0) {
+      cachedVoicesRef.current[lang] = matchingLangVoices[0];
+      console.warn(`[TTS] No clearly-female voice found for '${lang}', falling back to: ${matchingLangVoices[0].name}`);
+      return matchingLangVoices[0];
+    }
+
+    if (voices.length > 0) {
+      cachedVoicesRef.current[lang] = voices[0];
+      return voices[0];
+    }
+
+    return null;
+  }, []);
+
+  // Initialize voices on mount & listen to voiceschanged
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      const loadVoices = () => {
+        getFemaleVoice('en');
+        getFemaleVoice('hi');
+        getFemaleVoice('es');
+      };
+      loadVoices();
+      window.speechSynthesis.addEventListener('voiceschanged', loadVoices, { once: true });
+    }
+  }, [getFemaleVoice]);
 
   // Voice synthesis & live captioning
   const speak = useCallback(
@@ -350,8 +519,15 @@ export const AvatarReceptionView: React.FC = () => {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 1.0;
-        utterance.pitch = 1.05;
-        utterance.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
+        utterance.pitch = 1.06;
+
+        const voice = getFemaleVoice(currentLanguage);
+        if (voice) {
+          utterance.voice = voice;
+          utterance.lang = voice.lang;
+        } else {
+          utterance.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
+        }
 
         utterance.onstart = () => setAvatarState('speaking');
         utterance.onend = () => {
@@ -370,10 +546,97 @@ export const AvatarReceptionView: React.FC = () => {
         setAvatarState('idle');
       }
     },
-    [isMuted, currentLanguage]
+    [isMuted, currentLanguage, getFemaleVoice]
   );
 
-  // Clear all scan timers
+  // Dictation state for New Patient Details
+  const [activeDictationField, setActiveDictationField] = useState<'name' | 'reason' | null>(null);
+  const [dictationSuccessField, setDictationSuccessField] = useState<'name' | 'reason' | null>(null);
+  const speechRecognitionRef = useRef<any>(null);
+  const dictationTimeoutRef = useRef<any>(null);
+
+  const isSpeechRecognitionSupported = useMemo(() => {
+    return (
+      typeof window !== 'undefined' &&
+      Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+    );
+  }, []);
+
+  const startDictation = useCallback(
+    (field: 'name' | 'reason') => {
+      if (typeof window === 'undefined') return;
+      const SpeechRecognitionClass =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognitionClass) return;
+
+      if (activeDictationField === field) {
+        if (speechRecognitionRef.current) {
+          try {
+            speechRecognitionRef.current.stop();
+          } catch {}
+        }
+        if (dictationTimeoutRef.current) clearTimeout(dictationTimeoutRef.current);
+        setActiveDictationField(null);
+        return;
+      }
+
+      if (speechRecognitionRef.current) {
+        try {
+          speechRecognitionRef.current.stop();
+        } catch {}
+      }
+      if (dictationTimeoutRef.current) clearTimeout(dictationTimeoutRef.current);
+
+      try {
+        const recognition = new SpeechRecognitionClass();
+        recognition.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onstart = () => {
+          setActiveDictationField(field);
+        };
+
+        recognition.onresult = (event: any) => {
+          const transcript = event.results?.[0]?.[0]?.transcript || '';
+          if (transcript) {
+            setOnboardingForm((prev) => ({
+              ...prev,
+              [field]: transcript.trim(),
+            }));
+            setDictationSuccessField(field);
+            setTimeout(() => {
+              setDictationSuccessField(null);
+            }, 1500);
+          }
+          setActiveDictationField(null);
+        };
+
+        recognition.onerror = () => {
+          setActiveDictationField(null);
+        };
+
+        recognition.onend = () => {
+          setActiveDictationField(null);
+        };
+
+        speechRecognitionRef.current = recognition;
+        recognition.start();
+
+        dictationTimeoutRef.current = setTimeout(() => {
+          try {
+            recognition.stop();
+          } catch {}
+          setActiveDictationField(null);
+        }, 10000);
+      } catch {
+        setActiveDictationField(null);
+      }
+    },
+    [activeDictationField, currentLanguage]
+  );
+
+  // Clear all scan timers and ambient timers
   const clearAllScanTimers = useCallback(() => {
     if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
     if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
@@ -381,6 +644,14 @@ export const AvatarReceptionView: React.FC = () => {
     if (hintTimer2Ref.current) clearTimeout(hintTimer2Ref.current);
     if (matchTimerRef.current) clearTimeout(matchTimerRef.current);
     if (regStepTimerRef.current) clearTimeout(regStepTimerRef.current);
+    if (greetingTimerRef.current) clearTimeout(greetingTimerRef.current);
+    if (ambientLostTimerRef.current) clearTimeout(ambientLostTimerRef.current);
+    if (ambientSpeechRecognitionRef.current) {
+      try {
+        ambientSpeechRecognitionRef.current.stop();
+      } catch {}
+      ambientSpeechRecognitionRef.current = null;
+    }
   }, []);
 
   // Stop active camera stream
@@ -393,15 +664,31 @@ export const AvatarReceptionView: React.FC = () => {
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    if (ambientVideoRef.current) {
+      ambientVideoRef.current.srcObject = null;
+    }
+    setAmbientCameraActive(false);
   }, [clearAllScanTimers]);
 
-  // Start active camera preview (live video selfie style)
+  // Start active camera preview
   const startCameraPreview = useCallback(async () => {
     if (streamRef.current && streamRef.current.active) {
-      if (videoRef.current && videoRef.current.srcObject !== streamRef.current) {
-        videoRef.current.srcObject = streamRef.current;
-        videoRef.current.play().catch(() => {});
+      if (screen === 'AMBIENT') {
+        if (ambientVideoRef.current && ambientVideoRef.current.srcObject !== streamRef.current) {
+          ambientVideoRef.current.srcObject = streamRef.current;
+          ambientVideoRef.current.play().catch(() => {});
+        }
+        setAmbientCameraActive(true);
+      } else {
+        if (videoRef.current && videoRef.current.srcObject !== streamRef.current) {
+          videoRef.current.srcObject = streamRef.current;
+          videoRef.current.play().catch(() => {});
+        }
       }
+      return;
+    }
+
+    if (screen === 'AMBIENT' && ambientCameraDenied) {
       return;
     }
 
@@ -411,9 +698,26 @@ export const AvatarReceptionView: React.FC = () => {
           video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
         });
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {});
+
+        if (screen === 'AMBIENT') {
+          if (ambientVideoRef.current) {
+            ambientVideoRef.current.srcObject = stream;
+            ambientVideoRef.current.play().catch(() => {});
+          }
+          setAmbientCameraActive(true);
+          // Show one-time 4s session privacy disclosure toast
+          if (!ambientDisclosureShownRef.current) {
+            ambientDisclosureShownRef.current = true;
+            setAmbientDisclosureVisible(true);
+            setTimeout(() => {
+              setAmbientDisclosureVisible(false);
+            }, 4000);
+          }
+        } else {
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch(() => {});
+          }
         }
       } else {
         throw new Error('Camera device or getUserMedia not available');
@@ -421,7 +725,12 @@ export const AvatarReceptionView: React.FC = () => {
     } catch (e) {
       console.warn('Camera preview unavailable:', e);
       stopCameraStream();
-      if (screen === 'ONBOARDING_FACE') {
+
+      if (screen === 'AMBIENT') {
+        // AMBIENT remains gracefully in touch-only dormant mode permanently (no error prompt)
+        setAmbientCameraDenied(true);
+        setAmbientCameraActive(false);
+      } else if (screen === 'ONBOARDING_FACE') {
         setFaceRegPhase('denied');
         speak(
           currentLanguage === 'hi'
@@ -441,29 +750,330 @@ export const AvatarReceptionView: React.FC = () => {
         );
       }
     }
-  }, [stopCameraStream, speak, currentLanguage, screen]);
+  }, [stopCameraStream, speak, currentLanguage, screen, ambientCameraDenied]);
 
-  // Hook to start/stop live camera preview based on active screen (Never open on IDLE / Landing / Intro)
+  // Hook to start/stop live camera preview based on active screen
   useEffect(() => {
-    const isFaceScreen =
+    const isCameraScreen =
+      screen === 'AMBIENT' ||
       screen === 'FACE_SCAN' ||
       screen === 'FACE_CONSENT' ||
       (screen === 'ONBOARDING_FACE' && faceRegPhase === 'capturing');
 
-    if (isFaceScreen) {
+    if (isCameraScreen) {
       startCameraPreview();
     } else {
       stopCameraStream();
     }
   }, [screen, faceRegPhase, startCameraPreview, stopCameraStream]);
 
-  // Ensure video element receives active stream upon rendering
+  // Ensure video elements receive active stream upon rendering
   useEffect(() => {
-    if (videoRef.current && streamRef.current && videoRef.current.srcObject !== streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      videoRef.current.play().catch(() => {});
+    if (screen === 'AMBIENT') {
+      if (ambientVideoRef.current && streamRef.current && ambientVideoRef.current.srcObject !== streamRef.current) {
+        ambientVideoRef.current.srcObject = streamRef.current;
+        ambientVideoRef.current.play().catch(() => {});
+      }
+    } else {
+      if (videoRef.current && streamRef.current && videoRef.current.srcObject !== streamRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+        videoRef.current.play().catch(() => {});
+      }
     }
-  }, [screen, facePhase]);
+  }, [screen, facePhase, ambientPhase]);
+
+  // Speech listening and keyword intent resolver for AMBIENT screen
+  const startAmbientListening = useCallback(() => {
+    if (screenRef.current !== 'AMBIENT') return;
+    setAmbientPhase('listening');
+    if (typeof window === 'undefined') return;
+
+    const SpeechRecognitionClass =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionClass) {
+      // Speech recognition unsupported: fall back to IDLE Landing screen after a brief pause
+      setTimeout(() => {
+        if (screenRef.current === 'AMBIENT') {
+          setAmbientPhase('routing');
+          setTimeout(() => {
+            stopCameraStream();
+            setScreen('IDLE');
+          }, 600);
+        }
+      }, 2000);
+      return;
+    }
+
+    if (ambientSpeechRecognitionRef.current) {
+      try {
+        ambientSpeechRecognitionRef.current.stop();
+      } catch {}
+    }
+
+    try {
+      const recognition = new SpeechRecognitionClass();
+      recognition.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      let intentHandled = false;
+
+      recognition.onresult = (event: any) => {
+        const transcript = (event.results?.[0]?.[0]?.transcript || '').trim().toLowerCase();
+        console.log(`[Ambient Intent] Heard: "${transcript}"`);
+        if (!transcript) return;
+
+        intentHandled = true;
+        const hasAppt = APPOINTMENT_WORDS.some((w) => transcript.includes(w));
+        const hasWalkin = WALKIN_WORDS.some((w) => transcript.includes(w));
+
+        setAmbientPhase('routing');
+
+        setTimeout(() => {
+          stopCameraStream();
+          if (hasAppt && !hasWalkin) {
+            setFlowType('SCHEDULED');
+            setScreen('FACE_SCAN');
+            speak(
+              currentLanguage === 'hi'
+                ? 'कृपया चेक इन करने के लिए कैमरे में देखें या फोन नंबर दर्ज करें।'
+                : 'Please look into the camera to check in, or use your phone number below.'
+            );
+          } else if (hasWalkin && !hasAppt) {
+            setFlowType('WALK_IN');
+            setScreen('PHONE');
+            speak(
+              currentLanguage === 'hi'
+                ? 'स्वागत है! पंजीकरण शुरू करने के लिए अपना फोन नंबर दर्ज करें।'
+                : 'Welcome! Please enter your mobile phone number on the touch keypad to begin registration.'
+            );
+          } else {
+            // Ambiguous / both / neither
+            setScreen('IDLE');
+            speak(
+              currentLanguage === 'hi'
+                ? 'निश्चिंत रहें — आप मुझे बता सकते हैं, या एक विकल्प चुन सकते हैं।'
+                : 'Sure — you can tell me here, or just tap an option.'
+            );
+          }
+        }, 600);
+      };
+
+      recognition.onerror = () => {
+        if (!intentHandled && screenRef.current === 'AMBIENT') {
+          intentHandled = true;
+          setAmbientPhase('routing');
+          setTimeout(() => {
+            stopCameraStream();
+            setScreen('IDLE');
+            speak(
+              currentLanguage === 'hi'
+                ? 'निश्चिंत रहें — आप मुझे बता सकते हैं, या एक विकल्प चुन सकते हैं।'
+                : 'Sure — you can tell me here, or just tap an option.'
+            );
+          }, 600);
+        }
+      };
+
+      recognition.onend = () => {
+        if (!intentHandled && screenRef.current === 'AMBIENT') {
+          intentHandled = true;
+          setAmbientPhase('routing');
+          setTimeout(() => {
+            stopCameraStream();
+            setScreen('IDLE');
+            speak(
+              currentLanguage === 'hi'
+                ? 'निश्चिंत रहें — आप मुझे बता सकते हैं, या एक विकल्प चुन सकते हैं।'
+                : 'Sure — you can tell me here, or just tap an option.'
+            );
+          }, 600);
+        }
+      };
+
+      ambientSpeechRecognitionRef.current = recognition;
+      recognition.start();
+
+      // Fallback timeout after ~6 seconds if silence
+      setTimeout(() => {
+        if (!intentHandled && screenRef.current === 'AMBIENT') {
+          try {
+            recognition.stop();
+          } catch {}
+        }
+      }, 6000);
+    } catch {
+      setAmbientPhase('routing');
+      setTimeout(() => {
+        stopCameraStream();
+        setScreen('IDLE');
+      }, 600);
+    }
+  }, [currentLanguage, speak, stopCameraStream]);
+
+  // Trigger speech greeting on AMBIENT screen
+  const triggerAmbientGreeting = useCallback(() => {
+    if (
+      ambientPhaseRef.current === 'greeting' ||
+      ambientPhaseRef.current === 'listening' ||
+      ambientPhaseRef.current === 'routing'
+    ) {
+      return;
+    }
+    setAmbientPhase('greeting');
+    const greetingText =
+      currentLanguage === 'hi'
+        ? 'नमस्ते, मंत्राकेयर में आपका स्वागत है! मैं आज आपकी क्या सहायता कर सकती हूँ?'
+        : 'Hi, welcome to MantraCare! How can I help you today?';
+
+    speak(greetingText, 'speaking');
+
+    // After greeting speech ends, begin listening
+    if (greetingTimerRef.current) clearTimeout(greetingTimerRef.current);
+    greetingTimerRef.current = setTimeout(() => {
+      if (screenRef.current === 'AMBIENT') {
+        startAmbientListening();
+      }
+    }, 3800);
+  }, [currentLanguage, speak, startAmbientListening]);
+
+  // Presence Detection Loop: Only runs on AMBIENT (Throttled ~5 FPS / 200ms)
+  // Bounding-box numbers stay strictly in memory and are discarded immediately after calculation.
+  useEffect(() => {
+    if (screen !== 'AMBIENT' || ambientCameraDenied) {
+      if (ambientLostTimerRef.current) {
+        clearTimeout(ambientLostTimerRef.current);
+        ambientLostTimerRef.current = null;
+      }
+      return;
+    }
+
+    let animationFrameId: number;
+    let detector: any = null;
+    let lastFrameTime = 0;
+
+    if (typeof window !== 'undefined' && 'FaceDetector' in window) {
+      try {
+        detector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+      } catch (e) {
+        console.warn('Native FaceDetector initialization failed:', e);
+      }
+    }
+
+    // If FaceDetector is not available in window, presence detection is gracefully disabled
+    if (!detector) {
+      return;
+    }
+
+    const checkAmbientPresence = async (time: number) => {
+      if (time - lastFrameTime >= 200) {
+        lastFrameTime = time;
+
+        const vid = ambientVideoRef.current;
+        if (
+          vid &&
+          vid.readyState >= 2 &&
+          vid.videoHeight > 0 &&
+          screenRef.current === 'AMBIENT' &&
+          (ambientPhaseRef.current === 'dormant' || ambientPhaseRef.current === 'noticed')
+        ) {
+          try {
+            const faces = await detector.detect(vid);
+            if (faces && faces.length > 0) {
+              const face = faces[0].boundingBox;
+              const vH = vid.videoHeight || 720;
+              const faceHeightRatio = face.height / vH;
+              lastFaceSeenTimeRef.current = Date.now();
+
+              if (ambientLostTimerRef.current) {
+                clearTimeout(ambientLostTimerRef.current);
+                ambientLostTimerRef.current = null;
+              }
+
+              if (faceHeightRatio >= CLOSE_RATIO) {
+                closeDwellRef.current += 1;
+                noticedDwellRef.current += 1;
+                if (closeDwellRef.current >= AMBIENT_DWELL_COUNT) {
+                  triggerAmbientGreeting();
+                }
+              } else if (faceHeightRatio >= NOTICED_RATIO) {
+                closeDwellRef.current = 0;
+                noticedDwellRef.current += 1;
+                if (noticedDwellRef.current >= AMBIENT_DWELL_COUNT) {
+                  if (ambientPhaseRef.current === 'dormant') {
+                    setAmbientPhase('noticed');
+                  }
+                }
+              } else {
+                closeDwellRef.current = 0;
+                noticedDwellRef.current = 0;
+              }
+            } else {
+              // No face detected in this sample tick
+              closeDwellRef.current = 0;
+              noticedDwellRef.current = 0;
+              if (ambientPhaseRef.current === 'noticed' && !ambientLostTimerRef.current) {
+                ambientLostTimerRef.current = setTimeout(() => {
+                  if (screenRef.current === 'AMBIENT' && ambientPhaseRef.current === 'noticed') {
+                    setAmbientPhase('dormant');
+                  }
+                  ambientLostTimerRef.current = null;
+                }, 3000);
+              }
+            }
+          } catch {
+            // Discard detection errors gracefully
+          }
+        }
+      }
+      animationFrameId = requestAnimationFrame(checkAmbientPresence);
+    };
+
+    animationFrameId = requestAnimationFrame(checkAmbientPresence);
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      if (ambientLostTimerRef.current) {
+        clearTimeout(ambientLostTimerRef.current);
+        ambientLostTimerRef.current = null;
+      }
+    };
+  }, [screen, ambientCameraDenied, triggerAmbientGreeting]);
+
+  // Expose test hooks for AMBIENT and face position
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__setFacePosition = (pos: 'aligned' | 'too_close' | 'too_far' | 'off_center' | 'idle') => {
+        setFacePosition(pos);
+      };
+      (window as any).__setAmbientPhase = (phase: AmbientPhase) => {
+        setAmbientPhase(phase);
+        if (phase === 'greeting') {
+          triggerAmbientGreeting();
+        } else if (phase === 'listening') {
+          startAmbientListening();
+        }
+      };
+      (window as any).__triggerAmbientIntent = (phrase: string) => {
+        const text = phrase.trim().toLowerCase();
+        const hasAppt = APPOINTMENT_WORDS.some((w) => text.includes(w));
+        const hasWalkin = WALKIN_WORDS.some((w) => text.includes(w));
+        setAmbientPhase('routing');
+        setTimeout(() => {
+          stopCameraStream();
+          if (hasAppt && !hasWalkin) {
+            setFlowType('SCHEDULED');
+            setScreen('FACE_SCAN');
+          } else if (hasWalkin && !hasAppt) {
+            setFlowType('WALK_IN');
+            setScreen('PHONE');
+          } else {
+            setScreen('IDLE');
+          }
+        }, 500);
+      };
+    }
+  }, [triggerAmbientGreeting, startAmbientListening, stopCameraStream]);
 
   // Cancel scanning & reset to idle preview
   const cancelScanning = useCallback(() => {
@@ -572,17 +1182,18 @@ export const AvatarReceptionView: React.FC = () => {
     }, 1000);
   }, [clearAllScanTimers, speak, currentLanguage, startCameraPreview, maClient]);
 
-  // Reset Session (Always returns to IDLE Landing screen)
+  // Reset Session (Always returns to AMBIENT screen)
   const handleResetSession = useCallback((param?: boolean | React.MouseEvent) => {
-    const skipSpeechIfIdle = typeof param === 'boolean' ? param : false;
+    const skipSpeechIfAmbient = typeof param === 'boolean' ? param : false;
     clearAllScanTimers();
     stopCameraStream();
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
-    const wasIdle = screenRef.current === 'IDLE';
+    const wasAmbient = screenRef.current === 'AMBIENT';
 
-    setScreen('IDLE');
+    setScreen('AMBIENT');
+    setAmbientPhase('dormant');
     setFlowType(null);
     setFacePhase('idle');
     setFaceRegPhase('intro');
@@ -603,6 +1214,8 @@ export const AvatarReceptionView: React.FC = () => {
     setStaffModalOpen(false);
     setErrorMessage(null);
     setInactivitySeconds(null);
+    setSelectedServiceId('');
+    setSelectedProviderId('next_available');
     setOnboardingForm({
       name: '',
       dob: '',
@@ -613,15 +1226,14 @@ export const AvatarReceptionView: React.FC = () => {
       faceCheckinNextTime: false,
     });
 
-    if (!(skipSpeechIfIdle && wasIdle)) {
-      speak(
+    if (!(skipSpeechIfAmbient && wasAmbient)) {
+      setCaptionText(
         currentLanguage === 'hi'
           ? 'मंत्राकेयर में आपका स्वागत है। शुरू करने के लिए कृपया एक विकल्प चुनें।'
-          : 'Welcome to MantraCare Health Center. Please touch an option to begin.',
-        'idle'
+          : 'Welcome to MantraCare Health Center. Please touch an option to begin.'
       );
     }
-  }, [stopCameraStream, speak, currentLanguage, clearAllScanTimers]);
+  }, [stopCameraStream, currentLanguage, clearAllScanTimers]);
 
   // Throttled User Activity Handler (at most 1 call/sec)
   const handleUserActivity = useCallback(() => {
@@ -639,7 +1251,7 @@ export const AvatarReceptionView: React.FC = () => {
       setInactivitySeconds(remaining);
 
       if (remaining === 0) {
-        if (screenRef.current !== 'IDLE') {
+        if (screenRef.current !== 'AMBIENT') {
           handleResetSession(true);
         }
         lastActivityTimeRef.current = Date.now();
@@ -1047,6 +1659,8 @@ export const AvatarReceptionView: React.FC = () => {
       });
 
       setSelectedPatient(newClient);
+      setSelectedServiceId('');
+      setSelectedProviderId('next_available');
       setScreen('SERVICE_DOCTOR');
       speak('Registration approved! Next, choose your consultation service and provider.');
     } catch (err: any) {
@@ -1108,6 +1722,280 @@ export const AvatarReceptionView: React.FC = () => {
     }
   };
 
+  // Global Floating Mic & Voice Command State
+  const [isListeningGlobal, setIsListeningGlobal] = useState(false);
+  const [heardSuccessGlobal, setHeardSuccessGlobal] = useState(false);
+  const globalRecognitionRef = useRef<any>(null);
+  const globalTimeoutRef = useRef<any>(null);
+  const activeFocusedFieldRef = useRef<'name' | 'reason' | 'email' | null>(null);
+
+  // Screen Contextual Voice Command Handler
+  const handleVoiceCommand = useCallback(
+    (rawTranscript: string) => {
+      const text = rawTranscript.trim().toLowerCase();
+      console.log(`[Voice Assistant] Heard: "${rawTranscript}" on screen: ${screen}`);
+
+      // 1. Text input focus routing
+      if (activeFocusedFieldRef.current === 'name') {
+        setOnboardingForm((prev) => ({ ...prev, name: rawTranscript.trim() }));
+        setDictationSuccessField('name');
+        setTimeout(() => setDictationSuccessField(null), 1500);
+        return;
+      }
+      if (activeFocusedFieldRef.current === 'reason') {
+        setOnboardingForm((prev) => ({ ...prev, reason: rawTranscript.trim() }));
+        setDictationSuccessField('reason');
+        setTimeout(() => setDictationSuccessField(null), 1500);
+        return;
+      }
+      if (activeFocusedFieldRef.current === 'email') {
+        setOnboardingForm((prev) => ({ ...prev, email: rawTranscript.trim().replace(/\s+/g, '') }));
+        return;
+      }
+
+      // 2. Screen-specific voice command routing
+      if (screen === 'FACE_SCAN' || screen === 'VERIFY_CHOICE' || screen === 'FACE_CONSENT') {
+        if (text.includes('start') || text.includes('scan') || text.includes('begin') || text.includes('ready')) {
+          startScanning();
+        } else if (text.includes('phone') || text.includes('number') || text.includes('mobile')) {
+          stopCameraStream();
+          startPhoneVerification();
+        } else if (text.includes('cancel') || text.includes('stop')) {
+          cancelScanning();
+        }
+      } else if (screen === 'FACE_CONFIRM') {
+        if (text.includes('yes') || text.includes('me') || text.includes('confirm') || text.includes('correct') || text.includes('haan')) {
+          handleFaceConfirmYes();
+        } else if (text.includes('no') || text.includes('not') || text.includes('nahin')) {
+          handleFaceConfirmNo();
+        }
+      } else if (screen === 'PHONE') {
+        if (text.includes('clear') || text.includes('reset')) {
+          setPhoneNumber('');
+        } else if (text.includes('back') || text.includes('delete')) {
+          setPhoneNumber((prev) => prev.slice(0, -1));
+        } else if (text.includes('continue') || text.includes('send') || text.includes('next') || text.includes('code')) {
+          handleSendOtp();
+        } else if (text.includes('face') || text.includes('camera')) {
+          handleResetSession();
+        } else {
+          const wordToNum: Record<string, string> = {
+            zero: '0', one: '1', two: '2', three: '3', four: '4',
+            five: '5', six: '6', seven: '7', eight: '8', nine: '9',
+          };
+          let digits = '';
+          text.split(/\s+/).forEach((w) => {
+            if (wordToNum[w]) digits += wordToNum[w];
+            else digits += w.replace(/\D/g, '');
+          });
+          if (digits) {
+            setPhoneNumber((prev) => (prev + digits).slice(0, 15));
+          }
+        }
+      } else if (screen === 'OTP') {
+        if (text.includes('clear') || text.includes('reset')) {
+          setOtp('');
+        } else if (text.includes('back') || text.includes('delete')) {
+          setOtp((prev) => prev.slice(0, -1));
+        } else {
+          const wordToNum: Record<string, string> = {
+            zero: '0', one: '1', two: '2', three: '3', four: '4',
+            five: '5', six: '6', seven: '7', eight: '8', nine: '9',
+          };
+          let digits = '';
+          text.split(/\s+/).forEach((w) => {
+            if (wordToNum[w]) digits += wordToNum[w];
+            else digits += w.replace(/\D/g, '');
+          });
+          if (digits) {
+            setOtp((prev) => (prev + digits).slice(0, 4));
+          }
+        }
+      } else if (screen === 'PATIENT_PICK') {
+        const found = patients.find((p) => text.includes(p.name.toLowerCase()));
+        if (found) {
+          handleSelectFamilyPatient(found);
+        }
+      } else if (screen === 'DETAILS_SUMMARY') {
+        if (text.includes('confirm') || text.includes('check in') || text.includes('yes') || text.includes('print') || text.includes('done') || text.includes('token')) {
+          handleConfirmCheckin();
+        } else if (text.includes('not me') || text.includes('cancel') || text.includes('no') || text.includes('back')) {
+          handleResetSession();
+        }
+      } else if (screen === 'ONBOARDING_DETAILS') {
+        if (text.includes('next') || text.includes('continue') || text.includes('submit') || text.includes('review') || text.includes('face')) {
+          handleOnboardingStep1Next();
+        } else if (!onboardingForm.name) {
+          setOnboardingForm((prev) => ({ ...prev, name: rawTranscript.trim() }));
+        } else {
+          setOnboardingForm((prev) => ({ ...prev, reason: rawTranscript.trim() }));
+        }
+      } else if (screen === 'ONBOARDING_FACE') {
+        if (faceRegPhase === 'intro') {
+          if (text.includes('register') || text.includes('face') || text.includes('start') || text.includes('yes') || text.includes('camera')) {
+            handleStartFaceRegistration();
+          } else if (text.includes('skip') || text.includes('no') || text.includes('later') || text.includes('cancel')) {
+            handleSkipFaceRegistration();
+          }
+        } else if (faceRegPhase === 'capturing') {
+          if (text.includes('cancel') || text.includes('skip') || text.includes('stop')) {
+            handleSkipFaceRegistration();
+          }
+        } else if (faceRegPhase === 'duplicate_found') {
+          if (text.includes('yes') || text.includes('me') || text.includes('confirm')) {
+            handleDuplicateConfirmYes();
+          } else if (text.includes('no') || text.includes('new') || text.includes('continue')) {
+            handleDuplicateConfirmNo();
+          }
+        } else if (faceRegPhase === 'success') {
+          if (text.includes('continue') || text.includes('review') || text.includes('next') || text.includes('done')) {
+            handleContinueToReview();
+          }
+        }
+      } else if (screen === 'ONBOARDING_REVIEW') {
+        if (text.includes('approve') || text.includes('confirm') || text.includes('yes') || text.includes('submit') || text.includes('done')) {
+          handleOnboardingApprove();
+        } else if (text.includes('edit') || text.includes('change') || text.includes('back')) {
+          setScreen('ONBOARDING_DETAILS');
+        } else if (text.includes('decline') || text.includes('cancel') || text.includes('no')) {
+          handleResetSession();
+        }
+      } else if (screen === 'SERVICE_DOCTOR') {
+        if (text.includes('general') || text.includes('consultation') || text.includes('general consultation')) {
+          setSelectedServiceId('srv_consult');
+          setSelectedProviderId('next_available');
+        } else if (text.includes('cardio') || text.includes('heart') || text.includes('cardiology')) {
+          setSelectedServiceId('srv_cardio');
+          setSelectedProviderId('next_available');
+        } else if (text.includes('dental') || text.includes('tooth') || text.includes('teeth') || text.includes('clean')) {
+          setSelectedServiceId('srv_dental');
+          setSelectedProviderId('next_available');
+        } else if (text.includes('next available') || text.includes('first available') || text.includes('any')) {
+          setSelectedProviderId('next_available');
+        } else if (text.includes('confirm') || text.includes('issue') || text.includes('ticket') || text.includes('book') || text.includes('done')) {
+          if (selectedServiceId && selectedProviderId) {
+            handleBookWalkIn();
+          }
+        } else {
+          const matchProv = providers.find((p) => text.includes(p.name.toLowerCase()));
+          if (matchProv) {
+            setSelectedProviderId(matchProv.id);
+          }
+        }
+      } else if (screen === 'TOKEN_ISSUED') {
+        if (text.includes('sms') || text.includes('send') || text.includes('text')) {
+          if (issuedTicket) {
+            maClient.sendTokenNotification(issuedTicket.id, phoneNumber || '+91 98765 43210', 'sms');
+            showToast('Token details sent via SMS!');
+          }
+        } else if (text.includes('done') || text.includes('finish') || text.includes('home') || text.includes('close')) {
+          handleResetSession();
+        }
+      } else if (screen === 'MY_VISIT') {
+        if (text.includes('close') || text.includes('home') || text.includes('done') || text.includes('back')) {
+          handleResetSession();
+        }
+      }
+    },
+    [
+      screen,
+      onboardingForm,
+      faceRegPhase,
+      patients,
+      providers,
+      selectedServiceId,
+      selectedProviderId,
+      issuedTicket,
+      phoneNumber,
+      startScanning,
+      stopCameraStream,
+      startPhoneVerification,
+      cancelScanning,
+      handleFaceConfirmYes,
+      handleFaceConfirmNo,
+      handleSendOtp,
+      handleResetSession,
+      handleSelectFamilyPatient,
+      handleConfirmCheckin,
+      handleOnboardingStep1Next,
+      handleStartFaceRegistration,
+      handleSkipFaceRegistration,
+      handleDuplicateConfirmYes,
+      handleDuplicateConfirmNo,
+      handleContinueToReview,
+      handleOnboardingApprove,
+      handleBookWalkIn,
+      maClient,
+      showToast,
+    ]
+  );
+
+  const startGlobalDictation = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognitionClass =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionClass) return;
+
+    if (isListeningGlobal) {
+      if (globalRecognitionRef.current) {
+        try {
+          globalRecognitionRef.current.stop();
+        } catch {}
+      }
+      if (globalTimeoutRef.current) clearTimeout(globalTimeoutRef.current);
+      setIsListeningGlobal(false);
+      return;
+    }
+
+    if (globalRecognitionRef.current) {
+      try {
+        globalRecognitionRef.current.stop();
+      } catch {}
+    }
+    if (globalTimeoutRef.current) clearTimeout(globalTimeoutRef.current);
+
+    try {
+      const recognition = new SpeechRecognitionClass();
+      recognition.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        setIsListeningGlobal(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results?.[0]?.[0]?.transcript || '';
+        if (transcript) {
+          handleVoiceCommand(transcript);
+          setHeardSuccessGlobal(true);
+          setTimeout(() => setHeardSuccessGlobal(false), 1500);
+        }
+        setIsListeningGlobal(false);
+      };
+
+      recognition.onerror = () => {
+        setIsListeningGlobal(false);
+      };
+
+      recognition.onend = () => {
+        setIsListeningGlobal(false);
+      };
+
+      globalRecognitionRef.current = recognition;
+      recognition.start();
+
+      globalTimeoutRef.current = setTimeout(() => {
+        try {
+          recognition.stop();
+        } catch {}
+        setIsListeningGlobal(false);
+      }, 10000);
+    } catch {
+      setIsListeningGlobal(false);
+    }
+  }, [isListeningGlobal, currentLanguage, handleVoiceCommand]);
+
   // Step Progress Calculation
   const getStepProgress = () => {
     if (flowType === 'SCHEDULED') {
@@ -1133,6 +2021,204 @@ export const AvatarReceptionView: React.FC = () => {
   };
 
   const stepProgress = getStepProgress();
+
+  if (screen === 'AMBIENT') {
+    return (
+      <div
+        onClick={() => {
+          handleUserActivity();
+          stopCameraStream();
+          if (typeof window !== 'undefined' && window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+          }
+          setScreen('IDLE');
+          speak(
+            currentLanguage === 'hi'
+              ? 'मंत्राकेयर में आपका स्वागत है। शुरू करने के लिए कृपया एक विकल्प चुनें।'
+              : 'Welcome to MantraCare Health Center. Please touch an option to begin.',
+            'idle'
+          );
+        }}
+        className="h-screen w-screen overflow-hidden bg-gradient-to-br from-[#121820] via-[#1b2634] to-[#253545] flex flex-col items-center justify-between p-4 sm:p-6 lg:p-8 relative select-none font-sans text-white cursor-pointer"
+      >
+        {/* Hidden live camera stream for anonymous presence detection */}
+        <video
+          ref={ambientVideoRef}
+          autoPlay
+          playsInline
+          muted
+          className="hidden pointer-events-none"
+        />
+
+        {/* Ambient Dynamic Radial Glow */}
+        <div
+          className={`absolute inset-0 pointer-events-none transition-all duration-1000 ${
+            ambientPhase === 'greeting'
+              ? 'bg-[radial-gradient(ellipse_at_center,rgba(20,86,240,0.35)_0%,transparent_70%)]'
+              : ambientPhase === 'listening'
+              ? 'bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.30)_0%,transparent_70%)]'
+              : ambientPhase === 'noticed'
+              ? 'bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.22)_0%,transparent_70%)]'
+              : ambientPhase === 'routing'
+              ? 'bg-[radial-gradient(ellipse_at_center,rgba(96,165,250,0.28)_0%,transparent_70%)]'
+              : 'bg-[radial-gradient(ellipse_at_center,rgba(20,86,240,0.14)_0%,transparent_70%)]'
+          }`}
+        />
+
+        {/* Top-Right Persistent Privacy Badge (Icon + Text) */}
+        {ambientCameraActive && !ambientCameraDenied && (
+          <div className="absolute top-5 right-5 sm:top-6 sm:right-6 z-40 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/85 backdrop-blur-xl border border-white/20 text-white text-xs font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.30)] pointer-events-none">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] animate-pulse" />
+            <Camera className="w-3.5 h-3.5 text-blue-400" />
+            <span>Camera active for greeting only</span>
+          </div>
+        )}
+
+        {/* One-Time Session Privacy Disclosure Toast (~4s auto-fade) */}
+        {ambientDisclosureVisible && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="absolute top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-5 py-3 rounded-full bg-[#181e25]/95 backdrop-blur-2xl border border-white/25 text-white text-xs sm:text-sm font-semibold shadow-[0_20px_50px_rgba(0,0,0,0.50)] animate-in fade-in slide-in-from-top-3 duration-300 pointer-events-none text-center max-w-lg mx-auto"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>I use the camera to notice when someone's here. Nothing is recorded or saved.</span>
+          </div>
+        )}
+
+        {/* Top Header / Branding Bar */}
+        <header className="w-full flex items-center justify-between z-20 shrink-0 max-w-5xl">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white flex items-center justify-center shadow-md shadow-blue-500/30">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <span className="text-xs sm:text-sm font-bold tracking-wider uppercase text-slate-200 font-display">
+                MantraCare
+              </span>
+              <span className="hidden sm:inline text-xs text-slate-400 ml-2 font-medium">
+                • AI Receptionist
+              </span>
+            </div>
+          </div>
+
+          {/* Top-Right Language Switcher */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const nextLang = currentLanguage === 'en' ? 'hi' : 'en';
+              setCurrentLanguage(nextLang);
+              speak(
+                nextLang === 'hi'
+                  ? 'भाषा बदलकर हिंदी कर दी गई है।'
+                  : 'Language changed to English.'
+              );
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/15 text-xs font-semibold text-slate-200 transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
+          >
+            <Globe className="w-3.5 h-3.5 text-[#60a5fa]" />
+            <span>{currentLanguage === 'en' ? 'हिन्दी' : 'English'}</span>
+          </button>
+        </header>
+
+        {/* Center: Large Animated Avatar */}
+        <main className="flex-1 w-full max-w-4xl flex flex-col items-center justify-center relative min-h-0 py-2 z-10">
+          <div className="w-full h-full max-h-[62vh] flex items-center justify-center relative">
+            <AnimatedAvatar
+              state={
+                ambientPhase === 'greeting'
+                  ? 'speaking'
+                  : ambientPhase === 'listening'
+                  ? 'listening'
+                  : ambientPhase === 'routing'
+                  ? 'thinking'
+                  : 'idle'
+              }
+              avatarName="Aria"
+              thinkingMessage={
+                ambientPhase === 'routing'
+                  ? 'One moment, directing your visit...'
+                  : 'Welcome to MantraCare'
+              }
+              className="h-full w-auto"
+            />
+          </div>
+        </main>
+
+        {/* Bottom Stage: Caption & Interaction Affordance */}
+        <footer className="w-full max-w-2xl z-20 shrink-0 flex flex-col items-center gap-3 pb-2">
+          {/* Spoken Caption / Listening Waveform Card */}
+          {ambientPhase === 'greeting' || ambientPhase === 'listening' || ambientPhase === 'routing' ? (
+            <div className="w-full bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-3.5 sm:p-4 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <div className="flex items-start gap-3">
+                <div className="w-7 h-7 rounded-full bg-blue-500/25 text-[#60a5fa] flex items-center justify-center shrink-0 mt-0.5">
+                  {ambientPhase === 'listening' ? (
+                    <Mic className="w-4 h-4 text-blue-400 animate-pulse" />
+                  ) : ambientPhase === 'routing' ? (
+                    <Clock className="w-4 h-4 text-blue-400 animate-spin" />
+                  ) : (
+                    <MessageSquare className="w-4 h-4" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      {ambientPhase === 'listening'
+                        ? currentLanguage === 'hi'
+                          ? 'सुन रहे हैं...'
+                          : 'Listening...'
+                        : ambientPhase === 'routing'
+                        ? 'Routing'
+                        : 'Aria Speaking'}
+                    </p>
+                    {/* Animated Waveform Bars */}
+                    {(ambientPhase === 'greeting' || ambientPhase === 'listening') && (
+                      <div className="flex items-center gap-1 h-3.5">
+                        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                          <span
+                            key={i}
+                            className="wave-bar"
+                            style={{ '--i': i } as React.CSSProperties}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-sm sm:text-base font-medium text-white leading-snug">
+                    {ambientPhase === 'listening'
+                      ? currentLanguage === 'hi'
+                        ? 'कृपया बताएं कि मैं आपकी क्या मदद कर सकती हूँ...'
+                        : 'Tell me how I can help you today...'
+                      : ambientPhase === 'routing'
+                      ? currentLanguage === 'hi'
+                        ? 'समझ गई, एक क्षण...'
+                        : 'Got it, one moment...'
+                      : captionText}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Dormant / Noticed subtle low-key caption */
+            <div className="text-center space-y-1 py-1">
+              <p className="text-base sm:text-lg font-semibold text-slate-200">
+                {currentLanguage === 'hi' ? 'मंत्राकेयर में आपका स्वागत है' : 'Welcome to MantraCare'}
+              </p>
+              <p className="text-xs sm:text-sm text-slate-400 font-medium">
+                {currentLanguage === 'hi' ? 'शुरू करने के लिए स्क्रीन पर कहीं भी टैप करें' : 'Tap anywhere to begin'}
+              </p>
+            </div>
+          )}
+
+          {/* Subtle persistent touch hint */}
+          <div className="flex items-center gap-2 text-xs text-slate-400/80 bg-white/5 px-3.5 py-1.5 rounded-full border border-white/10 hover:bg-white/10 transition-colors">
+            <span>Touch screen anytime to open options</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </div>
+        </footer>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#e8eef5] flex flex-col lg:flex-row font-sans select-none text-[#222222] p-3 lg:p-4 gap-3 lg:gap-4 relative items-stretch">
@@ -1208,18 +2294,6 @@ export const AvatarReceptionView: React.FC = () => {
         {screen !== 'IDLE' && (
           <div className="flex items-center justify-between pb-2">
             <div className="flex flex-col">
-              {/* Back to Home Ghost Button */}
-              {(screen === 'FACE_SCAN' || screen === 'PHONE' || screen === 'PATIENT_PICK') && (
-                <button
-                  onClick={() => {
-                    handleResetSession();
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold transition-colors cursor-pointer w-fit mb-1.5"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Back to Home</span>
-                </button>
-              )}
               <h2 className="text-lg lg:text-xl font-bold text-[#222222] font-display flex items-center gap-2">
                 {(screen === 'FACE_SCAN' || screen === 'VERIFY_CHOICE' || screen === 'FACE_CONSENT') && (
                   <>
@@ -1854,103 +2928,84 @@ export const AvatarReceptionView: React.FC = () => {
         )}
 
         {/* ===================================================================== */}
-        {/* THREE-CARD VISIT DETAILS SUMMARY                                      */}
+        {/* THREE-CARD VISIT DETAILS SUMMARY (Full-Screen Vertical Stack)          */}
         {/* ===================================================================== */}
         {screen === 'DETAILS_SUMMARY' && visitSummary && (
-          <div className="flex-1 flex flex-col justify-center space-y-3 py-2">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Card 1: Patient Details */}
-              <div className="bg-white/90 rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-display block mb-1">
-                    Patient Details
+          <div className="flex-1 flex flex-col justify-between max-w-[680px] mx-auto w-full py-2 space-y-3.5 animate-in fade-in duration-200">
+            <div className="flex flex-col space-y-3.5 flex-1 justify-center">
+              {/* Card 1: Patient Profile & Identity */}
+              <div className="bg-white/90 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-[0_4px_20px_rgba(24,30,37,0.05)] flex items-center justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-display block">
+                    Patient Profile
                   </span>
-                  <h3 className="text-base font-bold text-[#222222] font-display">
+                  <h3 className="text-xl sm:text-2xl font-bold text-slate-900 font-display">
                     {visitSummary.patient.name}
                   </h3>
-                  <p className="text-sm text-slate-600 mt-0.5">
-                    {visitSummary.patient.age} yrs • {visitSummary.patient.gender}
+                  <p className="text-sm text-slate-600">
+                    {visitSummary.patient.age} yrs • {visitSummary.patient.gender} • Mobile: <span className="font-mono text-slate-800 font-semibold">{visitSummary.patient.maskedPhone}</span>
                   </p>
                 </div>
-                <div className="pt-3 border-t border-slate-100 mt-2 space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Patient ID:</span>
-                    <span className="font-mono font-semibold text-slate-700">{visitSummary.patient.id}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Mobile:</span>
-                    <span className="font-mono text-slate-700">{visitSummary.patient.maskedPhone}</span>
-                  </div>
+                <div className="text-right">
+                  <span className="font-mono text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 inline-block">
+                    ID: {visitSummary.patient.id}
+                  </span>
                 </div>
               </div>
 
-              {/* Card 2: Appointment Details */}
-              <div className="bg-white/90 rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-blue-600 font-display block mb-1">
+              {/* Card 2: Scheduled Appointment & Doctor */}
+              <div className="bg-white/90 backdrop-blur-md rounded-2xl sm:rounded-3xl border-2 border-blue-200/90 p-5 sm:p-6 shadow-[0_4px_20px_rgba(20,86,240,0.06)] flex items-center justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-600 font-display block">
                     Scheduled Appointment
                   </span>
-                  <h3 className="text-base font-bold text-slate-900 font-display">
+                  <h3 className="text-xl sm:text-2xl font-bold text-blue-950 font-display">
                     {visitSummary.appointment.serviceName}
                   </h3>
-                  <p className="text-sm text-slate-600 mt-0.5">
-                    {visitSummary.appointment.providerName}
+                  <p className="text-sm text-slate-700 font-medium">
+                    {visitSummary.appointment.providerName} • {visitSummary.appointment.date} @ {visitSummary.appointment.time}
                   </p>
                 </div>
-                <div className="pt-3 border-t border-slate-100 mt-2 space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Date & Time:</span>
-                    <span className="font-semibold text-slate-800 font-display">
-                      {visitSummary.appointment.date} @ {visitSummary.appointment.time}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Status:</span>
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Confirmed
-                    </span>
-                  </div>
+                <div className="text-right">
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    Confirmed
+                  </span>
                 </div>
               </div>
 
-              {/* Card 3: Room & Directions */}
-              <div className="bg-gradient-to-br from-blue-50/60 to-blue-100/40 rounded-2xl border-2 border-blue-200 p-4 shadow-2xs flex flex-col justify-between">
-                <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-blue-700 font-display block mb-1">
+              {/* Card 3: Clinic Station, Room & Directions */}
+              <div className="bg-gradient-to-br from-blue-50/80 via-blue-100/40 to-indigo-50/50 rounded-2xl sm:rounded-3xl border-2 border-blue-200 p-5 sm:p-6 shadow-[0_4px_20px_rgba(20,86,240,0.06)] flex items-center justify-between">
+                <div className="space-y-1">
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-700 font-display block">
                     Station & Room Assignment
                   </span>
-                  <h3 className="text-lg font-bold text-blue-950 font-display">
+                  <h3 className="text-xl sm:text-2xl font-bold text-blue-950 font-display">
                     {visitSummary.room.roomName}
                   </h3>
-                  <p className="text-sm text-blue-800 font-medium mt-0.5">
-                    {visitSummary.room.floorWing}
+                  <p className="text-sm text-slate-700">
+                    {visitSummary.room.floorWing} • 📍 {visitSummary.room.directions}
                   </p>
                 </div>
-                <div className="pt-2 border-t border-blue-200/60 mt-2 space-y-1 text-xs">
-                  <p className="text-xs text-slate-700 leading-tight">
-                    📍 {visitSummary.room.directions}
-                  </p>
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-xs font-semibold text-slate-500">Est. Wait Time:</span>
-                    <span className="font-bold text-blue-700 font-mono">~{visitSummary.room.estimatedWaitMin} min</span>
-                  </div>
+                <div className="text-right shrink-0 ml-4">
+                  <span className="text-xs font-semibold text-slate-500 block">Est. Wait</span>
+                  <span className="text-lg font-bold text-blue-700 font-mono">~{visitSummary.room.estimatedWaitMin} min</span>
                 </div>
               </div>
             </div>
 
             {/* Confirmation Action Buttons */}
-            <div className="flex items-center gap-3 pt-3">
+            <div className="flex items-center gap-3 pt-2">
               <button
                 onClick={handleConfirmCheckin}
-                className="flex-1 py-3.5 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] text-white text-base font-bold shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[var(--touch,60px)]"
+                className="flex-1 h-14 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] hover:from-[#1146c7] hover:to-[#1d4ed8] text-white text-base font-bold shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/35 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2"
               >
                 <Check className="w-5 h-5" />
                 <span>Confirm check-in & Print Token</span>
               </button>
               <button
                 onClick={handleResetSession}
-                className="px-6 py-3.5 rounded-full bg-white hover:bg-slate-50 border border-slate-200 text-sm font-semibold text-slate-700 transition-colors cursor-pointer min-h-[var(--touch,60px)]"
+                className="px-8 h-14 rounded-full bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-slate-300 text-sm font-semibold text-slate-700 transition-colors cursor-pointer"
               >
                 Not me
               </button>
@@ -1962,71 +3017,132 @@ export const AvatarReceptionView: React.FC = () => {
         {/* NEW PATIENT ONBOARDING - STEP 1 DETAILS                                */}
         {/* ===================================================================== */}
         {screen === 'ONBOARDING_DETAILS' && (
-          <div className="flex-1 flex flex-col justify-center max-w-lg mx-auto w-full py-2 space-y-3">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Full Legal Name *</label>
-              <input
-                type="text"
-                value={onboardingForm.name}
-                onChange={(e) => setOnboardingForm({ ...onboardingForm, name: e.target.value })}
-                placeholder="e.g. Sunita Rao"
-                className="w-full px-4 rounded-xl border border-slate-200 bg-white text-xl focus:border-[#1456f0] outline-none h-[var(--touch,60px)] min-h-[56px]"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
+          <div className="flex-1 flex flex-col justify-center max-w-[560px] mx-auto w-full py-4 space-y-4 animate-in fade-in duration-200">
+            <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 p-6 sm:p-7 shadow-[0_8px_30px_rgba(24,30,37,0.06)] space-y-4">
+              {/* Full Legal Name */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Age / Date of Birth</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                  Full Legal Name *
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    value={onboardingForm.name}
+                    onFocus={() => { activeFocusedFieldRef.current = 'name'; }}
+                    onBlur={() => { activeFocusedFieldRef.current = null; }}
+                    onChange={(e) => setOnboardingForm({ ...onboardingForm, name: e.target.value })}
+                    placeholder="e.g. Sunita Rao"
+                    className="w-full h-14 px-4.5 pr-14 rounded-2xl border-2 border-slate-200/85 bg-white text-lg font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#1456f0] focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                  />
+                  {isSpeechRecognitionSupported && (
+                    <button
+                      type="button"
+                      onClick={() => startDictation('name')}
+                      title="Dictate Full Name"
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                        activeDictationField === 'name'
+                          ? 'bg-blue-100 text-[#1456f0] ring-4 ring-blue-500/20 animate-pulse'
+                          : dictationSuccessField === 'name'
+                          ? 'bg-emerald-100 text-emerald-600'
+                          : 'text-[#64748b] hover:text-[#1456f0] hover:bg-blue-50/60'
+                      }`}
+                    >
+                      <Mic className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Age & Gender */}
+              <div className="grid grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Age / Date of Birth
+                  </label>
+                  <input
+                    type="number"
+                    value={onboardingForm.age}
+                    onChange={(e) => setOnboardingForm({ ...onboardingForm, age: Number(e.target.value) })}
+                    className="w-full h-14 px-4.5 rounded-2xl border-2 border-slate-200/85 bg-white text-lg font-medium font-mono text-slate-900 focus:border-[#1456f0] focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                    Gender
+                  </label>
+                  <select
+                    value={onboardingForm.gender}
+                    onChange={(e) => setOnboardingForm({ ...onboardingForm, gender: e.target.value })}
+                    className="w-full h-14 px-4.5 rounded-2xl border-2 border-slate-200/85 bg-white text-lg font-medium text-slate-900 focus:border-[#1456f0] focus:ring-4 focus:ring-blue-500/10 outline-none cursor-pointer transition-all"
+                  >
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Other">Other / Prefer not to say</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Email Address */}
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                  Email Address (Optional)
+                </label>
                 <input
-                  type="number"
-                  value={onboardingForm.age}
-                  onChange={(e) => setOnboardingForm({ ...onboardingForm, age: Number(e.target.value) })}
-                  className="w-full px-4 rounded-xl border border-slate-200 bg-white text-xl focus:border-[#1456f0] outline-none font-mono h-[var(--touch,60px)] min-h-[56px]"
+                  type="email"
+                  value={onboardingForm.email}
+                  onFocus={() => { activeFocusedFieldRef.current = 'email'; }}
+                  onBlur={() => { activeFocusedFieldRef.current = null; }}
+                  onChange={(e) => setOnboardingForm({ ...onboardingForm, email: e.target.value })}
+                  placeholder="name@example.com"
+                  className="w-full h-14 px-4.5 rounded-2xl border-2 border-slate-200/85 bg-white text-lg font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#1456f0] focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
                 />
               </div>
+
+              {/* Reason for Visit */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Gender</label>
-                <select
-                  value={onboardingForm.gender}
-                  onChange={(e) => setOnboardingForm({ ...onboardingForm, gender: e.target.value })}
-                  className="w-full px-4 rounded-xl border border-slate-200 bg-white text-xl focus:border-[#1456f0] outline-none cursor-pointer h-[var(--touch,60px)] min-h-[56px]"
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                  Reason for Visit
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    value={onboardingForm.reason}
+                    onFocus={() => { activeFocusedFieldRef.current = 'reason'; }}
+                    onBlur={() => { activeFocusedFieldRef.current = null; }}
+                    onChange={(e) => setOnboardingForm({ ...onboardingForm, reason: e.target.value })}
+                    placeholder="e.g. General checkup, Fever"
+                    className="w-full h-14 px-4.5 pr-14 rounded-2xl border-2 border-slate-200/85 bg-white text-lg font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#1456f0] focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                  />
+                  {isSpeechRecognitionSupported && (
+                    <button
+                      type="button"
+                      onClick={() => startDictation('reason')}
+                      title="Dictate Reason for Visit"
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                        activeDictationField === 'reason'
+                          ? 'bg-blue-100 text-[#1456f0] ring-4 ring-blue-500/20 animate-pulse'
+                          : dictationSuccessField === 'reason'
+                          ? 'bg-emerald-100 text-emerald-600'
+                          : 'text-[#64748b] hover:text-[#1456f0] hover:bg-blue-50/60'
+                      }`}
+                    >
+                      <Mic className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Continue Button */}
+              <div className="pt-2">
+                <button
+                  onClick={handleOnboardingStep1Next}
+                  className="w-full h-14 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] hover:from-[#1146c7] hover:to-[#1d4ed8] text-white text-base font-bold shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/35 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
-                  <option value="Other">Other / Prefer not to say</option>
-                </select>
+                  <span>{onboardingForm.age < 18 ? 'Next: Review Registration' : 'Next: Face Registration'}</span>
+                  <ArrowRight className="w-5 h-5" />
+                </button>
               </div>
             </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Email Address (Optional)</label>
-              <input
-                type="email"
-                value={onboardingForm.email}
-                onChange={(e) => setOnboardingForm({ ...onboardingForm, email: e.target.value })}
-                placeholder="name@example.com"
-                className="w-full px-4 rounded-xl border border-slate-200 bg-white text-xl focus:border-[#1456f0] outline-none h-[var(--touch,60px)] min-h-[56px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Reason for Visit</label>
-              <input
-                type="text"
-                value={onboardingForm.reason}
-                onChange={(e) => setOnboardingForm({ ...onboardingForm, reason: e.target.value })}
-                placeholder="e.g. General checkup, Fever"
-                className="w-full px-4 rounded-xl border border-slate-200 bg-white text-xl focus:border-[#1456f0] outline-none h-[var(--touch,60px)] min-h-[56px]"
-              />
-            </div>
-
-            <button
-              onClick={handleOnboardingStep1Next}
-              className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] text-white text-base font-bold shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[var(--touch,60px)]"
-            >
-              <span>{onboardingForm.age < 18 ? 'Next: Review Registration' : 'Next: Face Registration'}</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
           </div>
         )}
 
@@ -2034,45 +3150,47 @@ export const AvatarReceptionView: React.FC = () => {
         {/* ONBOARDING - STEP 2 FACE REGISTRATION                                 */}
         {/* ===================================================================== */}
         {screen === 'ONBOARDING_FACE' && (
-          <div className="flex-1 w-full h-full flex flex-col justify-between relative py-1 min-h-0">
-            {/* SUB-STATE 1: INTRO STATE (Before camera starts) */}
+          <>
+            {/* SUB-STATE 1: INTRO STATE (Full-screen vertically centered) */}
             {faceRegPhase === 'intro' && (
-              <div className="flex-1 flex flex-col justify-center max-w-lg mx-auto w-full py-4 space-y-6 animate-in fade-in">
-                <div className="text-center space-y-2">
-                  <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-blue-500/10 to-blue-600/20 text-[#1456f0] border border-blue-200 flex items-center justify-center mx-auto shadow-sm">
-                    <ScanFace className="w-8 h-8" />
+              <div className="flex-1 flex flex-col justify-center max-w-[620px] mx-auto w-full py-4 space-y-6 animate-in fade-in duration-200">
+                <div className="text-center space-y-3">
+                  <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-blue-500/15 via-blue-600/10 to-indigo-500/10 text-[#1456f0] border-2 border-blue-200 flex items-center justify-center mx-auto shadow-md shadow-blue-500/10">
+                    <ScanFace className="w-10 h-10" />
                   </div>
-                  <h3 className="text-2xl font-bold text-slate-900 font-display">
-                    Faster Check-in at Future Visits
-                  </h3>
-                  <p className="text-sm text-slate-500 max-w-sm mx-auto">
-                    Enable autonomous patient identification so you can check in with just a glance next time.
-                  </p>
+                  <div>
+                    <h3 className="text-2xl sm:text-3xl font-extrabold text-[#181e25] font-display tracking-tight">
+                      Faster Check-in at Future Visits
+                    </h3>
+                    <p className="text-sm sm:text-base text-[#64748b] max-w-md mx-auto mt-2 leading-relaxed">
+                      Enable autonomous face check-in so you can walk up and check in with just a glance next time.
+                    </p>
+                  </div>
                 </div>
 
-                {/* Informed Consent Box */}
-                <div className="p-5 bg-white/90 rounded-2xl border border-slate-200/90 shadow-sm space-y-2">
-                  <div className="flex items-center gap-2 font-bold text-slate-900 text-sm font-display">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                {/* Informed Consent Card */}
+                <div className="p-6 bg-white/85 backdrop-blur-md rounded-3xl border border-slate-200/90 shadow-[0_8px_30px_rgba(24,30,37,0.06)] space-y-2.5">
+                  <div className="flex items-center gap-2.5 font-bold text-slate-900 text-base font-display">
+                    <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
                     <span>Biometric Privacy & Consent</span>
                   </div>
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    We save a secure face template with your patient record so we can recognize you at future visits. We do not save photos. You can ask staff to delete it at any time.
+                  <p className="text-sm text-[#475569] leading-relaxed">
+                    We save an encrypted biometric vector template with your patient record so our reception camera can recognize you on return visits. We do not store raw photos or share your biometrics. You may revoke consent anytime.
                   </p>
                 </div>
 
-                {/* Equal-sized action buttons: Register (Primary) & Skip (Glass) */}
-                <div className="grid grid-cols-2 gap-3 pt-2">
+                {/* Two Equal Action Buttons */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
                   <button
                     onClick={handleStartFaceRegistration}
-                    className="py-3.5 px-4 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] hover:from-[#1146c7] hover:to-[#1d4ed8] text-white text-base font-bold shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[var(--touch,60px)]"
+                    className="h-14 px-6 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] hover:from-[#1146c7] hover:to-[#1d4ed8] text-white text-base font-bold shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/35 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2.5"
                   >
                     <Camera className="w-5 h-5" />
                     <span>Register my face</span>
                   </button>
                   <button
                     onClick={handleSkipFaceRegistration}
-                    className="py-3.5 px-4 rounded-full bg-white/80 hover:bg-white border border-slate-200 text-slate-700 text-base font-semibold backdrop-blur-sm transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[var(--touch,60px)]"
+                    className="h-14 px-6 rounded-full bg-white/90 hover:bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-700 text-base font-semibold shadow-sm active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
                     <span>Skip for now</span>
                   </button>
@@ -2080,11 +3198,11 @@ export const AvatarReceptionView: React.FC = () => {
               </div>
             )}
 
-            {/* SUB-STATE 2: LIVE 3-SAMPLE CAPTURE STATE */}
+            {/* SUB-STATE 2: LIVE 3-SAMPLE CAPTURE STATE (Identical treatment to FACE_SCAN) */}
             {faceRegPhase === 'capturing' && (
-              <div className="flex-1 w-full h-full flex flex-col justify-between relative min-h-0">
-                <div className="flex-1 min-h-0 w-full relative rounded-[28px] overflow-hidden bg-[#181e25] border-2 border-white/80 shadow-[0_16px_40px_rgba(24,30,37,0.18)] flex flex-col justify-between">
-                  {/* Live Mirrored Selfie Camera */}
+              <div className="face-stage">
+                <div className="face-camera">
+                  {/* Live Webcam Stream */}
                   <video
                     ref={videoRef}
                     autoPlay
@@ -2102,105 +3220,87 @@ export const AvatarReceptionView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Top Center Live Hint Pill */}
+                  {/* Top-Center Compact Glass 3-Sample Progress Pills */}
                   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+                    <div className="flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-slate-900/80 backdrop-blur-xl border border-white/20 text-white text-xs font-semibold shadow-lg">
+                      {[
+                        { idx: 0, label: 'Front' },
+                        { idx: 1, label: 'Left' },
+                        { idx: 2, label: 'Right' },
+                      ].map((s) => (
+                        <div key={s.idx} className="flex items-center gap-1.5">
+                          <div
+                            className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                              regSampleIndex > s.idx
+                                ? 'bg-emerald-400 ring-2 ring-emerald-400/40'
+                                : regSampleIndex === s.idx
+                                ? 'bg-[#1456f0] ring-2 ring-blue-400 animate-pulse'
+                                : 'bg-white/30'
+                            }`}
+                          />
+                          <span
+                            className={`${
+                              regSampleIndex === s.idx
+                                ? 'text-white font-bold'
+                                : regSampleIndex > s.idx
+                                ? 'text-emerald-300 font-semibold'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            {s.label}
+                          </span>
+                          {s.idx < 2 && <span className="text-white/20 text-xs">•</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Dynamic Hint Pill at Top Center (below progress pills) */}
+                  <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
                     <div className="py-1.5 px-4 rounded-full text-center border backdrop-blur-xl shadow-lg flex items-center gap-2 text-xs font-semibold whitespace-nowrap transition-all duration-200 bg-slate-900/85 border-white/20 text-white">
                       <Eye className="w-3.5 h-3.5 text-[#38bdf8] animate-pulse shrink-0" />
                       <span>{regHint}</span>
                     </div>
                   </div>
 
-                  {/* Viewfinder with 3-Dot Progress and Centered Oval Guide */}
-                  <div className="absolute inset-x-0 top-14 bottom-24 grid place-items-center pointer-events-none z-10">
-                    <div
-                      className="relative flex flex-col items-center justify-center transition-all duration-300 pointer-events-none"
-                      style={{
-                        height: 'min(100%, 560px)',
-                        aspectRatio: '3 / 4',
-                        maxWidth: '70%',
-                      }}
-                    >
-                      {/* 3-Dot Progress Indicators */}
-                      <div className="flex items-center gap-3 mb-2 px-4 py-1.5 rounded-full bg-slate-900/80 backdrop-blur-md border border-white/15">
-                        {[
-                          { idx: 0, label: 'Front' },
-                          { idx: 1, label: 'Left' },
-                          { idx: 2, label: 'Right' },
-                        ].map((s) => (
-                          <div key={s.idx} className="flex items-center gap-1.5">
-                            <div
-                              className={`w-3 h-3 rounded-full transition-all duration-300 flex items-center justify-center ${
-                                regSampleIndex > s.idx
-                                  ? 'bg-emerald-400 ring-2 ring-emerald-400/40'
-                                  : regSampleIndex === s.idx
-                                  ? 'bg-[#1456f0] ring-2 ring-blue-400 animate-pulse'
-                                  : 'bg-white/30'
-                              }`}
-                            >
-                              {regSampleIndex > s.idx && <Check className="w-2 h-2 text-slate-900 stroke-[3]" />}
-                            </div>
-                            <span
-                              className={`text-xs font-semibold ${
-                                regSampleIndex === s.idx
-                                  ? 'text-white font-bold'
-                                  : regSampleIndex > s.idx
-                                  ? 'text-emerald-300'
-                                  : 'text-slate-400'
-                              }`}
-                            >
-                              {s.label}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                  {/* ONE SHARED GUIDE BOX, absolutely centered inside card */}
+                  <div className="face-guide-area">
+                    <div className="face-guide">
+                      {/* 4 Crisp Corner Brackets */}
+                      <div className="absolute top-0 left-0 w-8 h-8 border-t-[3px] border-l-[3px] rounded-tl-xl border-[#3b82f6]" />
+                      <div className="absolute top-0 right-0 w-8 h-8 border-t-[3px] border-r-[3px] rounded-tr-xl border-[#3b82f6]" />
+                      <div className="absolute bottom-0 left-0 w-8 h-8 border-b-[3px] border-l-[3px] rounded-bl-xl border-[#3b82f6]" />
+                      <div className="absolute bottom-0 right-0 w-8 h-8 border-b-[3px] border-r-[3px] rounded-br-xl border-[#3b82f6]" />
 
-                      {/* Dashed Oval Container with 4 Corner Brackets */}
-                      <div className="relative flex-1 w-full flex items-center justify-center">
-                        <div className="absolute -top-1 -left-1 w-8 h-8 border-t-[3px] border-l-[3px] rounded-tl-xl border-[#3b82f6]" />
-                        <div className="absolute -top-1 -right-1 w-8 h-8 border-t-[3px] border-r-[3px] rounded-tr-xl border-[#3b82f6]" />
-                        <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-[3px] border-l-[3px] rounded-bl-xl border-[#3b82f6]" />
-                        <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-[3px] border-r-[3px] rounded-br-xl border-[#3b82f6]" />
-
+                      {/* Dashed Oval with Dimmed Background */}
+                      <div
+                        className="w-full h-full border-[3px] border-dashed border-[#3b82f6] shadow-[0_0_0_9999px_rgba(24,30,37,0.45)] relative flex items-center justify-center"
+                        style={{ borderRadius: '50% / 45%' }}
+                      >
                         <div
-                          className="w-full h-full border-[3px] border-dashed border-[#3b82f6] shadow-[0_0_0_9999px_rgba(24,30,37,0.45)] relative flex items-center justify-center"
+                          className="absolute inset-0 border-2 border-sky-400/60 animate-pulse shadow-[0_0_20px_rgba(56,189,248,0.5)]"
                           style={{ borderRadius: '50% / 45%' }}
-                        >
-                          <div
-                            className="absolute inset-0 border-2 border-sky-400/60 animate-pulse shadow-[0_0_20px_rgba(56,189,248,0.5)]"
-                            style={{ borderRadius: '50% / 45%' }}
-                          />
-                          <div className="absolute left-6 right-6 h-1 bg-gradient-to-r from-transparent via-[#38bdf8] to-transparent shadow-[0_0_16px_#38bdf8] animate-pulse" />
-                        </div>
+                        />
+                        <div className="absolute left-6 right-6 h-1 bg-gradient-to-r from-transparent via-[#38bdf8] to-transparent shadow-[0_0_16px_#38bdf8] animate-pulse" />
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Bottom Action Area */}
-                  <div className="w-full h-24 shrink-0 flex items-center justify-center gap-3 px-4 pb-4 z-20 pointer-events-auto">
-                    <button
-                      onClick={handleSkipFaceRegistration}
-                      className="h-12 px-6 rounded-full bg-slate-900/70 hover:bg-slate-900/90 text-white/90 hover:text-white border border-white/20 backdrop-blur-md text-sm font-semibold shadow-lg transition-all cursor-pointer flex items-center gap-2"
-                    >
-                      <X className="w-4 h-4" />
-                      <span>Cancel & Skip</span>
-                    </button>
-                    {regAttempts >= 3 && (
-                      <button
-                        onClick={handleSkipFaceRegistration}
-                        className="h-12 px-5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold backdrop-blur-md shadow-lg transition-all cursor-pointer"
-                      >
-                        Skip registration
-                      </button>
-                    )}
-                  </div>
+                {/* Floating Glass Dock at bottom edge of camera card */}
+                <div className="face-dock">
+                  <button className="dock-btn dock-cancel" onClick={handleSkipFaceRegistration}>
+                    <X size={20} />
+                    <span>Skip face registration</span>
+                  </button>
                 </div>
               </div>
             )}
 
             {/* SUB-STATE 3: DUPLICATE PROMPT STATE */}
             {faceRegPhase === 'duplicate_found' && duplicateCandidate && (
-              <div className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full py-4 text-center animate-in zoom-in-95 duration-300">
-                <div className="bg-white rounded-3xl border-2 border-blue-300 p-6 shadow-xl space-y-4">
+              <div className="flex-1 flex flex-col justify-center max-w-[560px] mx-auto w-full py-4 text-center animate-in zoom-in-95 duration-200">
+                <div className="bg-white/90 backdrop-blur-md rounded-3xl border-2 border-blue-300 p-7 shadow-xl space-y-4">
                   <div className="w-16 h-16 rounded-full bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center mx-auto">
                     <ScanFace className="w-8 h-8" />
                   </div>
@@ -2220,14 +3320,14 @@ export const AvatarReceptionView: React.FC = () => {
                   <div className="flex flex-col sm:flex-row items-center gap-3 pt-3">
                     <button
                       onClick={handleDuplicateConfirmYes}
-                      className="w-full sm:flex-1 py-3.5 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] text-white text-sm font-bold shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[var(--touch,60px)]"
+                      className="w-full sm:flex-1 h-14 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] text-white text-sm font-bold shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
                     >
                       <Check className="w-4 h-4" />
                       <span>Yes, that's me</span>
                     </button>
                     <button
                       onClick={handleDuplicateConfirmNo}
-                      className="w-full sm:flex-1 py-3.5 rounded-full bg-white hover:bg-slate-50 border border-slate-200 text-sm font-semibold text-slate-700 transition-colors cursor-pointer min-h-[var(--touch,60px)]"
+                      className="w-full sm:flex-1 h-14 rounded-full bg-white hover:bg-slate-50 border border-slate-200 text-sm font-semibold text-slate-700 transition-colors cursor-pointer"
                     >
                       No, continue as new
                     </button>
@@ -2238,8 +3338,8 @@ export const AvatarReceptionView: React.FC = () => {
 
             {/* SUB-STATE 4: SUCCESS STATE */}
             {faceRegPhase === 'success' && (
-              <div className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full py-4 text-center animate-in zoom-in-95 duration-300">
-                <div className="bg-white rounded-3xl border-2 border-emerald-300 p-7 shadow-xl space-y-5">
+              <div className="flex-1 flex flex-col justify-center max-w-[560px] mx-auto w-full py-4 text-center animate-in zoom-in-95 duration-200">
+                <div className="bg-white/90 backdrop-blur-md rounded-3xl border-2 border-emerald-300 p-8 shadow-xl space-y-5">
                   <div className="w-20 h-20 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto shadow-xs">
                     <CheckCircle2 className="w-10 h-10" />
                   </div>
@@ -2249,18 +3349,18 @@ export const AvatarReceptionView: React.FC = () => {
                       <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
                       Face registered
                     </span>
-                    <h3 className="text-xl font-bold text-slate-900 font-display pt-2">
+                    <h3 className="text-2xl font-bold text-slate-900 font-display pt-2">
                       Ready for Faster Check-in
                     </h3>
-                    <p className="text-sm text-slate-500 max-w-xs mx-auto">
-                      Your face template is prepared and will be saved with your patient registration upon approval.
+                    <p className="text-sm text-slate-500 max-w-sm mx-auto">
+                      Your biometric template is prepared and will be saved with your registration.
                     </p>
                   </div>
 
                   <div className="pt-2">
                     <button
                       onClick={handleContinueToReview}
-                      className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] text-white text-base font-bold shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[var(--touch,60px)]"
+                      className="w-full h-14 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] hover:from-[#1146c7] hover:to-[#1d4ed8] text-white text-base font-bold shadow-lg shadow-blue-500/25 transition-all cursor-pointer flex items-center justify-center gap-2"
                     >
                       <span>Continue to Review</span>
                       <ArrowRight className="w-5 h-5" />
@@ -2270,22 +3370,22 @@ export const AvatarReceptionView: React.FC = () => {
               </div>
             )}
 
-            {/* SUB-STATE 5: CAMERA DENIED / UNAVAILABLE */}
+            {/* SUB-STATE 5: CAMERA DENIED */}
             {faceRegPhase === 'denied' && (
-              <div className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full py-4 text-center animate-in zoom-in-95 duration-300">
-                <div className="bg-white rounded-3xl border-2 border-slate-200 p-6 shadow-md space-y-4">
-                  <div className="w-14 h-14 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center mx-auto">
-                    <Camera className="w-7 h-7" />
+              <div className="flex-1 flex flex-col justify-center max-w-[560px] mx-auto w-full py-4 text-center animate-in zoom-in-95 duration-200">
+                <div className="bg-white/90 backdrop-blur-md rounded-3xl border-2 border-slate-200 p-7 shadow-md space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center mx-auto">
+                    <Camera className="w-8 h-8" />
                   </div>
                   <div>
-                    <h4 className="text-base font-bold text-slate-900 font-display">Camera Unavailable</h4>
+                    <h4 className="text-lg font-bold text-slate-900 font-display">Camera Unavailable</h4>
                     <p className="text-sm text-slate-500 mt-1">
-                      Camera access was not granted or is unavailable. You can proceed with registration without face check-in.
+                      Camera access was not granted. You can continue registration without face check-in.
                     </p>
                   </div>
                   <button
                     onClick={handleSkipFaceRegistration}
-                    className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] text-white text-base font-bold shadow-md cursor-pointer flex items-center justify-center gap-1.5 min-h-[var(--touch,60px)]"
+                    className="w-full h-14 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] text-white text-base font-bold shadow-md cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     <span>Continue to Review</span>
                     <ArrowRight className="w-5 h-5" />
@@ -2293,56 +3393,78 @@ export const AvatarReceptionView: React.FC = () => {
                 </div>
               </div>
             )}
-          </div>
+          </>
         )}
 
         {/* ===================================================================== */}
         {/* ONBOARDING - STEP 3 HUMAN-CONFIRMATION GATE                           */}
         {/* ===================================================================== */}
         {screen === 'ONBOARDING_REVIEW' && (
-          <div className="flex-1 flex flex-col justify-center max-w-lg mx-auto w-full py-2 space-y-3">
-            <div className="bg-white rounded-3xl border-2 border-slate-200 p-5 shadow-md space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 font-display">
-                  Patient Registration Summary
-                </span>
-                <span className="text-xs font-bold bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full border border-blue-200">
+          <div className="flex-1 flex flex-col justify-center max-w-[660px] mx-auto w-full py-4 space-y-5 animate-in fade-in duration-200">
+            <div className="bg-white/85 backdrop-blur-md rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-[0_8px_30px_rgba(24,30,37,0.06)] space-y-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-display block">
+                    Walk-in Patient
+                  </span>
+                  <h3 className="text-lg font-bold text-[#181e25] font-display">
+                    Patient Registration Summary
+                  </h3>
+                </div>
+                <span className="text-xs font-bold bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
                   MantraAssist Intake
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="text-slate-400 block text-xs">Full Name:</span>
-                  <span className="font-bold text-slate-900">{onboardingForm.name}</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/70">
+                  <span className="text-xs font-medium text-slate-400 block mb-0.5">Full Legal Name:</span>
+                  <span className="text-base font-bold text-slate-900">{onboardingForm.name}</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-xs">Phone:</span>
-                  <span className="font-mono text-slate-800">{phoneNumber || '—'}</span>
+                <div className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/70">
+                  <span className="text-xs font-medium text-slate-400 block mb-0.5">Phone Number:</span>
+                  <span className="text-base font-mono font-bold text-slate-900">{phoneNumber || '—'}</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-xs">Age & Gender:</span>
-                  <span className="text-slate-800">{onboardingForm.age} yrs • {onboardingForm.gender}</span>
+                <div className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/70">
+                  <span className="text-xs font-medium text-slate-400 block mb-0.5">Age & Gender:</span>
+                  <span className="text-base font-bold text-slate-900">{onboardingForm.age} yrs • {onboardingForm.gender}</span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-xs">Face Check-in:</span>
-                  <span className={`font-semibold ${onboardingForm.faceCheckinNextTime ? 'text-emerald-700' : 'text-slate-600'}`}>
-                    {onboardingForm.faceCheckinNextTime ? 'Enrolled ✓ (Consent on file)' : (onboardingForm.age < 18 ? 'Not available (under 18)' : 'Skipped / Disabled')}
+                <div className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/70">
+                  <span className="text-xs font-medium text-slate-400 block mb-0.5">Face Check-in Status:</span>
+                  <span className={`text-sm font-bold flex items-center gap-1.5 mt-0.5 ${onboardingForm.faceCheckinNextTime ? 'text-emerald-700' : 'text-slate-600'}`}>
+                    {onboardingForm.faceCheckinNextTime ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>Enrolled (Consent on file)</span>
+                      </>
+                    ) : (
+                      onboardingForm.age < 18 ? 'Not available (under 18)' : 'Skipped for now'
+                    )}
                   </span>
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 text-sm">
-                <span className="text-slate-400 block text-xs">Assigned Default Process:</span>
-                <span className="font-semibold text-slate-800">Appointment Booking & Queue Journey</span>
+              {onboardingForm.email && (
+                <div className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/70 text-sm">
+                  <span className="text-xs font-medium text-slate-400 block mb-0.5">Email Address:</span>
+                  <span className="font-semibold text-slate-800">{onboardingForm.email}</span>
+                </div>
+              )}
+
+              <div className="p-3.5 rounded-2xl bg-blue-50/50 border border-blue-100 text-sm flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-medium text-blue-600 block">Assigned Clinic Journey:</span>
+                  <span className="font-bold text-blue-950">Walk-in Consultation & Queue Ticket</span>
+                </div>
+                <Sparkles className="w-5 h-5 text-blue-500" />
               </div>
             </div>
 
-            {/* Human-Confirmation Gate: Approve / Edit / Decline Buttons */}
-            <div className="flex items-center gap-2 pt-2">
+            {/* Action Buttons: Approve / Edit / Decline */}
+            <div className="flex items-center gap-3 pt-1">
               <button
                 onClick={handleOnboardingApprove}
-                className="flex-1 py-3.5 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] text-white text-base font-bold shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[var(--touch,60px)]"
+                className="flex-1 h-14 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] hover:from-[#1146c7] hover:to-[#1d4ed8] text-white text-base font-bold shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/35 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2"
               >
                 <Check className="w-5 h-5" />
                 <span>Approve Registration</span>
@@ -2350,7 +3472,7 @@ export const AvatarReceptionView: React.FC = () => {
 
               <button
                 onClick={() => setScreen('ONBOARDING_DETAILS')}
-                className="px-5 py-3.5 rounded-full bg-white hover:bg-slate-50 border border-slate-200 text-sm font-semibold text-slate-700 transition-colors cursor-pointer flex items-center gap-1.5 min-h-[var(--touch,60px)]"
+                className="px-6 h-14 rounded-full bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-slate-300 text-sm font-bold text-slate-700 transition-colors cursor-pointer flex items-center gap-1.5"
               >
                 <Edit3 className="w-4 h-4" />
                 <span>Edit</span>
@@ -2358,7 +3480,7 @@ export const AvatarReceptionView: React.FC = () => {
 
               <button
                 onClick={handleResetSession}
-                className="px-5 py-3.5 rounded-full bg-red-50 hover:bg-red-100 border border-red-200 text-sm font-semibold text-red-700 transition-colors cursor-pointer flex items-center gap-1.5 min-h-[var(--touch,60px)]"
+                className="px-6 h-14 rounded-full bg-red-50 hover:bg-red-100 border border-red-200 text-sm font-bold text-red-700 transition-colors cursor-pointer flex items-center gap-1.5"
               >
                 <X className="w-4 h-4" />
                 <span>Decline</span>
@@ -2368,72 +3490,132 @@ export const AvatarReceptionView: React.FC = () => {
         )}
 
         {/* ===================================================================== */}
-        {/* SERVICE & DOCTOR SELECTION                                            */}
+        {/* SERVICE & DOCTOR SELECTION (Two-Step Reveal, Vertical Column)         */}
         {/* ===================================================================== */}
         {screen === 'SERVICE_DOCTOR' && (
-          <div className="flex-1 flex flex-col justify-center max-w-lg mx-auto w-full py-2 space-y-3">
+          <div className="flex-1 flex flex-col justify-center max-w-[680px] mx-auto w-full py-4 space-y-5 animate-in fade-in duration-200">
+            {/* Step A: Choose Service (Vertical single column) */}
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Choose Service</label>
-              <div className="space-y-2">
-                {services.map((srv) => (
+              <div className="flex items-center justify-between mb-2.5">
+                <label className="text-sm font-bold text-slate-700 uppercase tracking-wider font-display">
+                  Step 1: Choose Service
+                </label>
+                {selectedServiceId && (
+                  <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Selected
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col space-y-3">
+                {services.map((srv) => {
+                  const isSelected = selectedServiceId === srv.id;
+                  return (
+                    <button
+                      key={srv.id}
+                      onClick={() => {
+                        setSelectedServiceId(srv.id);
+                        setSelectedProviderId('next_available');
+                      }}
+                      className={`w-full p-4 sm:p-5 rounded-2xl border-2 text-left flex items-center justify-between transition-all duration-200 cursor-pointer min-h-[72px] ${
+                        isSelected
+                          ? 'border-[#1456f0] bg-blue-50/70 shadow-md ring-2 ring-blue-500/20'
+                          : 'border-slate-200/90 bg-white hover:border-blue-200 hover:bg-slate-50/60 shadow-xs'
+                      }`}
+                    >
+                      <div className="space-y-0.5">
+                        <h4 className="text-base sm:text-lg font-bold text-slate-900 font-display leading-tight">{srv.name}</h4>
+                        <p className="text-xs text-slate-500 font-medium">
+                          Duration: {srv.durationMin} min • Category: {srv.category || 'General'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0 ml-4">
+                        <span className="text-base font-bold text-slate-900 font-mono">₹{srv.basePrice || 500}</span>
+                        {isSelected ? (
+                          <CheckCircle className="w-6 h-6 text-[#1456f0]" />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full border-2 border-slate-300" />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Step B: Provider Assignment (Smooth 240ms Ease-out Transition, Vertical single column) */}
+            <div
+              className={`transition-all duration-[240ms] ease-out motion-reduce:transition-none ${
+                selectedServiceId
+                  ? 'opacity-100 max-h-[500px] translate-y-0'
+                  : 'opacity-0 max-h-0 -translate-y-2 pointer-events-none overflow-hidden'
+              }`}
+            >
+              <div className="pt-2">
+                <label className="block text-sm font-bold text-slate-700 uppercase tracking-wider font-display mb-2.5">
+                  Step 2: Provider Assignment
+                </label>
+                <div className="flex flex-col space-y-3">
                   <button
-                    key={srv.id}
-                    onClick={() => setSelectedServiceId(srv.id)}
-                    className={`w-full p-3.5 rounded-2xl border-2 text-left flex items-center justify-between transition-all cursor-pointer min-h-[var(--touch,60px)] ${
-                      selectedServiceId === srv.id
-                        ? 'border-[#1456f0] bg-blue-50/50 shadow-xs'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    onClick={() => setSelectedProviderId('next_available')}
+                    className={`w-full p-4 rounded-2xl border-2 text-left transition-all duration-200 cursor-pointer flex items-center justify-between min-h-[64px] ${
+                      selectedProviderId === 'next_available'
+                        ? 'border-[#1456f0] bg-blue-50/70 shadow-md ring-2 ring-blue-500/20'
+                        : 'border-slate-200/90 bg-white hover:border-slate-300'
                     }`}
                   >
                     <div>
-                      <h4 className="text-sm font-bold text-slate-900 font-display">{srv.name}</h4>
-                      <p className="text-xs text-slate-500">Duration: {srv.durationMin} min • Base: ₹{srv.basePrice || 500}</p>
+                      <h4 className="text-base font-bold text-slate-900 font-display">⚡ Next Available</h4>
+                      <p className="text-xs text-slate-500 mt-0.5">Shortest estimated queue wait time</p>
                     </div>
-                    {selectedServiceId === srv.id && <CheckCircle className="w-5 h-5 text-[#1456f0]" />}
+                    {selectedProviderId === 'next_available' ? (
+                      <CheckCircle className="w-5 h-5 text-[#1456f0] shrink-0 ml-2" />
+                    ) : (
+                      <div className="w-5 h-5 rounded-full border-2 border-slate-300 shrink-0 ml-2" />
+                    )}
                   </button>
-                ))}
+
+                  {providers.slice(0, 3).map((prov) => {
+                    const isSelected = selectedProviderId === prov.id;
+                    return (
+                      <button
+                        key={prov.id}
+                        onClick={() => setSelectedProviderId(prov.id)}
+                        className={`w-full p-4 rounded-2xl border-2 text-left transition-all duration-200 cursor-pointer flex items-center justify-between min-h-[64px] ${
+                          isSelected
+                            ? 'border-[#1456f0] bg-blue-50/70 shadow-md ring-2 ring-blue-500/20'
+                            : 'border-slate-200/90 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <h4 className="text-base font-bold text-slate-900 font-display">{prov.name}</h4>
+                          {isSelected && <CheckCircle className="w-4 h-4 text-[#1456f0]" />}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {prov.specialization || prov.specialty || 'Consulting Physician'}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Provider Assignment</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setSelectedProviderId('next_available')}
-                  className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer min-h-[var(--touch,60px)] flex flex-col justify-center ${
-                    selectedProviderId === 'next_available'
-                      ? 'border-[#1456f0] bg-blue-50/50 shadow-xs'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  <h4 className="text-sm font-bold text-slate-900 font-display">⚡ Next Available</h4>
-                  <p className="text-xs text-slate-500">Shortest estimated queue</p>
-                </button>
-
-                {providers.slice(0, 3).map((prov) => (
-                  <button
-                    key={prov.id}
-                    onClick={() => setSelectedProviderId(prov.id)}
-                    className={`p-3 rounded-2xl border-2 text-left transition-all cursor-pointer min-h-[var(--touch,60px)] flex flex-col justify-center ${
-                      selectedProviderId === prov.id
-                        ? 'border-[#1456f0] bg-blue-50/50 shadow-xs'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <h4 className="text-sm font-bold text-slate-900 font-display">{prov.name}</h4>
-                    <p className="text-xs text-slate-500">{prov.specialization || prov.specialty || 'General Physician'}</p>
-                  </button>
-                ))}
-              </div>
+            {/* Confirm & Issue Queue Ticket */}
+            <div className="pt-2">
+              <button
+                onClick={handleBookWalkIn}
+                disabled={!selectedServiceId || !selectedProviderId}
+                className={`w-full h-14 rounded-full text-base font-bold shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                  selectedServiceId && selectedProviderId
+                    ? 'bg-gradient-to-r from-[#1456f0] to-[#2563eb] hover:from-[#1146c7] hover:to-[#1d4ed8] text-white shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/35 active:scale-[0.99]'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                }`}
+              >
+                <span>Confirm & Issue Queue Ticket</span>
+                <ArrowRight className="w-5 h-5" />
+              </button>
             </div>
-
-            <button
-              onClick={handleBookWalkIn}
-              className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] text-white text-base font-bold shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[var(--touch,60px)]"
-            >
-              <span>Confirm & Issue Queue Ticket</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
           </div>
         )}
 
@@ -2551,6 +3733,47 @@ export const AvatarReceptionView: React.FC = () => {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* GLOBAL FLOATING MIC ASSISTANT BUTTON                                  */}
+        {/* ===================================================================== */}
+        {screen !== 'IDLE' && isSpeechRecognitionSupported && (
+          <div className="absolute bottom-5 right-5 z-40 pointer-events-auto">
+            <button
+              onClick={startGlobalDictation}
+              title={
+                isListeningGlobal
+                  ? 'Listening... Speak a command or dictation'
+                  : 'Tap to speak / voice control'
+              }
+              className={`w-13 h-13 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer shadow-lg active:scale-95 group relative ${
+                isListeningGlobal
+                  ? 'bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white ring-4 ring-blue-400/40 shadow-blue-500/30 scale-105 animate-pulse'
+                  : heardSuccessGlobal
+                  ? 'bg-emerald-600 text-white ring-4 ring-emerald-400/40 shadow-emerald-500/30'
+                  : 'bg-white/90 hover:bg-white text-slate-600 hover:text-[#1456f0] border-2 border-slate-200/90 hover:border-blue-300 shadow-[0_8px_20px_rgba(24,30,37,0.12)]'
+              }`}
+            >
+              {isListeningGlobal ? (
+                <div className="flex items-center gap-0.5">
+                  <Mic className="w-5 h-5" />
+                  <span className="w-1 h-3 bg-white rounded-full animate-bounce" />
+                  <span className="w-1 h-4 bg-white rounded-full animate-bounce [animation-delay:0.15s]" />
+                  <span className="w-1 h-2 bg-white rounded-full animate-bounce [animation-delay:0.3s]" />
+                </div>
+              ) : heardSuccessGlobal ? (
+                <CheckCircle2 className="w-6 h-6 text-white" />
+              ) : (
+                <Mic className="w-5 h-5 group-hover:scale-110 transition-transform" />
+              )}
+
+              {/* Floating Tooltip Pill */}
+              <span className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-slate-900/90 backdrop-blur-md text-white text-xs font-semibold rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-y-1 group-hover:translate-y-0 whitespace-nowrap z-50">
+                {isListeningGlobal ? 'Listening... Speak command' : 'Voice Assistant'}
+              </span>
+            </button>
           </div>
         )}
       </main>

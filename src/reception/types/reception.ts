@@ -22,19 +22,6 @@ export interface Station {
   createdAt: string;
 }
 
-export interface KioskDevice {
-  id: string;
-  orgId: string;
-  name: string;
-  location: string;
-  deviceKey: string;
-  languages: string[];
-  status: 'online' | 'offline' | 'active' | 'inactive';
-  stationId?: string;
-  lastSeenAt: string;
-  registeredAt: string;
-}
-
 export interface ReceptionConfig {
   orgId: string;
   tokenPrefixes: {
@@ -152,7 +139,7 @@ export interface VisitSummary {
     date: string;
     time: string;
     status: string;
-    source?: 'ai_receptionist' | 'kiosk' | 'call' | 'web';
+    source?: 'ai_receptionist' | 'call' | 'web';
   };
   room: {
     stationId: string;
@@ -178,7 +165,7 @@ export interface PatientSummary {
   faceEnrolledVia?: string;
   faceTemplateVersion?: string;
   faceTemplate?: number[];
-  createdVia?: 'ai_receptionist' | 'kiosk' | 'call' | 'web' | 'manual';
+  createdVia?: 'ai_receptionist' | 'call' | 'web' | 'manual';
   defaultProcessId?: string;
 }
 
@@ -194,7 +181,7 @@ export interface CreatePatientPayload {
   faceTemplate?: number[];
   consentGiven?: boolean;
   consentAt?: string;
-  createdVia?: 'ai_receptionist' | 'kiosk' | 'call' | 'web';
+  createdVia?: 'ai_receptionist' | 'call' | 'web';
 }
 
 export interface ServiceItem {
@@ -246,7 +233,7 @@ export interface AppointmentSummary {
   receptionEnabled?: boolean;
   checkedInAt?: string;
   journeyId?: string;
-  source?: 'ai_receptionist' | 'kiosk' | 'call' | 'web';
+  source?: 'ai_receptionist' | 'call' | 'web';
   roomStationId?: string;
   roomName?: string;
   tokenNumber?: string;
@@ -260,7 +247,7 @@ export interface BookAppointmentPayload {
   time: string;
   reason?: string;
   isImmediateQueue?: boolean;
-  source?: 'ai_receptionist' | 'kiosk' | 'call' | 'web';
+  source?: 'ai_receptionist' | 'call' | 'web';
 }
 
 export interface PatientInvoiceSummary {
@@ -273,13 +260,8 @@ export interface PatientInvoiceSummary {
 
 export type QueueEventType = 
   | 'TICKET_CREATED' 
-  | 'TICKET_CALLED' 
-  | 'TICKET_RECALLED' 
-  | 'TICKET_SERVING' 
   | 'TICKET_COMPLETED' 
   | 'TICKET_SKIPPED' 
-  | 'TICKET_REQUEUED' 
-  | 'TICKET_TRANSFERRED'
   | 'QUEUE_TICKET_CREATED';
 
 export interface QueueEvent {
@@ -290,18 +272,9 @@ export interface QueueEvent {
   payload?: any;
 }
 
-export interface DisplayEvent {
-  stationGroupId: string;
-  nowServing: QueueTicket[];
-  nextUp: QueueTicket[];
-  lastCalledTicket?: QueueTicket;
-  timestamp: string;
-}
-
 export interface ReceptionAuditEvent {
   id: string;
   orgId: string;
-  deviceId?: string;
   userId?: string;
   clientId?: string;
   action: string;

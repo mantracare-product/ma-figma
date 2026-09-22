@@ -2,15 +2,14 @@
  * mockMaClient.ts
  * Path: src/reception/lib/api/mockMaClient.ts
  *
- * Front-end mock implementation of IMaClient.
- * Operates over localStorage + BroadcastChannel + LockService.
+ * Front-end mock implementation of IMaClient for AI Receptionist.
+ * Operates over localStorage and in-memory state.
  * Operates exclusively on synthetic/demo data.
  */
 
 import type { IMaClient } from './maClient';
 import type {
   Station,
-  KioskDevice,
   ReceptionConfig,
   PatientSummary,
   CreatePatientPayload,
@@ -23,17 +22,14 @@ import type {
   ProcessStageDef,
   QueueTicket,
   QueueEvent,
-  DisplayEvent,
   PatientInvoiceSummary,
   ReceptionAuditEvent,
+  VisitSummary,
 } from '../../types/reception';
-import { lockService } from '../sync/lockService';
-import { eventBusService } from '../sync/eventBusService';
 
 // Storage keys
 const STORAGE_KEYS = {
   STATIONS: 'ma_reception_stations',
-  DEVICES: 'ma_reception_devices',
   CONFIG: 'ma_reception_config',
   QUEUES: 'ma_reception_queues',
   JOURNEYS: 'ma_reception_journeys',
@@ -49,6 +45,7 @@ const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export class MockMaClient implements IMaClient {
   private static sharedMemoryStorage: Record<string, string> = {};
+  private queueListeners: Set<(event: QueueEvent) => void> = new Set();
 
   static resetStorage(): void {
     MockMaClient.sharedMemoryStorage = {};
@@ -88,6 +85,16 @@ export class MockMaClient implements IMaClient {
     }
   }
 
+  private notifyQueueListeners(event: QueueEvent): void {
+    this.queueListeners.forEach((cb) => {
+      try {
+        cb(event);
+      } catch (err) {
+        console.warn('Queue listener callback error:', err);
+      }
+    });
+  }
+
   private normalizePhone(phone: string): string {
     const digits = phone.replace(/[^0-9]/g, '');
     if (digits.length === 10) {
@@ -97,7 +104,7 @@ export class MockMaClient implements IMaClient {
   }
 
   private seedInitialDataIfEmpty(): void {
-    // 1. Stations
+    // 1. Rooms / Stations
     const existingStations = this.getStorage<Station[] | null>(STORAGE_KEYS.STATIONS, null);
     if (!existingStations || existingStations.length === 0) {
       const initialStations: Station[] = [
@@ -168,9 +175,9 @@ export class MockMaClient implements IMaClient {
     const existingPatients = this.getStorage<PatientSummary[] | null>(STORAGE_KEYS.PATIENTS, null);
     if (!existingPatients || existingPatients.length === 0) {
       const demoPatients: PatientSummary[] = [
-        { id: 'pat_1', name: 'Eleanor Vance', phone: '+1 (555) 234-5678', age: 34, gender: 'Female', relation: 'Self', faceEnrolled: true, faceEnrolledAt: '2026-08-14T09:30:00Z', createdVia: 'kiosk', defaultProcessId: 'Appointment Scheduling' },
+        { id: 'pat_1', name: 'Eleanor Vance', phone: '+1 (555) 234-5678', age: 34, gender: 'Female', relation: 'Self', faceEnrolled: true, faceEnrolledAt: '2026-08-14T09:30:00Z', createdVia: 'ai_receptionist', defaultProcessId: 'Appointment Scheduling' },
         { id: 'pat_2', name: 'Rohan Verma', phone: '+91 98765 43210', age: 34, gender: 'Male', relation: 'Self', faceEnrolled: false, createdVia: 'web', defaultProcessId: 'Patient Intake' },
-        { id: 'pat_3', name: 'Sunita Rao', phone: '+91 91234 56780', age: 58, gender: 'Female', relation: 'Self', faceEnrolled: true, faceEnrolledAt: '2026-09-02T11:15:00Z', createdVia: 'kiosk', defaultProcessId: 'Appointment Scheduling' },
+        { id: 'pat_3', name: 'Sunita Rao', phone: '+91 91234 56780', age: 58, gender: 'Female', relation: 'Self', faceEnrolled: true, faceEnrolledAt: '2026-09-02T11:15:00Z', createdVia: 'ai_receptionist', defaultProcessId: 'Appointment Scheduling' },
       ];
       this.setStorage(STORAGE_KEYS.PATIENTS, demoPatients);
 
@@ -189,7 +196,7 @@ export class MockMaClient implements IMaClient {
           time: '10:30 AM',
           status: 'confirmed',
           receptionEnabled: true,
-          source: 'kiosk',
+          source: 'ai_receptionist',
           roomStationId: 'st-consult-1',
           roomName: 'Dr. Sharma - Room 101',
           tokenNumber: 'D-001',
@@ -207,7 +214,7 @@ export class MockMaClient implements IMaClient {
           time: '11:00 AM',
           status: 'confirmed',
           receptionEnabled: true,
-          source: 'kiosk',
+          source: 'ai_receptionist',
           roomStationId: 'st-consult-1',
           roomName: 'Dr. Sharma - Room 101',
           tokenNumber: 'D-002',
@@ -258,76 +265,12 @@ export class MockMaClient implements IMaClient {
     return result;
   }
 
-  // --- Device & Auth ---
-
-  async authenticateDevice(deviceKey: string): Promise<{ deviceId: string; orgId: string; token: string }> {
-    const devices = this.getStorage<KioskDevice[]>(STORAGE_KEYS.DEVICES, []);
-    let device = devices.find((d) => d.deviceKey === deviceKey);
-    if (!device) {
-      device = {
-        id: `dev_${Date.now()}`,
-        orgId: DEFAULT_ORG_ID,
-        name: 'Front Desk Tablet Kiosk',
-        location: 'Ground Floor Lobby',
-        deviceKey: deviceKey || 'kiosk_demo_key_1234',
-        languages: ['en', 'hi'],
-        status: 'online',
-        lastSeenAt: new Date().toISOString(),
-        registeredAt: new Date().toISOString(),
-      };
-      devices.push(device);
-      this.setStorage(STORAGE_KEYS.DEVICES, devices);
-    }
-
-    return {
-      deviceId: device.id,
-      orgId: device.orgId,
-      token: `dev_token_${device.id}_${Date.now()}`,
-    };
-  }
-
-  async deviceHeartbeat(deviceId: string, status: 'online' | 'offline'): Promise<void> {
-    const devices = this.getStorage<KioskDevice[]>(STORAGE_KEYS.DEVICES, []);
-    const idx = devices.findIndex((d) => d.id === deviceId);
-    if (idx !== -1) {
-      devices[idx].status = status;
-      devices[idx].lastSeenAt = new Date().toISOString();
-      this.setStorage(STORAGE_KEYS.DEVICES, devices);
-    }
-  }
+  // --- Rooms / Stations ---
 
   async getStations(orgId: string = DEFAULT_ORG_ID): Promise<Station[]> {
     this.seedInitialDataIfEmpty();
     const stations = this.getStorage<Station[]>(STORAGE_KEYS.STATIONS, []);
     return stations.filter((s) => !orgId || s.orgId === orgId);
-  }
-
-  // Device helper methods
-  async registerDevice(data: { name: string; stationId?: string; location?: string }): Promise<{ kioskToken: string; device: KioskDevice }> {
-    const devices = this.getStorage<KioskDevice[]>(STORAGE_KEYS.DEVICES, []);
-    const token = `kiosk_tok_${Math.random().toString(36).substring(2, 10)}`;
-    const newDevice: KioskDevice = {
-      id: `dev_${Date.now()}`,
-      orgId: DEFAULT_ORG_ID,
-      name: data.name,
-      location: data.location || 'Reception Lobby',
-      stationId: data.stationId,
-      deviceKey: token,
-      languages: ['en', 'hi'],
-      status: 'active' as any,
-      lastSeenAt: new Date().toISOString(),
-      registeredAt: new Date().toISOString(),
-    };
-    devices.push(newDevice);
-    this.setStorage(STORAGE_KEYS.DEVICES, devices);
-    return { kioskToken: token, device: newDevice };
-  }
-
-  async verifyDevice(token: string): Promise<{ valid: boolean; device?: KioskDevice }> {
-    const devices = this.getStorage<KioskDevice[]>(STORAGE_KEYS.DEVICES, []);
-    const device = devices.find((d) => d.deviceKey === token && (d.status === 'active' || d.status === 'online'));
-    if (!device) return { valid: false };
-    return { valid: true, device };
   }
 
   // --- OTP & Identity ---
@@ -390,7 +333,7 @@ export class MockMaClient implements IMaClient {
       relation: 'Self',
       faceEnrolled: !!data.faceEnrolled,
       faceEnrolledAt: data.faceEnrolled ? new Date().toISOString() : undefined,
-      createdVia: data.createdVia || 'kiosk',
+      createdVia: data.createdVia || 'ai_receptionist',
       defaultProcessId: defaultProcess,
     };
     patients.push(newPatient);
@@ -415,8 +358,8 @@ export class MockMaClient implements IMaClient {
       id: `aud_${Date.now()}`,
       orgId: DEFAULT_ORG_ID,
       clientId: newPatient.id,
-      action: 'kiosk_onboarding_completed',
-      metadata: { name: newPatient.name, phone: newPatient.phone, createdVia: 'kiosk' },
+      action: 'receptionist_onboarding_completed',
+      metadata: { name: newPatient.name, phone: newPatient.phone, createdVia: 'ai_receptionist' },
       timestamp: new Date().toISOString(),
     });
 
@@ -425,7 +368,7 @@ export class MockMaClient implements IMaClient {
       orgId: DEFAULT_ORG_ID,
       clientId: newPatient.id,
       action: 'process_assigned',
-      metadata: { processName: defaultProcess, assignedVia: 'kiosk_default_rule' },
+      metadata: { processName: defaultProcess, assignedVia: 'receptionist_default_rule' },
       timestamp: new Date().toISOString(),
     });
 
@@ -450,51 +393,51 @@ export class MockMaClient implements IMaClient {
 
   async getProviders(orgId: string = DEFAULT_ORG_ID, serviceId?: string): Promise<ProviderItem[]> {
     const allProviders: ProviderItem[] = [
-      { id: 'prov_1', orgId, name: 'Dr. Ananya Sharma', specialization: 'General Physician', availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] },
-      { id: 'prov_2', orgId, name: 'Dr. Rajesh Patel', specialization: 'Cardiologist', availableDays: ['Mon', 'Wed', 'Fri'] },
-      { id: 'prov_3', orgId, name: 'Dr. Priya Nair', specialization: 'Dentist', availableDays: ['Tue', 'Thu', 'Sat'] },
+      { id: 'prov_1', orgId, name: 'Dr. Ananya Sharma', specialty: 'General Physician', specialization: 'Family Medicine', assignedStationId: 'st-consult-1', availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] },
+      { id: 'prov_2', orgId, name: 'Dr. Rajesh Patel', specialty: 'Cardiologist', specialization: 'Interventional Cardiology', assignedStationId: 'st-consult-1', availableDays: ['Mon', 'Wed', 'Fri'] },
+      { id: 'prov_3', orgId, name: 'Dr. Priya Desai', specialty: 'Dentist', specialization: 'Orthodontics', assignedStationId: 'st-consult-1', availableDays: ['Tue', 'Thu', 'Sat'] },
     ];
-    if (serviceId === 'srv_cardio') return [allProviders[1]];
-    if (serviceId === 'srv_dental') return [allProviders[2]];
+    if (serviceId === 'srv_cardio') return allProviders.filter((p) => p.id === 'prov_2');
+    if (serviceId === 'srv_dental') return allProviders.filter((p) => p.id === 'prov_3');
     return allProviders;
   }
 
-  async getSlots(serviceId: string, date: string, providerId?: string): Promise<TimeSlot[]> {
+  async getSlots(_serviceId: string, _date: string, _providerId?: string): Promise<TimeSlot[]> {
     return [
-      { id: 'slot_1', serviceId, providerId: providerId || 'prov_1', date, startTime: '10:00 AM', endTime: '10:15 AM', available: true },
-      { id: 'slot_2', serviceId, providerId: providerId || 'prov_1', date, startTime: '10:15 AM', endTime: '10:30 AM', available: true },
-      { id: 'slot_3', serviceId, providerId: providerId || 'prov_1', date, startTime: '11:00 AM', endTime: '11:15 AM', available: true },
-      { id: 'slot_4', serviceId, providerId: providerId || 'prov_1', date, startTime: '11:30 AM', endTime: '11:45 AM', available: true },
+      { id: 'slot_1', time: '09:00 AM', startTime: '09:00 AM', endTime: '09:30 AM', available: true },
+      { id: 'slot_2', time: '09:30 AM', startTime: '09:30 AM', endTime: '10:00 AM', available: true },
+      { id: 'slot_3', time: '10:00 AM', startTime: '10:00 AM', endTime: '10:30 AM', available: false },
+      { id: 'slot_4', time: '10:30 AM', startTime: '10:30 AM', endTime: '11:00 AM', available: true },
+      { id: 'slot_5', time: '11:00 AM', startTime: '11:00 AM', endTime: '11:30 AM', available: true },
+      { id: 'slot_6', time: '11:30 AM', startTime: '11:30 AM', endTime: '12:00 PM', available: true },
+      { id: 'slot_7', time: '02:00 PM', startTime: '02:00 PM', endTime: '02:30 PM', available: true },
+      { id: 'slot_8', time: '02:30 PM', startTime: '02:30 PM', endTime: '03:00 PM', available: true },
+      { id: 'slot_9', time: '03:00 PM', startTime: '03:00 PM', endTime: '03:30 PM', available: true },
+      { id: 'slot_10', time: '04:00 PM', startTime: '04:00 PM', endTime: '04:30 PM', available: true },
     ];
   }
 
   async bookAppointment(
     data: BookAppointmentPayload,
-    _sessionToken?: string,
+    _sessionToken: string = '',
     idempotencyKey: string = ''
   ): Promise<AppointmentSummary> {
     return this.withIdempotency(idempotencyKey, async () => {
+      this.seedInitialDataIfEmpty();
       const appointments = this.getStorage<AppointmentSummary[]>(STORAGE_KEYS.APPOINTMENTS, []);
       const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
       const patient = patients.find((p) => p.id === data.clientId);
+
       const services = await this.getServices();
       const srv = services.find((s) => s.id === data.serviceId);
-      const providers = await this.getProviders(DEFAULT_ORG_ID, data.serviceId);
+
+      const providers = await this.getProviders();
       const prov = providers.find((p) => p.id === data.providerId) || providers[0];
-      const stations = await this.getStations(DEFAULT_ORG_ID);
-      const targetStation = stations.find((s) => s.providerId === prov?.id || s.type === 'doctor_room') || stations[0];
 
-      const config = this.getStorage<ReceptionConfig>(STORAGE_KEYS.CONFIG, {
-        orgId: DEFAULT_ORG_ID,
-        tokenPrefixes: { doctor: 'D-', pharmacy: 'P-', lab: 'L-', billing: 'B-', desk: 'R-' },
-        lateArrivalWindowMin: 15,
-        earlyArrivalBufferMin: 30,
-        queueAgingCapMin: 45,
-        defaultLanguages: ['en', 'hi'],
-      });
+      const stations = await this.getStations();
+      const targetStation = stations.find((s) => s.type === 'doctor_room') || stations[0];
 
-      const tokenSeq = appointments.length + 1;
-      const tokenNumber = `${config.tokenPrefixes.doctor || 'D-'}${String(tokenSeq).padStart(3, '0')}`;
+      const tokenNumber = `D-${String(appointments.length + 1).padStart(3, '0')}`;
 
       const newApt: AppointmentSummary = {
         id: `apt_${Date.now()}`,
@@ -509,7 +452,7 @@ export class MockMaClient implements IMaClient {
         time: data.time,
         status: 'confirmed',
         receptionEnabled: true,
-        source: data.source || 'kiosk',
+        source: data.source || 'ai_receptionist',
         roomStationId: targetStation.id,
         roomName: targetStation.name,
         tokenNumber,
@@ -534,8 +477,8 @@ export class MockMaClient implements IMaClient {
             time: data.time.replace(/ AM| PM/i, ''),
             duration: srv?.durationMin || 30,
             status: 'scheduled',
-            notes: data.reason || 'Booked via AI Receptionist Kiosk',
-            source: 'kiosk',
+            notes: data.reason || 'Booked via AI Receptionist',
+            source: 'ai_receptionist',
             roomName: targetStation.name,
             tokenNumber,
             processId: 'Appointment Scheduling',
@@ -576,117 +519,120 @@ export class MockMaClient implements IMaClient {
     idempotencyKey: string = ''
   ): Promise<{ journey: Journey; ticket: QueueTicket }> {
     return this.withIdempotency(idempotencyKey, async () => {
-      return lockService.request('ma_queue_mutation_lock', async () => {
-        this.seedInitialDataIfEmpty();
-        const appointments = this.getStorage<AppointmentSummary[]>(STORAGE_KEYS.APPOINTMENTS, []);
-        const aptIdx = appointments.findIndex((a) => a.id === appointmentId);
-        const apt = aptIdx !== -1 ? appointments[aptIdx] : null;
+      this.seedInitialDataIfEmpty();
+      const appointments = this.getStorage<AppointmentSummary[]>(STORAGE_KEYS.APPOINTMENTS, []);
+      const aptIdx = appointments.findIndex((a) => a.id === appointmentId);
+      const apt = aptIdx !== -1 ? appointments[aptIdx] : null;
 
-        const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
-        const patient = patients.find((p) => p.id === clientId) || {
-          id: clientId,
-          name: apt?.clientName || 'Patient',
-          phone: apt?.clientPhone || '',
-          relation: 'Self' as const,
-        };
+      const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
+      const patient = patients.find((p) => p.id === clientId) || {
+        id: clientId,
+        name: apt?.clientName || 'Patient',
+        phone: apt?.clientPhone || '',
+        relation: 'Self' as const,
+      };
 
-        const stations = await this.getStations(DEFAULT_ORG_ID);
-        const targetStation =
-          (apt?.providerId ? stations.find((s) => s.providerId === apt.providerId) : null) ||
-          stations.find((s) => s.type === 'doctor_room') ||
-          stations.find((s) => s.type === 'desk') ||
-          stations[0];
+      const stations = await this.getStations(DEFAULT_ORG_ID);
+      const targetStation =
+        (apt?.providerId ? stations.find((s) => s.providerId === apt.providerId) : null) ||
+        stations.find((s) => s.type === 'doctor_room') ||
+        stations.find((s) => s.type === 'desk') ||
+        stations[0];
 
-        const config = this.getStorage<ReceptionConfig>(STORAGE_KEYS.CONFIG, {
-          orgId: DEFAULT_ORG_ID,
-          tokenPrefixes: { doctor: 'D-', pharmacy: 'P-', lab: 'L-', billing: 'B-', desk: 'R-' },
-          lateArrivalWindowMin: 15,
-          earlyArrivalBufferMin: 30,
-          queueAgingCapMin: 45,
-          defaultLanguages: ['en', 'hi'],
-        });
-
-        const prefixKey = targetStation.type === 'doctor_room' ? 'doctor' : targetStation.type;
-        const prefix = (config.tokenPrefixes as any)[prefixKey] || 'D-';
-        const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
-        const stationTickets = queues[targetStation.id] || [];
-        const nextSeq = stationTickets.length + 1;
-        const tokenLabel = `${prefix}${String(nextSeq).padStart(3, '0')}`;
-
-        const journeyId = `jrn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        const journey: Journey = {
-          id: journeyId,
-          orgId: DEFAULT_ORG_ID,
-          clientId: patient.id,
-          clientName: patient.name,
-          appointmentId: appointmentId || undefined,
-          processId: 'proc_clinical_consult',
-          processName: 'Clinical Visit Journey',
-          source: appointmentId ? 'scheduled' : 'walk_in',
-          status: 'active',
-          currentStageId: 'stg_def_2',
-          activeStageIds: ['stg_def_2'],
-          stages: [
-            { stageId: 'stg_def_1', name: 'Check-in', stationId: targetStation.id, status: 'completed', completedAt: new Date().toISOString() },
-            { stageId: 'stg_def_2', name: 'Doctor Consultation', stationId: targetStation.id, status: 'in_progress' },
-          ],
-          startedAt: new Date().toISOString(),
-        };
-
-        const ticket: QueueTicket = {
-          id: `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          orgId: DEFAULT_ORG_ID,
-          stationId: targetStation.id,
-          stationName: targetStation.name,
-          journeyId: journey.id,
-          journeyStageId: 'stg_def_2',
-          clientId: patient.id,
-          clientName: patient.name,
-          patientName: patient.name,
-          patientId: patient.id,
-          clientPhone: patient.phone,
-          tokenLabel,
-          ticketNumber: tokenLabel,
-          priority: 1,
-          status: 'waiting',
-          scheduledTime: apt?.time,
-          estimatedWaitMin: Math.max(5, (stationTickets.filter((t) => t.status === 'waiting').length + 1) * 10),
-          createdAt: new Date().toISOString(),
-        };
-
-        stationTickets.push(ticket);
-        queues[targetStation.id] = stationTickets;
-        this.setStorage(STORAGE_KEYS.QUEUES, queues);
-
-        const journeys = this.getStorage<Record<string, Journey>>(STORAGE_KEYS.JOURNEYS, {});
-        journeys[journeyId] = journey;
-        this.setStorage(STORAGE_KEYS.JOURNEYS, journeys);
-
-        if (apt) {
-          apt.checkedInAt = new Date().toISOString();
-          apt.journeyId = journeyId;
-          appointments[aptIdx] = apt;
-          this.setStorage(STORAGE_KEYS.APPOINTMENTS, appointments);
-        }
-
-        eventBusService.publish<QueueEvent>('QUEUE_UPDATE', {
-          type: 'TICKET_CREATED',
-          stationId: targetStation.id,
-          ticket,
-          timestamp: new Date().toISOString(),
-        });
-
-        await this.logAuditEvent({
-          id: `aud_${Date.now()}`,
-          orgId: DEFAULT_ORG_ID,
-          clientId: patient.id,
-          action: 'kiosk_checkin',
-          metadata: { tokenLabel, stationId: targetStation.id },
-          timestamp: new Date().toISOString(),
-        });
-
-        return { journey, ticket };
+      const config = this.getStorage<ReceptionConfig>(STORAGE_KEYS.CONFIG, {
+        orgId: DEFAULT_ORG_ID,
+        tokenPrefixes: { doctor: 'D-', pharmacy: 'P-', lab: 'L-', billing: 'B-', desk: 'R-' },
+        lateArrivalWindowMin: 15,
+        earlyArrivalBufferMin: 30,
+        queueAgingCapMin: 45,
+        defaultLanguages: ['en', 'hi'],
       });
+
+      const prefixKey = (targetStation.type === 'doctor_room' ? 'doctor' : targetStation.type) as keyof typeof config.tokenPrefixes;
+      const prefix = (config.tokenPrefixes && config.tokenPrefixes[prefixKey]) || 'D-';
+      const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
+      const stationTickets = queues[targetStation.id] || [];
+      const tokenNum = String(stationTickets.length + 1).padStart(3, '0');
+      const tokenLabel = `${prefix}${tokenNum}`;
+
+      const journeyId = `jrn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const stages = await this.getDefaultJourneyTemplate(apt?.serviceId || 'srv_consult', DEFAULT_ORG_ID);
+
+      const journey: Journey = {
+        id: journeyId,
+        orgId: DEFAULT_ORG_ID,
+        clientId: patient.id,
+        clientName: patient.name,
+        clientPhone: patient.phone,
+        appointmentId: apt?.id,
+        processId: 'Appointment Scheduling',
+        processName: 'Clinical Consultation Flow',
+        source: 'scheduled',
+        status: 'active',
+        currentStatus: 'checked_in',
+        currentStageId: stages[0].stageId || 'stg_def_1',
+        activeStageIds: [stages[0].stageId || 'stg_def_1'],
+        stages: stages.map((s, idx) => ({
+          stageId: s.stageId,
+          name: s.name,
+          stationId: s.stationType === targetStation.type ? targetStation.id : undefined,
+          type: s.type,
+          status: idx === 0 ? 'waiting' : 'pending',
+          enteredAt: idx === 0 ? new Date().toISOString() : undefined,
+        })),
+        startedAt: new Date().toISOString(),
+      };
+
+      const ticket: QueueTicket = {
+        id: `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        orgId: DEFAULT_ORG_ID,
+        stationId: targetStation.id,
+        stationName: targetStation.name,
+        journeyId,
+        journeyStageId: stages[0].stageId,
+        clientId: patient.id,
+        clientName: patient.name,
+        clientPhone: patient.phone,
+        tokenLabel,
+        priority: 1,
+        status: 'waiting',
+        scheduledTime: apt?.time,
+        estimatedWaitMin: Math.max(5, (stationTickets.filter((t) => t.status === 'waiting').length + 1) * 10),
+        createdAt: new Date().toISOString(),
+      };
+
+      stationTickets.push(ticket);
+      queues[targetStation.id] = stationTickets;
+      this.setStorage(STORAGE_KEYS.QUEUES, queues);
+
+      const journeys = this.getStorage<Record<string, Journey>>(STORAGE_KEYS.JOURNEYS, {});
+      journeys[journeyId] = journey;
+      this.setStorage(STORAGE_KEYS.JOURNEYS, journeys);
+
+      if (apt) {
+        apt.checkedInAt = new Date().toISOString();
+        apt.journeyId = journeyId;
+        appointments[aptIdx] = apt;
+        this.setStorage(STORAGE_KEYS.APPOINTMENTS, appointments);
+      }
+
+      this.notifyQueueListeners({
+        type: 'TICKET_CREATED',
+        stationId: targetStation.id,
+        ticket,
+        timestamp: new Date().toISOString(),
+      });
+
+      await this.logAuditEvent({
+        id: `aud_${Date.now()}`,
+        orgId: DEFAULT_ORG_ID,
+        clientId: patient.id,
+        action: 'receptionist_checkin',
+        metadata: { tokenLabel, stationId: targetStation.id },
+        timestamp: new Date().toISOString(),
+      });
+
+      return { journey, ticket };
     });
   }
 
@@ -708,7 +654,6 @@ export class MockMaClient implements IMaClient {
     patient: { name: string; phone: string; dob?: string };
     reason?: string;
     processId?: string;
-    kioskId?: string;
     idempotencyKey?: string;
   }): Promise<{ success: boolean; ticket: QueueTicket; journey: Journey }> {
     const idempotencyKey = payload.idempotencyKey || '';
@@ -739,7 +684,7 @@ export class MockMaClient implements IMaClient {
     });
   }
 
-  // --- Queue Operations (Atomic via lockService) ---
+  // --- Queue Operations ---
 
   async getStationQueue(stationId: string): Promise<QueueTicket[]> {
     const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
@@ -751,210 +696,86 @@ export class MockMaClient implements IMaClient {
     return Object.values(queues).flat();
   }
 
-  async callNextTicket(stationId: string): Promise<QueueTicket | null> {
-    return lockService.request('ma_queue_mutation_lock', async () => {
-      const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
-      const stationTickets = queues[stationId] || [];
-
-      const waitingTickets = stationTickets
-        .filter((t) => t.status === 'waiting')
-        .sort((a, b) => b.priority - a.priority || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-      if (waitingTickets.length === 0) return null;
-
-      const targetTicket = waitingTickets[0];
-      targetTicket.status = 'called';
-      targetTicket.calledAt = new Date().toISOString();
-
-      queues[stationId] = stationTickets;
-      this.setStorage(STORAGE_KEYS.QUEUES, queues);
-
-      eventBusService.publish<QueueEvent>('QUEUE_UPDATE', {
-        type: 'TICKET_CALLED',
-        stationId,
-        ticket: targetTicket,
-        timestamp: new Date().toISOString(),
-      });
-
-      this.broadcastDisplayEvent();
-      return targetTicket;
-    });
-  }
-
-  async callTicket(ticketId: string, stationId: string): Promise<QueueTicket> {
-    return lockService.request('ma_queue_mutation_lock', async () => {
-      const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
-      let foundTicket: QueueTicket | null = null;
-
-      for (const sId of Object.keys(queues)) {
-        const ticket = queues[sId].find((t) => t.id === ticketId);
-        if (ticket) {
-          foundTicket = ticket;
-          break;
-        }
-      }
-
-      if (!foundTicket) {
-        // Create mock ticket entry if not found
-        foundTicket = {
-          id: ticketId,
-          orgId: DEFAULT_ORG_ID,
-          stationId,
-          stationName: 'Station',
-          journeyId: `jrn_${Date.now()}`,
-          journeyStageId: 'stg_1',
-          clientId: 'pat_1',
-          clientName: 'Patient',
-          tokenLabel: 'A001',
-          priority: 1,
-          status: 'waiting',
-          createdAt: new Date().toISOString(),
-        };
-        if (!queues[stationId]) queues[stationId] = [];
-        queues[stationId].push(foundTicket);
-      }
-
-      foundTicket.status = 'called';
-      foundTicket.stationId = stationId;
-      foundTicket.calledAt = new Date().toISOString();
-      this.setStorage(STORAGE_KEYS.QUEUES, queues);
-      return foundTicket;
-    });
-  }
-
-  async recallTicket(ticketId: string): Promise<QueueTicket> {
-    return lockService.request('ma_queue_mutation_lock', async () => {
-      const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
-      for (const stationId of Object.keys(queues)) {
-        const ticket = queues[stationId].find((t) => t.id === ticketId);
-        if (ticket) {
-          ticket.status = 'called';
-          ticket.calledAt = new Date().toISOString();
-          this.setStorage(STORAGE_KEYS.QUEUES, queues);
-
-          eventBusService.publish<QueueEvent>('QUEUE_UPDATE', {
-            type: 'TICKET_RECALLED',
-            stationId,
-            ticket,
-            timestamp: new Date().toISOString(),
-          });
-
-          this.broadcastDisplayEvent();
-          return ticket;
-        }
-      }
-      throw new Error(`Ticket ${ticketId} not found`);
-    });
-  }
-
-  async serveTicket(ticketId: string): Promise<QueueTicket> {
-    return lockService.request('ma_queue_mutation_lock', async () => {
-      const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
-      for (const stationId of Object.keys(queues)) {
-        const ticket = queues[stationId].find((t) => t.id === ticketId);
-        if (ticket) {
-          ticket.status = 'serving';
-          ticket.servedAt = new Date().toISOString();
-          this.setStorage(STORAGE_KEYS.QUEUES, queues);
-
-          eventBusService.publish<QueueEvent>('QUEUE_UPDATE', {
-            type: 'TICKET_SERVING',
-            stationId,
-            ticket,
-            timestamp: new Date().toISOString(),
-          });
-
-          this.broadcastDisplayEvent();
-          return ticket;
-        }
-      }
-      throw new Error(`Ticket ${ticketId} not found`);
-    });
-  }
-
   async completeTicket(
     ticketId: string,
     nextStageIds: string[] = [],
     idempotencyKey: string = ''
   ): Promise<{ journey: Journey; nextTickets: QueueTicket[] }> {
     return this.withIdempotency(idempotencyKey, async () => {
-      return lockService.request('ma_queue_mutation_lock', async () => {
-        const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
-        let completedTicket: QueueTicket | null = null;
-        let sourceStationId = '';
+      const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
+      let completedTicket: QueueTicket | null = null;
+      let sourceStationId = '';
 
-        for (const stationId of Object.keys(queues)) {
-          const idx = queues[stationId].findIndex((t) => t.id === ticketId);
-          if (idx !== -1) {
-            completedTicket = queues[stationId][idx];
-            completedTicket.status = 'completed';
-            completedTicket.completedAt = new Date().toISOString();
-            sourceStationId = stationId;
-            break;
-          }
+      for (const stationId of Object.keys(queues)) {
+        const idx = queues[stationId].findIndex((t) => t.id === ticketId);
+        if (idx !== -1) {
+          completedTicket = queues[stationId][idx];
+          completedTicket.status = 'completed';
+          completedTicket.completedAt = new Date().toISOString();
+          sourceStationId = stationId;
+          break;
         }
+      }
 
-        if (!completedTicket) throw new Error(`Ticket ${ticketId} not found`);
+      if (!completedTicket) throw new Error(`Ticket ${ticketId} not found`);
 
-        const journeys = this.getStorage<Record<string, Journey>>(STORAGE_KEYS.JOURNEYS, {});
-        const journey: Journey = journeys[completedTicket.journeyId] || {
-          id: completedTicket.journeyId,
-          orgId: DEFAULT_ORG_ID,
-          clientId: completedTicket.clientId,
-          clientName: completedTicket.clientName,
-          processId: 'proc_clinical_consult',
-          source: 'walk_in',
-          currentStageId: 'stg_def_2',
-          activeStageIds: ['stg_def_2'],
-          status: 'completed',
-          stages: [],
-          startedAt: new Date().toISOString(),
-        };
+      const journeys = this.getStorage<Record<string, Journey>>(STORAGE_KEYS.JOURNEYS, {});
+      const journey: Journey = journeys[completedTicket.journeyId] || {
+        id: completedTicket.journeyId,
+        orgId: DEFAULT_ORG_ID,
+        clientId: completedTicket.clientId,
+        clientName: completedTicket.clientName,
+        processId: 'proc_clinical_consult',
+        source: 'walk_in',
+        currentStageId: 'stg_def_2',
+        activeStageIds: ['stg_def_2'],
+        status: 'completed',
+        stages: [],
+        startedAt: new Date().toISOString(),
+      };
 
-        const nextTickets: QueueTicket[] = [];
+      const nextTickets: QueueTicket[] = [];
 
-        if (nextStageIds.length > 0) {
-          const stations = await this.getStations(DEFAULT_ORG_ID);
-          for (const nextStageId of nextStageIds) {
-            const targetStation = stations.find((s) => s.type === 'pharmacy' || s.type === 'billing') || stations[0];
-            const nextTicket: QueueTicket = {
-              id: `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-              orgId: DEFAULT_ORG_ID,
-              stationId: targetStation.id,
-              stationName: targetStation.name,
-              journeyId: journey.id,
-              journeyStageId: nextStageId,
-              clientId: completedTicket.clientId,
-              clientName: completedTicket.clientName,
-              tokenLabel: completedTicket.tokenLabel,
-              priority: 1,
-              status: 'waiting',
-              createdAt: new Date().toISOString(),
-            };
-            if (!queues[targetStation.id]) queues[targetStation.id] = [];
-            queues[targetStation.id].push(nextTicket);
-            nextTickets.push(nextTicket);
-          }
-          journey.status = 'active';
-        } else {
-          journey.status = 'completed';
-          journey.completedAt = new Date().toISOString();
+      if (nextStageIds.length > 0) {
+        const stations = await this.getStations(DEFAULT_ORG_ID);
+        for (const nextStageId of nextStageIds) {
+          const targetStation = stations.find((s) => s.type === 'pharmacy' || s.type === 'billing') || stations[0];
+          const nextTicket: QueueTicket = {
+            id: `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            orgId: DEFAULT_ORG_ID,
+            stationId: targetStation.id,
+            stationName: targetStation.name,
+            journeyId: journey.id,
+            journeyStageId: nextStageId,
+            clientId: completedTicket.clientId,
+            clientName: completedTicket.clientName,
+            tokenLabel: completedTicket.tokenLabel,
+            priority: 1,
+            status: 'waiting',
+            createdAt: new Date().toISOString(),
+          };
+          if (!queues[targetStation.id]) queues[targetStation.id] = [];
+          queues[targetStation.id].push(nextTicket);
+          nextTickets.push(nextTicket);
         }
+        journey.status = 'active';
+      } else {
+        journey.status = 'completed';
+        journey.completedAt = new Date().toISOString();
+      }
 
-        this.setStorage(STORAGE_KEYS.QUEUES, queues);
-        journeys[journey.id] = journey;
-        this.setStorage(STORAGE_KEYS.JOURNEYS, journeys);
+      this.setStorage(STORAGE_KEYS.QUEUES, queues);
+      journeys[journey.id] = journey;
+      this.setStorage(STORAGE_KEYS.JOURNEYS, journeys);
 
-        eventBusService.publish<QueueEvent>('QUEUE_UPDATE', {
-          type: 'TICKET_COMPLETED',
-          stationId: sourceStationId,
-          ticket: completedTicket,
-          timestamp: new Date().toISOString(),
-        });
-
-        this.broadcastDisplayEvent();
-        return { journey, nextTickets };
+      this.notifyQueueListeners({
+        type: 'TICKET_COMPLETED',
+        stationId: sourceStationId,
+        ticket: completedTicket,
+        timestamp: new Date().toISOString(),
       });
+
+      return { journey, nextTickets };
     });
   }
 
@@ -981,133 +802,38 @@ export class MockMaClient implements IMaClient {
   }
 
   async skipTicket(ticketId: string, reason: 'no_show' | 'left' = 'no_show'): Promise<void> {
-    return lockService.request('ma_queue_mutation_lock', async () => {
-      const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
-      for (const stationId of Object.keys(queues)) {
-        const ticket = queues[stationId].find((t) => t.id === ticketId);
-        if (ticket) {
-          ticket.status = reason === 'no_show' ? 'no_show' : 'cancelled';
-          this.setStorage(STORAGE_KEYS.QUEUES, queues);
+    const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
+    for (const stationId of Object.keys(queues)) {
+      const ticket = queues[stationId].find((t) => t.id === ticketId);
+      if (ticket) {
+        ticket.status = reason === 'no_show' ? 'no_show' : 'cancelled';
+        this.setStorage(STORAGE_KEYS.QUEUES, queues);
 
-          eventBusService.publish<QueueEvent>('QUEUE_UPDATE', {
-            type: 'TICKET_SKIPPED',
-            stationId,
-            ticket,
-            timestamp: new Date().toISOString(),
-          });
+        this.notifyQueueListeners({
+          type: 'TICKET_SKIPPED',
+          stationId,
+          ticket,
+          timestamp: new Date().toISOString(),
+        });
 
-          this.broadcastDisplayEvent();
-          return;
-        }
+        return;
       }
-      throw new Error(`Ticket ${ticketId} not found`);
-    });
+    }
+    throw new Error(`Ticket ${ticketId} not found`);
   }
 
-  async requeueTicket(ticketId: string, priority: 0 | 1 | 2 = 1): Promise<QueueTicket> {
-    return lockService.request('ma_queue_mutation_lock', async () => {
-      const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
-      for (const stationId of Object.keys(queues)) {
-        const ticket = queues[stationId].find((t) => t.id === ticketId);
-        if (ticket) {
-          ticket.status = 'waiting';
-          ticket.priority = priority;
-          ticket.calledAt = undefined;
-          this.setStorage(STORAGE_KEYS.QUEUES, queues);
-
-          eventBusService.publish<QueueEvent>('QUEUE_UPDATE', {
-            type: 'TICKET_REQUEUED',
-            stationId,
-            ticket,
-            timestamp: new Date().toISOString(),
-          });
-
-          this.broadcastDisplayEvent();
-          return ticket;
-        }
-      }
-      throw new Error(`Ticket ${ticketId} not found`);
-    });
-  }
-
-  async transferTicket(ticketId: string, targetStationId: string, priority: 0 | 1 | 2 = 1): Promise<QueueTicket> {
-    return lockService.request('ma_queue_mutation_lock', async () => {
-      const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
-      const stations = await this.getStations(DEFAULT_ORG_ID);
-      const targetStation = stations.find((s) => s.id === targetStationId);
-      if (!targetStation) throw new Error(`Target station ${targetStationId} not found`);
-
-      let foundTicket: QueueTicket | null = null;
-      let sourceStationId = '';
-
-      for (const sId of Object.keys(queues)) {
-        const idx = queues[sId].findIndex((t) => t.id === ticketId);
-        if (idx !== -1) {
-          [foundTicket] = queues[sId].splice(idx, 1);
-          sourceStationId = sId;
-          break;
-        }
-      }
-
-      if (!foundTicket) throw new Error(`Ticket ${ticketId} not found`);
-
-      foundTicket.stationId = targetStation.id;
-      foundTicket.stationName = targetStation.name;
-      foundTicket.status = 'waiting';
-      foundTicket.priority = priority;
-      foundTicket.calledAt = undefined;
-
-      if (!queues[targetStation.id]) queues[targetStation.id] = [];
-      queues[targetStation.id].push(foundTicket);
-
-      this.setStorage(STORAGE_KEYS.QUEUES, queues);
-
-      eventBusService.publish<QueueEvent>('QUEUE_UPDATE', {
-        type: 'TICKET_TRANSFERRED',
-        stationId: sourceStationId,
-        ticket: foundTicket,
-        timestamp: new Date().toISOString(),
-      });
-
-      this.broadcastDisplayEvent();
-      return foundTicket;
-    });
-  }
-
-  // --- Realtime Subscriptions & Display Broadcast ---
+  // --- Realtime Subscriptions ---
 
   subscribeToQueue(stationId: string, callback: (event: QueueEvent) => void): () => void {
-    return eventBusService.subscribe<QueueEvent>('QUEUE_UPDATE', (event) => {
+    const listener = (event: QueueEvent) => {
       if (!stationId || event.stationId === stationId) {
         callback(event);
       }
-    });
-  }
-
-  subscribeToDisplay(stationGroupId: string, callback: (event: DisplayEvent) => void): () => void {
-    return eventBusService.subscribe<DisplayEvent>('DISPLAY_UPDATE', (event) => {
-      if (!stationGroupId || event.stationGroupId === stationGroupId) {
-        callback(event);
-      }
-    });
-  }
-
-  private broadcastDisplayEvent(): void {
-    const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
-    const allTickets = Object.values(queues).flat();
-
-    const nowServing = allTickets.filter((t) => t.status === 'called' || t.status === 'serving');
-    const nextUp = allTickets
-      .filter((t) => t.status === 'waiting')
-      .sort((a, b) => b.priority - a.priority || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-      .slice(0, 8);
-
-    eventBusService.publish<DisplayEvent>('DISPLAY_UPDATE', {
-      stationGroupId: 'default',
-      nowServing,
-      nextUp,
-      timestamp: new Date().toISOString(),
-    });
+    };
+    this.queueListeners.add(listener);
+    return () => {
+      this.queueListeners.delete(listener);
+    };
   }
 
   async sendTokenNotification(ticketId: string, phone: string, channel: 'sms' | 'whatsapp'): Promise<boolean> {
@@ -1354,13 +1080,12 @@ export class MockMaClient implements IMaClient {
 
   // --- Visit Summary (Driven by MA Process & Station Mapping) ---
 
-  async getVisitSummary(clientId: string, appointmentId?: string): Promise<import('../../types/reception').VisitSummary> {
+  async getVisitSummary(clientId: string, appointmentId?: string): Promise<VisitSummary> {
     this.seedInitialDataIfEmpty();
     const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
     let patient = patients.find((p) => p.id === clientId);
 
     if (!patient) {
-      // Fallback lookup
       patient = {
         id: clientId,
         name: 'Sunita Rao',
@@ -1386,7 +1111,7 @@ export class MockMaClient implements IMaClient {
         date: new Date().toISOString().split('T')[0],
         time: '11:00 AM',
         status: 'confirmed',
-        source: 'kiosk' as const,
+        source: 'ai_receptionist' as const,
         tokenNumber: 'D-002',
       };
 
@@ -1422,7 +1147,7 @@ export class MockMaClient implements IMaClient {
         date: apt.date,
         time: apt.time,
         status: apt.status || 'confirmed',
-        source: apt.source || 'kiosk',
+        source: apt.source || 'ai_receptionist',
       },
       room: {
         stationId: targetStation.id,
