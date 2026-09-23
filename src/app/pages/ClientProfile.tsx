@@ -975,10 +975,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   // Initialize selectedProcesses and drawerProcessStages from client
   useEffect(() => {
     if (client) {
-      setSelectedProcesses(client.processes);
+      setSelectedProcesses(client.processes ?? []);
       const initialStages: Record<string, string> = {};
       const headings = new Set<string>();
-      client.processes.forEach((processName) => {
+      (client.processes ?? []).forEach((processName) => {
         const parts = processName.split(":");
         if (parts.length >= 1) headings.add(parts[0].trim());
       });
@@ -1055,7 +1055,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     const headings = new Set<string>();
 
     storedCallLogs.forEach((l) => headings.add(l.process));
-    client.processes.forEach((processName) => {
+    (client.processes ?? []).forEach((processName) => {
       const parts = processName.split(":");
       if (parts.length >= 1) headings.add(parts[0].trim());
     });

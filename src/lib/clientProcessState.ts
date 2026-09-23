@@ -117,7 +117,14 @@ export function setClientProcessStage(clientId: string, entry: ClientProcessStag
         name: clientId === "CL-001" ? "Ramesh Iyer" : `Patient ${clientId}`,
         email: clientId === "CL-001" ? "ramesh.i@example.com" : "",
         phone: clientId === "CL-001" ? "+91 98201 45678" : "",
+        country: "IN",
+        countryCode: "+91",
+        countryFlag: "🇮🇳",
+        processes: [entry.processName],
         stage: entry.stageName,
+        responsible: "",
+        lastContact: new Date().toISOString().split("T")[0],
+        status: "Active",
         processStages: [stageEntryWithTime],
       };
       updated = [...clients, newClient];
