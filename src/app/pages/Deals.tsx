@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Search, Filter, Download, Upload, Phone, FileText, Play, Calendar, StopCircle, Settings as SettingsIcon, Eye, ChevronLeft, ChevronRight, ChevronDown, ChevronsLeft, ChevronsRight, AlertCircle, AlertTriangle, X, Pause, TrendingUp, Clock, GitBranch, RefreshCw, Zap, Star, Headphones, User, CheckCircle2, Volume2, Users, Target, Award, Brain, Shield, MessageSquare, Sparkles, ThumbsUp, ThumbsDown, Info, List, LayoutGrid, MoreVertical, Trash2, Pencil, Building2, CalendarClock, Package, CheckCircle, Plus, Globe, Copy } from "lucide-react";
 import { PiArrowSquareOutBold, PiArrowSquareInBold, PiPhoneIncoming, PiPhoneOutgoing } from "react-icons/pi";
@@ -29,6 +29,13 @@ import { getStoredCallLogs, saveCallLogs, PROCESS_LOGS_STORE_EVENT, updateProces
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
 import { getStagesForProcess } from "../components/ui/ProcessStageSelect";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
+import {
+  getClientProcessStages,
+  setClientProcessStage,
+  ClientProcessStage,
+  CLIENTS_STORE_EVENT,
+} from "../../lib/clientProcessState";
+import { onSyncEvent } from "../../lib/syncBroadcast";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
 
 interface CallLog {
@@ -82,6 +89,12 @@ interface Deal {
 }
 
 const initialDeals: Deal[] = [
+  // Patient Front Journeys (Daycare, OPD, IPD)
+  { id: "DEAL-RAMESH", dealName: "Toric IOL Cataract Daycare", clientName: "Ramesh Iyer", amount: 45000, currency: "₹", createdDate: "2024-05-18", status: "In Progress", responsible: "Dr. Meera Nair", stage: "Cataract Surgery Daycare: Pre-Op Prep" },
+  { id: "DEAL-CAT-02", dealName: "Monofocal Cataract Daycare", clientName: "Sunita Sharma", amount: 35000, currency: "₹", createdDate: "2024-05-18", status: "In Progress", responsible: "Dr. Meera Nair", stage: "Cataract Surgery Daycare: Checked In" },
+  { id: "DEAL-CAT-03", dealName: "Multifocal Cataract Package", clientName: "Rajesh Verma", amount: 65000, currency: "₹", createdDate: "2024-05-17", status: "In Progress", responsible: "Dr. Meera Nair", stage: "Cataract Surgery Daycare: Dilation & Drops" },
+  { id: "DEAL-OPH-01", dealName: "Comprehensive Retina Exam", clientName: "Meenakshi Sundaram", amount: 2500, currency: "₹", createdDate: "2024-05-18", status: "In Progress", responsible: "Dr. Sarah Johnson", stage: "Ophthalmology Consultation: Optometry & Vitals" },
+  { id: "DEAL-IPD-01", dealName: "Medical Inpatient Ward (Bed 14)", clientName: "Anand Rao", amount: 82000, currency: "₹", createdDate: "2024-05-16", status: "In Progress", responsible: "Dr. Sarah Johnson", stage: "Inpatient Medical Ward: Diagnostic Workup & Vitals" },
   { id: "DEAL-001", dealName: "Patient Intake Package", clientName: "Sarah Johnson", amount: 25000, currency: "₹", createdDate: "2024-05-18", status: "In Progress", responsible: "John Smith", stage: "Patient Intake: Initial Contact" },
   { id: "DEAL-002", dealName: "Insurance Verification Bundle", clientName: "Michael Chen", amount: 0, currency: "₹", createdDate: "2024-05-17", status: "In Progress", responsible: "Emily Davis", stage: "Patient Intake: Initial Contact" },
   { id: "DEAL-003", dealName: "Wellness Program", clientName: "Priya Sharma", amount: 15000, currency: "₹", createdDate: "2024-05-16", status: "In Progress", responsible: "Sarah Johnson", stage: "Patient Intake: Initial Contact" },
@@ -104,7 +117,11 @@ const initialDeals: Deal[] = [
 
 // Mock client data for profile drawer
 const mockClients: { [key: string]: Client } = {
-  "CL-001": { id: "CL-001", name: "Sarah Johnson", email: "sarah.j@email.com", phone: "5551234567", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake", "Follow-up Calls"], stage: "Insurance Verification", responsible: "John Smith", lastContact: "2024-04-10", status: "Active", companyName: "TechCorp Inc.", jobPosition: "Senior Manager", numberOfEmployees: "101-250" },
+  "CL-001": { id: "CL-001", name: "Ramesh Iyer", email: "ramesh.iyer@email.com", phone: "+91 98201 45678", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Cataract Surgery Daycare", "Patient Intake"], stage: "Pre-Op Prep", responsible: "Dr. Meera Nair", lastContact: "2024-05-18", status: "Active", companyName: "Private Patient", jobPosition: "Retired", numberOfEmployees: "1-10", location: "Mumbai" },
+  "CL-031": { id: "CL-031", name: "Sunita Sharma", email: "sunita.s@email.com", phone: "+91 98111 22334", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Cataract Surgery Daycare"], stage: "Checked In", responsible: "Dr. Meera Nair", lastContact: "2024-05-18", status: "Active" },
+  "CL-032": { id: "CL-032", name: "Rajesh Verma", email: "rajesh.v@email.com", phone: "+91 98222 33445", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Cataract Surgery Daycare"], stage: "Dilation & Drops", responsible: "Dr. Meera Nair", lastContact: "2024-05-18", status: "Active" },
+  "CL-033": { id: "CL-033", name: "Meenakshi Sundaram", email: "meenakshi.s@email.com", phone: "+91 98333 44556", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Ophthalmology Consultation"], stage: "Optometry & Vitals", responsible: "Dr. Sarah Johnson", lastContact: "2024-05-18", status: "Active" },
+  "CL-034": { id: "CL-034", name: "Anand Rao", email: "anand.rao@email.com", phone: "+91 98444 55667", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Inpatient Medical Ward"], stage: "Diagnostic Workup & Vitals", responsible: "Dr. Sarah Johnson", lastContact: "2024-05-16", status: "Active" },
   "CL-002": { id: "CL-002", name: "Michael Chen", email: "mchen@email.com", phone: "5552345678", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Initial Contact", responsible: "Sarah Johnson", lastContact: "2024-04-09", status: "Active", companyName: "Innovate Solutions", jobPosition: "Product Manager", numberOfEmployees: "51-100" },
   "CL-003": { id: "CL-003", name: "Emily Davis", email: "emily.d@email.com", phone: "5553456789", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active", companyName: "Healthcare Plus", jobPosition: "Director of Operations", numberOfEmployees: "251-500" },
   "CL-004": { id: "CL-004", name: "Robert Wilson", email: "rwilson@email.com", phone: "5554567890", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
@@ -157,6 +174,12 @@ const getClientObj = (clientId?: string, clientName?: string): Client | undefine
 // Distribution: 70 Outbound, 30 Inbound | 65 Completed, 20 Failed, 15 Pending
 // All calls mapped to valid clients with correct process assignments
 const initialCallLogs: CallLog[] = [
+  // Patient Front Journeys (Daycare, OPD, IPD)
+  { id: "CALL-RAMESH-01", client: "Ramesh Iyer", clientId: "CL-001", type: "Inbound", status: "In Progress", process: "Cataract Surgery Daycare", currentStage: "Pre-Op Prep", duration: "4:12", date: "2024-05-18 09:30", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-CAT-02", client: "Sunita Sharma", clientId: "CL-031", type: "Inbound", status: "In Progress", process: "Cataract Surgery Daycare", currentStage: "Checked In", duration: "1:45", date: "2024-05-18 08:45", hasRecording: false, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-CAT-03", client: "Rajesh Verma", clientId: "CL-032", type: "Outbound", status: "Completed", process: "Cataract Surgery Daycare", currentStage: "Dilation & Drops", duration: "3:10", date: "2024-05-18 09:10", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-OPH-01", client: "Meenakshi Sundaram", clientId: "CL-033", type: "Inbound", status: "In Progress", process: "Ophthalmology Consultation", currentStage: "Optometry & Vitals", duration: "2:30", date: "2024-05-18 10:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-IPD-01", client: "Anand Rao", clientId: "CL-034", type: "Inbound", status: "In Progress", process: "Inpatient Medical Ward", currentStage: "Diagnostic Workup & Vitals", duration: "5:00", date: "2024-05-16 11:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
   // Latest calls first (Apr 13-14)
   { id: "CALL-001", client: "Sarah Johnson", clientId: "CL-001", type: "Outbound", status: "Completed", process: "Patient Intake", currentStage: "Insurance Verification", duration: "4:32", date: "2024-04-13 14:30", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
   { id: "CALL-002", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "3:45", date: "2024-04-13 13:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
@@ -184,6 +207,22 @@ const initialCallLogs: CallLog[] = [
 // Helper function to derive process from stage
 const getProcessFromStage = (stage: string): string => {
   const stageToProcessMap: Record<string, string> = {
+    // Patient Front Journeys
+    'Checked In': 'Cataract Surgery Daycare',
+    'Dilation & Drops': 'Cataract Surgery Daycare',
+    'Pre-Op Prep': 'Cataract Surgery Daycare',
+    'In Surgery': 'Cataract Surgery Daycare',
+    'Recovery & Discharge': 'Cataract Surgery Daycare',
+    'Reception & Token': 'Ophthalmology Consultation',
+    'Optometry & Vitals': 'Ophthalmology Consultation',
+    'Dilation & Waiting': 'Ophthalmology Consultation',
+    'Doctor Consultation': 'Ophthalmology Consultation',
+    'Pharmacy & Billing': 'Ophthalmology Consultation',
+    'Admission & Bed Allocation': 'Inpatient Medical Ward',
+    'Diagnostic Workup & Vitals': 'Inpatient Medical Ward',
+    'Active Treatment & Rounds': 'Inpatient Medical Ward',
+    'Discharge Planning & Summary': 'Inpatient Medical Ward',
+    // AI Outreach & Support
     'Insurance Verification': 'Patient Intake',
     'Insurance Verify': 'Patient Intake',
     'Schedule Appointment': 'Patient Intake',
@@ -326,12 +365,39 @@ export default function Deals() {
   const navigate = useNavigate();
   const entityType = "deals";
   const entityLabel = "deals";
-  // Ensure all call logs have process field
+  // Ensure all call logs have process field, and include Patient Front clients
   const [callLogs, setCallLogs] = useState<CallLog[]>(() => {
-    return getStoredCallLogs().map(log => ({
+    let logs = getStoredCallLogs().map(log => ({
       ...log,
       process: log.process || getProcessFromStage(log.currentStage)
     }));
+    // Guarantee Ramesh Iyer exists in callLogs
+    if (!logs.some((l) => l.client === "Ramesh Iyer" || l.clientId === "CL-001")) {
+      const rameshLog = initialCallLogs.find((l) => l.client === "Ramesh Iyer");
+      if (rameshLog) {
+        logs = [rameshLog, ...logs];
+        saveCallLogs(logs);
+      }
+    }
+    // Guarantee other Patient Front patients exist
+    initialCallLogs.slice(0, 5).forEach((seed) => {
+      if (!logs.some((l) => l.clientId === seed.clientId)) {
+        logs.push(seed);
+      }
+    });
+    // Check if clientProcessState has current stage for CL-001
+    try {
+      const rameshStages = getClientProcessStages("CL-001");
+      if (rameshStages && rameshStages.length > 0) {
+        const active = rameshStages[0];
+        logs = logs.map((l) =>
+          l.client === "Ramesh Iyer" || l.clientId === "CL-001"
+            ? { ...l, currentStage: active.stageName, process: active.processName }
+            : l
+        );
+      }
+    } catch {}
+    return logs;
   });
 
   useEffect(() => {
@@ -532,7 +598,31 @@ export default function Deals() {
   const [deals, setDeals] = useState<Deal[]>(() => {
     try {
       const raw = sessionStorage.getItem("deals");
-      return raw ? JSON.parse(raw) : initialDeals;
+      let parsed: Deal[] = raw ? JSON.parse(raw) : initialDeals;
+      // Ensure Ramesh Iyer is present
+      if (!parsed.some((d) => d.clientName === "Ramesh Iyer")) {
+        const rameshDeal = initialDeals.find((d) => d.clientName === "Ramesh Iyer");
+        if (rameshDeal) parsed = [rameshDeal, ...parsed];
+      }
+      // Ensure initial Patient Front deals exist
+      initialDeals.slice(0, 5).forEach((seed) => {
+        if (!parsed.some((d) => d.id === seed.id)) {
+          parsed.push(seed);
+        }
+      });
+      // Synchronize latest stage from clientProcessState
+      try {
+        const rameshStages = getClientProcessStages("CL-001");
+        if (rameshStages && rameshStages.length > 0) {
+          const active = rameshStages[0];
+          parsed = parsed.map((d) =>
+            d.clientName === "Ramesh Iyer"
+              ? { ...d, stage: `${active.processName}: ${active.stageName}` }
+              : d
+          );
+        }
+      } catch {}
+      return parsed;
     } catch {
       return initialDeals;
     }
@@ -554,6 +644,92 @@ export default function Deals() {
     return () => {
       window.removeEventListener("deals_updated", handler);
       window.removeEventListener("storage", handler);
+    };
+  }, []);
+
+  // Helper to sync stage transitions directly to patient companion state
+  const syncStageToClientProcess = (
+    clientId: string,
+    clientName: string,
+    processName: string,
+    stageName: string,
+    stageId?: string
+  ) => {
+    try {
+      const resolvedClientId =
+        clientId && clientId !== "CL-001"
+          ? clientId
+          : clientName.toLowerCase().includes("ramesh")
+          ? "CL-001"
+          : clientId || "CL-001";
+
+      const procs = getStoredProcesses();
+      const matchedProc = procs.find(
+        (p) =>
+          p.name.trim().toLowerCase() === processName.trim().toLowerCase() ||
+          p.id.toLowerCase() === processName.toLowerCase()
+      );
+
+      let resolvedStageId = stageId;
+      if (!resolvedStageId && matchedProc?.stages) {
+        const matchedStage = matchedProc.stages.find(
+          (s) => s.name.trim().toLowerCase() === stageName.trim().toLowerCase() || s.id === stageName
+        );
+        if (matchedStage) {
+          resolvedStageId = matchedStage.id;
+        }
+      }
+      if (!resolvedStageId) {
+        resolvedStageId = stageName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      }
+
+      const entry: ClientProcessStage = {
+        processId: matchedProc?.id || processName.toLowerCase().replace(/\s+/g, "-"),
+        processName: matchedProc?.name || processName,
+        stageId: resolvedStageId,
+        stageName: stageName,
+        channel: "sms",
+        updatedAt: new Date().toISOString(),
+      };
+
+      setClientProcessStage(resolvedClientId, entry);
+    } catch (err) {
+      console.warn("Failed to sync stage to clientProcessState", err);
+    }
+  };
+
+  // Real-time synchronization when patient stage changes on Patient Front (e.g. check-in, dev bar)
+  useEffect(() => {
+    const syncFromPatientFront = () => {
+      try {
+        const rameshStages = getClientProcessStages("CL-001");
+        if (rameshStages && rameshStages.length > 0) {
+          const active = rameshStages[0];
+          setDeals((prev) =>
+            prev.map((d) =>
+              d.clientName === "Ramesh Iyer"
+                ? { ...d, stage: `${active.processName}: ${active.stageName}` }
+                : d
+            )
+          );
+          setCallLogs((prev) =>
+            prev.map((l) =>
+              l.client === "Ramesh Iyer" || l.clientId === "CL-001"
+                ? { ...l, currentStage: active.stageName, process: active.processName }
+                : l
+            )
+          );
+        }
+      } catch {}
+    };
+
+    window.addEventListener(CLIENTS_STORE_EVENT, syncFromPatientFront);
+    window.addEventListener("storage", syncFromPatientFront);
+    const unsub = onSyncEvent("CLIENTS_UPDATED", syncFromPatientFront);
+    return () => {
+      window.removeEventListener(CLIENTS_STORE_EVENT, syncFromPatientFront);
+      window.removeEventListener("storage", syncFromPatientFront);
+      unsub();
     };
   }, []);
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
@@ -796,6 +972,22 @@ export default function Deals() {
 
   // Comprehensive stage pipeline (for progress visualization)
   const stagePipeline = [
+    // Patient Front Journeys
+    { id: "cat-1", label: "Checked In", fullLabel: "Cataract Surgery Daycare: Checked In", category: "Cataract Surgery Daycare" },
+    { id: "cat-2", label: "Dilation & Drops", fullLabel: "Cataract Surgery Daycare: Dilation & Drops", category: "Cataract Surgery Daycare" },
+    { id: "cat-3", label: "Pre-Op Prep", fullLabel: "Cataract Surgery Daycare: Pre-Op Prep", category: "Cataract Surgery Daycare" },
+    { id: "cat-4", label: "In Surgery", fullLabel: "Cataract Surgery Daycare: In Surgery", category: "Cataract Surgery Daycare" },
+    { id: "cat-5", label: "Recovery & Discharge", fullLabel: "Cataract Surgery Daycare: Recovery & Discharge", category: "Cataract Surgery Daycare" },
+    { id: "oph-1", label: "Reception & Token", fullLabel: "Ophthalmology Consultation: Reception & Token", category: "Ophthalmology Consultation" },
+    { id: "oph-2", label: "Optometry & Vitals", fullLabel: "Ophthalmology Consultation: Optometry & Vitals", category: "Ophthalmology Consultation" },
+    { id: "oph-3", label: "Dilation & Waiting", fullLabel: "Ophthalmology Consultation: Dilation & Waiting", category: "Ophthalmology Consultation" },
+    { id: "oph-4", label: "Doctor Consultation", fullLabel: "Ophthalmology Consultation: Doctor Consultation", category: "Ophthalmology Consultation" },
+    { id: "oph-5", label: "Pharmacy & Billing", fullLabel: "Ophthalmology Consultation: Pharmacy & Billing", category: "Ophthalmology Consultation" },
+    { id: "ipd-1", label: "Admission & Bed Allocation", fullLabel: "Inpatient Medical Ward: Admission & Bed Allocation", category: "Inpatient Medical Ward" },
+    { id: "ipd-2", label: "Diagnostic Workup & Vitals", fullLabel: "Inpatient Medical Ward: Diagnostic Workup & Vitals", category: "Inpatient Medical Ward" },
+    { id: "ipd-3", label: "Active Treatment & Rounds", fullLabel: "Inpatient Medical Ward: Active Treatment & Rounds", category: "Inpatient Medical Ward" },
+    { id: "ipd-4", label: "Discharge Planning & Summary", fullLabel: "Inpatient Medical Ward: Discharge Planning & Summary", category: "Inpatient Medical Ward" },
+    // Standard AI Calling & Outreach
     { id: 1, label: "Initial Contact", fullLabel: "Patient Intake: Initial Contact", category: "Patient Intake" },
     { id: 2, label: "Insurance Verify", fullLabel: "Patient Intake: Insurance Verify", category: "Patient Intake" },
     { id: 3, label: "Schedule Appointment", fullLabel: "Patient Intake: Schedule Appointment", category: "Patient Intake" },
@@ -827,13 +1019,13 @@ export default function Deals() {
   const getStagePosition = (stageName: string): number => {
     // Try to find exact match in pipeline
     const exactMatch = stagePipeline.find(s => s.label === stageName);
-    if (exactMatch) return exactMatch.id;
+    if (exactMatch) return typeof exactMatch.id === "number" ? exactMatch.id : 1;
 
     // Try to find partial match for legacy stage names
     const partialMatch = stagePipeline.find(s =>
       s.label.toLowerCase().includes(stageName.toLowerCase())
     );
-    if (partialMatch) return partialMatch.id;
+    if (partialMatch) return typeof partialMatch.id === "number" ? partialMatch.id : 1;
 
     // Default to position 1 if no match
     return 1;
@@ -843,6 +1035,22 @@ export default function Deals() {
   const getCategoryFromStage = (stageName: string): string => {
     // Direct category mapping for common stage names
     const stageToCategory: { [key: string]: string } = {
+      // Patient Front Journeys
+      "Checked In": "Cataract Surgery Daycare",
+      "Dilation & Drops": "Cataract Surgery Daycare",
+      "Pre-Op Prep": "Cataract Surgery Daycare",
+      "In Surgery": "Cataract Surgery Daycare",
+      "Recovery & Discharge": "Cataract Surgery Daycare",
+      "Reception & Token": "Ophthalmology Consultation",
+      "Optometry & Vitals": "Ophthalmology Consultation",
+      "Dilation & Waiting": "Ophthalmology Consultation",
+      "Doctor Consultation": "Ophthalmology Consultation",
+      "Pharmacy & Billing": "Ophthalmology Consultation",
+      "Admission & Bed Allocation": "Inpatient Medical Ward",
+      "Diagnostic Workup & Vitals": "Inpatient Medical Ward",
+      "Active Treatment & Rounds": "Inpatient Medical Ward",
+      "Discharge Planning & Summary": "Inpatient Medical Ward",
+      // AI Outreach & Support
       "Initial Contact": "Patient Intake",
       "Insurance Verification": "Insurance Verification",
       "Insurance Verify": "Patient Intake",
@@ -877,6 +1085,108 @@ export default function Deals() {
     // Default to first category
     return "Patient Intake";
   };
+
+  // Dynamic Kanban stage pipeline derived from storedProcesses and fallback stagePipeline
+  const activeStagePipeline = useMemo(() => {
+    if (selectedProcessFilter) {
+      // 1. Look for selected process in storedProcesses
+      const foundProc = storedProcesses.find(
+        (p) =>
+          p.name.trim().toLowerCase() === selectedProcessFilter.trim().toLowerCase() ||
+          p.id.toLowerCase() === selectedProcessFilter.toLowerCase()
+      );
+      if (foundProc && foundProc.stages && foundProc.stages.length > 0) {
+        return foundProc.stages.map((s, idx) => ({
+          id: s.id || `stg-${idx}`,
+          label: s.name,
+          fullLabel: `${foundProc.name}: ${s.name}`,
+          category: foundProc.name,
+          stageId: s.id,
+          description: s.description,
+          color: s.color,
+          patientFacing: Boolean(s.patientFacingContent?.visibleToPatient !== false && (foundProc.category === "patient_front" || s.patientFacingContent)),
+        }));
+      }
+      // 2. Fallback to stagePipeline
+      const legacyMatches = stagePipeline.filter(
+        (s) => s.category.toLowerCase() === selectedProcessFilter.toLowerCase()
+      );
+      if (legacyMatches.length > 0) return legacyMatches;
+    }
+
+    // "All" selected -> Show all processes' stages:
+    // Combine storedProcesses stages and legacy stagePipeline (avoiding duplicates)
+    const pipeline: Array<{
+      id: string | number;
+      label: string;
+      fullLabel: string;
+      category: string;
+      stageId?: string;
+      description?: string;
+      color?: string;
+      patientFacing?: boolean;
+    }> = [];
+
+    // Add stored processes stages
+    storedProcesses.forEach((proc) => {
+      if (proc.stages && proc.stages.length > 0) {
+        proc.stages.forEach((s, idx) => {
+          pipeline.push({
+            id: `${proc.id}-${s.id || idx}`,
+            label: s.name,
+            fullLabel: `${proc.name}: ${s.name}`,
+            category: proc.name,
+            stageId: s.id,
+            description: s.description,
+            color: s.color,
+            patientFacing: Boolean(s.patientFacingContent?.visibleToPatient !== false && (proc.category === "patient_front" || s.patientFacingContent)),
+          });
+        });
+      }
+    });
+
+    // Fallback if storedProcesses is empty or incomplete
+    if (pipeline.length === 0) {
+      return stagePipeline;
+    }
+
+    return pipeline;
+  }, [selectedProcessFilter, storedProcesses, stagePipeline]);
+
+  // Unified flat list of all process names (no artificial category split)
+  const allProcessOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+
+    // 1. From storedProcesses
+    storedProcesses.forEach((p) => {
+      const trimmed = p.name?.trim();
+      if (trimmed && !seen.has(trimmed.toLowerCase())) {
+        seen.add(trimmed.toLowerCase());
+        list.push(trimmed);
+      }
+    });
+
+    // 2. Default processes
+    const defaults = [
+      'Cataract Surgery Daycare',
+      'Ophthalmology Consultation',
+      'Inpatient Medical Ward',
+      'Patient Intake',
+      'Follow-up Calls',
+      'Insurance Verification',
+      'Appointment Scheduling',
+      'Payment Reminder',
+    ];
+    defaults.forEach((name) => {
+      if (!seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        list.push(name);
+      }
+    });
+
+    return list;
+  }, [storedProcesses]);
 
   const dealStageLabels = ["New", "Can't Contact", "Follow-up Later", "Interested", "Close Deal"];
 
@@ -1959,19 +2269,32 @@ export default function Deals() {
 
             {/* Processes Dropdown */}
             <div className="relative">
-              <button
-                onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-white border transition-colors rounded-lg"
-                style={{
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  color: '#374151',
-                  borderColor: '#D1D5DB'
-                }}
-              >
-                {selectedProcessFilter ? selectedProcessFilter : "Process"}
-                <ChevronDown className="w-4 h-4" />
-              </button>
+              <div className="flex items-center">
+                <button
+                  onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
+                  className={`flex items-center gap-2 px-3 py-1.5 border transition-all rounded-lg ${
+                    selectedProcessFilter ? 'bg-primary/5 border-primary/40 text-primary font-medium' : 'bg-white border-[#D1D5DB] text-[#374151]'
+                  }`}
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: 500,
+                  }}
+                >
+                  <span className="truncate max-w-[200px]">
+                    {selectedProcessFilter || "Process"}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                </button>
+                {selectedProcessFilter && (
+                  <button
+                    onClick={() => setSelectedProcessFilter(null)}
+                    className="ml-1 p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+                    title="Clear filter"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
 
               {/* Processes Dropdown Menu */}
               {showProcessesDropdown && (
@@ -1983,36 +2306,55 @@ export default function Deals() {
                   />
 
                   {/* Dropdown Panel */}
-                  <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-border rounded-lg shadow-xl z-50 py-2">
+                  <div
+                    className="absolute top-full left-0 mt-2 w-72 bg-white border border-border rounded-xl shadow-2xl z-50 py-2 max-h-[460px] overflow-y-auto"
+                    style={{ scrollbarWidth: 'thin' }}
+                  >
+                    {/* All Processes */}
                     <button
                       onClick={() => {
                         setSelectedProcessFilter(null);
                         setShowProcessesDropdown(false);
                       }}
-                      className={`w-full text-left px-4 py-2 text-sm rounded transition-colors ${!selectedProcessFilter ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'
-                        }`}
+                      className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between transition-colors ${
+                        !selectedProcessFilter ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
+                      }`}
                     >
-                      All
+                      <span className="flex items-center gap-2">
+                        <span>All Processes</span>
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">
+                        {deals.length}
+                      </span>
                     </button>
-                    {[
-                      'Patient Intake',
-                      'Follow-up Calls',
-                      'Insurance Verification',
-                      'Appointment Scheduling',
-                      'Payment Reminder'
-                    ].map((process) => (
-                      <button
-                        key={process}
-                        onClick={() => {
-                          setSelectedProcessFilter(process);
-                          setShowProcessesDropdown(false);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm rounded transition-colors ${selectedProcessFilter === process ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'
+
+                    {allProcessOptions.map((processName) => {
+                      const count = deals.filter((d) => {
+                        if (d.stage.toLowerCase().startsWith(processName.toLowerCase() + ":")) return true;
+                        const cat = getCategoryFromStage(d.stage);
+                        return cat.toLowerCase() === processName.toLowerCase();
+                      }).length;
+                      const isSelected = selectedProcessFilter?.toLowerCase() === processName.toLowerCase();
+                      return (
+                        <button
+                          key={processName}
+                          onClick={() => {
+                            setSelectedProcessFilter(processName);
+                            setShowProcessesDropdown(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between transition-colors ${
+                            isSelected ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
                           }`}
-                      >
-                        {process}
-                      </button>
-                    ))}
+                        >
+                          <span className="truncate">{processName}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            isSelected ? 'bg-primary/20 text-primary' : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </>
               )}
@@ -2379,11 +2721,12 @@ export default function Deals() {
                                                 setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
                                                 saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
                                                 updateProcessCallLogStage(log.clientId, log.process, stageName);
+                                                syncStageToClientProcess(log.clientId, log.client, log.process, stageName);
                                                 setDeals((prev) =>
                                                   prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
                                                 );
                                                 setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
-                                                toast.success(`Stage moved to ${stageName} with required fields saved ✓`);
+                                                toast.success(`Stage moved to ${stageName} with required fields saved ✓ (Syncs to Patient Front)`);
                                               },
                                             });
                                             return;
@@ -2393,10 +2736,11 @@ export default function Deals() {
                                           setCallLogs(prev => prev.map(l => l.id === log.id ? updatedLog : l));
                                           saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
                                           updateProcessCallLogStage(log.clientId, log.process, stageName);
+                                          syncStageToClientProcess(log.clientId, log.client, log.process, stageName);
                                           setDeals(prev =>
                                             prev.map(d => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
                                           );
-                                          toast.success(`Stage moved to ${stageName} ✓`);
+                                          toast.success(`Stage moved to ${stageName} ✓ (Reflected in Patient Front)`);
                                         }}
                                         onMouseEnter={() => setHoveredStageSegment({ logId: log.id, segIdx })}
                                         onMouseLeave={() => setHoveredStageSegment(null)}
@@ -2768,11 +3112,17 @@ export default function Deals() {
                 }
               }}
             >
-              {(selectedProcessFilter
-                ? stagePipeline.filter((s) => s.category === selectedProcessFilter)
-                : stagePipeline
-              ).map((stage) => {
-                const stageDeals = deals.filter((d) => d.stage === stage.fullLabel);
+              {activeStagePipeline.map((stage) => {
+                const stageDeals = deals.filter((d) => {
+                  if (d.stage === stage.fullLabel) return true;
+                  const [dealProc, dealStage] = d.stage.includes(":")
+                    ? d.stage.split(":").map((s) => s.trim())
+                    : ["", d.stage.trim()];
+                  if (dealProc && dealProc.toLowerCase() === stage.category.toLowerCase() && dealStage.toLowerCase() === stage.label.toLowerCase()) return true;
+                  if (!selectedProcessFilter && d.stage.toLowerCase() === stage.label.toLowerCase()) return true;
+                  if (selectedProcessFilter && selectedProcessFilter.toLowerCase() === stage.category.toLowerCase() && (d.stage.toLowerCase() === stage.label.toLowerCase() || dealStage.toLowerCase() === stage.label.toLowerCase())) return true;
+                  return false;
+                });
                 const totalValue = stageDeals.reduce((sum, d) => sum + d.amount, 0);
                 const isQuickDealOpen = quickDealColumn === stage.fullLabel;
 
@@ -2840,8 +3190,9 @@ export default function Deals() {
                                   saveCallLogs(getStoredCallLogs().map((l) => (l.id === matchingLog.id ? updatedLog : l)));
                                 }
                                 updateProcessCallLogStage(clientId, procName, stageClean);
+                                syncStageToClientProcess(clientId, targetDeal.clientName, procName, stageClean, (stage as any).stageId);
                                 setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
-                                toast.success(`Deal moved to ${stage.fullLabel} with required fields saved ✓`);
+                                toast.success(`Deal moved to ${stage.fullLabel} with required fields saved ✓ (Synced to Patient Companion)`);
                               },
                             });
                             setDraggedDealId(null);
@@ -2860,7 +3211,8 @@ export default function Deals() {
                             setCallLogs((prev) => prev.map((l) => (l.id === matchingLog.id ? updatedLog : l)));
                             saveCallLogs(getStoredCallLogs().map((l) => (l.id === matchingLog.id ? updatedLog : l)));
                           }
-                          toast.success(`Deal moved to ${stage.fullLabel} ✓`);
+                          syncStageToClientProcess(clientId, targetDeal.clientName, procName, stageClean, (stage as any).stageId);
+                          toast.success(`Deal moved to ${stage.fullLabel} ✓ (Reflected in Patient Companion)`);
                         }
                         setDraggedDealId(null);
                       }
@@ -2869,11 +3221,11 @@ export default function Deals() {
                     {/* Column header */}
                     <div className="px-3 py-3" style={{ backgroundColor: '#1C2B4A' }}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-white font-bold" style={{ fontSize: '14px', fontFamily: 'Outfit, sans-serif' }}>
+                        <span className="text-white font-bold truncate" style={{ fontSize: '14px', fontFamily: 'Outfit, sans-serif' }}>
                           {stage.label}
                         </span>
                         <div
-                          className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                          className="px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0"
                           style={{ backgroundColor: '#06B6D4', color: '#FFFFFF', minWidth: '20px', textAlign: 'center' }}
                         >
                           {stageDeals.length}
@@ -2894,6 +3246,7 @@ export default function Deals() {
                           const isMenuOpen = openDealMenuId === deal.id;
                           const createdDate = new Date(deal.createdDate);
                           const displayDate = createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                          const dealProc = deal.stage.includes(': ') ? deal.stage.split(': ')[0] : stage.category;
 
                           return (
                             <div
@@ -2901,7 +3254,29 @@ export default function Deals() {
                               draggable
                               onDragStart={() => setDraggedDealId(deal.id)}
                               onDragEnd={() => setDraggedDealId(null)}
-                              className="bg-white rounded-lg cursor-move transition-all group hover:shadow-md"
+                              onClick={() => {
+                                const matchingLog = callLogs.find(
+                                  (l) => l.client === deal.clientName && (l.process === dealProc || deal.stage.includes(l.process))
+                                ) || {
+                                  id: `LOG-${deal.id}`,
+                                  client: deal.clientName,
+                                  clientId: getClientIdByName(deal.clientName),
+                                  type: "Outbound",
+                                  status: deal.status === "Won" ? "Completed" : "Pending",
+                                  process: dealProc,
+                                  currentStage: stage.label,
+                                  duration: "0:00",
+                                  date: deal.createdDate,
+                                  hasRecording: false,
+                                  hasTranscript: false,
+                                  hasScheduledCall: false,
+                                };
+                                setSelectedLogForView(matchingLog as any);
+                                setViewDrawerTab("general");
+                                setHistoryFilter("");
+                                setShowViewDrawer(true);
+                              }}
+                              className="bg-white rounded-lg cursor-pointer transition-all group hover:shadow-md"
                               style={{
                                 boxShadow: draggedDealId === deal.id
                                   ? '0 8px 24px rgba(0,0,0,0.15)'
@@ -3966,11 +4341,13 @@ export default function Deals() {
           if (!selectedLogForView) return;
           const newStage = getDealStageFromIndex(idx, selectedLogForView.process);
           setDrawerStageIdx(idx);
-          toast.success(`Stage updated to ${newStage} ✓`);
+          toast.success(`Stage updated to ${newStage} ✓ (Synced to Patient Companion)`);
           setCallLogs((prev) =>
             prev.map((l) => (l.id === selectedLogForView.id ? { ...l, currentStage: newStage } : l))
           );
+          setSelectedLogForView((prev) => (prev ? { ...prev, currentStage: newStage } : null));
           updateProcessCallLogStage(selectedLogForView.clientId, selectedLogForView.process, newStage);
+          syncStageToClientProcess(selectedLogForView.clientId, selectedLogForView.client, selectedLogForView.process, newStage);
           setDeals((allDeals) =>
             allDeals.map((d) => (d.clientName === selectedLogForView.client ? { ...d, stage: `${selectedLogForView.process}: ${newStage}` } : d))
           );

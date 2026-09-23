@@ -40,7 +40,27 @@ export const stageMapping: Record<string, StageOption[]> = {
     { id: "2", label: "Document Check", fullLabel: "Insurance Verification: Document Check", category: "Insurance Verification" },
     { id: "3", label: "Verification", fullLabel: "Insurance Verification: Verification", category: "Insurance Verification" },
     { id: "4", label: "Approval", fullLabel: "Insurance Verification: Approval", category: "Insurance Verification" },
-  ]
+  ],
+  "Cataract Surgery Daycare": [
+    { id: "cat-1", label: "Checked In", fullLabel: "Cataract Surgery Daycare: Checked In", category: "Cataract Surgery Daycare" },
+    { id: "cat-2", label: "Dilation & Drops", fullLabel: "Cataract Surgery Daycare: Dilation & Drops", category: "Cataract Surgery Daycare" },
+    { id: "cat-3", label: "Pre-Op Prep", fullLabel: "Cataract Surgery Daycare: Pre-Op Prep", category: "Cataract Surgery Daycare" },
+    { id: "cat-4", label: "In Surgery", fullLabel: "Cataract Surgery Daycare: In Surgery", category: "Cataract Surgery Daycare" },
+    { id: "cat-5", label: "Recovery & Discharge", fullLabel: "Cataract Surgery Daycare: Recovery & Discharge", category: "Cataract Surgery Daycare" },
+  ],
+  "Ophthalmology Consultation": [
+    { id: "oph-1", label: "Reception & Token", fullLabel: "Ophthalmology Consultation: Reception & Token", category: "Ophthalmology Consultation" },
+    { id: "oph-2", label: "Optometry & Vitals", fullLabel: "Ophthalmology Consultation: Optometry & Vitals", category: "Ophthalmology Consultation" },
+    { id: "oph-3", label: "Dilation & Waiting", fullLabel: "Ophthalmology Consultation: Dilation & Waiting", category: "Ophthalmology Consultation" },
+    { id: "oph-4", label: "Doctor Consultation", fullLabel: "Ophthalmology Consultation: Doctor Consultation", category: "Ophthalmology Consultation" },
+    { id: "oph-5", label: "Pharmacy & Billing", fullLabel: "Ophthalmology Consultation: Pharmacy & Billing", category: "Ophthalmology Consultation" },
+  ],
+  "Inpatient Medical Ward": [
+    { id: "ipd-1", label: "Admission & Bed Allocation", fullLabel: "Inpatient Medical Ward: Admission & Bed Allocation", category: "Inpatient Medical Ward" },
+    { id: "ipd-2", label: "Diagnostic Workup & Vitals", fullLabel: "Inpatient Medical Ward: Diagnostic Workup & Vitals", category: "Inpatient Medical Ward" },
+    { id: "ipd-3", label: "Active Treatment & Rounds", fullLabel: "Inpatient Medical Ward: Active Treatment & Rounds", category: "Inpatient Medical Ward" },
+    { id: "ipd-4", label: "Discharge Planning & Summary", fullLabel: "Inpatient Medical Ward: Discharge Planning & Summary", category: "Inpatient Medical Ward" },
+  ],
 };
 
 export const getStagesForProcess = (processName: string): StageOption[] => {

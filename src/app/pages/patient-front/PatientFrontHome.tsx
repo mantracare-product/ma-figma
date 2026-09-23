@@ -254,7 +254,19 @@ export default function PatientFrontHome({
       ? cataractProcess.stages
       : defaultCataractStages;
 
-  const currentStageId = activeEnrollment?.stageId || "cat-3";
+  const currentStageId = (() => {
+    if (activeEnrollment?.stageId) {
+      const match = processStagesList.find((s) => s.id === activeEnrollment.stageId);
+      if (match) return match.id;
+    }
+    if (activeEnrollment?.stageName) {
+      const matchByName = processStagesList.find(
+        (s) => s.name.trim().toLowerCase() === activeEnrollment.stageName.trim().toLowerCase()
+      );
+      if (matchByName) return matchByName.id;
+    }
+    return activeEnrollment?.stageId || "cat-3";
+  })();
 
   // Special Journey States
   const isPreCheckin = currentStageId === "pre-checkin";

@@ -21,6 +21,12 @@ export interface CallLog {
 }
 
 const initialCallLogs: CallLog[] = [
+  // Patient Front Journeys (Daycare, OPD, IPD)
+  { id: "CALL-RAMESH-01", client: "Ramesh Iyer", clientId: "CL-001", type: "Inbound", status: "In Progress", process: "Cataract Surgery Daycare", currentStage: "Pre-Op Prep", duration: "4:12", date: "2024-05-18 09:30", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-CAT-02", client: "Sunita Sharma", clientId: "CL-031", type: "Inbound", status: "In Progress", process: "Cataract Surgery Daycare", currentStage: "Checked In", duration: "1:45", date: "2024-05-18 08:45", hasRecording: false, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-CAT-03", client: "Rajesh Verma", clientId: "CL-032", type: "Outbound", status: "Completed", process: "Cataract Surgery Daycare", currentStage: "Dilation & Drops", duration: "3:10", date: "2024-05-18 09:10", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-OPH-01", client: "Meenakshi Sundaram", clientId: "CL-033", type: "Inbound", status: "In Progress", process: "Ophthalmology Consultation", currentStage: "Optometry & Vitals", duration: "2:30", date: "2024-05-18 10:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-IPD-01", client: "Anand Rao", clientId: "CL-034", type: "Inbound", status: "In Progress", process: "Inpatient Medical Ward", currentStage: "Diagnostic Workup & Vitals", duration: "5:00", date: "2024-05-16 11:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
   { id: "CALL-001", client: "Sarah Johnson", clientId: "CL-001", type: "Outbound", status: "Completed", process: "Patient Intake", currentStage: "Insurance Verification", duration: "4:32", date: "2024-04-13 14:30", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
   { id: "CALL-002", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "3:45", date: "2024-04-13 13:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
   { id: "CALL-003", client: "Ahmed Al-Mansoori", clientId: "CL-023", type: "Inbound", status: "Completed", process: "Insurance Verification", currentStage: "Document Check", duration: "5:20", date: "2024-04-13 11:40", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
