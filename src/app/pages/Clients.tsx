@@ -180,9 +180,19 @@ export default function Clients() {
     'Overdue follow-up'
   ];
 
+  // Merge stored clients with initialClients: stored clients take precedence by id,
+  // but all initialClients are always shown so a partial localStorage write can't wipe the list.
+  const mergeWithInitial = (stored: Client[]): Client[] => {
+    if (stored.length === 0) return initialClients;
+    const storedIds = new Set(stored.map((c) => c.id));
+    const missing = initialClients.filter((c) => !storedIds.has(c.id));
+    // Put new/stored clients first, then fill in any missing initial ones
+    return [...stored, ...missing];
+  };
+
   const [clients, setClients] = useState<Client[]>(() => {
     const list = getStoredClients();
-    return list.length > 0 ? list : initialClients;
+    return mergeWithInitial(list);
   });
 
   useEffect(() => {
@@ -194,7 +204,7 @@ export default function Clients() {
     const handler = () => {
       try {
         const stored = getStoredClients();
-        if (stored.length > 0) setClients(stored);
+        setClients(mergeWithInitial(stored));
       } catch {}
     };
     window.addEventListener(CLIENTS_STORE_EVENT, handler);

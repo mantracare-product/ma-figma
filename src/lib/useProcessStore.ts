@@ -746,6 +746,8 @@ export function getStoredProcesses(): Process[] {
       }
     }
     parsed.forEach((p) => {
+      // Guard against processes with missing stages array
+      if (!Array.isArray(p.stages)) p.stages = [];
       if (p.id === "1") {
         p.category = "ai_calling";
       }
