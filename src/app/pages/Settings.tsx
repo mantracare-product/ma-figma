@@ -1354,7 +1354,7 @@ export default function Settings() {
     "Table": "table",
     "Drawing / Signature": "signature",
     "List (Dropdown)": "select",
-    "New List": "new_list",
+    "List": "new_list",
     "Multi-Select": "multiselect",
     "Date": "date",
     "Date & Time": "date_time",
@@ -1376,7 +1376,7 @@ export default function Settings() {
     "signature": "Drawing / Signature",
     "drawing": "Drawing / Signature",
     "select": "List (Dropdown)",
-    "new_list": "New List",
+    "new_list": "List",
     "multiselect": "Multi-Select",
     "date": "Date",
     "date_time": "Date & Time",
@@ -6414,8 +6414,8 @@ export default function Settings() {
                             const typeName =
                               isCompositeField
                                 ? field.compositeDisplayMode === "table" || field.inputType === "table"
-                                  ? "Composite Field (Table)"
-                                  : "Composite Field (Group)"
+                                  ? "Group Field (Table)"
+                                  : "Group Field (Group)"
                                 : field.inputType === "list_open"
                                 ? "List (Open · Tags)"
                                 : isListField
