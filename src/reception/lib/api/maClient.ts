@@ -8,6 +8,8 @@
 
 import type {
   Station,
+  DirectionCategory,
+  DirectionRoom,
   PatientSummary,
   CreatePatientPayload,
   ServiceItem,
@@ -26,8 +28,9 @@ import type {
 import { MockMaClient } from './mockMaClient';
 
 export interface IMaClient {
-  // Rooms / Stations
+  // Rooms / Stations & Directions
   getStations(orgId?: string): Promise<Station[]>;
+  getDirectionCategories(orgId?: string): Promise<DirectionCategory[]>;
 
   // OTP & Identity
   sendOtp(phone: string): Promise<{ success: boolean; expiresAt: string }>;

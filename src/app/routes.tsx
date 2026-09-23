@@ -44,6 +44,42 @@ export const router = createBrowserRouter([
     Component: AvatarReceptionView,
   },
   {
+    path: "/reception/landing",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/appointment",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/walk-in",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/billing",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/billing/:subStep",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/directions",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/directions/:categoryId",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/directions/:categoryId/:roomId",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/my-visit",
+    Component: AvatarReceptionView,
+  },
+  {
     path: "/reception/avatar",
     Component: AvatarReceptionView,
   },

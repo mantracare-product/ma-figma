@@ -10,6 +10,8 @@
 import type { IMaClient } from './maClient';
 import type {
   Station,
+  DirectionCategory,
+  DirectionRoom,
   ReceptionConfig,
   PatientSummary,
   CreatePatientPayload,
@@ -30,6 +32,7 @@ import type {
 // Storage keys
 const STORAGE_KEYS = {
   STATIONS: 'ma_reception_stations',
+  CATEGORIES: 'ma_reception_direction_categories',
   CONFIG: 'ma_reception_config',
   QUEUES: 'ma_reception_queues',
   JOURNEYS: 'ma_reception_journeys',
@@ -104,45 +107,135 @@ export class MockMaClient implements IMaClient {
   }
 
   private seedInitialDataIfEmpty(): void {
+    // 0. Direction Categories
+    const existingCategories = this.getStorage<Array<{ id: string; name: string; icon?: string }> | null>(
+      STORAGE_KEYS.CATEGORIES,
+      null
+    );
+    if (!existingCategories || existingCategories.length === 0) {
+      const initialCategories = [
+        { id: 'cat_clinical', name: 'Clinical & Doctors', icon: 'Stethoscope' },
+        { id: 'cat_pharmacy_labs', name: 'Pharmacy & Labs', icon: 'FlaskConical' },
+        { id: 'cat_facilities', name: 'Facilities & Restrooms', icon: 'Building2' },
+      ];
+      this.setStorage(STORAGE_KEYS.CATEGORIES, initialCategories);
+    }
+
     // 1. Rooms / Stations
     const existingStations = this.getStorage<Station[] | null>(STORAGE_KEYS.STATIONS, null);
-    if (!existingStations || existingStations.length === 0) {
+    if (!existingStations || existingStations.length === 0 || !existingStations.some((s) => s.directions)) {
       const initialStations: Station[] = [
-        {
-          id: 'st-checkin-1',
-          orgId: DEFAULT_ORG_ID,
-          name: 'Front Check-in Desk',
-          type: 'desk',
-          roomNumber: 'Reception',
-          active: true,
-          createdAt: new Date().toISOString(),
-        },
         {
           id: 'st-consult-1',
           orgId: DEFAULT_ORG_ID,
-          name: 'Dr. Sharma - Room 101',
+          name: "Dr. Sharma's Consultation Room",
           type: 'doctor_room',
           providerId: 'prov_1',
           providerName: 'Dr. Ananya Sharma',
           roomNumber: '101',
+          floorWing: 'Ground Floor, Clinical Wing B',
+          directions: 'Proceed down hallway B, past reception counter, 2nd door on right.',
+          categoryId: 'cat_clinical',
+          active: true,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'st-consult-2',
+          orgId: DEFAULT_ORG_ID,
+          name: 'Dr. Rajesh Patel - Cardiology',
+          type: 'doctor_room',
+          providerId: 'prov_2',
+          providerName: 'Dr. Rajesh Patel',
+          roomNumber: '102',
+          floorWing: 'Ground Floor, Clinical Wing B',
+          directions: 'Walk past reception, take hallway B on the right, room 102 is the 3rd door on the right.',
+          categoryId: 'cat_clinical',
+          active: true,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'st-consult-3',
+          orgId: DEFAULT_ORG_ID,
+          name: 'Dr. Priya Nair - Pediatrics',
+          type: 'doctor_room',
+          providerId: 'prov_3',
+          providerName: 'Dr. Priya Nair',
+          roomNumber: '204',
+          floorWing: '1st Floor, Specialty Wing',
+          directions: 'Take the central elevator to the 1st floor, turn left, Room 204 is on the left.',
+          categoryId: 'cat_clinical',
           active: true,
           createdAt: new Date().toISOString(),
         },
         {
           id: 'station_pharmacy_1',
           orgId: DEFAULT_ORG_ID,
-          name: 'Main Pharmacy - Counter A',
+          name: 'Main Pharmacy & Dispensing',
           type: 'pharmacy',
           roomNumber: 'Counter A',
+          floorWing: 'Ground Floor, Main Lobby',
+          directions: 'Located right next to the main entrance lobby, Counter A on your immediate left.',
+          categoryId: 'cat_pharmacy_labs',
           active: true,
           createdAt: new Date().toISOString(),
         },
         {
           id: 'station_lab_1',
           orgId: DEFAULT_ORG_ID,
-          name: 'Diagnostic Lab - Counter 1',
+          name: 'Diagnostic Lab & Blood Collection',
           type: 'lab',
           roomNumber: 'Lab 1',
+          floorWing: 'Ground Floor, Diagnostics Wing',
+          directions: 'Turn right at the main corridor, follow the blue line to Diagnostic Lab 1.',
+          categoryId: 'cat_pharmacy_labs',
+          active: true,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'st-restroom-1',
+          orgId: DEFAULT_ORG_ID,
+          name: 'Restroom - Ground Floor',
+          type: 'custom',
+          roomNumber: 'G-Restroom',
+          floorWing: 'Ground Floor, Central Corridor',
+          directions: 'Walk past reception desk, turn left at water station, restrooms are on the left.',
+          categoryId: 'cat_facilities',
+          active: true,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'st-restroom-2',
+          orgId: DEFAULT_ORG_ID,
+          name: 'Restroom - 1st Floor',
+          type: 'custom',
+          roomNumber: '1F-Restroom',
+          floorWing: '1st Floor, Near Elevator',
+          directions: 'Take the elevator to 1st floor, restrooms are immediately right of the elevator exit.',
+          categoryId: 'cat_facilities',
+          active: true,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'st-water',
+          orgId: DEFAULT_ORG_ID,
+          name: 'Drinking Water & Refreshments',
+          type: 'custom',
+          roomNumber: 'Lounge Area',
+          floorWing: 'Ground Floor, Main Waiting Lounge',
+          directions: 'Water dispenser and coffee station are located at the back of the main waiting lounge.',
+          categoryId: 'cat_facilities',
+          active: true,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'st-billing',
+          orgId: DEFAULT_ORG_ID,
+          name: 'Billing & Insurance Desk',
+          type: 'billing',
+          roomNumber: 'Counters 3 & 4',
+          floorWing: 'Ground Floor, Admin Section',
+          directions: 'Proceed straight ahead from the main entrance, adjacent to the reception counter.',
+          categoryId: 'cat_facilities',
           active: true,
           createdAt: new Date().toISOString(),
         },
@@ -271,6 +364,66 @@ export class MockMaClient implements IMaClient {
     this.seedInitialDataIfEmpty();
     const stations = this.getStorage<Station[]>(STORAGE_KEYS.STATIONS, []);
     return stations.filter((s) => !orgId || s.orgId === orgId);
+  }
+
+  async getDirectionCategories(orgId: string = DEFAULT_ORG_ID): Promise<DirectionCategory[]> {
+    this.seedInitialDataIfEmpty();
+    const stations = await this.getStations(orgId);
+    const storedCategories = this.getStorage<Array<{ id: string; name: string; icon?: string }>>(
+      STORAGE_KEYS.CATEGORIES,
+      []
+    );
+
+    const categoriesMap = new Map<string, DirectionCategory>();
+
+    // Register known categories
+    for (const cat of storedCategories) {
+      categoriesMap.set(cat.id, {
+        id: cat.id,
+        name: cat.name,
+        icon: cat.icon || 'MapPin',
+        rooms: [],
+      });
+    }
+
+    // Default "Other" category for unassigned/unknown categories
+    const otherCategory: DirectionCategory = {
+      id: 'cat_other',
+      name: 'Other Locations',
+      icon: 'MapPin',
+      rooms: [],
+    };
+
+    // Group active stations with directions into their category
+    for (const station of stations) {
+      if (!station.active) continue;
+      const room: DirectionRoom = {
+        id: station.id,
+        name: station.name,
+        floorWing: station.floorWing || (station.roomNumber ? `Room ${station.roomNumber}` : undefined),
+        directions: station.directions || `Located at room ${station.roomNumber || station.name}. Please ask reception for assistance.`,
+        stationId: station.id,
+        categoryId: station.categoryId,
+      };
+
+      if (station.categoryId && categoriesMap.has(station.categoryId)) {
+        categoriesMap.get(station.categoryId)!.rooms.push(room);
+      } else {
+        otherCategory.rooms.push(room);
+      }
+    }
+
+    const result: DirectionCategory[] = [];
+    for (const cat of categoriesMap.values()) {
+      if (cat.rooms.length > 0) {
+        result.push(cat);
+      }
+    }
+    if (otherCategory.rooms.length > 0) {
+      result.push(otherCategory);
+    }
+
+    return result;
   }
 
   // --- OTP & Identity ---

@@ -12,6 +12,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useNavigate, useLocation, useParams } from 'react-router';
 import {
   LayoutGrid,
   CalendarCheck,
@@ -43,15 +44,28 @@ import {
   Send,
   RefreshCw,
   Mic,
+  UserCheck,
+  Stethoscope,
+  FlaskConical,
+  Building2,
+  Navigation,
+  Compass,
+  Map,
+  CreditCard,
+  Receipt,
 } from 'lucide-react';
 import { AnimatedAvatar, type AvatarState } from './components/AnimatedAvatar';
+import { WhisperAudioRecorder } from '../lib/whisperRecorder';
 import { getMaClient } from '../lib/api/maClient';
-import type {
-  PatientSummary,
-  QueueTicket,
-  ServiceItem,
-  ProviderItem,
-  VisitSummary,
+import {
+  STATIC_DIRECTION_CATEGORIES,
+  type PatientSummary,
+  type QueueTicket,
+  type ServiceItem,
+  type ProviderItem,
+  type VisitSummary,
+  type DirectionCategory,
+  type DirectionRoom,
 } from '../types/reception';
 import '../styles/navodyaTokens.css';
 import '../styles/avatarStage.css';
@@ -73,15 +87,22 @@ export type ScreenState =
   | 'SERVICE_DOCTOR'
   | 'BOOKING_CONFIRM'
   | 'TOKEN_ISSUED'
-  | 'MY_VISIT';
+  | 'MY_VISIT'
+  | 'DIRECTIONS_CATEGORIES'
+  | 'DIRECTIONS_ROOMS'
+  | 'DIRECTIONS_RESULT';
 
-export type AmbientPhase = 'dormant' | 'noticed' | 'greeting' | 'listening' | 'routing';
+export type AmbientPhase = 'dormant' | 'engaged' | 'greeting' | 'listening' | 'routing';
 export type FaceScanPhase = 'idle' | 'starting' | 'scanning' | 'success' | 'no_match' | 'denied';
 export type FaceRegistrationPhase = 'intro' | 'capturing' | 'duplicate_found' | 'success' | 'denied';
 
-export type FlowType = 'SCHEDULED' | 'WALK_IN' | 'MY_VISIT' | null;
+export type FlowType = 'SCHEDULED' | 'WALK_IN' | 'PAYMENT' | 'MY_VISIT' | null;
 
 const INACTIVITY_TIMEOUT_SECONDS = 60;
+
+// Centralized white-label organization name config
+export const DEFAULT_ORGANIZATION_NAME = 'MantraCare';
+export const DEFAULT_ORGANIZATION_NAME_HI = 'मंत्राकेयर';
 
 // Presence detection thresholds (face-size ratio proxy for distance)
 // NOTE: faceHeightRatio is a heuristic proxy (face.height / video.videoHeight), not a real physical distance measurement.
@@ -93,34 +114,208 @@ const AMBIENT_DWELL_COUNT = 2; // 2 consecutive detections required to avoid fli
 // Keyword intent matcher dictionaries (English and Hindi equivalents)
 const APPOINTMENT_WORDS = [
   'appointment',
+  'appointments',
   'booked',
+  'booking',
   'scheduled',
+  'schedule',
   'check in',
   'checkin',
+  'check-in',
   'my doctor',
   'my visit',
   'visit',
+  'doctor',
+  'dr',
+  'physician',
+  'cardiologist',
+  'ortho',
+  'orthopedic',
+  'pediatrician',
+  'general physician',
+  'consult',
+  'consultation',
+  'fever',
+  'cough',
+  'sick',
+  'pain',
+  'opd',
+  'meet doctor',
+  'see doctor',
+  'have an appointment',
+  'i have appointment',
+  'apointment',
+  'apointmnt',
   'अपॉइंटमेंट',
   'चेक इन',
   'चेकिन',
   'बुक',
   'डॉक्टर',
+  'परामर्श',
+  'दिखाना',
+  'तबीयत',
+  'बुखार',
 ];
 
 const WALKIN_WORDS = [
   'walk in',
   'walk-in',
+  'walkin',
   'new patient',
+  'new user',
+  'new visit',
+  'new visitor',
   'no appointment',
+  'without appointment',
   'register',
+  'registration',
   'first time',
+  'first visit',
+  'create account',
+  'sign up',
+  'enroll',
+  'enrolment',
   'वॉक इन',
   'वॉक-इन',
   'नया मरीज',
   'नया पेशेंट',
   'रजिस्टर',
+  'पंजीकरण',
   'पहली बार',
+  'खाता',
 ];
+
+const PAYMENT_WORDS = [
+  'pay',
+  'payment',
+  'bill',
+  'pay bill',
+  'pay my bill',
+  'invoice',
+  'billing',
+  'due',
+  'dues',
+  'fees',
+  'fee',
+  'counter',
+  'pay dues',
+  'cost',
+  'charge',
+  'money',
+  'cashier',
+  'receipt',
+  'भुगतान',
+  'पेमेंट',
+  'बिल',
+  'फीस',
+  'रसीद',
+  'पैसे',
+];
+
+const DIRECTIONS_WORDS = [
+  'direction',
+  'directions',
+  'where is',
+  'where are',
+  'where do i',
+  'how do i get to',
+  'how to go',
+  'way to',
+  'find',
+  'locate',
+  'location of',
+  'take me to',
+  'show me',
+  'show directions',
+  'guide',
+  'guide me',
+  'map',
+  'washroom',
+  'restroom',
+  'toilet',
+  'bathroom',
+  'loo',
+  'lavatory',
+  'wc',
+  'parking',
+  'pharmacy',
+  'pharmacy located',
+  'chemist',
+  'medicine',
+  'medicines',
+  'medical store',
+  'dispensary',
+  'lab',
+  'lab located',
+  'laboratory',
+  'diagnostic',
+  'diagnostics',
+  'blood test',
+  'blood sample',
+  'sample collection',
+  'x-ray',
+  'xray',
+  'scan',
+  'mri',
+  'ultrasound',
+  'pathology',
+  'test',
+  'reports',
+  'water',
+  'drinking water',
+  'cooler',
+  'filter',
+  'help desk',
+  'front desk',
+  'department',
+  'departments',
+  'facilities',
+  'lift',
+  'elevator',
+  'stairs',
+  'cafeteria',
+  'canteen',
+  'दिशा',
+  'कहाँ है',
+  'कहाँ जाना है',
+  'रास्ता',
+  'वॉशरूम',
+  'शौचालय',
+  'टॉयलेट',
+  'पार्किंग',
+  'दवाखाना',
+  'दवाई',
+  'जाँच',
+  'लैब',
+  'खून जाँच',
+  'टेस्ट',
+  'पानी',
+  'पीने का पानी',
+];
+
+
+
+export const CategoryIcon: React.FC<{ icon?: string; className?: string }> = ({
+  icon,
+  className = 'w-6 h-6',
+}) => {
+  switch (icon) {
+    case 'Stethoscope':
+      return <Stethoscope className={className} />;
+    case 'FlaskConical':
+      return <FlaskConical className={className} />;
+    case 'Building2':
+      return <Building2 className={className} />;
+    case 'Navigation':
+      return <Navigation className={className} />;
+    case 'Compass':
+      return <Compass className={className} />;
+    case 'Map':
+      return <Map className={className} />;
+    default:
+      return <MapPin className={className} />;
+  }
+};
 
 export interface ActionStackProps {
   primary?: {
@@ -187,6 +382,9 @@ export const ActionStack: React.FC<ActionStackProps> = ({ primary, secondary, cl
 
 export const AvatarReceptionView: React.FC = () => {
   const maClient = getMaClient();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams();
 
   // Navigation & Flow State (AMBIENT is default on load/reset)
   const [screen, setScreen] = useState<ScreenState>('AMBIENT');
@@ -205,9 +403,19 @@ export const AvatarReceptionView: React.FC = () => {
   ambientPhaseRef.current = ambientPhase;
   const greetingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const ambientSpeechRecognitionRef = useRef<any>(null);
+  const whisperRecorderRef = useRef<WhisperAudioRecorder | null>(null);
+  const isAriaSpeakingRef = useRef<boolean>(false);
+  const startAmbientListeningRef = useRef<(() => void) | null>(null);
   const noticedDwellRef = useRef<number>(0);
   const closeDwellRef = useRef<number>(0);
   const lastFaceSeenTimeRef = useRef<number>(0);
+
+  // Dev-only debug overlay query parameter (?debug=1 or ?debug=true)
+  const isDebug = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const p = new URLSearchParams(window.location.search);
+    return p.get('debug') === '1' || p.get('debug') === 'true';
+  }, []);
 
   // Avatar & Voice State
   const [avatarState, setAvatarState] = useState<AvatarState>('idle');
@@ -215,6 +423,8 @@ export const AvatarReceptionView: React.FC = () => {
   const [captionText, setCaptionText] = useState<string>(
     'Welcome to MantraCare Health Center. Please touch an option to begin.'
   );
+  const [userTranscriptText, setUserTranscriptText] = useState<string>('');
+  const [isUserSpeaking, setIsUserSpeaking] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
   // Form Fields & Patient State
@@ -257,6 +467,8 @@ export const AvatarReceptionView: React.FC = () => {
 
   const screenRef = useRef<ScreenState>(screen);
   screenRef.current = screen;
+  const processDirectionsIntentRef = useRef<((transcript: string, options?: { isAmbient?: boolean }) => Promise<boolean>) | null>(null);
+  const resolveIntentRef = useRef<((transcript: string, options?: { isAmbient?: boolean }) => Promise<boolean>) | null>(null);
 
   const lastActivityTimeRef = useRef<number>(Date.now());
 
@@ -365,6 +577,99 @@ export const AvatarReceptionView: React.FC = () => {
   const [staffModalOpen, setStaffModalOpen] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [inactivitySeconds, setInactivitySeconds] = useState<number | null>(null);
+
+  // Directions & Wayfinding State
+  const [directionCategories, setDirectionCategories] = useState<DirectionCategory[]>(STATIC_DIRECTION_CATEGORIES);
+  const [selectedDirectionCategory, setSelectedDirectionCategory] = useState<DirectionCategory | null>(null);
+  const [selectedDirectionRoom, setSelectedDirectionRoom] = useState<DirectionRoom | null>(null);
+  const [directionsEntrySource, setDirectionsEntrySource] = useState<'browse' | 'voice_direct'>('browse');
+
+  const loadDirectionCategories = useCallback(async () => {
+    try {
+      const cats = await maClient.getDirectionCategories();
+      if (cats && cats.length > 0) {
+        setDirectionCategories(cats);
+        return cats;
+      }
+      return STATIC_DIRECTION_CATEGORIES;
+    } catch (e) {
+      console.warn('Using static direction categories fallback:', e);
+      return STATIC_DIRECTION_CATEGORIES;
+    }
+  }, [maClient]);
+
+  useEffect(() => {
+    loadDirectionCategories();
+  }, [loadDirectionCategories]);
+
+  // URL Route Synchronization
+  useEffect(() => {
+    const pathname = location.pathname;
+
+    if (
+      pathname === '/reception' ||
+      pathname === '/reception/' ||
+      pathname === '/reception/avatar' ||
+      pathname === '/reception/landing' ||
+      pathname === '/reception/idle'
+    ) {
+      if (pathname === '/reception/landing' || pathname === '/reception/idle') {
+        navigate('/reception', { replace: true });
+      }
+      if (screen !== 'AMBIENT') {
+        setScreen('AMBIENT');
+        setFlowType(null);
+      }
+    } else if (pathname === '/reception/appointment') {
+      setFlowType('SCHEDULED');
+      if (screen === 'AMBIENT' || screen === 'IDLE' || screen.startsWith('DIRECTIONS') || screen === 'MY_VISIT') {
+        setScreen('FACE_SCAN');
+      }
+    } else if (pathname === '/reception/walk-in') {
+      setFlowType('WALK_IN');
+      if (screen === 'AMBIENT' || screen === 'IDLE' || screen.startsWith('DIRECTIONS') || screen === 'MY_VISIT') {
+        setScreen('PHONE');
+      }
+    } else if (pathname.startsWith('/reception/billing')) {
+      setFlowType('PAYMENT');
+      if (screen === 'AMBIENT' || screen === 'IDLE' || screen.startsWith('DIRECTIONS') || screen === 'MY_VISIT') {
+        setScreen('PHONE');
+      }
+    } else if (pathname === '/reception/directions') {
+      setScreen('DIRECTIONS_CATEGORIES');
+      setFlowType(null);
+    } else if (pathname.startsWith('/reception/directions/')) {
+      const parts = pathname.replace('/reception/directions/', '').split('/');
+      const catId = parts[0];
+      const roomId = parts[1];
+
+      const resolveRouteCategoryAndRoom = async () => {
+        const cats = directionCategories.length > 0 ? directionCategories : await loadDirectionCategories();
+        const foundCat = cats.find((c) => c.id === catId);
+        if (foundCat) {
+          setSelectedDirectionCategory(foundCat);
+          if (roomId) {
+            const foundRoom = foundCat.rooms.find((r) => r.id === roomId);
+            if (foundRoom) {
+              setSelectedDirectionRoom(foundRoom);
+              setScreen('DIRECTIONS_RESULT');
+            } else {
+              setScreen('DIRECTIONS_ROOMS');
+            }
+          } else {
+            setScreen('DIRECTIONS_ROOMS');
+          }
+        } else {
+          setScreen('DIRECTIONS_CATEGORIES');
+        }
+      };
+
+      resolveRouteCategoryAndRoom();
+    } else if (pathname === '/reception/my-visit') {
+      setFlowType('MY_VISIT');
+      setScreen('MY_VISIT');
+    }
+  }, [location.pathname, directionCategories, loadDirectionCategories]);
 
   // Trigger in-panel glass toast
   const showToast = useCallback((msg: string) => {
@@ -503,19 +808,40 @@ export const AvatarReceptionView: React.FC = () => {
 
   // Voice synthesis & live captioning
   const speak = useCallback(
-    (text: string, state: AvatarState = 'speaking', thinkMsg?: string) => {
+    (
+      text: string,
+      state: AvatarState = 'speaking',
+      thinkMsg?: string,
+      onEnd?: () => void
+    ) => {
       setCaptionText(text);
+      setUserTranscriptText('');
+      setIsUserSpeaking(false);
       if (thinkMsg) setThinkingMessage(thinkMsg);
       setAvatarState(state);
+      console.log(`[Aria Speaking 🗣️]: "${text}"`);
 
       if (isMuted || typeof window === 'undefined' || !window.speechSynthesis) {
         if (state === 'speaking') {
-          setTimeout(() => setAvatarState('idle'), 2600);
+          isAriaSpeakingRef.current = true;
+          setTimeout(() => {
+            isAriaSpeakingRef.current = false;
+            setAvatarState('idle');
+            onEnd?.();
+          }, 2400);
+        } else {
+          isAriaSpeakingRef.current = false;
+          onEnd?.();
         }
         return;
       }
 
       try {
+        if (ambientSpeechRecognitionRef.current) {
+          try {
+            ambientSpeechRecognitionRef.current.stop();
+          } catch {}
+        }
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 1.0;
@@ -529,21 +855,36 @@ export const AvatarReceptionView: React.FC = () => {
           utterance.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
         }
 
-        utterance.onstart = () => setAvatarState('speaking');
+        utterance.onstart = () => {
+          isAriaSpeakingRef.current = true;
+          setAvatarState('speaking');
+        };
         utterance.onend = () => {
+          isAriaSpeakingRef.current = false;
           if (state !== 'success' && state !== 'thinking') {
             setAvatarState('idle');
           }
+          // Small 150ms acoustic buffer before triggering next step
+          setTimeout(() => {
+            onEnd?.();
+          }, 150);
         };
         utterance.onerror = () => {
+          isAriaSpeakingRef.current = false;
           if (state !== 'success' && state !== 'thinking') {
             setAvatarState('idle');
           }
+          setTimeout(() => {
+            onEnd?.();
+          }, 150);
         };
 
+        isAriaSpeakingRef.current = true;
         window.speechSynthesis.speak(utterance);
       } catch {
+        isAriaSpeakingRef.current = false;
         setAvatarState('idle');
+        onEnd?.();
       }
     },
     [isMuted, currentLanguage, getFemaleVoice]
@@ -646,6 +987,10 @@ export const AvatarReceptionView: React.FC = () => {
     if (regStepTimerRef.current) clearTimeout(regStepTimerRef.current);
     if (greetingTimerRef.current) clearTimeout(greetingTimerRef.current);
     if (ambientLostTimerRef.current) clearTimeout(ambientLostTimerRef.current);
+    if (whisperRecorderRef.current) {
+      whisperRecorderRef.current.stop();
+      whisperRecorderRef.current = null;
+    }
     if (ambientSpeechRecognitionRef.current) {
       try {
         ambientSpeechRecognitionRef.current.stop();
@@ -783,159 +1128,168 @@ export const AvatarReceptionView: React.FC = () => {
   }, [screen, facePhase, ambientPhase]);
 
   // Speech listening and keyword intent resolver for AMBIENT screen
+  const ambientListeningTimeoutRef = useRef<any>(null);
+  const unrecognizedAttemptsRef = useRef<number>(0);
+
   const startAmbientListening = useCallback(() => {
     if (screenRef.current !== 'AMBIENT') return;
-    setAmbientPhase('listening');
     if (typeof window === 'undefined') return;
 
-    const SpeechRecognitionClass =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognitionClass) {
-      // Speech recognition unsupported: fall back to IDLE Landing screen after a brief pause
+    // Delay start if Aria is actively speaking to prevent mic picking up speaker output
+    if (isAriaSpeakingRef.current) {
       setTimeout(() => {
         if (screenRef.current === 'AMBIENT') {
-          setAmbientPhase('routing');
-          setTimeout(() => {
-            stopCameraStream();
-            setScreen('IDLE');
-          }, 600);
+          startAmbientListening();
         }
-      }, 2000);
+      }, 300);
       return;
     }
 
+    setAmbientPhase('listening');
+    setAvatarState('idle');
+
+    if (ambientListeningTimeoutRef.current) {
+      clearTimeout(ambientListeningTimeoutRef.current);
+      ambientListeningTimeoutRef.current = null;
+    }
+
+    // Stop any previously active whisper recorder or speech recognition
+    if (whisperRecorderRef.current) {
+      whisperRecorderRef.current.stop();
+      whisperRecorderRef.current = null;
+    }
+
+    let intentHandled = false;
+
+    // 1. Primary Engine: Neural Whisper STT via /api/stt/transcribe
+    try {
+      const whisperRecorder = new WhisperAudioRecorder({
+        language: currentLanguage === 'hi' ? 'hi' : 'en',
+        onAudioLevel: (level: number) => {
+          if (level > 0.05 && !isAriaSpeakingRef.current) {
+            setIsUserSpeaking(true);
+          }
+        },
+        onTranscript: async (transcript: string) => {
+          if (isAriaSpeakingRef.current || intentHandled) return;
+
+          const normalizedLower = transcript.toLowerCase();
+          const isEcho =
+            normalizedLower.includes('how can i help') ||
+            normalizedLower.includes('welcome to mantracare') ||
+            normalizedLower.includes('welcome to mantra care') ||
+            normalizedLower.includes('help you today') ||
+            normalizedLower.includes("didn't quite catch") ||
+            normalizedLower.includes('didnt quite catch') ||
+            normalizedLower.includes('tap an option') ||
+            normalizedLower.includes('tell me what you need') ||
+            normalizedLower.includes('माफ़ कीजिए') ||
+            normalizedLower.includes('नमस्ते') ||
+            normalizedLower.includes('सहायता कर सकती');
+
+          if (isEcho) {
+            console.log('[Whisper STT] Ignored system voice echo:', transcript);
+            setIsUserSpeaking(false);
+            return;
+          }
+
+          console.log(`[User Spoke 🗣️]: "${transcript}"`);
+          setUserTranscriptText(transcript);
+          setIsUserSpeaking(false);
+          intentHandled = true;
+          setAmbientPhase('routing');
+          whisperRecorder.stop();
+          stopCameraStream();
+
+          setTimeout(async () => {
+            if (resolveIntentRef.current) {
+              await resolveIntentRef.current(transcript, { isAmbient: true });
+            }
+          }, 80);
+        },
+        onError: (err) => {
+          console.warn('[Whisper STT] Recorder notice:', err);
+          setIsUserSpeaking(false);
+        },
+      });
+
+      whisperRecorder.start().catch((err) => {
+        console.warn('[Whisper STT] Could not start audio stream:', err);
+      });
+      whisperRecorderRef.current = whisperRecorder;
+    } catch (err) {
+      console.warn('[Whisper STT] Init failed:', err);
+    }
+
+    // Reset to dormant if no speech heard within 16 seconds
+    ambientListeningTimeoutRef.current = setTimeout(() => {
+      if (!intentHandled && screenRef.current === 'AMBIENT' && ambientPhaseRef.current === 'listening') {
+        whisperRecorderRef.current?.stop();
+        setAmbientPhase('dormant');
+      }
+    }, 16000);
+  }, [currentLanguage, stopCameraStream]);
+  startAmbientListeningRef.current = startAmbientListening;
+
+  // Presence Trigger Flow on AMBIENT screen (Button tap OR close face auto-detection)
+  // Sequence: dormant -> engaged (300-500ms attentive pose) -> greeting (TTS welcome) -> listening (chained onend) -> routing -> destination
+  const triggerPresenceFlow = useCallback(() => {
+    if (
+      ambientPhaseRef.current === 'engaged' ||
+      ambientPhaseRef.current === 'greeting'
+    ) {
+      return;
+    }
+
+    if (ambientListeningTimeoutRef.current) {
+      clearTimeout(ambientListeningTimeoutRef.current);
+      ambientListeningTimeoutRef.current = null;
+    }
+
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
     if (ambientSpeechRecognitionRef.current) {
       try {
         ambientSpeechRecognitionRef.current.stop();
       } catch {}
+      ambientSpeechRecognitionRef.current = null;
     }
 
-    try {
-      const recognition = new SpeechRecognitionClass();
-      recognition.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
-      recognition.continuous = false;
-      recognition.interimResults = false;
+    // Step 1: Engaged (brief alert / attentive pose shift, ~300ms)
+    unrecognizedAttemptsRef.current = 0;
+    setAmbientPhase('engaged');
+    setAvatarState('idle');
 
-      let intentHandled = false;
-
-      recognition.onresult = (event: any) => {
-        const transcript = (event.results?.[0]?.[0]?.transcript || '').trim().toLowerCase();
-        console.log(`[Ambient Intent] Heard: "${transcript}"`);
-        if (!transcript) return;
-
-        intentHandled = true;
-        const hasAppt = APPOINTMENT_WORDS.some((w) => transcript.includes(w));
-        const hasWalkin = WALKIN_WORDS.some((w) => transcript.includes(w));
-
-        setAmbientPhase('routing');
-
-        setTimeout(() => {
-          stopCameraStream();
-          if (hasAppt && !hasWalkin) {
-            setFlowType('SCHEDULED');
-            setScreen('FACE_SCAN');
-            speak(
-              currentLanguage === 'hi'
-                ? 'कृपया चेक इन करने के लिए कैमरे में देखें या फोन नंबर दर्ज करें।'
-                : 'Please look into the camera to check in, or use your phone number below.'
-            );
-          } else if (hasWalkin && !hasAppt) {
-            setFlowType('WALK_IN');
-            setScreen('PHONE');
-            speak(
-              currentLanguage === 'hi'
-                ? 'स्वागत है! पंजीकरण शुरू करने के लिए अपना फोन नंबर दर्ज करें।'
-                : 'Welcome! Please enter your mobile phone number on the touch keypad to begin registration.'
-            );
-          } else {
-            // Ambiguous / both / neither
-            setScreen('IDLE');
-            speak(
-              currentLanguage === 'hi'
-                ? 'निश्चिंत रहें — आप मुझे बता सकते हैं, या एक विकल्प चुन सकते हैं।'
-                : 'Sure — you can tell me here, or just tap an option.'
-            );
-          }
-        }, 600);
-      };
-
-      recognition.onerror = () => {
-        if (!intentHandled && screenRef.current === 'AMBIENT') {
-          intentHandled = true;
-          setAmbientPhase('routing');
-          setTimeout(() => {
-            stopCameraStream();
-            setScreen('IDLE');
-            speak(
-              currentLanguage === 'hi'
-                ? 'निश्चिंत रहें — आप मुझे बता सकते हैं, या एक विकल्प चुन सकते हैं।'
-                : 'Sure — you can tell me here, or just tap an option.'
-            );
-          }, 600);
-        }
-      };
-
-      recognition.onend = () => {
-        if (!intentHandled && screenRef.current === 'AMBIENT') {
-          intentHandled = true;
-          setAmbientPhase('routing');
-          setTimeout(() => {
-            stopCameraStream();
-            setScreen('IDLE');
-            speak(
-              currentLanguage === 'hi'
-                ? 'निश्चिंत रहें — आप मुझे बता सकते हैं, या एक विकल्प चुन सकते हैं।'
-                : 'Sure — you can tell me here, or just tap an option.'
-            );
-          }, 600);
-        }
-      };
-
-      ambientSpeechRecognitionRef.current = recognition;
-      recognition.start();
-
-      // Fallback timeout after ~6 seconds if silence
-      setTimeout(() => {
-        if (!intentHandled && screenRef.current === 'AMBIENT') {
-          try {
-            recognition.stop();
-          } catch {}
-        }
-      }, 6000);
-    } catch {
-      setAmbientPhase('routing');
-      setTimeout(() => {
-        stopCameraStream();
-        setScreen('IDLE');
-      }, 600);
-    }
-  }, [currentLanguage, speak, stopCameraStream]);
-
-  // Trigger speech greeting on AMBIENT screen
-  const triggerAmbientGreeting = useCallback(() => {
-    if (
-      ambientPhaseRef.current === 'greeting' ||
-      ambientPhaseRef.current === 'listening' ||
-      ambientPhaseRef.current === 'routing'
-    ) {
-      return;
-    }
-    setAmbientPhase('greeting');
-    const greetingText =
-      currentLanguage === 'hi'
-        ? 'नमस्ते, मंत्राकेयर में आपका स्वागत है! मैं आज आपकी क्या सहायता कर सकती हूँ?'
-        : 'Hi, welcome to MantraCare! How can I help you today?';
-
-    speak(greetingText, 'speaking');
-
-    // After greeting speech ends, begin listening
     if (greetingTimerRef.current) clearTimeout(greetingTimerRef.current);
     greetingTimerRef.current = setTimeout(() => {
-      if (screenRef.current === 'AMBIENT') {
-        startAmbientListening();
-      }
-    }, 3800);
+      if (screenRef.current !== 'AMBIENT') return;
+
+      // Step 2: Greeting (Speak welcome with white-label organization name)
+      setAmbientPhase('greeting');
+      const orgName = currentLanguage === 'hi' ? DEFAULT_ORGANIZATION_NAME_HI : DEFAULT_ORGANIZATION_NAME;
+      const greetingText =
+        currentLanguage === 'hi'
+          ? `नमस्ते, ${orgName} में आपका स्वागत है! मैं आज आपकी क्या सहायता कर सकती हूँ?`
+          : `Welcome to ${orgName}! How can I help you today?`;
+
+      let hasChainedToListening = false;
+      const onGreetingFinished = () => {
+        if (hasChainedToListening) return;
+        hasChainedToListening = true;
+        if (screenRef.current === 'AMBIENT') {
+          // Step 3: Listening immediately chained off TTS completion with 200ms buffer
+          setTimeout(() => {
+            if (screenRef.current === 'AMBIENT') {
+              setAmbientPhase('listening');
+              startAmbientListening();
+            }
+          }, 200);
+        }
+      };
+
+      speak(greetingText, 'speaking', undefined, onGreetingFinished);
+    }, 300);
   }, [currentLanguage, speak, startAmbientListening]);
 
   // Presence Detection Loop: Only runs on AMBIENT (Throttled ~5 FPS / 200ms)
@@ -961,7 +1315,7 @@ export const AvatarReceptionView: React.FC = () => {
       }
     }
 
-    // If FaceDetector is not available in window, presence detection is gracefully disabled
+    // If FaceDetector is not available in window, presence detection is gracefully disabled (manual button is primary)
     if (!detector) {
       return;
     }
@@ -976,7 +1330,7 @@ export const AvatarReceptionView: React.FC = () => {
           vid.readyState >= 2 &&
           vid.videoHeight > 0 &&
           screenRef.current === 'AMBIENT' &&
-          (ambientPhaseRef.current === 'dormant' || ambientPhaseRef.current === 'noticed')
+          ambientPhaseRef.current === 'dormant'
         ) {
           try {
             const faces = await detector.detect(vid);
@@ -993,34 +1347,14 @@ export const AvatarReceptionView: React.FC = () => {
 
               if (faceHeightRatio >= CLOSE_RATIO) {
                 closeDwellRef.current += 1;
-                noticedDwellRef.current += 1;
                 if (closeDwellRef.current >= AMBIENT_DWELL_COUNT) {
-                  triggerAmbientGreeting();
-                }
-              } else if (faceHeightRatio >= NOTICED_RATIO) {
-                closeDwellRef.current = 0;
-                noticedDwellRef.current += 1;
-                if (noticedDwellRef.current >= AMBIENT_DWELL_COUNT) {
-                  if (ambientPhaseRef.current === 'dormant') {
-                    setAmbientPhase('noticed');
-                  }
+                  triggerPresenceFlow();
                 }
               } else {
                 closeDwellRef.current = 0;
-                noticedDwellRef.current = 0;
               }
             } else {
-              // No face detected in this sample tick
               closeDwellRef.current = 0;
-              noticedDwellRef.current = 0;
-              if (ambientPhaseRef.current === 'noticed' && !ambientLostTimerRef.current) {
-                ambientLostTimerRef.current = setTimeout(() => {
-                  if (screenRef.current === 'AMBIENT' && ambientPhaseRef.current === 'noticed') {
-                    setAmbientPhase('dormant');
-                  }
-                  ambientLostTimerRef.current = null;
-                }, 3000);
-              }
             }
           } catch {
             // Discard detection errors gracefully
@@ -1038,7 +1372,7 @@ export const AvatarReceptionView: React.FC = () => {
         ambientLostTimerRef.current = null;
       }
     };
-  }, [screen, ambientCameraDenied, triggerAmbientGreeting]);
+  }, [screen, ambientCameraDenied, triggerPresenceFlow]);
 
   // Expose test hooks for AMBIENT and face position
   useEffect(() => {
@@ -1046,34 +1380,30 @@ export const AvatarReceptionView: React.FC = () => {
       (window as any).__setFacePosition = (pos: 'aligned' | 'too_close' | 'too_far' | 'off_center' | 'idle') => {
         setFacePosition(pos);
       };
+      (window as any).__triggerPresence = () => {
+        triggerPresenceFlow();
+      };
       (window as any).__setAmbientPhase = (phase: AmbientPhase) => {
         setAmbientPhase(phase);
-        if (phase === 'greeting') {
-          triggerAmbientGreeting();
+        if (phase === 'engaged' || phase === 'greeting') {
+          triggerPresenceFlow();
         } else if (phase === 'listening') {
           startAmbientListening();
         }
       };
-      (window as any).__triggerAmbientIntent = (phrase: string) => {
-        const text = phrase.trim().toLowerCase();
-        const hasAppt = APPOINTMENT_WORDS.some((w) => text.includes(w));
-        const hasWalkin = WALKIN_WORDS.some((w) => text.includes(w));
+      (window as any).__triggerAmbientIntent = async (phrase: string) => {
+        const text = phrase.trim();
+        console.log(`[Voice Intent] Raw Recognized Text (manual trigger): "${text}"`);
         setAmbientPhase('routing');
-        setTimeout(() => {
+        setTimeout(async () => {
           stopCameraStream();
-          if (hasAppt && !hasWalkin) {
-            setFlowType('SCHEDULED');
-            setScreen('FACE_SCAN');
-          } else if (hasWalkin && !hasAppt) {
-            setFlowType('WALK_IN');
-            setScreen('PHONE');
-          } else {
-            setScreen('IDLE');
+          if (resolveIntentRef.current) {
+            await resolveIntentRef.current(text, { isAmbient: true });
           }
         }, 500);
       };
     }
-  }, [triggerAmbientGreeting, startAmbientListening, stopCameraStream]);
+  }, [triggerPresenceFlow, startAmbientListening, stopCameraStream]);
 
   // Cancel scanning & reset to idle preview
   const cancelScanning = useCallback(() => {
@@ -1216,6 +1546,9 @@ export const AvatarReceptionView: React.FC = () => {
     setInactivitySeconds(null);
     setSelectedServiceId('');
     setSelectedProviderId('next_available');
+    setSelectedDirectionCategory(null);
+    setSelectedDirectionRoom(null);
+    setDirectionsEntrySource('browse');
     setOnboardingForm({
       name: '',
       dob: '',
@@ -1233,7 +1566,11 @@ export const AvatarReceptionView: React.FC = () => {
           : 'Welcome to MantraCare Health Center. Please touch an option to begin.'
       );
     }
-  }, [stopCameraStream, currentLanguage, clearAllScanTimers]);
+
+    if (location.pathname !== '/reception') {
+      navigate('/reception');
+    }
+  }, [stopCameraStream, currentLanguage, clearAllScanTimers, location.pathname, navigate]);
 
   // Throttled User Activity Handler (at most 1 call/sec)
   const handleUserActivity = useCallback(() => {
@@ -1251,7 +1588,7 @@ export const AvatarReceptionView: React.FC = () => {
       setInactivitySeconds(remaining);
 
       if (remaining === 0) {
-        if (screenRef.current !== 'AMBIENT') {
+        if (screenRef.current !== 'AMBIENT' || location.pathname !== '/reception') {
           handleResetSession(true);
         }
         lastActivityTimeRef.current = Date.now();
@@ -1259,7 +1596,7 @@ export const AvatarReceptionView: React.FC = () => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [handleResetSession]);
+  }, [handleResetSession, location.pathname]);
 
   // Global user activity event listeners (throttled)
   useEffect(() => {
@@ -1272,7 +1609,9 @@ export const AvatarReceptionView: React.FC = () => {
   }, [handleUserActivity]);
 
   // Navigation Handlers
-  const handleNavClick = (target: 'home' | 'checkin' | 'new_patient' | 'my_visit' | 'lang' | 'staff') => {
+  const handleNavClick = (
+    target: 'home' | 'checkin' | 'new_patient' | 'payment' | 'directions' | 'my_visit' | 'lang' | 'staff'
+  ) => {
     handleUserActivity();
     if (target === 'home') {
       handleResetSession();
@@ -1280,15 +1619,38 @@ export const AvatarReceptionView: React.FC = () => {
       stopCameraStream();
       setFlowType('SCHEDULED');
       setScreen('FACE_SCAN');
-      speak('Please look into the camera to check in, or use your phone number below.');
+      navigate('/reception/appointment');
+      speak(
+        currentLanguage === 'hi'
+          ? 'कृपया चेक इन करने के लिए कैमरे में देखें या फोन नंबर दर्ज करें।'
+          : 'Please look into the camera to check in, or use your phone number below.'
+      );
     } else if (target === 'new_patient') {
       stopCameraStream();
       setFlowType('WALK_IN');
       setScreen('PHONE');
-      speak('Welcome! Please enter your mobile phone number on the touch keypad to begin registration.');
+      navigate('/reception/walk-in');
+      speak(
+        currentLanguage === 'hi'
+          ? 'स्वागत है! पंजीकरण शुरू करने के लिए अपना फोन नंबर दर्ज करें।'
+          : 'Welcome! Please enter your mobile phone number on the touch keypad to begin registration.'
+      );
+    } else if (target === 'payment') {
+      stopCameraStream();
+      setFlowType('PAYMENT');
+      setScreen('PHONE');
+      navigate('/reception/billing');
+      speak(
+        currentLanguage === 'hi'
+          ? 'कृपया अपना बिल और बकाया देखने के लिए अपना मोबाइल नंबर दर्ज करें।'
+          : 'Please enter your mobile phone number on the touch keypad to look up your bill.'
+      );
+    } else if (target === 'directions') {
+      handleOpenDirections();
     } else if (target === 'my_visit') {
       stopCameraStream();
       setFlowType('MY_VISIT');
+      navigate('/reception/my-visit');
       loadMyVisitStatus();
     } else if (target === 'lang') {
       const nextLang = currentLanguage === 'en' ? 'hi' : 'en';
@@ -1391,10 +1753,19 @@ export const AvatarReceptionView: React.FC = () => {
 
       const found = await maClient.lookupClientsByPhone(phoneNumber, verifyRes.sessionToken);
 
-      if (flowType === 'SCHEDULED') {
+      if (flowType === 'SCHEDULED' || flowType === 'PAYMENT') {
         if (!found || found.length === 0) {
-          setErrorMessage('No appointment found for this phone number. Please register as new patient.');
-          speak('We could not find an appointment with this number. You can register as a new patient.', 'apologetic');
+          setErrorMessage(
+            flowType === 'PAYMENT'
+              ? 'No billing records found for this phone number.'
+              : 'No appointment found for this phone number. Please register as new patient.'
+          );
+          speak(
+            flowType === 'PAYMENT'
+              ? 'We could not find any billing records for this number. Please check with the front desk.'
+              : 'We could not find an appointment with this number. You can register as a new patient.',
+            'apologetic'
+          );
           setScreen('PHONE');
           return;
         }
@@ -1405,11 +1776,19 @@ export const AvatarReceptionView: React.FC = () => {
           const summary = await maClient.getVisitSummary(pat.id);
           setVisitSummary(summary);
           setScreen('DETAILS_SUMMARY');
-          speak(`Welcome ${pat.name}. Here are your appointment details. Please confirm check-in.`);
+          speak(
+            flowType === 'PAYMENT'
+              ? `Welcome ${pat.name}. Here are your pending bills and visit summary.`
+              : `Welcome ${pat.name}. Here are your appointment details. Please confirm check-in.`
+          );
         } else {
           setPatients(found);
           setScreen('PATIENT_PICK');
-          speak('Multiple patients are registered under this number. Who is checking in today?');
+          speak(
+            flowType === 'PAYMENT'
+              ? 'Multiple profiles are registered under this number. Whose bill would you like to view?'
+              : 'Multiple patients are registered under this number. Who is checking in today?'
+          );
         }
       } else {
         // Walk-in / New Patient
@@ -1438,7 +1817,11 @@ export const AvatarReceptionView: React.FC = () => {
     const summary = await maClient.getVisitSummary(pat.id);
     setVisitSummary(summary);
     setScreen('DETAILS_SUMMARY');
-    speak(`Welcome ${pat.name}. Please confirm your appointment details.`);
+    speak(
+      flowType === 'PAYMENT'
+        ? `Welcome ${pat.name}. Here are your pending bills and visit summary.`
+        : `Welcome ${pat.name}. Please confirm your appointment details.`
+    );
   };
 
   // --- FLOW 3: Confirm Check-In & Token Issuance ---
@@ -1722,6 +2105,381 @@ export const AvatarReceptionView: React.FC = () => {
     }
   };
 
+  // --- FLOW 6: Directions & Wayfinding ---
+  const handleOpenDirections = useCallback(async () => {
+    handleUserActivity();
+    stopCameraStream();
+    setFlowType(null);
+    const cats = await loadDirectionCategories();
+    setScreen('DIRECTIONS_CATEGORIES');
+    navigate('/reception/directions');
+    speak(
+      currentLanguage === 'hi'
+        ? 'यहाँ क्लिनिक के सभी विभाग हैं। दिशा-निर्देशों के लिए कृपया एक श्रेणी चुनें।'
+        : 'Here are all clinic departments. Please select a category to view room directions.'
+    );
+  }, [handleUserActivity, stopCameraStream, loadDirectionCategories, speak, currentLanguage, navigate]);
+
+  const handleSelectDirectionCategory = useCallback(
+    async (cat: DirectionCategory) => {
+      handleUserActivity();
+      setSelectedDirectionCategory(cat);
+      setScreen('DIRECTIONS_ROOMS');
+      navigate(`/reception/directions/${cat.id}`);
+      maClient.logAuditEvent({
+        id: `evt_cat_${Date.now()}`,
+        orgId: 'org_mantracare_default',
+        action: 'receptionist_directions_category_viewed',
+        metadata: { categoryId: cat.id },
+        timestamp: new Date().toISOString(),
+      });
+      speak(
+        currentLanguage === 'hi'
+          ? `${cat.name} के कमरे। कृपया अपना गंतव्य चुनें।`
+          : `Here are the rooms in ${cat.name}. Please select your destination.`
+      );
+    },
+    [handleUserActivity, maClient, speak, currentLanguage, navigate]
+  );
+
+  const handleSelectDirectionRoom = useCallback(
+    (room: DirectionRoom, source: 'browse' | 'voice_direct' = 'browse', categoryId?: string) => {
+      handleUserActivity();
+      setSelectedDirectionRoom(room);
+      setDirectionsEntrySource(source);
+      setScreen('DIRECTIONS_RESULT');
+      const catId = categoryId || selectedDirectionCategory?.id || room.categoryId || 'cat_clinical';
+      navigate(`/reception/directions/${catId}/${room.id}`);
+      maClient.logAuditEvent({
+        id: `evt_room_${Date.now()}`,
+        orgId: 'org_mantracare_default',
+        action: 'receptionist_directions_room_viewed',
+        metadata: { roomId: room.id, source: source === 'voice_direct' ? 'voice' : 'touch' },
+        timestamp: new Date().toISOString(),
+      });
+      const locSpeech = room.floorWing ? `is on ${room.floorWing}.` : '';
+      speak(
+        currentLanguage === 'hi'
+          ? `${room.name} ${locSpeech} ${room.directions}`
+          : `${room.name} ${locSpeech} ${room.directions}`
+      );
+    },
+    [handleUserActivity, maClient, speak, currentLanguage, selectedDirectionCategory, navigate]
+  );
+
+  const handleDirectionsBack = useCallback(() => {
+    handleUserActivity();
+    if (screen === 'DIRECTIONS_RESULT') {
+      if (directionsEntrySource === 'voice_direct') {
+        handleResetSession();
+      } else {
+        const catId = selectedDirectionCategory?.id || 'cat_clinical';
+        navigate(`/reception/directions/${catId}`);
+        setScreen('DIRECTIONS_ROOMS');
+      }
+    } else if (screen === 'DIRECTIONS_ROOMS') {
+      navigate('/reception/directions');
+      setScreen('DIRECTIONS_CATEGORIES');
+    } else {
+      handleResetSession();
+    }
+  }, [screen, directionsEntrySource, handleResetSession, handleUserActivity, selectedDirectionCategory, navigate]);
+
+  const handleResolveIntent = useCallback(
+    async (rawTranscript: string, options: { isAmbient?: boolean } = {}) => {
+      const { isAmbient = false } = options;
+      const text = (rawTranscript || '').trim();
+      const normalized = text.toLowerCase();
+
+      // Step 1: Raw recognized text logging (Part B Diagnosis)
+      console.log(`[Voice Intent Resolver] 🎙️ Processing speech input: "${rawTranscript}" (isAmbient: ${isAmbient})`);
+
+      if (!text) {
+        console.log('[Voice Intent Resolver] ℹ️ Empty transcript received, skipping intent match.');
+        return false;
+      }
+
+      // Priority 1: Specific Room Match across all categories (Room > Category > General Intent > Fallback)
+      const loadedCats = directionCategories.length > 0 ? directionCategories : await loadDirectionCategories();
+      const cats = loadedCats.length > 0 ? loadedCats : STATIC_DIRECTION_CATEGORIES;
+
+      let matchedRoom: { room: DirectionRoom; category: DirectionCategory } | null = null;
+      for (const cat of cats) {
+        for (const rm of cat.rooms) {
+          const rmLower = rm.name.toLowerCase();
+          const keywords = rmLower
+            .split(/[\s-,&/]+/)
+            .filter((w) => w.length > 2 && w !== 'room' && w !== 'floor' && w !== 'the' && w !== 'and');
+          
+          const hasExact = normalized.includes(rmLower);
+          const hasKeyword = keywords.some((kw) => normalized.includes(kw));
+
+          const isPharmacyMatch = (rm.id.includes('pharmacy') || rmLower.includes('pharmacy')) &&
+            (normalized.includes('pharmacy') || normalized.includes('medicine') || normalized.includes('chemist') || normalized.includes('dispensing') || normalized.includes('दवा') || normalized.includes('दवाखाना'));
+          const isLabMatch = (rm.id.includes('lab') || rmLower.includes('lab')) &&
+            (normalized.includes('lab') || normalized.includes('diagnostic') || normalized.includes('blood') || normalized.includes('test') || normalized.includes('laboratory') || normalized.includes('जाँच') || normalized.includes('लैब'));
+          const isRestroomMatch = (rm.id.includes('restroom') || rmLower.includes('restroom') || rmLower.includes('washroom')) &&
+            (normalized.includes('restroom') || normalized.includes('washroom') || normalized.includes('toilet') || normalized.includes('bathroom') || normalized.includes('शौचालय') || normalized.includes('वॉशरूम'));
+          const isWaterMatch = (rm.id.includes('water') || rmLower.includes('water')) &&
+            (normalized.includes('water') || normalized.includes('drinking water') || normalized.includes('पानी'));
+          const isBillingMatch = (rm.id.includes('billing') || rmLower.includes('billing')) &&
+            (normalized.includes('billing') || normalized.includes('bill desk') || normalized.includes('insurance desk'));
+
+          if (hasExact || hasKeyword || isPharmacyMatch || isLabMatch || isRestroomMatch || isWaterMatch || isBillingMatch) {
+            matchedRoom = { room: rm, category: cat };
+            break;
+          }
+        }
+        if (matchedRoom) break;
+      }
+
+      // Direct fallback matching for common destinations if loop missed
+      if (!matchedRoom) {
+        if (
+          normalized.includes('pharmacy') ||
+          normalized.includes('medicine') ||
+          normalized.includes('chemist') ||
+          normalized.includes('dispensary') ||
+          normalized.includes('दवा')
+        ) {
+          matchedRoom = {
+            room: STATIC_DIRECTION_CATEGORIES[0].rooms[0],
+            category: STATIC_DIRECTION_CATEGORIES[0],
+          };
+        } else if (
+          normalized.includes('lab') ||
+          normalized.includes('diagnostic') ||
+          normalized.includes('blood') ||
+          normalized.includes('test') ||
+          normalized.includes('जाँच') ||
+          normalized.includes('लैब')
+        ) {
+          matchedRoom = {
+            room: STATIC_DIRECTION_CATEGORIES[0].rooms[1],
+            category: STATIC_DIRECTION_CATEGORIES[0],
+          };
+        } else if (
+          normalized.includes('restroom') ||
+          normalized.includes('washroom') ||
+          normalized.includes('toilet') ||
+          normalized.includes('bathroom') ||
+          normalized.includes('शौचालय')
+        ) {
+          matchedRoom = {
+            room: STATIC_DIRECTION_CATEGORIES[2].rooms[0],
+            category: STATIC_DIRECTION_CATEGORIES[2],
+          };
+        } else if (normalized.includes('water') || normalized.includes('पानी')) {
+          matchedRoom = {
+            room: STATIC_DIRECTION_CATEGORIES[2].rooms[1],
+            category: STATIC_DIRECTION_CATEGORIES[2],
+          };
+        }
+      }
+
+      if (matchedRoom) {
+        unrecognizedAttemptsRef.current = 0;
+        const destUrl = `/reception/directions/${matchedRoom.category.id}/${matchedRoom.room.id}`;
+        console.log(`[Voice Intent Resolver] 🎯 PRIORITY 1 MATCH: Room "${matchedRoom.room.name}" (${matchedRoom.room.id}) -> Navigating to ${destUrl}`);
+        handleUserActivity();
+        stopCameraStream();
+        setSelectedDirectionCategory(matchedRoom.category);
+        setSelectedDirectionRoom(matchedRoom.room);
+        setDirectionsEntrySource('voice_direct');
+        setScreen('DIRECTIONS_RESULT');
+        navigate(destUrl);
+        const locSpeech = matchedRoom.room.floorWing ? `is on ${matchedRoom.room.floorWing}.` : '';
+        speak(
+          currentLanguage === 'hi'
+            ? `${matchedRoom.room.name} ${locSpeech} ${matchedRoom.room.directions}`
+            : `${matchedRoom.room.name} ${locSpeech} ${matchedRoom.room.directions}`
+        );
+        return true;
+      }
+
+      // Priority 2: Category Match
+      const isExplicitDirections = DIRECTIONS_WORDS.some((w) => normalized.includes(w.toLowerCase()));
+      let matchedCat: DirectionCategory | null = null;
+      for (const cat of cats) {
+        const catLower = cat.name.toLowerCase();
+        const catKeywords = catLower.split(/[\s&,-]+/).filter((w) => w.length > 2);
+        if (
+          normalized.includes(catLower) ||
+          (isExplicitDirections && catKeywords.some((kw) => normalized.includes(kw))) ||
+          (cat.id === 'cat_pharmacy_labs' &&
+            (normalized.includes('pharmacy') ||
+              normalized.includes('lab') ||
+              normalized.includes('diagnostic') ||
+              normalized.includes('medicine') ||
+              normalized.includes('test') ||
+              normalized.includes('दवा') ||
+              normalized.includes('जाँच'))) ||
+          (cat.id === 'cat_facilities' &&
+            (normalized.includes('facilities') ||
+              normalized.includes('restroom') ||
+              normalized.includes('washroom') ||
+              normalized.includes('toilet') ||
+              normalized.includes('bathroom') ||
+              normalized.includes('water') ||
+              normalized.includes('drinking water') ||
+              normalized.includes('शौचालय') ||
+              normalized.includes('वॉशरूम') ||
+              normalized.includes('पानी'))) ||
+          (cat.id === 'cat_clinical' &&
+            isExplicitDirections &&
+            (normalized.includes('clinical') || normalized.includes('consultation') || normalized.includes('ओपीडी') || normalized.includes('doctor')))
+        ) {
+          matchedCat = cat;
+          break;
+        }
+      }
+
+      if (matchedCat) {
+        unrecognizedAttemptsRef.current = 0;
+        const destUrl = `/reception/directions/${matchedCat.id}`;
+        console.log(`[Voice Intent Resolver] 🎯 PRIORITY 2 MATCH: Category "${matchedCat.name}" (${matchedCat.id}) -> Navigating to ${destUrl}`);
+        handleUserActivity();
+        stopCameraStream();
+        setSelectedDirectionCategory(matchedCat);
+        setScreen('DIRECTIONS_ROOMS');
+        navigate(destUrl);
+        speak(
+          currentLanguage === 'hi'
+            ? `${matchedCat.name} के कमरे। कृपया अपना गंतव्य चुनें।`
+            : `Here are the rooms in ${matchedCat.name}. Please select your destination.`
+        );
+        return true;
+      }
+
+      // Priority 3: General Intents (Walk-in, Payment, Appointment, Generic Directions)
+      const isWalkin = WALKIN_WORDS.some((w) => normalized.includes(w.toLowerCase()));
+      const isPayment = !isWalkin && PAYMENT_WORDS.some((w) => normalized.includes(w.toLowerCase()));
+      const isAppointment = !isWalkin && !isPayment && APPOINTMENT_WORDS.some((w) => normalized.includes(w.toLowerCase()));
+
+      console.log(`[Voice Intent Resolver] 🔍 General intent results for "${normalized}":`, {
+        isWalkin,
+        isPayment,
+        isAppointment,
+        isExplicitDirections,
+      });
+
+      // 3A. Walk-in Intent
+      if (isWalkin) {
+        unrecognizedAttemptsRef.current = 0;
+        console.log('[Voice Intent Resolver] 🎯 PRIORITY 3 MATCH: Walk-in Registration -> /reception/walk-in');
+        handleUserActivity();
+        stopCameraStream();
+        setFlowType('WALK_IN');
+        setScreen('PHONE');
+        navigate('/reception/walk-in');
+        speak(
+          currentLanguage === 'hi'
+            ? 'स्वागत है! पंजीकरण शुरू करने के लिए अपना फोन नंबर दर्ज करें।'
+            : 'Welcome! Please enter your mobile phone number on the touch keypad to begin registration.'
+        );
+        return true;
+      }
+
+      // 3B. Payment Intent
+      if (isPayment) {
+        unrecognizedAttemptsRef.current = 0;
+        console.log('[Voice Intent Resolver] 🎯 PRIORITY 3 MATCH: Bill Payment -> /reception/billing');
+        handleUserActivity();
+        stopCameraStream();
+        setFlowType('PAYMENT');
+        setScreen('PHONE');
+        navigate('/reception/billing');
+        speak(
+          currentLanguage === 'hi'
+            ? 'कृपया अपना बिल और बकाया देखने के लिए अपना मोबाइल नंबर दर्ज करें।'
+            : 'Please enter your mobile phone number on the touch keypad to look up your bill.'
+        );
+        return true;
+      }
+
+      // 3C. Appointment Intent
+      if (isAppointment) {
+        unrecognizedAttemptsRef.current = 0;
+        console.log('[Voice Intent Resolver] 🎯 PRIORITY 3 MATCH: Appointment Check-in -> /reception/appointment');
+        handleUserActivity();
+        stopCameraStream();
+        setFlowType('SCHEDULED');
+        setScreen('FACE_SCAN');
+        navigate('/reception/appointment');
+        speak(
+          currentLanguage === 'hi'
+            ? 'कृपया चेक इन करने के लिए कैमरे में देखें या फोन नंबर दर्ज करें।'
+            : 'Please look into the camera to check in, or use your phone number below.'
+        );
+        return true;
+      }
+
+      // 3D. Generic directions intent ("get directions", "where do I go", "directions")
+      if (isExplicitDirections) {
+        unrecognizedAttemptsRef.current = 0;
+        console.log('[Voice Intent Resolver] 🎯 PRIORITY 3 MATCH: Generic Directions -> /reception/directions');
+        handleUserActivity();
+        stopCameraStream();
+        setScreen('DIRECTIONS_CATEGORIES');
+        navigate('/reception/directions');
+        speak(
+          currentLanguage === 'hi'
+            ? 'यहाँ क्लिनिक के सभी विभाग हैं। दिशा-निर्देशों के लिए कृपया एक श्रेणी चुनें।'
+            : 'Here are all clinic departments. Please select a category to view room directions.'
+        );
+        return true;
+      }
+
+      // Priority 4: Fallback for Unrelated / nonsensical speech -> Stay on /reception AMBIENT screen (No landing page)
+      console.log(`[Voice Intent Resolver] ⚠️ PRIORITY 4: No match found for "${normalized}". Remaining on AMBIENT surface.`);
+      handleUserActivity();
+      setAmbientPhase('dormant');
+      setAvatarState('idle');
+
+      if (unrecognizedAttemptsRef.current === 0) {
+        unrecognizedAttemptsRef.current += 1;
+        speak(
+          currentLanguage === 'hi'
+            ? 'माफ़ कीजिए, मैं समझ नहीं पाई। आप स्क्रीन पर दिए गए विकल्पों में से चुन सकते हैं या पूछ सकते हैं।'
+            : "I'm sorry, I didn't quite catch that. You can tap an option on screen or tell me what you need.",
+          'speaking',
+          undefined,
+          () => {
+            if (screenRef.current === 'AMBIENT') {
+              setAmbientPhase('listening');
+              startAmbientListeningRef.current?.();
+            } else {
+              setAvatarState('idle');
+              setAmbientPhase('dormant');
+            }
+          }
+        );
+      } else {
+        console.log('[Voice Intent Resolver] 🤫 Repeated unhandled speech: keeping listening active without looping TTS.');
+        if (screenRef.current === 'AMBIENT') {
+          setTimeout(() => {
+            if (screenRef.current === 'AMBIENT') {
+              setAmbientPhase('listening');
+              startAmbientListeningRef.current?.();
+            }
+          }, 350);
+        }
+      }
+      return false;
+    },
+    [
+      directionCategories,
+      loadDirectionCategories,
+      handleUserActivity,
+      stopCameraStream,
+      speak,
+      currentLanguage,
+      navigate,
+    ]
+  );
+  resolveIntentRef.current = handleResolveIntent;
+  processDirectionsIntentRef.current = handleResolveIntent;
+
   // Global Floating Mic & Voice Command State
   const [isListeningGlobal, setIsListeningGlobal] = useState(false);
   const [heardSuccessGlobal, setHeardSuccessGlobal] = useState(false);
@@ -1734,6 +2492,13 @@ export const AvatarReceptionView: React.FC = () => {
     (rawTranscript: string) => {
       const text = rawTranscript.trim().toLowerCase();
       console.log(`[Voice Assistant] Heard: "${rawTranscript}" on screen: ${screen}`);
+
+      if (screen === 'IDLE' || screen === 'AMBIENT') {
+        if (resolveIntentRef.current) {
+          resolveIntentRef.current(rawTranscript, { isAmbient: screen === 'AMBIENT' });
+        }
+        return;
+      }
 
       // 1. Text input focus routing
       if (activeFocusedFieldRef.current === 'name') {
@@ -1895,6 +2660,35 @@ export const AvatarReceptionView: React.FC = () => {
         if (text.includes('close') || text.includes('home') || text.includes('done') || text.includes('back')) {
           handleResetSession();
         }
+      } else if (screen === 'DIRECTIONS_CATEGORIES') {
+        if (text.includes('back') || text.includes('home') || text.includes('cancel')) {
+          handleResetSession();
+        } else {
+          if (processDirectionsIntentRef.current) {
+            processDirectionsIntentRef.current(rawTranscript);
+          }
+        }
+      } else if (screen === 'DIRECTIONS_ROOMS') {
+        if (text.includes('back') || text.includes('categories') || text.includes('category')) {
+          setScreen('DIRECTIONS_CATEGORIES');
+        } else if (text.includes('home') || text.includes('done')) {
+          handleResetSession();
+        } else {
+          if (processDirectionsIntentRef.current) {
+            processDirectionsIntentRef.current(rawTranscript);
+          }
+        }
+      } else if (screen === 'DIRECTIONS_RESULT') {
+        if (text.includes('done') || text.includes('finish') || text.includes('home') || text.includes('close')) {
+          handleResetSession();
+        } else if (text.includes('back')) {
+          handleDirectionsBack();
+        }
+      } else {
+        // Global intent trigger fallback
+        if (resolveIntentRef.current) {
+          resolveIntentRef.current(rawTranscript);
+        }
       }
     },
     [
@@ -1925,6 +2719,7 @@ export const AvatarReceptionView: React.FC = () => {
       handleContinueToReview,
       handleOnboardingApprove,
       handleBookWalkIn,
+      handleDirectionsBack,
       maClient,
       showToast,
     ]
@@ -2025,21 +2820,8 @@ export const AvatarReceptionView: React.FC = () => {
   if (screen === 'AMBIENT') {
     return (
       <div
-        onClick={() => {
-          handleUserActivity();
-          stopCameraStream();
-          if (typeof window !== 'undefined' && window.speechSynthesis) {
-            window.speechSynthesis.cancel();
-          }
-          setScreen('IDLE');
-          speak(
-            currentLanguage === 'hi'
-              ? 'मंत्राकेयर में आपका स्वागत है। शुरू करने के लिए कृपया एक विकल्प चुनें।'
-              : 'Welcome to MantraCare Health Center. Please touch an option to begin.',
-            'idle'
-          );
-        }}
-        className="h-screen w-screen overflow-hidden bg-gradient-to-br from-[#121820] via-[#1b2634] to-[#253545] flex flex-col items-center justify-between p-4 sm:p-6 lg:p-8 relative select-none font-sans text-white cursor-pointer"
+        onClick={handleUserActivity}
+        className="h-screen w-screen overflow-hidden bg-gradient-to-br from-[#121820] via-[#1b2634] to-[#253545] flex flex-col items-center justify-between p-4 sm:p-6 lg:p-8 relative select-none font-sans text-white"
       >
         {/* Hidden live camera stream for anonymous presence detection */}
         <video
@@ -2057,44 +2839,33 @@ export const AvatarReceptionView: React.FC = () => {
               ? 'bg-[radial-gradient(ellipse_at_center,rgba(20,86,240,0.35)_0%,transparent_70%)]'
               : ambientPhase === 'listening'
               ? 'bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.30)_0%,transparent_70%)]'
-              : ambientPhase === 'noticed'
-              ? 'bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.22)_0%,transparent_70%)]'
+              : ambientPhase === 'engaged'
+              ? 'bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.25)_0%,transparent_70%)]'
               : ambientPhase === 'routing'
               ? 'bg-[radial-gradient(ellipse_at_center,rgba(96,165,250,0.28)_0%,transparent_70%)]'
               : 'bg-[radial-gradient(ellipse_at_center,rgba(20,86,240,0.14)_0%,transparent_70%)]'
           }`}
         />
 
-        {/* Top-Right Persistent Privacy Badge (Icon + Text) */}
-        {ambientCameraActive && !ambientCameraDenied && (
-          <div className="absolute top-5 right-5 sm:top-6 sm:right-6 z-40 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/85 backdrop-blur-xl border border-white/20 text-white text-xs font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.30)] pointer-events-none">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] animate-pulse" />
-            <Camera className="w-3.5 h-3.5 text-blue-400" />
-            <span>Camera active for greeting only</span>
-          </div>
-        )}
-
-        {/* One-Time Session Privacy Disclosure Toast (~4s auto-fade) */}
-        {ambientDisclosureVisible && (
-          <div
-            role="status"
-            aria-live="polite"
-            className="absolute top-16 sm:top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-5 py-3 rounded-full bg-[#181e25]/95 backdrop-blur-2xl border border-white/25 text-white text-xs sm:text-sm font-semibold shadow-[0_20px_50px_rgba(0,0,0,0.50)] animate-in fade-in slide-in-from-top-3 duration-300 pointer-events-none text-center max-w-lg mx-auto"
-          >
-            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>I use the camera to notice when someone's here. Nothing is recorded or saved.</span>
+        {/* Temporary Dev-Only Debug Overlay (Visible only when ?debug=1 or ?debug=true) */}
+        {isDebug && (
+          <div className="absolute top-5 left-5 z-50 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-black/85 backdrop-blur-md border border-amber-400/50 text-amber-300 font-mono text-xs shadow-xl pointer-events-none">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping shrink-0" />
+            <span>
+              [DEBUG] Phase: <strong className="text-white uppercase">{ambientPhase}</strong> | Screen: {screen} | Cam: {ambientCameraActive ? 'Active' : ambientCameraDenied ? 'Denied' : 'Off'}
+            </span>
           </div>
         )}
 
         {/* Top Header / Branding Bar */}
-        <header className="w-full flex items-center justify-between z-20 shrink-0 max-w-5xl">
+        <header className="w-full flex items-center justify-between z-20 shrink-0 max-w-6xl">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white flex items-center justify-center shadow-md shadow-blue-500/30">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
             <div>
               <span className="text-xs sm:text-sm font-bold tracking-wider uppercase text-slate-200 font-display">
-                MantraCare
+                {DEFAULT_ORGANIZATION_NAME}
               </span>
               <span className="hidden sm:inline text-xs text-slate-400 ml-2 font-medium">
                 • AI Receptionist
@@ -2102,90 +2873,375 @@ export const AvatarReceptionView: React.FC = () => {
             </div>
           </div>
 
-          {/* Top-Right Language Switcher */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              const nextLang = currentLanguage === 'en' ? 'hi' : 'en';
-              setCurrentLanguage(nextLang);
-              speak(
-                nextLang === 'hi'
-                  ? 'भाषा बदलकर हिंदी कर दी गई है।'
-                  : 'Language changed to English.'
-              );
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/15 text-xs font-semibold text-slate-200 transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
-          >
-            <Globe className="w-3.5 h-3.5 text-[#60a5fa]" />
-            <span>{currentLanguage === 'en' ? 'हिन्दी' : 'English'}</span>
-          </button>
+          <div className="flex items-center gap-2.5">
+            {/* Minimal Camera Indicator (Conditional on active camera stream) */}
+            {ambientCameraActive && !ambientCameraDenied && (
+              <div
+                className="relative group flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/10 hover:bg-white/15 backdrop-blur-md border border-white/15 text-blue-300 transition-all cursor-default"
+                title="Camera active for greeting only"
+              >
+                <Camera className="w-4 h-4 text-blue-300" />
+                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#10b981] ring-2 ring-[#1b2634] animate-pulse" />
+                
+                {/* Tooltip on hover/long-press only */}
+                <span className="absolute top-full right-0 mt-2 px-3 py-1.5 bg-slate-900/95 backdrop-blur-md text-white text-[11px] font-semibold rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-white/10">
+                  Camera active for greeting only
+                </span>
+              </div>
+            )}
+
+            {/* Top-Right Language Switcher */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const nextLang = currentLanguage === 'en' ? 'hi' : 'en';
+                setCurrentLanguage(nextLang);
+                speak(
+                  nextLang === 'hi'
+                    ? 'भाषा बदलकर हिंदी कर दी गई है।'
+                    : 'Language changed to English.'
+                );
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/15 text-xs font-semibold text-slate-200 transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
+            >
+              <Globe className="w-3.5 h-3.5 text-[#60a5fa]" />
+              <span>{currentLanguage === 'en' ? 'हिन्दी' : 'English'}</span>
+            </button>
+          </div>
         </header>
 
-        {/* Center: Large Animated Avatar */}
-        <main className="flex-1 w-full max-w-4xl flex flex-col items-center justify-center relative min-h-0 py-2 z-10">
-          <div className="w-full h-full max-h-[62vh] flex items-center justify-center relative">
+        {/* Center Main Stage: Symmetrical Quick Actions & Large Centered Avatar */}
+        <main className="flex-1 w-full max-w-6xl flex flex-col xl:flex-row items-center justify-center relative min-h-0 py-2 z-10 gap-6 xl:gap-8">
+          {/* Left Symmetrical Quick Action Group (Desktop >= 1280px) */}
+          <div className="hidden xl:flex flex-col items-center justify-center gap-8 shrink-0 z-20">
+            {/* 1. Appointment */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUserActivity();
+                stopCameraStream();
+                setFlowType('SCHEDULED');
+                setScreen('FACE_SCAN');
+                navigate('/reception/appointment');
+                speak(
+                  currentLanguage === 'hi'
+                    ? 'कृपया चेक इन करने के लिए कैमरे में देखें या फोन नंबर दर्ज करें।'
+                    : 'Please look into the camera to check in, or use your phone number below.'
+                );
+              }}
+              className="group flex flex-col items-center gap-2 cursor-pointer transition-all duration-300 active:scale-95 select-none"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 hover:border-blue-400/60 shadow-[0_8px_24px_rgba(0,0,0,0.25)] hover:shadow-[0_12px_32px_rgba(20,86,240,0.40)] hover:scale-105 transition-all flex items-center justify-center text-white">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] flex items-center justify-center text-white shadow-md shadow-blue-500/30 group-hover:scale-110 transition-transform">
+                  <CalendarCheck className="w-5 h-5" />
+                </div>
+              </div>
+              <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors tracking-wide text-center">
+                {currentLanguage === 'hi' ? 'अपॉइंटमेंट' : 'Appointment'}
+              </span>
+            </button>
+
+            {/* 2. Walk-in */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUserActivity();
+                stopCameraStream();
+                setFlowType('WALK_IN');
+                setScreen('PHONE');
+                navigate('/reception/walk-in');
+                speak(
+                  currentLanguage === 'hi'
+                    ? 'स्वागत है! पंजीकरण शुरू करने के लिए अपना फोन नंबर दर्ज करें।'
+                    : 'Welcome! Please enter your mobile phone number on the touch keypad to begin registration.'
+                );
+              }}
+              className="group flex flex-col items-center gap-2 cursor-pointer transition-all duration-300 active:scale-95 select-none"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 hover:border-blue-400/60 shadow-[0_8px_24px_rgba(0,0,0,0.25)] hover:shadow-[0_12px_32px_rgba(20,86,240,0.40)] hover:scale-105 transition-all flex items-center justify-center text-white">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] flex items-center justify-center text-white shadow-md shadow-blue-500/30 group-hover:scale-110 transition-transform">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+              </div>
+              <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors tracking-wide text-center">
+                {currentLanguage === 'hi' ? 'वॉक-इन' : 'Walk-in'}
+              </span>
+            </button>
+          </div>
+
+          {/* Center: Enlarged, Visual Anchor Animated Avatar (55-65vh) */}
+          <div className="flex-1 w-full h-[52vh] sm:h-[58vh] xl:h-[64vh] flex items-center justify-center relative">
             <AnimatedAvatar
               state={
-                ambientPhase === 'greeting'
+                avatarState === 'speaking'
+                  ? 'speaking'
+                  : ambientPhase === 'greeting'
                   ? 'speaking'
                   : ambientPhase === 'listening'
                   ? 'listening'
-                  : ambientPhase === 'routing'
+                  : ambientPhase === 'routing' || avatarState === 'thinking'
                   ? 'thinking'
                   : 'idle'
               }
               avatarName="Aria"
               thinkingMessage={
-                ambientPhase === 'routing'
-                  ? 'One moment, directing your visit...'
-                  : 'Welcome to MantraCare'
+                ambientPhase === 'routing' || avatarState === 'thinking'
+                  ? thinkingMessage || 'One moment, directing your visit...'
+                  : `Welcome to ${DEFAULT_ORGANIZATION_NAME}`
               }
               className="h-full w-auto"
             />
           </div>
+
+          {/* Right Symmetrical Quick Action Group (Desktop >= 1280px) */}
+          <div className="hidden xl:flex flex-col items-center justify-center gap-8 shrink-0 z-20">
+            {/* 3. Pay Bill */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUserActivity();
+                stopCameraStream();
+                setFlowType('PAYMENT');
+                setScreen('PHONE');
+                navigate('/reception/billing');
+                speak(
+                  currentLanguage === 'hi'
+                    ? 'कृपया अपना बिल और बकाया देखने के लिए अपना मोबाइल नंबर दर्ज करें।'
+                    : 'Please enter your mobile phone number on the touch keypad to look up your bill.'
+                );
+              }}
+              className="group flex flex-col items-center gap-2 cursor-pointer transition-all duration-300 active:scale-95 select-none"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 hover:border-blue-400/60 shadow-[0_8px_24px_rgba(0,0,0,0.25)] hover:shadow-[0_12px_32px_rgba(20,86,240,0.40)] hover:scale-105 transition-all flex items-center justify-center text-white">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] flex items-center justify-center text-white shadow-md shadow-blue-500/30 group-hover:scale-110 transition-transform">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+              </div>
+              <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors tracking-wide text-center">
+                {currentLanguage === 'hi' ? 'बिल भुगतान' : 'Pay Bill'}
+              </span>
+            </button>
+
+            {/* 4. Directions */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenDirections();
+              }}
+              className="group flex flex-col items-center gap-2 cursor-pointer transition-all duration-300 active:scale-95 select-none"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 hover:border-blue-400/60 shadow-[0_8px_24px_rgba(0,0,0,0.25)] hover:shadow-[0_12px_32px_rgba(20,86,240,0.40)] hover:scale-105 transition-all flex items-center justify-center text-white">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] flex items-center justify-center text-white shadow-md shadow-blue-500/30 group-hover:scale-110 transition-transform">
+                  <Navigation className="w-5 h-5" />
+                </div>
+              </div>
+              <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors tracking-wide text-center">
+                {currentLanguage === 'hi' ? 'दिशा-निर्देश' : 'Directions'}
+              </span>
+            </button>
+          </div>
+
+          {/* Narrow Screens & Portrait Quick Action Row (< 1280px) */}
+          <div className="xl:hidden flex flex-wrap items-center justify-center gap-5 sm:gap-8 z-20 pb-2">
+            {/* 1. Appointment */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUserActivity();
+                stopCameraStream();
+                setFlowType('SCHEDULED');
+                setScreen('FACE_SCAN');
+                navigate('/reception/appointment');
+                speak(
+                  currentLanguage === 'hi'
+                    ? 'कृपया चेक इन करने के लिए कैमरे में देखें या फोन नंबर दर्ज करें।'
+                    : 'Please look into the camera to check in, or use your phone number below.'
+                );
+              }}
+              className="group flex flex-col items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 shadow-lg flex items-center justify-center text-white">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] flex items-center justify-center text-white">
+                  <CalendarCheck className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <span className="text-[11px] sm:text-xs font-bold text-slate-200">
+                {currentLanguage === 'hi' ? 'अपॉइंटमेंट' : 'Appointment'}
+              </span>
+            </button>
+
+            {/* 2. Walk-in */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUserActivity();
+                stopCameraStream();
+                setFlowType('WALK_IN');
+                setScreen('PHONE');
+                navigate('/reception/walk-in');
+                speak(
+                  currentLanguage === 'hi'
+                    ? 'स्वागत है! पंजीकरण शुरू करने के लिए अपना फोन नंबर दर्ज करें।'
+                    : 'Welcome! Please enter your mobile phone number on the touch keypad to begin registration.'
+                );
+              }}
+              className="group flex flex-col items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 shadow-lg flex items-center justify-center text-white">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] flex items-center justify-center text-white">
+                  <UserPlus className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <span className="text-[11px] sm:text-xs font-bold text-slate-200">
+                {currentLanguage === 'hi' ? 'वॉक-इन' : 'Walk-in'}
+              </span>
+            </button>
+
+            {/* 3. Pay Bill */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUserActivity();
+                stopCameraStream();
+                setFlowType('PAYMENT');
+                setScreen('PHONE');
+                navigate('/reception/billing');
+                speak(
+                  currentLanguage === 'hi'
+                    ? 'कृपया अपना बिल और बकाया देखने के लिए अपना मोबाइल नंबर दर्ज करें।'
+                    : 'Please enter your mobile phone number on the touch keypad to look up your bill.'
+                );
+              }}
+              className="group flex flex-col items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 shadow-lg flex items-center justify-center text-white">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] flex items-center justify-center text-white">
+                  <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <span className="text-[11px] sm:text-xs font-bold text-slate-200">
+                {currentLanguage === 'hi' ? 'बिल भुगतान' : 'Pay Bill'}
+              </span>
+            </button>
+
+            {/* 4. Directions */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenDirections();
+              }}
+              className="group flex flex-col items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 shadow-lg flex items-center justify-center text-white">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] flex items-center justify-center text-white">
+                  <Navigation className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+              <span className="text-[11px] sm:text-xs font-bold text-slate-200">
+                {currentLanguage === 'hi' ? 'दिशा-निर्देश' : 'Directions'}
+              </span>
+            </button>
+          </div>
         </main>
 
-        {/* Bottom Stage: Caption & Interaction Affordance */}
-        <footer className="w-full max-w-2xl z-20 shrink-0 flex flex-col items-center gap-3 pb-2">
-          {/* Spoken Caption / Listening Waveform Card */}
-          {ambientPhase === 'greeting' || ambientPhase === 'listening' || ambientPhase === 'routing' ? (
-            <div className="w-full bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-3.5 sm:p-4 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
-              <div className="flex items-start gap-3">
-                <div className="w-7 h-7 rounded-full bg-blue-500/25 text-[#60a5fa] flex items-center justify-center shrink-0 mt-0.5">
-                  {ambientPhase === 'listening' ? (
-                    <Mic className="w-4 h-4 text-blue-400 animate-pulse" />
+        {/* Bottom Bar: Bottom-Left Start Button & Center Spoken Caption/Waveform */}
+        <footer className="w-full max-w-6xl z-20 shrink-0 flex items-center justify-between relative min-h-[48px] pb-1">
+          {/* Small Start Button in bottom-left corner */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleUserActivity();
+              triggerPresenceFlow();
+            }}
+            disabled={ambientPhase === 'engaged'}
+            className="w-[140px] sm:w-[150px] h-[var(--touch,48px)] min-h-[48px] rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 hover:border-blue-400/50 text-white font-semibold text-xs sm:text-sm shadow-[0_8px_24px_rgba(0,0,0,0.25)] hover:shadow-[0_12px_28px_rgba(20,86,240,0.30)] flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+          >
+            <Sparkles className="w-4 h-4 text-[#60a5fa] shrink-0" />
+            <span>{currentLanguage === 'hi' ? 'शुरू करें' : 'Start'}</span>
+          </button>
+
+          {/* Center Spoken Caption / Listening Waveform Card */}
+          {(ambientPhase === 'greeting' ||
+            ambientPhase === 'listening' ||
+            ambientPhase === 'routing' ||
+            avatarState === 'speaking' ||
+            isUserSpeaking ||
+            userTranscriptText) && (
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-full max-w-lg bg-white/10 backdrop-blur-2xl border border-white/20 rounded-2xl p-3 sm:p-3.5 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <div className="flex items-start gap-2.5">
+                <div className="w-6 h-6 rounded-full bg-blue-500/25 text-[#60a5fa] flex items-center justify-center shrink-0 mt-0.5">
+                  {isUserSpeaking ? (
+                    <Mic className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                  ) : ambientPhase === 'listening' ? (
+                    <Mic className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
                   ) : ambientPhase === 'routing' ? (
-                    <Clock className="w-4 h-4 text-blue-400 animate-spin" />
+                    <Clock className="w-3.5 h-3.5 text-blue-400 animate-spin" />
                   ) : (
-                    <MessageSquare className="w-4 h-4" />
+                    <MessageSquare className="w-3.5 h-3.5" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-0.5">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                      {ambientPhase === 'listening'
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      {isUserSpeaking
+                        ? currentLanguage === 'hi'
+                          ? 'आप बोल रहे हैं...'
+                          : 'You are speaking...'
+                        : userTranscriptText && ambientPhase === 'listening'
+                        ? currentLanguage === 'hi'
+                          ? 'आपने कहा'
+                          : 'You said'
+                        : ambientPhase === 'listening'
                         ? currentLanguage === 'hi'
                           ? 'सुन रहे हैं...'
                           : 'Listening...'
                         : ambientPhase === 'routing'
-                        ? 'Routing'
-                        : 'Aria Speaking'}
+                        ? currentLanguage === 'hi'
+                          ? 'खोज रहे हैं...'
+                          : 'Routing'
+                        : avatarState === 'speaking' || ambientPhase === 'greeting'
+                        ? currentLanguage === 'hi'
+                          ? 'एरिया बोल रही हैं'
+                          : 'Aria Speaking'
+                        : currentLanguage === 'hi'
+                        ? 'तैयार'
+                        : 'Ready'}
                     </p>
                     {/* Animated Waveform Bars */}
-                    {(ambientPhase === 'greeting' || ambientPhase === 'listening') && (
-                      <div className="flex items-center gap-1 h-3.5">
+                    {(ambientPhase === 'greeting' ||
+                      ambientPhase === 'listening' ||
+                      avatarState === 'speaking' ||
+                      isUserSpeaking) && (
+                      <div className="flex items-center gap-1 h-3">
                         {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
                           <span
                             key={i}
-                            className="wave-bar"
+                            className={`wave-bar ${isUserSpeaking ? '!bg-emerald-400' : ''}`}
                             style={{ '--i': i } as React.CSSProperties}
                           />
                         ))}
                       </div>
                     )}
                   </div>
-                  <p className="text-sm sm:text-base font-medium text-white leading-snug">
-                    {ambientPhase === 'listening'
+                  <p className="text-xs sm:text-sm font-medium text-white leading-snug">
+                    {isUserSpeaking
+                      ? currentLanguage === 'hi'
+                        ? 'आपकी आवाज़ सुन रहे हैं...'
+                        : 'Listening to your voice...'
+                      : userTranscriptText && avatarState !== 'speaking'
+                      ? currentLanguage === 'hi'
+                        ? `"${userTranscriptText}"`
+                        : `"${userTranscriptText}"`
+                      : ambientPhase === 'listening'
                       ? currentLanguage === 'hi'
                         ? 'कृपया बताएं कि मैं आपकी क्या मदद कर सकती हूँ...'
                         : 'Tell me how I can help you today...'
@@ -2198,23 +3254,7 @@ export const AvatarReceptionView: React.FC = () => {
                 </div>
               </div>
             </div>
-          ) : (
-            /* Dormant / Noticed subtle low-key caption */
-            <div className="text-center space-y-1 py-1">
-              <p className="text-base sm:text-lg font-semibold text-slate-200">
-                {currentLanguage === 'hi' ? 'मंत्राकेयर में आपका स्वागत है' : 'Welcome to MantraCare'}
-              </p>
-              <p className="text-xs sm:text-sm text-slate-400 font-medium">
-                {currentLanguage === 'hi' ? 'शुरू करने के लिए स्क्रीन पर कहीं भी टैप करें' : 'Tap anywhere to begin'}
-              </p>
-            </div>
           )}
-
-          {/* Subtle persistent touch hint */}
-          <div className="flex items-center gap-2 text-xs text-slate-400/80 bg-white/5 px-3.5 py-1.5 rounded-full border border-white/10 hover:bg-white/10 transition-colors">
-            <span>Touch screen anytime to open options</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </div>
         </footer>
       </div>
     );
@@ -2263,15 +3303,21 @@ export const AvatarReceptionView: React.FC = () => {
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-0.5">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  {avatarState === 'thinking' ? thinkingMessage : 'Aria Speaking'}
+                  {isUserSpeaking
+                    ? 'You are speaking...'
+                    : userTranscriptText && avatarState !== 'speaking'
+                    ? 'You said'
+                    : avatarState === 'thinking'
+                    ? thinkingMessage
+                    : 'Aria Speaking'}
                 </p>
-                {/* CSS Animated Voice Waveform Bars (Active only while speaking) */}
-                {avatarState === 'speaking' && (
+                {/* CSS Animated Voice Waveform Bars */}
+                {(avatarState === 'speaking' || isUserSpeaking) && (
                   <div className="flex items-center gap-1 h-3.5">
                     {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
                       <span
                         key={i}
-                        className="wave-bar"
+                        className={`wave-bar ${isUserSpeaking ? '!bg-emerald-400' : ''}`}
                         style={{ '--i': i } as React.CSSProperties}
                       />
                     ))}
@@ -2279,7 +3325,9 @@ export const AvatarReceptionView: React.FC = () => {
                 )}
               </div>
               <p className="text-sm lg:text-base font-medium text-white leading-snug">
-                {captionText}
+                {userTranscriptText && avatarState !== 'speaking' && !isUserSpeaking
+                  ? `"${userTranscriptText}"`
+                  : captionText}
               </p>
             </div>
           </div>
@@ -2317,6 +3365,24 @@ export const AvatarReceptionView: React.FC = () => {
                 {screen === 'SERVICE_DOCTOR' && 'Select Service & Provider'}
                 {screen === 'TOKEN_ISSUED' && 'Queue Token Issued'}
                 {screen === 'MY_VISIT' && 'Active Visit Tracker'}
+                {screen === 'DIRECTIONS_CATEGORIES' && (
+                  <>
+                    <Navigation className="w-5 h-5 text-[#1456f0]" />
+                    <span>Clinic Wayfinding & Directions</span>
+                  </>
+                )}
+                {screen === 'DIRECTIONS_ROOMS' && (
+                  <>
+                    <MapPin className="w-5 h-5 text-[#1456f0]" />
+                    <span>{selectedDirectionCategory?.name || 'Department Rooms'}</span>
+                  </>
+                )}
+                {screen === 'DIRECTIONS_RESULT' && (
+                  <>
+                    <Compass className="w-5 h-5 text-[#1456f0]" />
+                    <span>Directions & Location</span>
+                  </>
+                )}
               </h2>
               <p className="text-sm text-[#64748b] mt-0.5">
                 {(screen === 'FACE_SCAN' || screen === 'VERIFY_CHOICE' || screen === 'FACE_CONSENT') &&
@@ -2334,6 +3400,9 @@ export const AvatarReceptionView: React.FC = () => {
                 {screen === 'DETAILS_SUMMARY' && 'Summary retrieved directly from clinic system.'}
                 {screen === 'ONBOARDING_FACE' && 'Next time, check in with just a look.'}
                 {screen === 'ONBOARDING_REVIEW' && 'Review details before registering.'}
+                {screen === 'DIRECTIONS_CATEGORIES' && 'Select a department to view available rooms and directions.'}
+                {screen === 'DIRECTIONS_ROOMS' && 'Select a room or station to view walking directions.'}
+                {screen === 'DIRECTIONS_RESULT' && 'Step-by-step navigation from reception.'}
               </p>
             </div>
 
@@ -2379,7 +3448,7 @@ export const AvatarReceptionView: React.FC = () => {
         )}
 
         {/* ===================================================================== */}
-        {/* LANDING SCREEN (Home: 2 Large Glass Quick Buttons)                     */}
+        {/* LANDING SCREEN (Home: 3 Large Glass Quick Action Cards)               */}
         {/* ===================================================================== */}
         {screen === 'IDLE' && (
           <div className="flex-1 w-full h-full flex flex-col justify-between py-2 min-h-0 animate-in fade-in duration-300">
@@ -2389,80 +3458,162 @@ export const AvatarReceptionView: React.FC = () => {
                 Welcome to MantraCare
               </h2>
               <p className="text-base sm:text-lg text-[#475569] mt-1.5 font-medium">
-                Fast, contactless check-in and clinic walk-in registration.
+                Fast, contactless check-in, walk-in registration, and interactive clinic wayfinding.
               </p>
             </div>
 
-            {/* Two Large Clinical Glass Quick Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 my-auto py-2">
+            {/* Four Large Clinical Glass Quick Action Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-5 my-auto py-2">
               {/* 1. I Have an Appointment */}
               <button
                 onClick={() => {
                   handleUserActivity();
                   setFlowType('SCHEDULED');
                   setScreen('FACE_SCAN');
-                  speak('Please look into the camera to check in, or use your phone number below.');
+                  navigate('/reception/appointment');
+                  speak(
+                    currentLanguage === 'hi'
+                      ? 'कृपया चेक इन करने के लिए कैमरे में देखें या फोन नंबर दर्ज करें।'
+                      : 'Please look into the camera to check in, or use your phone number below.'
+                  );
                 }}
-                className="group text-left p-6 lg:p-8 rounded-3xl bg-gradient-to-br from-white/90 via-white/75 to-blue-50/60 hover:from-white hover:to-blue-50/90 backdrop-blur-xl border-2 border-blue-200 hover:border-[#1456f0] shadow-[0_12px_32px_rgba(20,86,240,0.12)] hover:shadow-[0_18px_44px_rgba(20,86,240,0.22)] hover:-translate-y-1 active:translate-y-0 transition-all duration-300 cursor-pointer flex flex-col justify-between relative overflow-hidden min-h-[var(--touch,60px)]"
+                className="group text-left p-5 lg:p-6 rounded-3xl bg-gradient-to-br from-white/90 via-white/75 to-blue-50/60 hover:from-white hover:to-blue-50/90 backdrop-blur-xl border-2 border-blue-200 hover:border-[#1456f0] shadow-[0_12px_32px_rgba(20,86,240,0.12)] hover:shadow-[0_18px_44px_rgba(20,86,240,0.22)] hover:-translate-y-1 active:translate-y-0 transition-all duration-300 cursor-pointer flex flex-col justify-between relative overflow-hidden min-h-[var(--touch,60px)]"
               >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 -mr-8 -mt-8" />
+                <div className="absolute top-0 right-0 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 -mr-6 -mt-6" />
                 
                 <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform duration-300">
-                      <CalendarCheck className="w-7 h-7" />
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform duration-300">
+                      <CalendarCheck className="w-6 h-6" />
                     </div>
-                    <span className="px-3 py-1 rounded-full bg-blue-100/80 text-blue-800 text-xs font-bold tracking-wide uppercase border border-blue-200/60">
+                    <span className="px-2.5 py-0.5 rounded-full bg-blue-100/80 text-blue-800 text-[11px] font-bold tracking-wide uppercase border border-blue-200/60">
                       Scheduled
                     </span>
                   </div>
 
-                  <h3 className="text-xl lg:text-2xl font-bold text-[#181e25] font-display group-hover:text-[#1456f0] transition-colors">
+                  <h3 className="text-lg lg:text-xl font-bold text-[#181e25] font-display group-hover:text-[#1456f0] transition-colors">
                     I Have an Appointment
                   </h3>
-                  <p className="text-sm sm:text-base text-[#64748b] mt-2 leading-relaxed">
-                    Instant face recognition or phone lookup for pre-booked visits & consultations.
+                  <p className="text-xs sm:text-sm text-[#64748b] mt-1.5 leading-relaxed line-clamp-2">
+                    Instant face recognition or phone lookup for pre-booked visits.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 mt-6 pt-4 border-t border-slate-100 text-sm sm:text-base font-bold text-[#1456f0] group-hover:translate-x-1 transition-transform">
+                <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-slate-100 text-xs sm:text-sm font-bold text-[#1456f0] group-hover:translate-x-1 transition-transform">
                   <span>Touch to Check In</span>
                   <ArrowRight className="w-4 h-4" />
                 </div>
               </button>
 
-              {/* 2. I'm a Walk-in Patient (Electric Blue Glass Treatment) */}
+              {/* 2. I'm a Walk-in Patient */}
               <button
                 onClick={() => {
                   handleUserActivity();
                   setFlowType('WALK_IN');
                   setScreen('PHONE');
-                  speak('Welcome! Please enter your mobile phone number on the touch keypad to begin registration.');
+                  navigate('/reception/walk-in');
+                  speak(
+                    currentLanguage === 'hi'
+                      ? 'स्वागत है! पंजीकरण शुरू करने के लिए अपना फोन नंबर दर्ज करें।'
+                      : 'Welcome! Please enter your mobile phone number on the touch keypad to begin registration.'
+                  );
                 }}
-                className="group text-left p-6 lg:p-8 rounded-3xl bg-gradient-to-br from-white/90 via-white/75 to-blue-50/60 hover:from-white hover:to-blue-50/90 backdrop-blur-xl border-2 border-blue-200 hover:border-[#1456f0] shadow-[0_12px_32px_rgba(20,86,240,0.12)] hover:shadow-[0_18px_44px_rgba(20,86,240,0.22)] hover:-translate-y-1 active:translate-y-0 transition-all duration-300 cursor-pointer flex flex-col justify-between relative overflow-hidden min-h-[var(--touch,60px)]"
+                className="group text-left p-5 lg:p-6 rounded-3xl bg-gradient-to-br from-white/90 via-white/75 to-blue-50/60 hover:from-white hover:to-blue-50/90 backdrop-blur-xl border-2 border-blue-200 hover:border-[#1456f0] shadow-[0_12px_32px_rgba(20,86,240,0.12)] hover:shadow-[0_18px_44px_rgba(20,86,240,0.22)] hover:-translate-y-1 active:translate-y-0 transition-all duration-300 cursor-pointer flex flex-col justify-between relative overflow-hidden min-h-[var(--touch,60px)]"
               >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 -mr-8 -mt-8" />
+                <div className="absolute top-0 right-0 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 -mr-6 -mt-6" />
 
                 <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform duration-300">
-                      <UserPlus className="w-7 h-7" />
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform duration-300">
+                      <UserPlus className="w-6 h-6" />
                     </div>
-                    <span className="px-3 py-1 rounded-full bg-blue-100/80 text-blue-800 text-xs font-bold tracking-wide uppercase border border-blue-200/60">
-                      Walk-in / New
+                    <span className="px-2.5 py-0.5 rounded-full bg-blue-100/80 text-blue-800 text-[11px] font-bold tracking-wide uppercase border border-blue-200/60">
+                      Walk-in
                     </span>
                   </div>
 
-                  <h3 className="text-xl lg:text-2xl font-bold text-[#181e25] font-display group-hover:text-[#1456f0] transition-colors">
+                  <h3 className="text-lg lg:text-xl font-bold text-[#181e25] font-display group-hover:text-[#1456f0] transition-colors">
                     I'm a Walk-in Patient
                   </h3>
-                  <p className="text-sm sm:text-base text-[#64748b] mt-2 leading-relaxed">
-                    Register without an appointment, pick your doctor or service, and get an immediate token.
+                  <p className="text-xs sm:text-sm text-[#64748b] mt-1.5 leading-relaxed line-clamp-2">
+                    Register without an appointment, pick your doctor, and get a token.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 mt-6 pt-4 border-t border-slate-100 text-sm sm:text-base font-bold text-[#1456f0] group-hover:translate-x-1 transition-transform">
+                <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-slate-100 text-xs sm:text-sm font-bold text-[#1456f0] group-hover:translate-x-1 transition-transform">
                   <span>Start Registration</span>
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </button>
+
+              {/* 3. Pay My Bill */}
+              <button
+                onClick={() => {
+                  handleUserActivity();
+                  setFlowType('PAYMENT');
+                  setScreen('PHONE');
+                  navigate('/reception/billing');
+                  speak(
+                    currentLanguage === 'hi'
+                      ? 'कृपया अपना बिल और बकाया देखने के लिए अपना मोबाइल नंबर दर्ज करें।'
+                      : 'Please enter your mobile phone number on the touch keypad to look up your bill.'
+                  );
+                }}
+                className="group text-left p-5 lg:p-6 rounded-3xl bg-gradient-to-br from-white/90 via-white/75 to-blue-50/60 hover:from-white hover:to-blue-50/90 backdrop-blur-xl border-2 border-blue-200 hover:border-[#1456f0] shadow-[0_12px_32px_rgba(20,86,240,0.12)] hover:shadow-[0_18px_44px_rgba(20,86,240,0.22)] hover:-translate-y-1 active:translate-y-0 transition-all duration-300 cursor-pointer flex flex-col justify-between relative overflow-hidden min-h-[var(--touch,60px)]"
+              >
+                <div className="absolute top-0 right-0 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 -mr-6 -mt-6" />
+
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform duration-300">
+                      <CreditCard className="w-6 h-6" />
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-blue-100/80 text-blue-800 text-[11px] font-bold tracking-wide uppercase border border-blue-200/60">
+                      Billing
+                    </span>
+                  </div>
+
+                  <h3 className="text-lg lg:text-xl font-bold text-[#181e25] font-display group-hover:text-[#1456f0] transition-colors">
+                    Pay My Bill
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#64748b] mt-1.5 leading-relaxed line-clamp-2">
+                    Quick payment lookup, invoice settlement, and digital receipts.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-slate-100 text-xs sm:text-sm font-bold text-[#1456f0] group-hover:translate-x-1 transition-transform">
+                  <span>Pay or View Dues</span>
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </button>
+
+              {/* 4. Get Directions (Wayfinding) */}
+              <button
+                onClick={() => handleOpenDirections()}
+                className="group text-left p-5 lg:p-6 rounded-3xl bg-gradient-to-br from-white/90 via-white/75 to-blue-50/60 hover:from-white hover:to-blue-50/90 backdrop-blur-xl border-2 border-blue-200 hover:border-[#1456f0] shadow-[0_12px_32px_rgba(20,86,240,0.12)] hover:shadow-[0_18px_44px_rgba(20,86,240,0.22)] hover:-translate-y-1 active:translate-y-0 transition-all duration-300 cursor-pointer flex flex-col justify-between relative overflow-hidden min-h-[var(--touch,60px)]"
+              >
+                <div className="absolute top-0 right-0 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 -mr-6 -mt-6" />
+
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform duration-300">
+                      <Navigation className="w-6 h-6" />
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-blue-100/80 text-blue-800 text-[11px] font-bold tracking-wide uppercase border border-blue-200/60">
+                      Wayfinding
+                    </span>
+                  </div>
+
+                  <h3 className="text-lg lg:text-xl font-bold text-[#181e25] font-display group-hover:text-[#1456f0] transition-colors">
+                    Get Directions
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#64748b] mt-1.5 leading-relaxed line-clamp-2">
+                    Browse doctor rooms, pharmacy, labs, restrooms, and facility directions.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-slate-100 text-xs sm:text-sm font-bold text-[#1456f0] group-hover:translate-x-1 transition-transform">
+                  <span>Browse Locations</span>
                   <ArrowRight className="w-4 h-4" />
                 </div>
               </button>
@@ -3737,6 +4888,202 @@ export const AvatarReceptionView: React.FC = () => {
         )}
 
         {/* ===================================================================== */}
+        {/* DIRECTIONS: CATEGORIES LIST SCREEN                                    */}
+        {/* ===================================================================== */}
+        {screen === 'DIRECTIONS_CATEGORIES' && (
+          <div className="flex-1 flex flex-col justify-between max-w-[680px] mx-auto w-full py-2 animate-in fade-in duration-200 min-h-0">
+            <div className="space-y-3 overflow-y-auto pr-1 my-auto">
+              {directionCategories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => handleSelectDirectionCategory(cat)}
+                  className="w-full p-4 sm:p-5 rounded-2xl bg-white/80 hover:bg-white backdrop-blur-xl border-2 border-slate-200/90 hover:border-blue-400 hover:shadow-[0_12px_28px_rgba(20,86,240,0.12)] transition-all duration-200 cursor-pointer flex items-center justify-between group active:scale-[0.99] min-h-[72px]"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 border border-blue-200/80 flex items-center justify-center group-hover:bg-gradient-to-br group-hover:from-[#1456f0] group-hover:to-[#2563eb] group-hover:text-white group-hover:scale-105 transition-all duration-200 shrink-0 shadow-xs">
+                      <CategoryIcon icon={cat.icon} className="w-6 h-6" />
+                    </div>
+                    <div className="text-left space-y-0.5">
+                      <h3 className="text-lg sm:text-xl font-bold text-slate-900 font-display group-hover:text-[#1456f0] transition-colors">
+                        {cat.name}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-500 font-medium">
+                        {cat.rooms.length} {cat.rooms.length === 1 ? 'room / location' : 'rooms & locations'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400 group-hover:text-[#1456f0] transition-colors">
+                    <span className="text-xs font-bold uppercase tracking-wider hidden sm:inline-block">View Rooms</span>
+                    <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-3 shrink-0">
+              <button
+                onClick={handleResetSession}
+                className="w-full h-14 rounded-full bg-white/80 hover:bg-white backdrop-blur-xl border border-slate-200 text-slate-700 text-base font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs hover:shadow-md active:scale-[0.99]"
+              >
+                <ArrowLeft className="w-5 h-5 text-slate-500" />
+                <span>Back to Home</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* DIRECTIONS: ROOMS IN CATEGORY LIST SCREEN                             */}
+        {/* ===================================================================== */}
+        {screen === 'DIRECTIONS_ROOMS' && selectedDirectionCategory && (
+          <div className="flex-1 flex flex-col justify-between max-w-[680px] mx-auto w-full py-2 animate-in fade-in duration-200 min-h-0">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-200/60">
+                  <CategoryIcon icon={selectedDirectionCategory.icon} className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Category</span>
+                  <h3 className="text-base font-bold text-slate-900 font-display leading-none">
+                    {selectedDirectionCategory.name}
+                  </h3>
+                </div>
+              </div>
+              <button
+                onClick={() => setScreen('DIRECTIONS_CATEGORIES')}
+                className="px-3.5 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>All Categories</span>
+              </button>
+            </div>
+
+            <div className="space-y-3 overflow-y-auto pr-1 my-auto py-2">
+              {selectedDirectionCategory.rooms.map((room) => (
+                <button
+                  key={room.id}
+                  onClick={() => handleSelectDirectionRoom(room, 'browse')}
+                  className="w-full p-4 sm:p-5 rounded-2xl bg-white/80 hover:bg-white backdrop-blur-xl border-2 border-slate-200/90 hover:border-blue-400 hover:shadow-[0_12px_28px_rgba(20,86,240,0.12)] transition-all duration-200 cursor-pointer flex items-center justify-between group active:scale-[0.99] min-h-[64px]"
+                >
+                  <div className="flex items-center gap-3.5 text-left">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 group-hover:bg-blue-50 group-hover:text-blue-600 flex items-center justify-center transition-colors shrink-0">
+                      <MapPin className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-base sm:text-lg font-bold text-slate-900 font-display group-hover:text-[#1456f0] transition-colors">
+                        {room.name}
+                      </h4>
+                      {room.floorWing && (
+                        <p className="text-xs text-slate-500 font-medium flex items-center gap-1 mt-0.5">
+                          <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{room.floorWing}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 text-slate-400 group-hover:text-[#1456f0] transition-colors">
+                    <span className="text-xs font-bold uppercase tracking-wider hidden sm:inline-block">Directions</span>
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-3 shrink-0 flex items-center gap-3">
+              <button
+                onClick={() => setScreen('DIRECTIONS_CATEGORIES')}
+                className="flex-1 h-14 rounded-full bg-white/80 hover:bg-white backdrop-blur-xl border border-slate-200 text-slate-700 text-base font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs hover:shadow-md active:scale-[0.99]"
+              >
+                <ArrowLeft className="w-5 h-5 text-slate-500" />
+                <span>Back to Categories</span>
+              </button>
+              <button
+                onClick={handleResetSession}
+                className="px-6 h-14 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold transition-colors cursor-pointer"
+              >
+                Home
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* DIRECTIONS: ROOM DETAIL / RESULT SCREEN                               */}
+        {/* ===================================================================== */}
+        {screen === 'DIRECTIONS_RESULT' && selectedDirectionRoom && (
+          <div className="flex-1 flex flex-col justify-between max-w-[680px] mx-auto w-full py-2 animate-in fade-in duration-200 min-h-0">
+            <div className="bg-white/90 backdrop-blur-xl rounded-3xl border-2 border-blue-200 p-6 sm:p-8 shadow-xl space-y-6 my-auto">
+              {/* Room Title Header */}
+              <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-100">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-blue-700 uppercase tracking-wider bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                      Destination
+                    </span>
+                    {directionsEntrySource === 'voice_direct' && (
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-emerald-600" />
+                        Direct Match
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-display">
+                    {selectedDirectionRoom.name}
+                  </h3>
+                  {selectedDirectionRoom.floorWing && (
+                    <p className="text-sm font-semibold text-slate-600 flex items-center gap-1.5 pt-0.5">
+                      <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span>{selectedDirectionRoom.floorWing}</span>
+                    </p>
+                  )}
+                </div>
+
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white flex items-center justify-center shadow-lg shadow-blue-500/25 shrink-0">
+                  <Compass className="w-7 h-7 animate-pulse" />
+                </div>
+              </div>
+
+              {/* Walking Instructions Card */}
+              <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-blue-50/80 via-blue-50/40 to-slate-50/60 border border-blue-200 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-blue-900 uppercase tracking-wider font-display">
+                  <Navigation className="w-4 h-4 text-[#1456f0]" />
+                  <span>Walking Instructions</span>
+                </div>
+                <p className="text-base sm:text-lg font-medium text-slate-800 leading-relaxed">
+                  {selectedDirectionRoom.directions}
+                </p>
+              </div>
+
+              {/* Wayfinding Tips */}
+              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm text-slate-600">
+                <MapPin className="w-4 h-4 text-slate-500 shrink-0" />
+                <span>Look for overhead departmental signage or ask any clinic floor assistant.</span>
+              </div>
+            </div>
+
+            {/* Bottom Controls: Back + Done */}
+            <div className="pt-3 shrink-0 flex items-center gap-3">
+              <button
+                onClick={handleDirectionsBack}
+                className="flex-1 h-14 rounded-full bg-white/80 hover:bg-white backdrop-blur-xl border border-slate-200 text-slate-700 text-base font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs hover:shadow-md active:scale-[0.99]"
+              >
+                <ArrowLeft className="w-5 h-5 text-slate-500" />
+                <span>
+                  {directionsEntrySource === 'voice_direct' ? 'Back' : 'Back to Rooms'}
+                </span>
+              </button>
+              <button
+                onClick={handleResetSession}
+                className="flex-1 h-14 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] hover:from-[#1146c7] hover:to-[#1d4ed8] text-white text-base font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 active:scale-[0.99]"
+              >
+                <CheckCircle2 className="w-5 h-5" />
+                <span>Done</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
         {/* GLOBAL FLOATING MIC ASSISTANT BUTTON                                  */}
         {/* ===================================================================== */}
         {screen !== 'IDLE' && isSpeechRecognitionSupported && (
@@ -3829,6 +5176,38 @@ export const AvatarReceptionView: React.FC = () => {
             <UserPlus className={`w-5 h-5 ${flowType === 'WALK_IN' ? 'text-[#60a5fa]' : 'text-[#64748b] group-hover:text-blue-600'}`} />
             <span className="absolute right-14 lg:right-[60px] px-2.5 py-1 bg-slate-900/90 backdrop-blur-md text-white text-xs font-semibold rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-x-1 group-hover:translate-x-0 whitespace-nowrap z-50">
               New Patient
+            </span>
+          </button>
+
+          {/* Pay Bill Button */}
+          <button
+            onClick={() => handleNavClick('payment')}
+            className={`w-12 h-12 lg:w-13 lg:h-13 rounded-full flex flex-col items-center justify-center transition-all duration-300 cursor-pointer relative group ${
+              flowType === 'PAYMENT' && screen !== 'IDLE'
+                ? 'bg-gradient-to-br from-[#181e25] to-[#2c3e50] text-white shadow-[0_10px_25px_rgba(24,30,37,0.30)] ring-2 ring-blue-500/50 scale-105'
+                : 'bg-white/80 hover:bg-white backdrop-blur-xl shadow-[0_8px_20px_rgba(24,30,37,0.08)] hover:shadow-[0_12px_28px_rgba(20,86,240,0.18)] hover:scale-108 active:scale-95 text-[#45515e] hover:text-[#181e25]'
+            }`}
+            title="Pay Bill"
+          >
+            <CreditCard className={`w-5 h-5 ${flowType === 'PAYMENT' && screen !== 'IDLE' ? 'text-[#60a5fa]' : 'text-[#64748b] group-hover:text-blue-600'}`} />
+            <span className="absolute right-14 lg:right-[60px] px-2.5 py-1 bg-slate-900/90 backdrop-blur-md text-white text-xs font-semibold rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-x-1 group-hover:translate-x-0 whitespace-nowrap z-50">
+              Pay Bill
+            </span>
+          </button>
+
+          {/* Directions Button */}
+          <button
+            onClick={() => handleNavClick('directions')}
+            className={`w-12 h-12 lg:w-13 lg:h-13 rounded-full flex flex-col items-center justify-center transition-all duration-300 cursor-pointer relative group ${
+              screen === 'DIRECTIONS_CATEGORIES' || screen === 'DIRECTIONS_ROOMS' || screen === 'DIRECTIONS_RESULT'
+                ? 'bg-gradient-to-br from-[#181e25] to-[#2c3e50] text-white shadow-[0_10px_25px_rgba(24,30,37,0.30)] ring-2 ring-blue-500/50 scale-105'
+                : 'bg-white/80 hover:bg-white backdrop-blur-xl shadow-[0_8px_20px_rgba(24,30,37,0.08)] hover:shadow-[0_12px_28px_rgba(20,86,240,0.18)] hover:scale-108 active:scale-95 text-[#45515e] hover:text-[#181e25]'
+            }`}
+            title="Directions"
+          >
+            <Navigation className={`w-5 h-5 ${screen === 'DIRECTIONS_CATEGORIES' || screen === 'DIRECTIONS_ROOMS' || screen === 'DIRECTIONS_RESULT' ? 'text-[#60a5fa]' : 'text-[#64748b] group-hover:text-blue-600'}`} />
+            <span className="absolute right-14 lg:right-[60px] px-2.5 py-1 bg-slate-900/90 backdrop-blur-md text-white text-xs font-semibold rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-x-1 group-hover:translate-x-0 whitespace-nowrap z-50">
+              Directions
             </span>
           </button>
 
