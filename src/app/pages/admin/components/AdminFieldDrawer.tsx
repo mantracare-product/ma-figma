@@ -159,15 +159,14 @@ const CONSOLIDATED_FIELD_TYPES: {
   {
     category: "Options & Logic",
     items: [
-      { id: "list", label: "List", description: "Typed options, search filters, sorting, and 2-way sync" },
-      { id: "new_list", label: "New List", description: "Basic List, Advanced List, or Advance 2 with row overrides" },
+      { id: "new_list", label: "List", description: "Basic (single column) or Advance List (Multi Column) with row overrides" },
       { id: "yes_no", label: "Yes / No", description: "Binary boolean toggle" },
     ],
   },
   {
     category: "Advanced & Media",
     items: [
-      { id: "composite", label: "Composite Field", description: "Multi-field records presented as Table View or Group View" },
+      { id: "composite", label: "Group Field", description: "Multi-field records presented as Table View or Group View" },
       { id: "crm_bind", label: "Link to Mantra Entities", description: "Dynamically link to team members, clients, or services" },
       { id: "media", label: "Media Attach", description: "Image, document, or audio upload attachments" },
       { id: "signature", label: "Digital Signature", description: "Interactive touchscreen drawing signature pad" },
@@ -372,7 +371,7 @@ export function generateSampleCsvForComposite(
   compositeName: string = "composite_options"
 ): void {
   if (!columns || columns.length === 0) {
-    toast.error("No columns found in selected composite field to generate sample CSV.");
+    toast.error("No columns found in selected group field to generate sample CSV.");
     return;
   }
 
@@ -1514,8 +1513,13 @@ export function AdminFieldDrawer({
     return advanceLists.find((l) => l.id === form.advanceListId);
   }, [advanceLists, form.advanceListId]);
 
-  const handleSelectAdvanceList = (listId: string) => {
-    const targetList = advanceLists.find((l) => l.id === listId);
+  const handleSelectAdvanceList = (listId: string, customListPool?: AdvanceListDefinition[]) => {
+    const pool = customListPool && customListPool.length > 0
+      ? customListPool
+      : advanceLists.length > 0
+      ? advanceLists
+      : getStoredAdvanceLists();
+    const targetList = pool.find((l) => l.id === listId) || getStoredAdvanceLists().find((l) => l.id === listId);
     if (!targetList) {
       setForm((p) => ({
         ...p,
@@ -2888,7 +2892,7 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* 3D. Composite Field (Group of Existing Fields) */}
+          {/* 3D. Group Field (Group of Existing Fields) */}
           {form.primaryCategory === "composite" && (
             <div className="space-y-3.5 p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl">
               <div>
@@ -2897,7 +2901,7 @@ export function AdminFieldDrawer({
                     <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Grouped Fields ({form.tableColumns.length})
                     </label>
-                    <InfoTooltip text="Group existing fields in this module into this composite structure. Each sub-field inherits its format, validation, and type rules without separate configuration." size="sm" />
+                    <InfoTooltip text="Group existing fields in this module into this group structure. Each sub-field inherits its format, validation, and type rules without separate configuration." size="sm" />
                   </div>
 
                   {!isReadOnly && (
@@ -2969,7 +2973,7 @@ export function AdminFieldDrawer({
                       No Fields Grouped Yet
                     </p>
                     <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
-                      Select existing fields from this module to group into this composite field, or click <strong>+ Add Field</strong> to create a new one.
+                      Select existing fields from this module to group into this group field, or click <strong>+ Add Field</strong> to create a new one.
                     </p>
                     {!isReadOnly && (
                       <div className="flex items-center justify-center pt-1">
@@ -3047,7 +3051,7 @@ export function AdminFieldDrawer({
                   <label className="block text-xs font-semibold text-slate-700">
                     Display Mode
                   </label>
-                  <InfoTooltip text="Choose how this composite field appears on records. Data structure is shared between Table View and Group View." size="sm" />
+                  <InfoTooltip text="Choose how this group field appears on records. Data structure is shared between Table View and Group View." size="sm" />
                 </div>
                 <AdminSelect
                   value={form.compositeDisplayMode || "table"}
@@ -3814,16 +3818,15 @@ export function AdminFieldDrawer({
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <label className="block text-xs font-semibold text-slate-700">List Type</label>
-                  <InfoTooltip text="Choose between Basic List, Advanced List, or Advance 2." size="sm" />
+                  <InfoTooltip text="Choose between Basic (single column) or Advance List (Multi Column)." size="sm" />
                 </div>
                 <AdminSelect
-                  value={form.newListSourceMode}
+                  value={form.newListSourceMode === "advance_2" ? "manual" : form.newListSourceMode}
                   disabled={isReadOnly}
                   onChange={(val) => setForm((p) => ({ ...p, newListSourceMode: val as any }))}
                   options={[
-                    { value: "manual", label: "Basic List" },
-                    { value: "option_list", label: "Advanced List" },
-                    { value: "advance_2", label: "Advance 2" },
+                    { value: "manual", label: "Basic (single column)" },
+                    { value: "option_list", label: "Advance List(Multi Column)" },
                   ]}
                 />
               </div>
@@ -3977,15 +3980,15 @@ export function AdminFieldDrawer({
               )}
 
               {/* ─────────────────────────────────────────────────────────────
-                  MODE 2 — ADVANCED LIST (Linked to Existing Composite Field)
+                  MODE 2 — ADVANCED LIST (Linked to Existing Group Field)
                  ───────────────────────────────────────────────────────────── */}
               {form.newListSourceMode === "option_list" && (
                 <div className="space-y-4 pt-1">
-                  {/* Select Source Composite Field */}
+                  {/* Select Source Group Field */}
                   <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                        Source Composite Field <span className="text-red-500">*</span>
+                        Source Group Field <span className="text-red-500">*</span>
                       </label>
                       {!isReadOnly && availableCompositeFieldsInModule.length > 0 && (
                         <button
@@ -4008,9 +4011,9 @@ export function AdminFieldDrawer({
                           value={form.newListSourceCompositeKey}
                           disabled={isReadOnly}
                           onChange={(val) => handleSelectCompositeForNewList(val)}
-                          placeholder="— Select an existing composite field —"
+                          placeholder="— Select an existing group field —"
                           options={[
-                            { value: "", label: "— Select an existing composite field —" },
+                            { value: "", label: "— Select an existing group field —" },
                             ...availableCompositeFieldsInModule.map((cf) => ({
                               value: cf.key,
                               label: `${cf.label} (${cf.key})`,
@@ -4029,7 +4032,7 @@ export function AdminFieldDrawer({
                       </div>
                     ) : (
                       <div className="p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl text-center space-y-2.5">
-                        <p className="text-xs font-medium text-slate-600">No composite fields found in this module</p>
+                        <p className="text-xs font-medium text-slate-600">No group fields found in this module</p>
                         {!isReadOnly && (
                           <button
                             type="button"
@@ -4040,7 +4043,7 @@ export function AdminFieldDrawer({
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 font-semibold text-xs rounded-lg border border-blue-200 transition-colors cursor-pointer"
                           >
                             <Plus className="w-3.5 h-3.5" />
-                            <span>Create Composite Field</span>
+                            <span>Create Group Field</span>
                           </button>
                         )}
                       </div>
@@ -4061,18 +4064,15 @@ export function AdminFieldDrawer({
 
                       {/* Matrix Grid */}
                       <div className="border border-slate-200 rounded-lg overflow-x-auto">
-                        <table className="w-full min-w-[480px] text-left text-xs border-collapse">
+                        <table className="w-full min-w-[440px] text-left text-xs border-collapse">
                           <thead>
                             <tr className="bg-slate-100/80 border-b border-slate-200 text-[11px] font-bold text-slate-700">
                               <th className="px-3 py-2 min-w-[140px]">Column Name</th>
-                              <th className="px-2 py-2 text-center w-20">Type</th>
-                              <th className="px-2 py-2 text-center w-20">
+                              <th className="px-2 py-2 text-center w-24">Type</th>
+                              <th className="px-2 py-2 text-center w-24">
                                 <span className="text-blue-700">Primary</span>
                               </th>
-                              <th className="px-2 py-2 text-center w-20">
-                                <span className="text-slate-600">Disable</span>
-                              </th>
-                              <th className="px-2 py-2 text-center w-20">
+                              <th className="px-2 py-2 text-center w-24">
                                 <span className="text-emerald-700">Editable</span>
                               </th>
                             </tr>
@@ -4089,7 +4089,6 @@ export function AdminFieldDrawer({
                               };
 
                               const isPrimary = Boolean(existingCfg.isPrimary);
-                              const isDisable = Boolean(existingCfg.isDisable);
                               const isEditable = Boolean(existingCfg.isEditable);
 
                               return (
@@ -4128,7 +4127,7 @@ export function AdminFieldDrawer({
                                               columnName: c.name,
                                               columnType: c.inputType,
                                               isPrimary: selectedThis,
-                                              isDisable: selectedThis ? false : cfg.isDisable,
+                                              isDisable: false,
                                               isEditable: selectedThis ? false : cfg.isEditable,
                                             };
                                           });
@@ -4138,49 +4137,13 @@ export function AdminFieldDrawer({
                                       />
                                     </label>
                                   </td>
-                                  {/* 2. Disable Checkbox (Multiple allowed) */}
+                                  {/* 2. Editable Checkbox */}
                                   <td className="px-2 py-2.5 text-center">
                                     <label className={`inline-flex items-center justify-center p-1 ${isPrimary || isReadOnly ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}>
                                       <input
                                         type="checkbox"
                                         disabled={isPrimary || isReadOnly}
-                                        checked={isDisable}
-                                        onChange={(e) => {
-                                          const checked = e.target.checked;
-                                          const next = selectedCompositeColumns.map((c) => {
-                                            const cfg = form.newListColumnConfigs.find((x) => x.columnId === c.id) || {
-                                              columnId: c.id,
-                                              columnName: c.name,
-                                              columnType: c.inputType,
-                                              isPrimary: c.id === col.id ? isPrimary : false,
-                                              isDisable: false,
-                                              isEditable: true,
-                                            };
-                                            if (c.id === col.id) {
-                                              return {
-                                                ...cfg,
-                                                columnId: c.id,
-                                                columnName: c.name,
-                                                columnType: c.inputType,
-                                                isDisable: checked,
-                                                isEditable: checked ? false : cfg.isEditable,
-                                              };
-                                            }
-                                            return cfg;
-                                          });
-                                          setForm((p) => ({ ...p, newListColumnConfigs: next }));
-                                        }}
-                                        className="w-4 h-4 text-slate-600 rounded cursor-pointer accent-slate-600"
-                                      />
-                                    </label>
-                                  </td>
-                                  {/* 3. Editable Checkbox (Multiple allowed) */}
-                                  <td className="px-2 py-2.5 text-center">
-                                    <label className={`inline-flex items-center justify-center p-1 ${isPrimary || isReadOnly ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}>
-                                      <input
-                                        type="checkbox"
-                                        disabled={isPrimary || isReadOnly}
-                                        checked={isEditable}
+                                        checked={isPrimary ? false : isEditable}
                                         onChange={(e) => {
                                           const checked = e.target.checked;
                                           const next = selectedCompositeColumns.map((c) => {
@@ -4199,7 +4162,7 @@ export function AdminFieldDrawer({
                                                 columnName: c.name,
                                                 columnType: c.inputType,
                                                 isEditable: checked,
-                                                isDisable: checked ? false : cfg.isDisable,
+                                                isDisable: false,
                                               };
                                             }
                                             return cfg;
@@ -4221,11 +4184,14 @@ export function AdminFieldDrawer({
 
                   {/* Defined Option Items / Records for Option List */}
                   {selectedCompositeColumns.length > 0 && (
-                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                          Defined Option Rows ({form.options.length})
-                        </span>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2 px-1">
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            Option Rows ({form.options.length})
+                          </label>
+                          <InfoTooltip text="Options added to this list reflect the spreadsheet view of the selected group field." size="sm" />
+                        </div>
 
                         {!isReadOnly && canClientAddOptions && (
                           <div className="flex items-center gap-1.5">
@@ -4269,128 +4235,201 @@ export function AdminFieldDrawer({
                       </div>
 
                       {form.options.length === 0 ? (
-                        <div className="p-4 bg-white border border-slate-200 border-dashed rounded-xl text-xs text-slate-400 text-center">
-                          No option rows defined yet. Click &ldquo;+ Add Option Row&rdquo; above to add options.
+                        <div className="p-4 text-center border border-slate-200 rounded-xl bg-white shadow-2xs space-y-1.5">
+                          <p className="text-xs text-slate-400">
+                            Table starts empty by default.
+                          </p>
+                          {!isReadOnly && canClientAddOptions && (
+                            <div className="flex justify-end pt-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newIdx = 1;
+                                  const initialRowVals: Record<string, any> = {};
+                                  selectedCompositeColumns.forEach((c) => {
+                                    initialRowVals[c.id] = "";
+                                  });
+                                  setForm((p) => ({
+                                    ...p,
+                                    options: [
+                                      {
+                                        id: Date.now() + newIdx,
+                                        label: "",
+                                        value: initialRowVals,
+                                        index: newIdx,
+                                      },
+                                    ],
+                                  }));
+                                }}
+                                className="text-xs font-semibold flex items-center gap-1 cursor-pointer bg-transparent p-0 text-blue-600 hover:text-blue-700 hover:underline"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Pre-seed a Default Row</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ) : (
-                        <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-                          {form.options.map((opt, optIdx) => {
-                            const primaryCol = form.newListColumnConfigs.find((c) => c.isPrimary)?.columnId || selectedCompositeColumns[0]?.id;
-                            const rowVals: Record<string, any> = (typeof opt.value === "object" && opt.value !== null)
-                              ? opt.value
-                              : { [primaryCol]: opt.label || opt.value || "" };
-
-                            return (
-                              <div
-                                key={opt.id || optIdx}
-                                className={`p-3 bg-slate-50/60 border rounded-xl space-y-2 transition-colors ${
-                                  opt.isDefault ? "border-blue-300 bg-blue-50/20" : "border-slate-200 hover:border-slate-300"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded">
-                                      Row #{optIdx + 1}
-                                    </span>
-                                    {opt.isDefault && (
-                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200/80">
-                                        <Star className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
-                                        <span>Default Row</span>
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {!isReadOnly && (
-                                    <div className="flex items-center gap-0.5">
-                                      <button
-                                        type="button"
-                                        disabled={optIdx === 0}
-                                        onClick={() => moveOption(optIdx, -1)}
-                                        className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
-                                        title="Move up"
-                                      >
-                                        <ChevronUp className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={optIdx === form.options.length - 1}
-                                        onClick={() => moveOption(optIdx, 1)}
-                                        className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
-                                        title="Move down"
-                                      >
-                                        <ChevronDown className="w-3.5 h-3.5" />
-                                      </button>
-                                      <OptionRowMenu
-                                        isDefault={opt.isDefault}
-                                        onToggleDefault={() => {
-                                          const isCurrentlyDefault = opt.isDefault;
-                                          if (isCurrentlyDefault) {
-                                            updateOption(optIdx, { isDefault: false });
-                                            if (form.defaultValue === opt.id || form.defaultValue === opt.value) {
-                                              setForm((p) => ({ ...p, defaultValue: undefined }));
-                                            }
-                                          } else {
-                                            if (form.selectionMode === "single") {
-                                              const updated = form.options.map((o, i) => ({
-                                                ...o,
-                                                isDefault: i === optIdx,
-                                              }));
-                                              setForm((p) => ({
-                                                ...p,
-                                                options: updated,
-                                                defaultValue: opt.id || opt.value,
-                                              }));
-                                            } else {
-                                              updateOption(optIdx, { isDefault: true });
-                                            }
-                                          }
-                                        }}
-                                        onDelete={() => removeOption(optIdx)}
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-2">
+                        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                          <div className="overflow-x-auto max-h-96">
+                            <table className="w-full text-left border-collapse">
+                              <thead>
+                                <tr className="bg-slate-50/80 border-b border-slate-200 sticky top-0 z-10">
+                                  <th className="w-8 px-2.5 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">
+                                    #
+                                  </th>
                                   {selectedCompositeColumns.map((col) => {
                                     const colCfg = form.newListColumnConfigs.find((c) => c.columnId === col.id);
                                     const isPrimary = colCfg?.isPrimary ?? (col.id === selectedCompositeColumns[0]?.id);
-                                    const currentVal = rowVals[col.id] ?? (isPrimary ? opt.label : "");
-
                                     return (
-                                      <div key={col.id} className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-slate-600 flex items-center gap-1">
+                                      <th
+                                        key={col.id}
+                                        className="px-3 py-2 text-[11px] font-bold text-slate-600 uppercase tracking-wider min-w-[130px]"
+                                      >
+                                        <div className="flex items-center gap-1.5">
                                           <span>{col.name}</span>
                                           {isPrimary && (
-                                            <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.2 rounded font-normal">
-                                              Primary
+                                            <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.2 rounded font-normal lowercase">
+                                              primary
                                             </span>
                                           )}
-                                        </label>
-                                        <FieldInputRenderer
-                                          subField={col}
-                                          value={currentVal}
-                                          disabled={isReadOnly}
-                                          onChange={(subVal) => {
-                                            const nextVals = { ...rowVals, [col.id]: subVal };
-                                            const primaryColId = form.newListColumnConfigs.find((c) => c.isPrimary)?.columnId || selectedCompositeColumns[0]?.id;
-                                            const updatedLabel = isPrimary
-                                              ? (typeof subVal === "string" ? subVal : (Array.isArray(subVal) ? subVal.join(", ") : String(subVal ?? "")))
-                                              : (nextVals[primaryColId] || opt.label || (typeof subVal === "string" ? subVal : ""));
-                                            updateOption(optIdx, {
-                                              label: updatedLabel,
-                                              value: nextVals,
-                                            });
-                                          }}
-                                          isSubField={true}
-                                        />
-                                      </div>
+                                        </div>
+                                      </th>
                                     );
                                   })}
-                                </div>
-                              </div>
-                            );
-                          })}
+                                  <th className="w-20 px-2 py-2 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                    Default
+                                  </th>
+                                  <th className="w-16 px-2 py-2 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                    Actions
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {form.options.map((opt, optIdx) => {
+                                  const primaryCol = form.newListColumnConfigs.find((c) => c.isPrimary)?.columnId || selectedCompositeColumns[0]?.id;
+                                  const rowVals: Record<string, any> = (typeof opt.value === "object" && opt.value !== null)
+                                    ? opt.value
+                                    : { [primaryCol]: opt.label || opt.value || "" };
+
+                                  return (
+                                    <tr
+                                      key={opt.id || optIdx}
+                                      className={`hover:bg-slate-50/50 transition-colors ${
+                                        opt.isDefault ? "bg-blue-50/30" : ""
+                                      }`}
+                                    >
+                                      <td className="px-2.5 py-2 text-center text-[10px] font-bold text-slate-400 bg-slate-50/30">
+                                        {optIdx + 1}
+                                      </td>
+
+                                      {selectedCompositeColumns.map((col) => {
+                                        const colCfg = form.newListColumnConfigs.find((c) => c.columnId === col.id);
+                                        const isPrimary = colCfg?.isPrimary ?? (col.id === selectedCompositeColumns[0]?.id);
+                                        const currentVal = rowVals[col.id] ?? (isPrimary ? opt.label : "");
+
+                                        return (
+                                          <td key={col.id} className="px-2 py-1.5 min-w-[130px]">
+                                            <FieldInputRenderer
+                                              subField={col}
+                                              value={currentVal}
+                                              disabled={isReadOnly}
+                                              onChange={(subVal) => {
+                                                const nextVals = { ...rowVals, [col.id]: subVal };
+                                                const primaryColId = form.newListColumnConfigs.find((c) => c.isPrimary)?.columnId || selectedCompositeColumns[0]?.id;
+                                                const updatedLabel = isPrimary
+                                                  ? (typeof subVal === "string" ? subVal : (Array.isArray(subVal) ? subVal.join(", ") : String(subVal ?? "")))
+                                                  : (nextVals[primaryColId] || opt.label || (typeof subVal === "string" ? subVal : ""));
+                                                updateOption(optIdx, {
+                                                  label: updatedLabel,
+                                                  value: nextVals,
+                                                });
+                                              }}
+                                              isSubField={true}
+                                            />
+                                          </td>
+                                        );
+                                      })}
+
+                                      {/* Default Toggle Button */}
+                                      <td className="px-2 py-1.5 text-center">
+                                        <button
+                                          type="button"
+                                          disabled={isReadOnly}
+                                          onClick={() => {
+                                            const isCurrentlyDefault = opt.isDefault;
+                                            if (isCurrentlyDefault) {
+                                              updateOption(optIdx, { isDefault: false });
+                                              if (form.defaultValue === opt.id || form.defaultValue === opt.value) {
+                                                setForm((p) => ({ ...p, defaultValue: undefined }));
+                                              }
+                                            } else {
+                                              if (form.selectionMode === "single") {
+                                                const updated = form.options.map((o, i) => ({
+                                                  ...o,
+                                                  isDefault: i === optIdx,
+                                                }));
+                                                setForm((p) => ({
+                                                  ...p,
+                                                  options: updated,
+                                                  defaultValue: opt.id || opt.value,
+                                                }));
+                                              } else {
+                                                updateOption(optIdx, { isDefault: true });
+                                              }
+                                            }
+                                          }}
+                                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                                            opt.isDefault
+                                              ? "bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs"
+                                              : "bg-slate-100 text-slate-400 hover:text-slate-600 hover:bg-slate-200 border border-transparent"
+                                          }`}
+                                          title={opt.isDefault ? "Default Option (Click to unset)" : "Set as Default"}
+                                        >
+                                          <Star className={`w-3 h-3 ${opt.isDefault ? "fill-blue-600 text-blue-600" : ""}`} />
+                                          <span className="text-[10px]">{opt.isDefault ? "Default" : "Set"}</span>
+                                        </button>
+                                      </td>
+
+                                      {/* Reorder & Delete Actions */}
+                                      <td className="px-2 py-1.5 text-center">
+                                        {!isReadOnly && (
+                                          <div className="flex items-center justify-center gap-0.5">
+                                            <button
+                                              type="button"
+                                              disabled={optIdx === 0}
+                                              onClick={() => moveOption(optIdx, -1)}
+                                              className="p-1 text-slate-300 hover:text-slate-600 disabled:opacity-20 cursor-pointer"
+                                              title="Move up"
+                                            >
+                                              <ChevronUp className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              disabled={optIdx === form.options.length - 1}
+                                              onClick={() => moveOption(optIdx, 1)}
+                                              className="p-1 text-slate-300 hover:text-slate-600 disabled:opacity-20 cursor-pointer"
+                                              title="Move down"
+                                            >
+                                              <ChevronDown className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => removeOption(optIdx)}
+                                              className="p-1 text-slate-300 hover:text-red-600 cursor-pointer rounded"
+                                              title="Delete row"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -4575,12 +4614,15 @@ export function AdminFieldDrawer({
                     </div>
                   )}
 
-                  {/* Defined Option Items / Records for Advance List 2 */}
+                  {/* Defined Option Items / Records for Advance List 2 (Table View) */}
                   {selectedAdvanceListDef && selectedAdvanceListDef.columns.length > 0 && (
                     <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                          Defined Option Rows ({form.options.length})
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>Defined Option Rows</span>
+                          <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-semibold">
+                            {form.options.length}
+                          </span>
                         </span>
 
                         {!isReadOnly && canClientAddOptions && (
@@ -4629,57 +4671,94 @@ export function AdminFieldDrawer({
                           No option rows defined yet. Click &ldquo;+ Add Option Row&rdquo; or &ldquo;Import CSV&rdquo; above.
                         </div>
                       ) : (
-                        <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-                          {form.options.map((opt, optIdx) => {
-                            const primaryCol = selectedAdvanceListDef.columns.find((c) => c.isPrimary) || selectedAdvanceListDef.columns[0];
-                            const rowVals: Record<string, any> =
-                              typeof opt.value === "object" && opt.value !== null
-                                ? opt.value
-                                : { [primaryCol?.id || "col_1"]: opt.label || opt.value || "" };
-
-                            return (
-                              <div
-                                key={opt.id || optIdx}
-                                className={`p-3 bg-slate-50/60 border rounded-xl space-y-2 transition-colors ${
-                                  opt.isDefault ? "border-blue-300 bg-blue-50/20" : "border-slate-200 hover:border-slate-300"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded">
-                                      Row #{optIdx + 1}
-                                    </span>
-                                    {opt.isDefault && (
-                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200/80">
-                                        <Star className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
-                                        <span>Default Row</span>
+                        <div className="border border-slate-200 rounded-lg overflow-x-auto max-h-96">
+                          <table className="w-full text-left text-xs border-collapse min-w-[480px]">
+                            <thead className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 shadow-2xs">
+                              <tr className="text-[11px] font-bold text-slate-700">
+                                <th className="px-2.5 py-2 text-center w-12 text-slate-500 font-mono">#</th>
+                                {selectedAdvanceListDef.columns.map((col) => (
+                                  <th key={col.id} className="px-3 py-2 min-w-[140px]">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-semibold text-slate-800">{col.name}</span>
+                                      {col.isPrimary && (
+                                        <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                                          Primary
+                                        </span>
+                                      )}
+                                      <span className="text-[9px] font-mono text-slate-400 uppercase font-normal">
+                                        ({col.type})
                                       </span>
-                                    )}
-                                  </div>
+                                    </div>
+                                  </th>
+                                ))}
+                                <th className="px-2 py-2 text-center w-16">Default</th>
+                                {!isReadOnly && <th className="px-2 py-2 text-center w-20">Actions</th>}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                              {form.options.map((opt, optIdx) => {
+                                const primaryCol = selectedAdvanceListDef.columns.find((c) => c.isPrimary) || selectedAdvanceListDef.columns[0];
+                                const rowVals: Record<string, any> =
+                                  typeof opt.value === "object" && opt.value !== null
+                                    ? opt.value
+                                    : { [primaryCol?.id || "col_1"]: opt.label || opt.value || "" };
 
-                                  {!isReadOnly && (
-                                    <div className="flex items-center gap-0.5">
+                                return (
+                                  <tr
+                                    key={opt.id || optIdx}
+                                    className={`hover:bg-slate-50/70 transition-colors ${
+                                      opt.isDefault ? "bg-blue-50/30" : ""
+                                    }`}
+                                  >
+                                    {/* Row Index */}
+                                    <td className="px-2.5 py-2 text-center font-mono font-bold text-slate-400 text-[11px]">
+                                      {optIdx + 1}
+                                    </td>
+
+                                    {/* Column Input Cells */}
+                                    {selectedAdvanceListDef.columns.map((col) => {
+                                      const isPrimary = col.isPrimary;
+                                      const currentVal = rowVals[col.id] ?? (isPrimary ? opt.label : "");
+
+                                      return (
+                                        <td key={col.id} className="px-2.5 py-1.5">
+                                          <input
+                                            type={col.type === "number" ? "number" : "text"}
+                                            value={currentVal}
+                                            disabled={isReadOnly}
+                                            placeholder={`${col.name}...`}
+                                            onChange={(e) => {
+                                              const rawVal = e.target.value;
+                                              const nextVal =
+                                                col.type === "number"
+                                                  ? rawVal === ""
+                                                    ? 0
+                                                    : isNaN(parseFloat(rawVal))
+                                                    ? 0
+                                                    : parseFloat(rawVal)
+                                                  : rawVal;
+                                              const nextVals = { ...rowVals, [col.id]: nextVal };
+                                              const primaryColId = primaryCol?.id || selectedAdvanceListDef.columns[0]?.id;
+                                              const updatedLabel = isPrimary
+                                                ? String(nextVal)
+                                                : nextVals[primaryColId] || opt.label || String(nextVal);
+                                              updateOption(optIdx, {
+                                                label: updatedLabel,
+                                                value: nextVals,
+                                              });
+                                            }}
+                                            className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-medium text-slate-800 transition-all"
+                                          />
+                                        </td>
+                                      );
+                                    })}
+
+                                    {/* Default Star Toggle */}
+                                    <td className="px-2 py-1.5 text-center">
                                       <button
                                         type="button"
-                                        disabled={optIdx === 0}
-                                        onClick={() => moveOption(optIdx, -1)}
-                                        className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
-                                        title="Move up"
-                                      >
-                                        <ChevronUp className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={optIdx === form.options.length - 1}
-                                        onClick={() => moveOption(optIdx, 1)}
-                                        className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
-                                        title="Move down"
-                                      >
-                                        <ChevronDown className="w-3.5 h-3.5" />
-                                      </button>
-                                      <OptionRowMenu
-                                        isDefault={opt.isDefault}
-                                        onToggleDefault={() => {
+                                        disabled={isReadOnly}
+                                        onClick={() => {
                                           const isCurrentlyDefault = opt.isDefault;
                                           if (isCurrentlyDefault) {
                                             updateOption(optIdx, { isDefault: false });
@@ -4702,55 +4781,55 @@ export function AdminFieldDrawer({
                                             }
                                           }
                                         }}
-                                        onDelete={() => removeOption(optIdx)}
-                                      />
-                                    </div>
-                                  )}
-                                </div>
+                                        className={`p-1 rounded cursor-pointer transition-colors ${
+                                          opt.isDefault
+                                            ? "text-amber-500 hover:text-amber-600 bg-amber-50"
+                                            : "text-slate-300 hover:text-slate-500"
+                                        }`}
+                                        title={opt.isDefault ? "Default option (Click to remove)" : "Set as default option"}
+                                      >
+                                        <Star className={`w-3.5 h-3.5 ${opt.isDefault ? "fill-amber-400" : ""}`} />
+                                      </button>
+                                    </td>
 
-                                <div className="grid grid-cols-2 gap-2">
-                                  {selectedAdvanceListDef.columns.map((col) => {
-                                    const isPrimary = col.isPrimary;
-                                    const currentVal = rowVals[col.id] ?? (isPrimary ? opt.label : "");
-
-                                    return (
-                                      <div key={col.id} className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-slate-600 flex items-center justify-between">
-                                          <div className="flex items-center gap-1">
-                                            <span>{col.name}</span>
-                                            {isPrimary && (
-                                              <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.2 rounded font-normal">
-                                                Primary
-                                              </span>
-                                            )}
-                                          </div>
-                                          <span className="text-[9px] font-mono text-slate-400 uppercase">{col.type}</span>
-                                        </label>
-                                        <input
-                                          type={col.type === "number" ? "number" : "text"}
-                                          value={currentVal}
-                                          disabled={isReadOnly}
-                                          placeholder={`${col.name}...`}
-                                          onChange={(e) => {
-                                            const rawVal = e.target.value;
-                                            const nextVal = col.type === "number" ? (rawVal === "" ? 0 : isNaN(parseFloat(rawVal)) ? 0 : parseFloat(rawVal)) : rawVal;
-                                            const nextVals = { ...rowVals, [col.id]: nextVal };
-                                            const primaryColId = primaryCol?.id || selectedAdvanceListDef.columns[0]?.id;
-                                            const updatedLabel = isPrimary ? String(nextVal) : (nextVals[primaryColId] || opt.label || String(nextVal));
-                                            updateOption(optIdx, {
-                                              label: updatedLabel,
-                                              value: nextVals,
-                                            });
-                                          }}
-                                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-500 font-medium text-slate-800"
-                                        />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
+                                    {/* Row Actions */}
+                                    {!isReadOnly && (
+                                      <td className="px-2 py-1.5 text-center">
+                                        <div className="flex items-center justify-center gap-0.5">
+                                          <button
+                                            type="button"
+                                            disabled={optIdx === 0}
+                                            onClick={() => moveOption(optIdx, -1)}
+                                            className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                            title="Move up"
+                                          >
+                                            <ChevronUp className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={optIdx === form.options.length - 1}
+                                            onClick={() => moveOption(optIdx, 1)}
+                                            className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                            title="Move down"
+                                          >
+                                            <ChevronDown className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => removeOption(optIdx)}
+                                            className="p-1 text-slate-400 hover:text-red-600 cursor-pointer transition-colors"
+                                            title="Delete row"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    )}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
                       )}
                     </div>
@@ -4786,43 +4865,46 @@ export function AdminFieldDrawer({
                 />
               </div>
 
-              {/* 2. Search Bar Toggle */}
-              <div className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <Search className="w-4 h-4 text-slate-500 shrink-0" />
-                  <span className="text-xs text-slate-700 font-medium">Search Bar</span>
-                  <InfoTooltip text="Enable search input within the dropdown." size="sm" />
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={form.allowSearch}
-                    disabled={isReadOnly}
-                    onChange={(e) => setForm((p) => ({ ...p, allowSearch: e.target.checked }))}
-                    className="sr-only peer"
-                  />
-                  <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
+              {/* 2. Search Bar & Custom Options Settings (Shown only for Basic (single column); inherited for Advance List (Multi Column)) */}
+              {form.newListSourceMode === "manual" ? (
+                <>
+                  <div className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <Search className="w-4 h-4 text-slate-500 shrink-0" />
+                      <span className="text-xs text-slate-700 font-medium">Search Bar</span>
+                      <InfoTooltip text="Enable search input within the dropdown." size="sm" />
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={form.allowSearch}
+                        disabled={isReadOnly}
+                        onChange={(e) => setForm((p) => ({ ...p, allowSearch: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
 
-              {/* 4. Allow Custom Options Toggle */}
-              <div className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <PlusCircle className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span className="text-xs text-slate-700 font-medium">Allow Custom Options</span>
-                  <InfoTooltip text="Allow users to type and add new options at runtime." size="sm" />
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(form.allowCustomOptions)}
-                    disabled={isReadOnly}
-                    onChange={(e) => setForm((p) => ({ ...p, allowCustomOptions: e.target.checked }))}
-                    className="sr-only peer"
-                  />
-                  <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
+                  <div className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <PlusCircle className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="text-xs text-slate-700 font-medium">Allow Custom Options</span>
+                      <InfoTooltip text="Allow users to type and add new options at runtime." size="sm" />
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(form.allowCustomOptions)}
+                        disabled={isReadOnly}
+                        onChange={(e) => setForm((p) => ({ ...p, allowCustomOptions: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                </>
+              ) : null}
             </>
           )}
 
@@ -5567,6 +5649,54 @@ export function AdminFieldDrawer({
                     ? formatted.map((o, i) => ({ ...o, index: i + 1 }))
                     : [...p.options, ...formatted].map((o, i) => ({ ...o, index: i + 1 })),
               }));
+
+              // Dynamic Sub-List Auto-Registration (Item 1)
+              if (isCompositeOptionList && csvColumns.length > 0) {
+                csvColumns.forEach((col) => {
+                  const targetField = allFieldsInPrimaryModule.find(
+                    (f) => f.key === col.id || String(f.id) === col.id || f.label.toLowerCase() === (col.name || "").toLowerCase()
+                  );
+                  if (
+                    targetField &&
+                    (targetField.inputType === "select" ||
+                      targetField.inputType === "list_select" ||
+                      targetField.inputType === "list" ||
+                      targetField.inputType === "multiselect" ||
+                      (targetField.options && targetField.options.length > 0))
+                  ) {
+                    const existingLabels = (targetField.options || []).map((o) =>
+                      (o.label || String(o.value || "")).toLowerCase().trim()
+                    );
+                    const uniqueNewVals: string[] = [];
+                    newOptions.forEach((opt) => {
+                      if (typeof opt.value === "object" && opt.value !== null) {
+                        const cellVal = String(opt.value[col.id] || "").trim();
+                        if (
+                          cellVal &&
+                          !existingLabels.includes(cellVal.toLowerCase()) &&
+                          !uniqueNewVals.includes(cellVal)
+                        ) {
+                          uniqueNewVals.push(cellVal);
+                        }
+                      }
+                    });
+
+                    if (uniqueNewVals.length > 0) {
+                      const updatedOpts = [
+                        ...(targetField.options || []),
+                        ...uniqueNewVals.map((val, i) => ({
+                          id: Date.now() + Math.floor(Math.random() * 100000) + i,
+                          label: val,
+                          value: val,
+                          index: (targetField.options?.length || 0) + i + 1,
+                        })),
+                      ];
+                      updateCustomField(form.module, targetField.id, { options: updatedOpts });
+                      toast.success(`Auto-added ${uniqueNewVals.length} new option(s) to "${targetField.label}" list`);
+                    }
+                  }
+                });
+              }
             }}
           />
         )}
@@ -5611,8 +5741,9 @@ export function AdminFieldDrawer({
           onSaved={(savedList) => {
             setAdvanceListDrawerOpen(false);
             setAdvanceListEditingDef(null);
-            setAdvanceLists(getStoredAdvanceLists());
-            handleSelectAdvanceList(savedList.id);
+            const freshLists = getStoredAdvanceLists();
+            setAdvanceLists(freshLists);
+            handleSelectAdvanceList(savedList.id, freshLists);
           }}
         />
       )}

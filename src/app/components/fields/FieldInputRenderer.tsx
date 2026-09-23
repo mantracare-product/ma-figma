@@ -1379,6 +1379,22 @@ function NewListInputRenderer({
     compositeColumns.find((c) => c.id === primaryColId)?.name ||
     "Primary Option";
 
+  // Resolve primary column subField and its underlying field definition
+  const primarySubField = useMemo(() => {
+    return compositeColumns.find((c) => c.id === primaryColId) || compositeColumns[0];
+  }, [compositeColumns, primaryColId]);
+
+  const primaryFieldDef = useMemo(() => {
+    if (!primaryColId) return undefined;
+    return allFields.find(
+      (f) =>
+        f.key === primaryColId ||
+        String(f.id) === primaryColId ||
+        (primarySubField && f.key === primarySubField.id) ||
+        (primarySubField && f.label.toLowerCase() === primarySubField.name.toLowerCase())
+    );
+  }, [allFields, primaryColId, primarySubField]);
+
   // Retrieve all rows from the source composite or field-defined options
   const sourceRows: Record<string, any>[] = useMemo(() => {
     let rows: Record<string, any>[] = [];
@@ -1398,15 +1414,14 @@ function NewListInputRenderer({
           [primaryColId]: opt.label || String(opt.value || ""),
         };
       });
-      if (rows.length > 0) return rows;
     }
 
     // 1. In-memory record data
-    if (recordData && sourceCompositeKey && Array.isArray(recordData[sourceCompositeKey]) && recordData[sourceCompositeKey].length > 0) {
+    if (rows.length === 0 && recordData && sourceCompositeKey && Array.isArray(recordData[sourceCompositeKey]) && recordData[sourceCompositeKey].length > 0) {
       rows = recordData[sourceCompositeKey];
     }
     // 2. Default template rows configured in field definition
-    else if (sourceCompositeDef?.defaultValue) {
+    else if (rows.length === 0 && sourceCompositeDef?.defaultValue) {
       if (Array.isArray(sourceCompositeDef.defaultValue)) {
         rows = sourceCompositeDef.defaultValue.filter((item): item is Record<string, any> => typeof item === "object" && item !== null);
       } else if (typeof sourceCompositeDef.defaultValue === "object" && sourceCompositeDef.defaultValue !== null) {
@@ -1450,41 +1465,90 @@ function NewListInputRenderer({
       ];
     }
 
-    return rows;
-  }, [field?.options, recordData, sourceCompositeKey, sourceCompositeDef, compositeColumns, primaryColId]);
+    // Item 2 & 3: Inject standalone primary list additions with graceful empty columns and live sync renamed labels
+    if (primaryFieldDef?.options && Array.isArray(primaryFieldDef.options) && primaryFieldDef.options.length > 0) {
+      const existingRowsMap = new Map<string, Record<string, any>>();
+      const updatedRows: Record<string, any>[] = [];
 
-  // Dropdown options built from Primary column
-  const options = useMemo(() => {
-    let list = sourceRows.map((r, i) => {
-      const rowId = String(r.id || r.key || `row_${i + 1}`);
-      const primaryVal = String(r[primaryColId] || r.name || r.title || r.label || `Option #${i + 1}`);
+      // Map existing rows by ID or Primary Column value
+      rows.forEach((r) => {
+        const idKey = String(r.id || "");
+        const valKey = String(r[primaryColId] || "");
+        if (idKey) existingRowsMap.set(idKey.toLowerCase(), r);
+        if (valKey) existingRowsMap.set(valKey.toLowerCase(), r);
+      });
 
-      // Preview from other non-primary columns
-      const secondaryParts: string[] = [];
-      for (const col of compositeColumns) {
-        if (col.id !== primaryColId && r[col.id] !== undefined && r[col.id] !== "") {
-          secondaryParts.push(`${col.name}: ${r[col.id]}`);
+      // Synchronize with primary standalone list options
+      primaryFieldDef.options.forEach((pOpt, idx) => {
+        const optId = String(pOpt.id || `popt_${idx + 1}`);
+        const optLabel = pOpt.label || String(pOpt.value || "");
+        const optVal = String(pOpt.value || pOpt.label || "");
+
+        const existing = existingRowsMap.get(optId.toLowerCase()) || 
+                         existingRowsMap.get(optLabel.toLowerCase()) || 
+                         existingRowsMap.get(optVal.toLowerCase());
+
+        if (existing) {
+          // Item 3: Live update primary column label if renamed in standalone list
+          updatedRows.push({
+            ...existing,
+            [primaryColId]: optLabel,
+          });
+          // Remove from map to track what has been used
+          existingRowsMap.delete(optId.toLowerCase());
+          if (existing.id) existingRowsMap.delete(String(existing.id).toLowerCase());
+        } else {
+          // Item 2: Standalone Primary List addition with graceful empty columns
+          const emptyRow: Record<string, any> = {
+            id: optId,
+            [primaryColId]: optLabel,
+            _isUnassigned: true,
+          };
+          // Initialize other columns with empty/blank
+          compositeColumns.forEach((col) => {
+            if (col.id !== primaryColId) {
+              emptyRow[col.id] = "";
+            }
+          });
+          updatedRows.push(emptyRow);
         }
-      }
+      });
 
-      return {
-        value: rowId,
-        label: primaryVal,
-        subtitle: secondaryParts.slice(0, 2).join(" • "),
-        row: r,
-      };
-    });
+      // Add any remaining rows that weren't in primaryFieldDef.options
+      rows.forEach((r) => {
+        const idKey = String(r.id || "").toLowerCase();
+        const valKey = String(r[primaryColId] || "").toLowerCase();
+        if ((idKey && existingRowsMap.has(idKey)) || (valKey && existingRowsMap.has(valKey))) {
+          updatedRows.push(r);
+          if (idKey) existingRowsMap.delete(idKey);
+          if (valKey) existingRowsMap.delete(valKey);
+        }
+      });
 
-    const sortOrder = config?.sortOrder;
-    if (sortOrder === "alphabetical_asc") {
-      list.sort((a, b) => a.label.localeCompare(b.label));
-    } else if (sortOrder === "alphabetical_desc") {
-      list.sort((a, b) => b.label.localeCompare(a.label));
-    } else if (sortOrder === "recent") {
-      list.reverse();
+      return updatedRows;
     }
-    return list;
-  }, [sourceRows, primaryColId, compositeColumns, config?.sortOrder]);
+
+    return rows;
+  }, [field?.options, recordData, sourceCompositeKey, sourceCompositeDef, compositeColumns, primaryColId, primaryFieldDef]);
+
+  // Inherit search bar and add custom item settings from primary column's field settings
+  const inheritedAllowSearch = useMemo(() => {
+    if (primarySubField?.allowSearch !== undefined) return primarySubField.allowSearch;
+    if (primaryFieldDef?.listConfig?.allowSearch !== undefined) return primaryFieldDef.listConfig.allowSearch;
+    if (primaryFieldDef?.newListConfig?.allowSearch !== undefined) return primaryFieldDef.newListConfig.allowSearch;
+    if (primaryFieldDef?.allowSearch !== undefined) return primaryFieldDef.allowSearch;
+    if (config?.allowSearch !== undefined) return config.allowSearch;
+    return true;
+  }, [primarySubField, primaryFieldDef, config]);
+
+  const inheritedAllowCustom = useMemo(() => {
+    if (primarySubField?.allowCustomOptions !== undefined) return Boolean(primarySubField.allowCustomOptions);
+    if (primaryFieldDef?.allowCustomOptions !== undefined) return Boolean(primaryFieldDef.allowCustomOptions);
+    if (primaryFieldDef?.listConfig?.allowCustomOptions !== undefined) return Boolean(primaryFieldDef.listConfig.allowCustomOptions);
+    if (primaryFieldDef?.newListConfig?.allowCustomOptions !== undefined) return Boolean(primaryFieldDef.newListConfig.allowCustomOptions);
+    if (config?.allowCustomOptions !== undefined) return Boolean(config.allowCustomOptions);
+    return false;
+  }, [primarySubField, primaryFieldDef, config]);
 
   const isMultiple = config?.selectionMode === "multiple" || field?.selectionMode === "multiple";
 
@@ -1520,16 +1584,49 @@ function NewListInputRenderer({
     return [];
   }, [value]);
 
+  // Derive dropdown options from sourceRows + any locally added custom options
+  const options = useMemo(() => {
+    const builtOptions: Array<{ value: string; label: string; subtitle?: string }> = sourceRows.map((row, idx) => {
+      const rowId = String(row.id || row.key || `row_${idx + 1}`);
+      const primaryVal = String(row[primaryColId] || row.name || row.label || rowId);
+
+      // Subtitle from other columns
+      const otherCols = compositeColumns.filter((col) => col.id !== primaryColId);
+      const subParts = otherCols
+        .map((col) => row[col.id])
+        .filter((val) => val !== undefined && val !== null && String(val).trim() !== "");
+      const subtitle = subParts.length > 0 ? subParts.slice(0, 2).join(" • ") : undefined;
+
+      return {
+        value: rowId,
+        label: primaryVal,
+        subtitle,
+      };
+    });
+
+    // Merge in any custom options added locally
+    localExtraOptions.forEach((extra) => {
+      if (!builtOptions.some((o) => o.value === extra.value || o.label === extra.label)) {
+        builtOptions.push({
+          value: String(extra.value || extra.id || extra.label),
+          label: extra.label || String(extra.value),
+        });
+      }
+    });
+
+    return builtOptions;
+  }, [sourceRows, primaryColId, compositeColumns, localExtraOptions]);
+
   // Handle single-select selection
   const handleSingleSelectChange = (selectedId: string) => {
     if (!selectedId) {
       onChange(isAdminDefault ? undefined : null);
       return;
     }
-    const foundOpt = options.find((o) => o.value === selectedId);
+    const foundOpt = options.find((o) => o.value === selectedId || o.label === selectedId);
     const item: NewListSelectionItem = {
       selectedRowId: selectedId,
-      primaryValue: foundOpt?.label || "",
+      primaryValue: foundOpt?.label || selectedId,
       overrides: {},
     };
     onChange(item);
@@ -1541,10 +1638,10 @@ function NewListInputRenderer({
     const exists = normalizedSelection.some((item) => String(item.selectedRowId) === String(selectedId));
     if (exists) return;
 
-    const foundOpt = options.find((o) => o.value === selectedId);
+    const foundOpt = options.find((o) => o.value === selectedId || o.label === selectedId);
     const newItem: NewListSelectionItem = {
       selectedRowId: selectedId,
-      primaryValue: foundOpt?.label || "",
+      primaryValue: foundOpt?.label || selectedId,
       overrides: {},
     };
     onChange([...normalizedSelection, newItem]);
@@ -1632,7 +1729,7 @@ function NewListInputRenderer({
           <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
             <div className="text-[11px] leading-tight">
-              <span className="font-semibold">Source row no longer exists in composite.</span>
+              <span className="font-semibold">Source row no longer exists in group.</span>
               <span className="text-amber-700 block text-[10px]">
                 Preserving local saved record overrides.
               </span>
@@ -1651,7 +1748,6 @@ function NewListInputRenderer({
             };
 
             const isPrimary = Boolean(colCfg.isPrimary);
-            const isColDisabled = Boolean(colCfg.isDisable);
             const isColEditable = Boolean(colCfg.isEditable);
 
             // Value resolution: local override layered on top of source row
@@ -1671,11 +1767,6 @@ function NewListInputRenderer({
                       </span>
                     )}
                   </label>
-                  {isColDisabled && (
-                    <span className="text-[9px] text-slate-400 flex items-center gap-0.5 shrink-0" title="Locked by admin">
-                      <Lock className="w-2.5 h-2.5" /> Locked
-                    </span>
-                  )}
                   {hasOverride && isColEditable && (
                     <span className="text-[9px] text-emerald-600 font-semibold flex items-center gap-0.5 shrink-0" title="Custom override for this record">
                       <Edit3 className="w-2.5 h-2.5" /> Overridden
@@ -1683,12 +1774,12 @@ function NewListInputRenderer({
                   )}
                 </div>
 
-                {isColDisabled || disabled ? (
-                  // Locked / Greyed-Out Read-Only Field
-                  <div className="px-2.5 py-1.5 bg-slate-100/90 border border-slate-200 rounded-lg text-xs text-slate-600 font-medium select-none truncate">
+                {!isColEditable || disabled ? (
+                  // Read-Only Display
+                  <div className="px-2.5 py-1.5 bg-slate-100/90 border border-slate-200 rounded-lg text-xs text-slate-600 font-medium select-none truncate min-h-[30px] flex items-center shadow-2xs">
                     {currentVal !== undefined && currentVal !== "" 
                       ? (Array.isArray(currentVal) ? currentVal.join(", ") : String(currentVal)) 
-                      : <span className="text-slate-400 italic">—</span>}
+                      : <span className="text-slate-400 italic font-normal">—</span>}
                   </div>
                 ) : (
                   // Editable Field (Stored as local override)
@@ -1708,11 +1799,11 @@ function NewListInputRenderer({
     );
   };
 
-  // If no source composite is configured
+  // If no source group field is configured
   if (!sourceCompositeKey) {
     return (
       <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500 italic">
-        {isAdminDefault ? "No composite field linked yet." : "Please configure a source composite field in admin."}
+        {isAdminDefault ? "No group field linked yet." : "Please configure a source group field in admin."}
       </div>
     );
   }
@@ -1743,7 +1834,12 @@ function NewListInputRenderer({
               ]}
               size="sm"
               triggerClassName={borderClass}
-              allowSearch={config?.allowSearch}
+              allowSearch={inheritedAllowSearch}
+              allowCustomOptions={inheritedAllowCustom}
+              onAddOption={inheritedAllowCustom ? (newVal) => {
+                handleAddLocalOption(newVal);
+                handleMultiAddRow(newVal);
+              } : undefined}
             />
           </div>
         )}
@@ -1787,7 +1883,12 @@ function NewListInputRenderer({
         ]}
         size="sm"
         triggerClassName={borderClass}
-        allowSearch={config?.allowSearch}
+        allowSearch={inheritedAllowSearch}
+        allowCustomOptions={inheritedAllowCustom}
+        onAddOption={inheritedAllowCustom ? (newVal) => {
+          handleAddLocalOption(newVal);
+          handleSingleSelectChange(newVal);
+        } : undefined}
       />
 
       {/* Populated Associated Column Block */}

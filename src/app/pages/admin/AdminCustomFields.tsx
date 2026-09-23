@@ -205,14 +205,13 @@ const FIELD_TYPES: { label: string; value: FieldInputType }[] = [
   { label: "Money / Currency", value: "money" },
   { label: "Date & Time", value: "date_time" },
   { label: "Date", value: "date" },
-  { label: "List", value: "list_select" },
-  { label: "New List", value: "new_list" },
+  { label: "List", value: "new_list" },
   { label: "Open List (Tags)", value: "list_open" },
   { label: "Boolean (Yes/No)", value: "yes_no" },
   { label: "Email", value: "email" },
   { label: "Phone Number", value: "tel" },
   { label: "Link / URL", value: "link" },
-  { label: "Composite Field", value: "composite" as any },
+  { label: "Group Field", value: "composite" as any },
   { label: "Link to Mantra Entities", value: "crm_bind" },
   { label: "Digital Signature", value: "signature" },
   { label: "Media Attach", value: "file" },
@@ -221,14 +220,14 @@ const FIELD_TYPES: { label: string; value: FieldInputType }[] = [
 
 const FIELD_TYPE_REVERSE_MAP: Record<string, string> = {
   text: "Text",
-  table: "Composite Field (Table)",
+  table: "Group Field (Table)",
   signature: "Digital Signature",
   drawing: "Digital Signature",
   list_select: "List",
-  new_list: "New List",
+  new_list: "List",
   list_open: "Open List",
-  group: "Composite Field (Group)",
-  group_repeatable: "Composite Field (Group)",
+  group: "Group Field (Group)",
+  group_repeatable: "Group Field (Group)",
   crm_bind: "Link to Mantra Entities",
   select: "List",
   multiselect: "List (Multi)",
@@ -490,8 +489,8 @@ export function AdminCustomFields() {
                   const typeName =
                     isCompositeField
                       ? field.compositeDisplayMode === "table" || field.inputType === "table"
-                        ? "Composite Field (Table)"
-                        : "Composite Field (Group)"
+                        ? "Group Field (Table)"
+                        : "Group Field (Group)"
                       : field.inputType === "list_open"
                       ? "List (Open · Tags)"
                       : isListField

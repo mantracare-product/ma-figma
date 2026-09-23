@@ -13,6 +13,7 @@ import {
   ChevronDown,
   FileSpreadsheet,
   CheckCircle2,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
@@ -857,87 +858,86 @@ export function AdvanceListDrawer({
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-                    {rows.map((row, rIdx) => {
-                      return (
-                        <div
-                          key={row.id || rIdx}
-                          className={`p-3 bg-white border rounded-xl space-y-2.5 transition-colors shadow-2xs ${
-                            row.isDefault
-                              ? "border-blue-300 bg-blue-50/20"
-                              : "border-slate-200 hover:border-slate-300"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                                #{rIdx + 1}
-                              </span>
-                              {row.isDefault && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                  Default Option
+                  <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-96 shadow-2xs bg-white">
+                    <table className="w-full text-left text-xs border-collapse min-w-[480px]">
+                      <thead className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 shadow-2xs">
+                        <tr className="text-[11px] font-bold text-slate-700">
+                          <th className="px-2.5 py-2 text-center w-12 text-slate-500 font-mono">#</th>
+                          {columns.map((col) => (
+                            <th key={col.id} className="px-3 py-2 min-w-[140px]">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-slate-800">{col.name}</span>
+                                {col.isPrimary && (
+                                  <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                                    Primary
+                                  </span>
+                                )}
+                                <span className="text-[9px] font-mono text-slate-400 uppercase font-normal">
+                                  ({col.type})
                                 </span>
-                              )}
-                            </div>
+                              </div>
+                            </th>
+                          ))}
+                          <th className="px-2 py-2 text-center w-16">Default</th>
+                          <th className="px-2 py-2 text-center w-16">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {rows.map((row, rIdx) => (
+                          <tr
+                            key={row.id || rIdx}
+                            className={`hover:bg-slate-50/70 transition-colors ${
+                              row.isDefault ? "bg-blue-50/30" : ""
+                            }`}
+                          >
+                            <td className="px-2.5 py-2 text-center font-mono font-bold text-slate-400 text-[11px]">
+                              {rIdx + 1}
+                            </td>
 
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => toggleRowDefault(rIdx)}
-                                className={`px-2 py-0.5 text-[10px] font-semibold rounded border cursor-pointer transition-colors ${
-                                  row.isDefault
-                                    ? "bg-blue-100 text-blue-800 border-blue-300"
-                                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                                }`}
-                              >
-                                {row.isDefault ? "Default" : "Set Default"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => deleteRow(rIdx)}
-                                className="p-1 text-slate-400 hover:text-red-600 cursor-pointer"
-                                title="Delete row"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Grid of Cells */}
-                          <div className="grid grid-cols-2 gap-2">
                             {columns.map((col) => {
-                              const isPrimary = col.isPrimary;
                               const val = row.values[col.id] ?? "";
-
                               return (
-                                <div key={col.id} className="space-y-1">
-                                  <div className="flex items-center justify-between text-[10px] text-slate-600 font-semibold">
-                                    <div className="flex items-center gap-1">
-                                      <span>{col.name}</span>
-                                      {isPrimary && (
-                                        <span className="text-[9px] bg-blue-100 text-blue-700 px-1 rounded font-normal">
-                                          Primary
-                                        </span>
-                                      )}
-                                    </div>
-                                    <span className="text-[9px] text-slate-400 font-mono uppercase">
-                                      {col.type}
-                                    </span>
-                                  </div>
+                                <td key={col.id} className="px-2.5 py-1.5">
                                   <input
                                     type={col.type === "number" ? "number" : "text"}
                                     value={val}
                                     placeholder={`${col.name}...`}
                                     onChange={(e) => updateRowCell(rIdx, col.id, e.target.value)}
-                                    className="w-full px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium text-slate-800"
+                                    className="w-full px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-md outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-medium text-slate-800 transition-all"
                                   />
-                                </div>
+                                </td>
                               );
                             })}
-                          </div>
-                        </div>
-                      );
-                    })}
+
+                            <td className="px-2 py-1.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => toggleRowDefault(rIdx)}
+                                className={`p-1 rounded cursor-pointer transition-colors ${
+                                  row.isDefault
+                                    ? "text-amber-500 hover:text-amber-600 bg-amber-50"
+                                    : "text-slate-300 hover:text-slate-500"
+                                }`}
+                                title={row.isDefault ? "Default row (Click to unset)" : "Set as default row"}
+                              >
+                                <Star className={`w-3.5 h-3.5 ${row.isDefault ? "fill-amber-400 text-amber-500" : ""}`} />
+                              </button>
+                            </td>
+
+                            <td className="px-2 py-1.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => deleteRow(rIdx)}
+                                className="p-1 text-slate-400 hover:text-red-600 cursor-pointer transition-colors"
+                                title="Delete row"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>

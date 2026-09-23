@@ -112,6 +112,10 @@ export interface SubFieldConfig {
   placeholder?: string;
   required?: boolean;
   options?: FieldOption[];
+  allowCustomOptions?: boolean;
+  allowSearch?: boolean;
+  listConfig?: ListFieldConfig;
+  newListConfig?: NewListConfig;
   crmBindConfig?: CrmBindConfig;
   defaultValue?: any;
   currency?: string;  // for money sub-fields
@@ -397,6 +401,7 @@ export interface FieldDefinition {
   validation?: string;
   options?: FieldOption[];    // for select/dropdown/list types
   allowCustomOptions?: boolean; // Allow users to type custom options at runtime
+  allowSearch?: boolean;      // Enable/disable search bar for options
   listConfig?: ListFieldConfig; // Search, sort order, and live 2-way linking
   newListConfig?: NewListConfig; // for new_list field type
   tableColumns?: TableColumnConfig[]; // for table type (legacy)
@@ -2306,9 +2311,79 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
     const norm = normalizeModule(module);
     const normalizedPatch = { ...patch };
     setCustomFields((prev) => {
-      const updated = (prev[norm] || []).map((f) =>
-        f.id === id ? { ...f, ...normalizedPatch } : f
-      );
+      const currentList = prev[norm] || [];
+      const targetField = currentList.find((f) => f.id === id);
+      if (!targetField) {
+        return {
+          ...prev,
+          [norm]: currentList.map((f) => (f.id === id ? { ...f, ...normalizedPatch } : f)),
+        };
+      }
+
+      // Track option renames for propagation
+      const oldOptions = targetField.options || [];
+      const newOptions = normalizedPatch.options;
+      const optionRenames: Record<string, string> = {};
+      if (newOptions && Array.isArray(newOptions)) {
+        newOptions.forEach((newOpt) => {
+          const matchedOld = oldOptions.find((o) => o.id === newOpt.id || o.value === newOpt.value);
+          if (matchedOld && matchedOld.label && newOpt.label && matchedOld.label !== newOpt.label) {
+            optionRenames[matchedOld.label] = newOpt.label;
+          }
+        });
+      }
+
+      const updated = currentList.map((f) => {
+        if (f.id === id) {
+          return { ...f, ...normalizedPatch };
+        }
+
+        // Live 2-way sync with linked lists
+        if (
+          (f.listConfig?.liveLinkedFieldKey && f.listConfig.liveLinkedFieldKey === targetField.key) ||
+          (f.listConfig?.inheritedFieldKey && f.listConfig.inheritedFieldKey === targetField.key)
+        ) {
+          if (newOptions) {
+            return {
+              ...f,
+              options: newOptions.map((o) => ({ ...o })),
+            };
+          }
+        }
+
+        // Sync option renames across Option List / Advanced List fields that link to targetField
+        if (Object.keys(optionRenames).length > 0 && Array.isArray(f.options) && f.options.length > 0) {
+          const updatedOpts = f.options.map((opt) => {
+            if (typeof opt.value === "object" && opt.value !== null) {
+              const nextRowVal = { ...opt.value };
+              let modified = false;
+              Object.entries(optionRenames).forEach(([oldLbl, newLbl]) => {
+                Object.keys(nextRowVal).forEach((k) => {
+                  if (nextRowVal[k] === oldLbl) {
+                    nextRowVal[k] = newLbl;
+                    modified = true;
+                  }
+                });
+              });
+              const updatedOptLabel = optionRenames[opt.label] || opt.label;
+              return modified || updatedOptLabel !== opt.label
+                ? { ...opt, label: updatedOptLabel, value: nextRowVal }
+                : opt;
+            } else if (typeof opt.value === "string" && optionRenames[opt.value]) {
+              return {
+                ...opt,
+                label: optionRenames[opt.label] || optionRenames[opt.value] || opt.label,
+                value: optionRenames[opt.value],
+              };
+            }
+            return opt;
+          });
+          return { ...f, options: updatedOpts };
+        }
+
+        return f;
+      });
+
       return {
         ...prev,
         [norm]: updated,
