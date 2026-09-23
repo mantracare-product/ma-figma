@@ -69,8 +69,8 @@ export function getClientProcessStages(clientId: string): ClientProcessStage[] {
         {
           processId: "op-cataract",
           processName: "Cataract Surgery Daycare",
-          stageId: "cat-3",
-          stageName: "Pre-Op Prep",
+          stageId: "pre-checkin",
+          stageName: "Morning (Pre-Checkin)",
           channel: "sms",
         },
       ];

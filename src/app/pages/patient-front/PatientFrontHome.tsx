@@ -265,7 +265,7 @@ export default function PatientFrontHome({
       );
       if (matchByName) return matchByName.id;
     }
-    return activeEnrollment?.stageId || "cat-3";
+    return activeEnrollment?.stageId || "pre-checkin";
   })();
 
   // Special Journey States
@@ -300,9 +300,9 @@ export default function PatientFrontHome({
   // Current active stage object
   const currentStageObj: Stage =
     patientVisibleStages.find((s) => s.id === currentStageId) ||
-    patientVisibleStages[2] ||
+    patientVisibleStages[0] ||
     processStagesList[0] ||
-    defaultCataractStages[2];
+    defaultCataractStages[0];
 
   const currentIdx = patientVisibleStages.findIndex((s) => s.id === currentStageObj.id);
   const activeIdx = currentIdx !== -1 ? currentIdx : 2;
@@ -311,8 +311,24 @@ export default function PatientFrontHome({
   const stageSteps: StageStep[] = patientVisibleStages.map((stg, i) => ({
     id: stg.id,
     label: stg.name,
-    status: i < activeIdx ? "done" : i === activeIdx ? "current" : "upcoming",
+    status: isPreCheckin ? "upcoming" : i < activeIdx ? "done" : i === activeIdx ? "current" : "upcoming",
   }));
+
+  // Handler: clicking the current first stage resets back to pre-checkin (for demo)
+  const handleStageTrackSelect = (stepId: string) => {
+    const clickedIdx = patientVisibleStages.findIndex((s) => s.id === stepId);
+    const isFirstAndCurrent = clickedIdx === 0 && stepId === currentStageId;
+    const targetId = isFirstAndCurrent ? "pre-checkin" : stepId;
+    const targetStage = patientVisibleStages.find((s) => s.id === targetId);
+    setClientProcessStage(clientId, {
+      processId: cataractProcess.id,
+      processName: cataractProcess.name,
+      stageId: targetId,
+      stageName: isFirstAndCurrent ? "Morning (Pre-Checkin)" : (targetStage?.name || targetId),
+      channel: "sms",
+    });
+    setActiveStages(getClientProcessStages(clientId));
+  };
 
   // Dynamic Headline based on active stage
   const getStageHeadline = (stg: Stage) => {
@@ -534,10 +550,7 @@ export default function PatientFrontHome({
           {/* Stepper Timeline */}
           <StageTrack
             steps={stageSteps}
-            onSelectStep={(stgId) => {
-              const match = processStagesList.find((s) => s.id === stgId);
-              if (match) setSelectedDrawerStage({ process: cataractProcess, stage: match });
-            }}
+            onSelectStep={handleStageTrackSelect}
           />
 
           {/* State 4 (In Surgery) vs Standard Stage Footer (Stages 1, 2, 3, 5) */}
