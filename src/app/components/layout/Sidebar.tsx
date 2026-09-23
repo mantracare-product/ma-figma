@@ -26,7 +26,6 @@ import {
   Plus,
   Stethoscope,
   Shield,
-  ExternalLink,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
@@ -328,31 +327,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           </nav>
         </div>
 
-        {/* ── Bottom Actions & Sign Out Bar ── */}
-        <div className="p-3 border-t border-slate-100 space-y-1">
-          {collapsed ? (
-            <Tooltip text="Launch Patient Portal" placement="right">
-              <button
-                type="button"
-                onClick={() => window.open("/patient-front", "_blank")}
-                className="w-10 h-10 mx-auto rounded-xl flex items-center justify-center text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-              >
-                <QrCode className="w-4 h-4" />
-              </button>
-            </Tooltip>
-          ) : (
-            <button
-              type="button"
-              onClick={() => window.open("/patient-front", "_blank")}
-              className="flex items-center justify-between w-full px-3.5 py-2.5 rounded-xl text-xs font-bold text-blue-700 bg-blue-50/80 hover:bg-blue-100 transition-all cursor-pointer border border-blue-200/60"
-            >
-              <div className="flex items-center gap-2">
-                <QrCode className="w-4 h-4 text-blue-600" />
-                <span>Open Patient Portal</span>
-              </div>
-              <ExternalLink className="w-3.5 h-3.5 text-blue-500" />
-            </button>
-          )}
+        {/* ── Bottom Sign Out Bar ── */}
+        <div className="p-3 border-t border-slate-100">
 
           {collapsed ? (
             <Tooltip text="Sign Out" placement="right">
