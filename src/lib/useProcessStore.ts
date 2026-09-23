@@ -408,9 +408,34 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     },
     stages: [
       {
+        id: "cat-0",
+        name: "Pre-Checkin",
+        description: "Morning of surgery, home fasting compliance, and arrival reporting at Reception Desk",
+        status: "active",
+        color: "#3B82F6",
+        patientFacingContent: {
+          infoText: "Your cataract surgery is scheduled for today. Please arrive by 8:45 AM and report to Reception Desk Counter 1.",
+          instructions: [
+            "Confirm zero food, tea, or water since midnight (strict fasting required)",
+            "Ensure an adult companion or attendant is accompanying you today",
+            "Report to Reception Desk Counter 1 upon hospital entry for staff check-in",
+          ],
+          badge: "Scheduled · Pre-Checkin",
+          doctorName: "Dr. Meera Nair",
+          roomOrCounter: "Reception Desk (Counter 1)",
+          estimatedWaitTime: "Surgery at 9:00 AM",
+          visibleToPatient: true,
+          checklist: [
+            { id: "cat-pre-1", label: "Strict fasting since midnight confirmed", description: "No food or liquids taken this morning", required: true },
+            { id: "cat-pre-2", label: "Attendant present to accompany home", description: "Family member or companion is with you", required: true },
+            { id: "cat-pre-3", label: "Government ID & insurance docs carried", description: "Physical cards ready to present at admissions desk", required: true },
+          ],
+        },
+      },
+      {
         id: "cat-1",
         name: "Checked In",
-        description: "Pre-op check-in, baseline vitals, and surgical consent review",
+        description: "Pre-op check-in, baseline vitals, and surgical prep review",
         status: "active",
         color: "#10b981",
         patientFacingContent: {
@@ -418,7 +443,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
           instructions: [
             "Take a seat in the Pre-Op Lounge while nursing prepares your record",
             "Confirm you have had zero food or water since midnight (fasting)",
-            "Review and sign your surgical consent before entering the holding room",
+            "Verify identification and prepare for baseline clinical vitals",
           ],
           badge: "Pre-Op Check-In",
           doctorName: "Dr. Meera Nair",
@@ -429,13 +454,6 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
             { id: "cat-f-2", label: "Attendant or companion present", description: "Priya Iyer is present to accompany you home today", required: true },
             { id: "cat-f-3", label: "Eyewear & personal valuables handed over", description: "Spectacles and personal valuables safely kept with your attendant", required: true },
           ],
-          consent: {
-            id: "cat-consent-1",
-            title: "Consent for Right-Eye Cataract Phacoemulsification & Foldable Toric IOL",
-            description: "Review and electronically sign procedure consent",
-            content: "I hereby authorize Dr. Meera Nair and the surgical care team at EyeMantra to perform Phacoemulsification with Foldable Toric Intraocular Lens (IOL) implantation on my Right Eye. The procedure steps, topical anesthesia, and recovery care have been explained to me in plain language. I confirm that I have complied with pre-operative fasting guidelines.",
-            requiresSignature: true,
-          },
         },
       },
       {
@@ -727,23 +745,50 @@ export function getStoredProcesses(): Process[] {
         return updated;
       }
     }
-    // Ensure Cataract Surgery stages are always in proper chronological order (cat-1, cat-2, cat-3, cat-4, cat-5)
+    // Ensure Cataract Surgery has Pre-Checkin as stage 0, consistent checklist/instructions, and remove legacy consent forms
     if (cataract && cataract.stages) {
+      // Remove in-stage consent config since forms module is used instead
+      cataract.stages.forEach((s) => {
+        if (s.patientFacingContent?.consent) {
+          delete s.patientFacingContent.consent;
+        }
+      });
+
+      if (!cataract.stages.some((s) => s.id === "cat-0" || s.name.toLowerCase().includes("pre-checkin"))) {
+        const defaultProc = DEFAULT_INITIAL_PROCESSES.find((p) => p.id === "op-cataract");
+        if (defaultProc?.stages?.[0]) {
+          cataract.stages.unshift(defaultProc.stages[0]);
+          localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(parsed));
+        }
+      } else {
+        // Ensure existing cat-0 has full checklist & instructions
+        const cat0 = cataract.stages.find((s) => s.id === "cat-0" || s.name.toLowerCase().includes("pre-checkin"));
+        const defaultCat0 = DEFAULT_INITIAL_PROCESSES.find((p) => p.id === "op-cataract")?.stages?.[0];
+        if (cat0 && defaultCat0?.patientFacingContent) {
+          if (!cat0.patientFacingContent?.checklist || cat0.patientFacingContent.checklist.length === 0) {
+            cat0.patientFacingContent = {
+              ...(cat0.patientFacingContent || {}),
+              checklist: defaultCat0.patientFacingContent.checklist,
+              instructions: defaultCat0.patientFacingContent.instructions,
+              badge: defaultCat0.patientFacingContent.badge,
+              doctorName: defaultCat0.patientFacingContent.doctorName,
+              roomOrCounter: defaultCat0.patientFacingContent.roomOrCounter,
+              estimatedWaitTime: defaultCat0.patientFacingContent.estimatedWaitTime,
+            };
+          }
+        }
+      }
+
       const orderMap: Record<string, number> = {
+        "cat-0": 0,
         "cat-1": 1,
         "cat-2": 2,
         "cat-3": 3,
         "cat-4": 4,
         "cat-5": 5,
       };
-      const isDisordered = cataract.stages.some((s, idx) => {
-        const expected = orderMap[s.id];
-        return expected !== undefined && expected !== idx + 1;
-      });
-      if (isDisordered) {
-        cataract.stages.sort((a, b) => (orderMap[a.id] ?? 99) - (orderMap[b.id] ?? 99));
-        localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(parsed));
-      }
+      cataract.stages.sort((a, b) => (orderMap[a.id] ?? 99) - (orderMap[b.id] ?? 99));
+      localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(parsed));
     }
     parsed.forEach((p) => {
       // Guard against processes with missing stages array

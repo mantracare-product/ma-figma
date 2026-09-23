@@ -3,7 +3,6 @@ import {
   Calendar,
   Clock,
   Plus,
-  QrCode,
   X,
   CheckCircle2,
   Video,
@@ -18,7 +17,6 @@ import {
   APPOINTMENTS_STORE_EVENT,
   Appointment,
 } from "../../../lib/appointmentsStore";
-import { setClientProcessStage } from "../../../lib/clientProcessState";
 import { onSyncEvent } from "../../../lib/syncBroadcast";
 import BookAppointmentModal from "./components/BookAppointmentModal";
 import { toast } from "sonner";
@@ -42,7 +40,6 @@ export default function PatientAppointments({
   });
   const [activeTab, setActiveTab] = useState<"upcoming" | "past">("upcoming");
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
-  const [selectedQRPassAppt, setSelectedQRPassAppt] = useState<Appointment | null>(null);
   const [reschedulingApptId, setReschedulingApptId] = useState<number | null>(null);
   const [newRescheduleDate, setNewRescheduleDate] = useState("2026-09-23");
   const [newRescheduleTime, setNewRescheduleTime] = useState("10:30 AM");
@@ -71,19 +68,6 @@ export default function PatientAppointments({
     (a) => a.status === "completed" || a.status === "cancelled" || a.status === "no-show"
   );
 
-  const handleSimulateArrival = (appt: Appointment) => {
-    updateAppointmentStatus(appt.id, "arrived");
-    if (appt.processId) {
-      setClientProcessStage(clientId, {
-        processId: appt.processId,
-        processName: appt.serviceName || "Cataract Surgery Daycare",
-        stageId: appt.stageId || "cat-1",
-        stageName: "Checked In",
-      });
-    }
-    toast.success("Arrival confirmed with Dr. Meera Nair");
-    setSelectedQRPassAppt(null);
-  };
 
   const handleRescheduleSubmit = (id: number) => {
     if (!newRescheduleDate) {
@@ -217,7 +201,7 @@ export default function PatientAppointments({
 
                 {/* Actions per spec */}
                 <div className="flex items-center gap-2 sm:gap-3 shrink-0 self-end sm:self-center">
-                  {isVideo && appt.meetingLink ? (
+                  {isVideo && appt.meetingLink && (
                     <button
                       type="button"
                       onClick={() => window.open(appt.meetingLink, "_blank")}
@@ -225,14 +209,6 @@ export default function PatientAppointments({
                     >
                       <Video className="w-3.5 h-3.5" />
                       <span>Join Call</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedQRPassAppt(appt)}
-                      className="cursor-pointer text-xs font-semibold text-[#1456f0] hover:text-blue-700 hover:underline px-2 py-1 rounded-md"
-                    >
-                      View pass
                     </button>
                   )}
 
@@ -258,74 +234,7 @@ export default function PatientAppointments({
         </div>
       )}
 
-      {/* Arrival QR Pass Modal */}
-      {selectedQRPassAppt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-[#151c24] rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4 border border-slate-200 dark:border-slate-800 text-center relative">
-            <button
-              type="button"
-              onClick={() => setSelectedQRPassAppt(null)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
 
-            <div>
-              <div className="text-xs font-semibold text-[#1456f0] uppercase tracking-wider mb-0.5">
-                Arrival Pass
-              </div>
-              <h3 className="font-semibold text-base text-slate-900 dark:text-white">
-                {selectedQRPassAppt.title || selectedQRPassAppt.serviceName}
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {selectedQRPassAppt.doctorName || "Dr. Meera Nair"} · {selectedQRPassAppt.location || "EyeMantra"}
-              </p>
-            </div>
-
-            <div className="py-2 flex justify-center">
-              <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
-                <QrCode className="w-36 h-36 text-slate-900 dark:text-slate-100" />
-              </div>
-            </div>
-
-            <div className="text-xs space-y-1.5 py-2 border-y border-slate-100 dark:border-slate-800 text-left">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Patient</span>
-                <span className="font-medium text-slate-900 dark:text-white">{clientName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Scheduled Time</span>
-                <span className="font-medium text-slate-900 dark:text-white">
-                  {selectedQRPassAppt.date} · {selectedQRPassAppt.time}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Location</span>
-                <span className="font-medium text-slate-900 dark:text-white truncate max-w-[200px]">
-                  {selectedQRPassAppt.location || "EyeMantra Paschim Vihar (PV)"}
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-1 flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => handleSimulateArrival(selectedQRPassAppt)}
-                className="w-full py-2.5 rounded-xl bg-[#1456f0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs cursor-pointer active:scale-95 transition-all"
-              >
-                Confirm Arrival Check-In
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedQRPassAppt(null)}
-                className="w-full py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-slate-800 cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Reschedule Modal (Flow 9) */}
       {reschedulingApptId && (

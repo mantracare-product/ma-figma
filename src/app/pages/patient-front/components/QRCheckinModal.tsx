@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import {
   X,
-  QrCode,
   CheckCircle2,
-  Clock,
   Building2,
   Stethoscope,
-  Sparkles,
+  ShieldCheck,
+  UserCheck,
+  Clock,
+  Ticket,
 } from "lucide-react";
 import {
   getStoredAppointments,
@@ -44,7 +45,7 @@ export default function QRCheckinModal({
       name: "Checked In",
     };
 
-    // Update process stage
+    // Update process stage manually (Reception staff action)
     setClientProcessStage(clientId, {
       processId: cataractProc?.id || "op-cataract",
       processName: cataractProc?.name || "Cataract Surgery Daycare",
@@ -65,7 +66,7 @@ export default function QRCheckinModal({
     }
 
     setIsSuccess(true);
-    toast.success("Arrival confirmed — Welcome to EyeMantra");
+    toast.success("Reception Check-In Confirmed — Welcome to EyeMantra");
 
     setTimeout(() => {
       onCheckinSuccess(cataractProc?.id || "op-cataract");
@@ -81,14 +82,14 @@ export default function QRCheckinModal({
         <div className="p-5 border-b border-[#e2e8f0] dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-[#eff6ff] dark:bg-blue-950/60 text-[#1456f0] dark:text-[#60a5fa] flex items-center justify-center">
-              <QrCode className="w-4.5 h-4.5" />
+              <Building2 className="w-4.5 h-4.5" />
             </div>
             <div>
               <h3 className="font-display text-base font-bold text-[#222222] dark:text-white">
-                Clinic Arrival Check-In
+                Reception Desk Check-In
               </h3>
               <p className="text-xs text-[#64748b] dark:text-slate-400">
-                Self-service QR scanner · EyeMantra
+                Staff Manual Admission · EyeMantra Daycare
               </p>
             </div>
           </div>
@@ -109,14 +110,32 @@ export default function QRCheckinModal({
                 <CheckCircle2 className="w-8 h-8" />
               </div>
               <h4 className="font-display text-lg font-bold text-[#222222] dark:text-white">
-                Checking you in for your cataract surgery today…
+                Check-in verified by Reception Desk
               </h4>
               <p className="text-xs text-[#45515e] dark:text-slate-300 max-w-xs mx-auto">
-                Opening your live Today visit tracking...
+                Opening live daycare tracking for Ramesh Iyer…
               </p>
             </div>
           ) : (
-            <div className="space-y-4 text-center">
+            <div className="space-y-4">
+              {/* Token & Counter Header Banner */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50/90 to-slate-50 dark:from-blue-950/30 dark:to-slate-900 border border-blue-100 dark:border-blue-900/40">
+                <div className="flex items-center justify-between">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100/80 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-semibold">
+                    <Ticket className="w-3.5 h-3.5" />
+                    <span>Token #04</span>
+                  </div>
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5" /> 8:45 AM Entry
+                  </span>
+                </div>
+                <div className="mt-3">
+                  <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Reporting Desk</div>
+                  <div className="text-sm font-bold text-slate-900 dark:text-white">Reception Desk Counter 1 (Admissions)</div>
+                  <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">Pre-Op Bay 3 · Daycare Wing</div>
+                </div>
+              </div>
+
               {/* Patient & Procedure Summary Card */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-[#e2e8f0] dark:border-slate-800 text-left">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
@@ -131,28 +150,29 @@ export default function QRCheckinModal({
                 </div>
                 <div className="text-[11px] text-[#64748b] dark:text-slate-400 mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-800 flex justify-between">
                   <span>Patient: <strong>{clientName}</strong> (62)</span>
-                  <span>Pre-Op Bay 3</span>
+                  <span>ID: <strong>CL-001</strong></span>
                 </div>
               </div>
 
-              {/* Visual simulated QR code box */}
-              <div className="flex flex-col items-center justify-center p-5 rounded-2xl border-2 border-dashed border-[#1456f0]/30 bg-[#eff6ff]/30 dark:bg-blue-950/20">
-                <div className="w-24 h-24 bg-white dark:bg-slate-800 p-2.5 rounded-xl shadow-xs flex items-center justify-center">
-                  <QrCode className="w-full h-full text-[#1456f0]" />
+              {/* Desk Instructions & Staff Verification Checklist */}
+              <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 text-left">
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-900 dark:text-amber-200 mb-1.5">
+                  <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Manual Desk Check-In Procedure</span>
                 </div>
-                <p className="text-xs text-[#64748b] dark:text-slate-400 mt-3 max-w-xs">
-                  Scan the entrance QR pass at the daycare desk or tap below to enter Today.
+                <p className="text-xs text-amber-800 dark:text-amber-300/90 leading-relaxed">
+                  Present Token <strong>#04</strong> to the receptionist. Hospital staff confirms fasting status and baseline vitals before manually moving the patient to <strong>Checked In</strong>.
                 </p>
               </div>
 
-              {/* Single Dominant Action Button */}
+              {/* Staff Action Button */}
               <button
                 type="button"
                 onClick={handleConfirmCheckin}
                 className="w-full py-3 rounded-full bg-[#1456f0] hover:bg-[#1d4ed8] text-white font-semibold text-xs transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer active:scale-98 mt-2"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Check In Now & Enter Today</span>
+                <UserCheck className="w-4 h-4" />
+                <span>Confirm Desk Check-In (Staff Action)</span>
               </button>
             </div>
           )}

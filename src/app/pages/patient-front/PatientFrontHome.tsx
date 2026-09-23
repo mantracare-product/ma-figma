@@ -8,7 +8,7 @@ import {
   MapPin,
   ShieldCheck,
   ArrowRight,
-  QrCode,
+  Building2,
   User,
 } from "lucide-react";
 import {
@@ -28,19 +28,16 @@ import StageTrack, { StageStep } from "./components/StageTrack";
 import ActionCard from "./components/ActionCard";
 import { QuietList, QuietRow } from "./components/QuietList";
 import StageContentDrawer from "./components/StageContentDrawer";
-import QRCheckinModal from "./components/QRCheckinModal";
 import PatientStageDevBar from "./components/PatientStageDevBar";
 
 interface PatientFrontHomeProps {
   clientId: string;
   onNavigateTab: (tab: "today" | "appointments" | "documents" | "billing" | "profile") => void;
-  onTriggerCheckin?: () => void;
 }
 
 export default function PatientFrontHome({
   clientId,
   onNavigateTab,
-  onTriggerCheckin,
 }: PatientFrontHomeProps) {
   const [client, setClient] = useState<any>(() => {
     const found = findClientById(clientId);
@@ -61,8 +58,7 @@ export default function PatientFrontHome({
   const [processes, setProcesses] = useState<Process[]>(getStoredProcesses);
   const { invoices } = useInvoices();
 
-  // Drawer / Modal states
-  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  // Drawer states
   const [selectedDrawerStage, setSelectedDrawerStage] = useState<{
     process: Process;
     stage: Stage;
@@ -95,9 +91,28 @@ export default function PatientFrontHome({
   // Fallback Cataract Stages aligned strictly with v3 Brief
   const defaultCataractStages: Stage[] = [
     {
+      id: "cat-0",
+      name: "Pre-Checkin",
+      description: "Morning fasting verification and arrival reporting at Reception Desk",
+      status: "active",
+      color: "#3b82f6",
+      patientFacingContent: {
+        infoText: "Your cataract surgery is scheduled for today. Please arrive by 8:45 AM and report to Reception Desk Counter 1.",
+        instructions: [
+          "Confirm strict fasting (zero food or water since midnight)",
+          "Bring your companion or attendant with you to the clinic",
+          "Report to Reception Counter 1 for admission and verification",
+        ],
+        badge: "Scheduled · Reception Check-In",
+        doctorName: "Dr. Meera Nair",
+        roomOrCounter: "Reception Desk (Counter 1)",
+        estimatedWaitTime: "Surgery at 9:00 AM",
+      },
+    },
+    {
       id: "cat-1",
       name: "Checked In",
-      description: "Pre-op check-in, baseline vitals, and surgical consent review",
+      description: "Pre-op check-in, baseline vitals, and surgical prep review",
       status: "active",
       color: "#10b981",
       patientFacingContent: {
@@ -105,7 +120,7 @@ export default function PatientFrontHome({
         instructions: [
           "Take a seat in the Pre-Op Lounge while nursing prepares your record",
           "Confirm you have had zero food or water since midnight (fasting)",
-          "Review and sign your surgical consent before entering the holding room",
+          "Verify identification and prepare for baseline clinical vitals",
         ],
         badge: "Pre-Op Check-In",
         doctorName: "Dr. Meera Nair",
@@ -116,13 +131,6 @@ export default function PatientFrontHome({
           { id: "cat-f-2", label: "Attendant or companion present", description: "Priya Iyer is present to accompany you home today", required: true },
           { id: "cat-f-3", label: "Eyewear & personal valuables handed over", description: "Spectacles and personal valuables safely kept with your attendant", required: true },
         ],
-        consent: {
-          id: "cat-consent-1",
-          title: "Consent for Right-Eye Cataract Phacoemulsification & Foldable Toric IOL",
-          description: "Review and electronically sign procedure consent",
-          content: "I hereby authorize Dr. Meera Nair and the surgical care team at EyeMantra to perform Phacoemulsification with Foldable Toric Intraocular Lens (IOL) implantation on my Right Eye. The procedure steps, topical anesthesia, and recovery care have been explained to me in plain language. I confirm that I have complied with pre-operative fasting guidelines.",
-          requiresSignature: true,
-        },
       },
     },
     {
@@ -269,7 +277,7 @@ export default function PatientFrontHome({
   })();
 
   // Special Journey States
-  const isPreCheckin = currentStageId === "pre-checkin";
+  const isPreCheckin = currentStageId === "pre-checkin" || currentStageId === "cat-0" || currentStageId.toLowerCase().includes("pre-checkin");
   const isQuiet = currentStageId === "quiet";
   const isInSurgery = currentStageId === "cat-4";
   const isRecovery = currentStageId === "cat-5";
@@ -277,7 +285,7 @@ export default function PatientFrontHome({
   // Filter out stages explicitly set as internal-only (visibleToPatient === false) and preserve chronological clinical order
   const patientVisibleStages = useMemo(() => {
     const visible = processStagesList.filter(
-      (s) => s.patientFacingContent?.visibleToPatient !== false
+      (s) => s.patientFacingContent?.visibleToPatient !== false && s.id !== "cat-0" && s.id !== "pre-checkin"
     );
     const orderMap: Record<string, number> = {
       "cat-1": 1,
@@ -286,7 +294,7 @@ export default function PatientFrontHome({
       "cat-4": 4,
       "cat-5": 5,
     };
-    const list = visible.length > 0 ? visible : processStagesList;
+    const list = visible.length > 0 ? visible : processStagesList.filter(s => s.id !== "cat-0" && s.id !== "pre-checkin");
     return [...list].sort((a, b) => {
       const ordA = orderMap[a.id];
       const ordB = orderMap[b.id];
@@ -326,7 +334,7 @@ export default function PatientFrontHome({
     return "Cataract Daycare Surgery";
   };
 
-  // Check for blocking action item (Consent signature or Recovery discharge checklist)
+  // Check for actionable item (e.g. Recovery eye-shield checklist)
   let pendingAction: {
     label: string;
     desc: string;
@@ -335,27 +343,9 @@ export default function PatientFrontHome({
   } | null = null;
 
   const progress = getStoredStageProgress(clientId, cataractProcess.id, currentStageObj.id);
-  const consent = currentStageObj.patientFacingContent?.consent;
   const stageChecklist = currentStageObj.patientFacingContent?.checklist || [];
 
-  if (
-    !isPreCheckin &&
-    !isQuiet &&
-    !isInSurgery &&
-    consent &&
-    !progress.consentsSigned[consent.id]
-  ) {
-    pendingAction = {
-      label: "Needs your signature",
-      desc: consent.description || "Procedure consent form — required prior to theatre entry",
-      actionText: "Review & sign",
-      onClick: () =>
-        setSelectedDrawerStage({
-          process: cataractProcess,
-          stage: currentStageObj,
-        }),
-    };
-  } else if (isRecovery && stageChecklist.length > 0) {
+  if (!isPreCheckin && !isQuiet && !isInSurgery && isRecovery && stageChecklist.length > 0) {
     const isCompleted = stageChecklist.every((item) =>
       progress.completedChecklistIds.includes(item.id)
     );
@@ -417,16 +407,6 @@ export default function PatientFrontHome({
     setSelectedDrawerStage({ process: cataractProcess, stage: currentStageObj });
   };
 
-  const handleInstantCheckin = () => {
-    setClientProcessStage(clientId, {
-      processId: cataractProcess.id,
-      processName: cataractProcess.name,
-      stageId: "cat-1",
-      stageName: "Checked In",
-      channel: "sms",
-    });
-    setActiveStages(getClientProcessStages(clientId));
-  };
 
   return (
     <div className="w-full select-none animate-in fade-in duration-200">
@@ -448,6 +428,10 @@ export default function PatientFrontHome({
               <span className="w-1.5 h-1.5 rounded-full bg-[#1456f0]" />
               <span>Right Eye Cataract · Daycare</span>
             </div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/50 text-amber-800 dark:text-amber-300 text-[11px] font-semibold">
+              <Building2 className="w-3 h-3 text-amber-600" />
+              <span>Report to Reception Desk</span>
+            </div>
           </div>
 
           <h1 className="font-display font-semibold text-slate-900 dark:text-white text-xl sm:text-2xl tracking-tight mb-2">
@@ -455,11 +439,11 @@ export default function PatientFrontHome({
           </h1>
 
           <p className="text-slate-600 dark:text-slate-300 text-xs sm:text-sm leading-relaxed mb-5 max-w-xl">
-            Right-eye cataract surgery with Dr. Meera Nair. Please arrive 15 minutes early.
+            Right-eye cataract surgery with Dr. Meera Nair. Please arrive by 8:45 AM and report to Reception Desk Counter 1. Staff will verify your details and check you in.
           </p>
 
           <div className="mt-5 p-3.5 sm:p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3.5">
-            <div className="flex items-center gap-3 text-xs">
+            <div className="flex items-center flex-wrap gap-3 text-xs">
               <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
                 <User className="w-3.5 h-3.5 text-slate-400" />
                 <span>Dr. Meera Nair</span>
@@ -469,16 +453,19 @@ export default function PatientFrontHome({
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Fasting required</span>
               </div>
+              <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0" />
+              <div className="inline-flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-300">
+                <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                <span>Counter 1</span>
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={onTriggerCheckin || handleInstantCheckin}
-              className="cursor-pointer shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#1456f0] hover:bg-blue-700 text-white font-semibold text-xs transition-all active:scale-95 shadow-xs"
-            >
-              <QrCode className="w-4 h-4" />
-              <span>Check In Now</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-medium">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                <span>Awaiting clinic check-in</span>
+              </span>
+            </div>
           </div>
         </div>
       ) : isQuiet ? (
@@ -675,16 +662,6 @@ export default function PatientFrontHome({
         />
       )}
 
-      {/* QR Checkin Modal */}
-      <QRCheckinModal
-        isOpen={isQRModalOpen}
-        onClose={() => setIsQRModalOpen(false)}
-        clientId={clientId}
-        clientName={clientName}
-        onCheckinSuccess={() => {
-          setActiveStages(getClientProcessStages(clientId));
-        }}
-      />
 
       {/* Floating Developer Stage Simulator for Instant 1-Tap Testing */}
       <PatientStageDevBar

@@ -42,6 +42,7 @@ export const stageMapping: Record<string, StageOption[]> = {
     { id: "4", label: "Approval", fullLabel: "Insurance Verification: Approval", category: "Insurance Verification" },
   ],
   "Cataract Surgery Daycare": [
+    { id: "cat-0", label: "Pre-Checkin", fullLabel: "Cataract Surgery Daycare: Pre-Checkin", category: "Cataract Surgery Daycare" },
     { id: "cat-1", label: "Checked In", fullLabel: "Cataract Surgery Daycare: Checked In", category: "Cataract Surgery Daycare" },
     { id: "cat-2", label: "Dilation & Drops", fullLabel: "Cataract Surgery Daycare: Dilation & Drops", category: "Cataract Surgery Daycare" },
     { id: "cat-3", label: "Pre-Op Prep", fullLabel: "Cataract Surgery Daycare: Pre-Op Prep", category: "Cataract Surgery Daycare" },

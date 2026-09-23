@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   Trash2,
   Plus,
-  FileSignature,
   Code,
   Eye,
   Lock,
@@ -42,7 +41,7 @@ export const HTML_SNIPPET_TEMPLATES = [
     label: "+ Success / Cleared",
     snippet: `<div style="background-color: #ECFDF5; border: 1px solid #A7F3D0; padding: 14px 16px; border-radius: 12px; margin: 12px 0;">
   <strong style="color: #065F46; display: block; margin-bottom: 4px;">✅ Verification Cleared</strong>
-  <p style="color: #047857; font-size: 13px; margin: 0; line-height: 1.5;">Biometric lens calculation and consent signed. Patient is queued for theatre transfer.</p>
+  <p style="color: #047857; font-size: 13px; margin: 0; line-height: 1.5;">Biometric lens calculation verified. Client is queued for theatre transfer.</p>
 </div>`,
   },
   {
@@ -102,10 +101,10 @@ interface PatientCompanionStageBuilderProps {
   onInstructionsChange: (val: string[]) => void;
   checklist: PatientStageChecklistItem[];
   onChecklistChange: (val: PatientStageChecklistItem[]) => void;
-  consent: PatientStageConsent;
-  onConsentChange: (val: PatientStageConsent) => void;
-  consentEnabled: boolean;
-  onConsentEnabledChange: (val: boolean) => void;
+  consent?: PatientStageConsent;
+  onConsentChange?: (val: PatientStageConsent) => void;
+  consentEnabled?: boolean;
+  onConsentEnabledChange?: (val: boolean) => void;
 }
 
 export default function PatientCompanionStageBuilder({
@@ -127,13 +126,9 @@ export default function PatientCompanionStageBuilder({
   onInstructionsChange,
   checklist,
   onChecklistChange,
-  consent,
-  onConsentChange,
-  consentEnabled,
-  onConsentEnabledChange,
 }: PatientCompanionStageBuilderProps) {
   const [editorTab, setEditorTab] = useState<"edit" | "preview">("edit");
-  const [activeSubTab, setActiveSubTab] = useState<"builder" | "checklist" | "consent" | "steps">("builder");
+  const [activeSubTab, setActiveSubTab] = useState<"builder" | "checklist" | "steps">("builder");
 
   // Draft inputs
   const [newStepInput, setNewStepInput] = useState("");
@@ -165,7 +160,7 @@ export default function PatientCompanionStageBuilder({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h4 className="text-sm font-bold text-slate-900 dark:text-white" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                Visible in Patient Companion App
+                Visible in Client Companion App
               </h4>
               <span
                 className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider transition-colors ${
@@ -178,7 +173,7 @@ export default function PatientCompanionStageBuilder({
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Toggle whether patients and their attendants can view this stage, guidance, location, and progress on mobile (/patient-front).
+              Toggle whether clients and their attendants can view this stage, guidance, location, and progress on mobile (/patient-front).
             </p>
           </div>
         </div>
@@ -193,7 +188,7 @@ export default function PatientCompanionStageBuilder({
               onChange={(e) => {
                 const val = e.target.checked;
                 onToggleVisible(val);
-                toast.info(val ? "Stage enabled for Patient Companion" : "Stage hidden from Patient Companion (Internal only)");
+                toast.info(val ? "Stage enabled for Client Companion" : "Stage hidden from Client Companion (Internal only)");
               }}
             />
             <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:ring-2 peer-focus:ring-emerald-400 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
@@ -206,7 +201,7 @@ export default function PatientCompanionStageBuilder({
         <div className="p-4 bg-slate-50/70 dark:bg-slate-900/40 flex items-center gap-2.5 text-xs text-slate-600 dark:text-slate-400">
           <Lock className="w-4 h-4 text-slate-400 shrink-0" />
           <span>
-            <strong>Internal Stage:</strong> This stage is hidden from patients and attendants. It will not appear on their timeline or visit tracker.
+            <strong>Internal Stage:</strong> This stage is hidden from clients and attendants. It will not appear on their timeline or visit tracker.
           </span>
         </div>
       ) : (
@@ -238,19 +233,6 @@ export default function PatientCompanionStageBuilder({
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>Checklist ({checklist.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveSubTab("consent")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                activeSubTab === "consent"
-                  ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
-              }`}
-            >
-              <FileSignature className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-              <span>Consent Form ({consentEnabled ? "On" : "Off"})</span>
             </button>
 
             <button
@@ -338,7 +320,7 @@ export default function PatientCompanionStageBuilder({
                     <span>Custom HTML & Guidance Builder</span>
                   </h5>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Write rich HTML blocks, alerts, cards, or custom formatted advisories shown to patients during this stage.
+                    Write rich HTML blocks, alerts, cards, or custom formatted advisories shown to clients during this stage.
                   </p>
                 </div>
 
@@ -426,7 +408,7 @@ export default function PatientCompanionStageBuilder({
                 <div className="p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950/50">
                   <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-200 dark:border-slate-800 text-[11px] text-slate-400">
                     <span className="font-semibold text-slate-700 dark:text-slate-300">
-                      📱 Patient Companion Drawer Preview
+                      📱 Client Companion Drawer Preview
                     </span>
                     <span>Live Rendering</span>
                   </div>
@@ -460,7 +442,7 @@ export default function PatientCompanionStageBuilder({
                     <span>Stage Verification Checklist ({checklist.length})</span>
                   </h5>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Tasks the patient or nursing staff must verify for this stage.
+                    Tasks the client or clinic staff must verify for this stage.
                   </p>
                 </div>
               </div>
@@ -577,83 +559,7 @@ export default function PatientCompanionStageBuilder({
             </div>
           )}
 
-          {/* TAB 3: INFORMED SURGICAL CONSENT */}
-          {activeSubTab === "consent" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
-                <div>
-                  <h5 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <FileSignature className="w-3.5 h-3.5 text-purple-600" />
-                    <span>Informed Procedure / Surgical Consent</span>
-                  </h5>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Requires the patient or attendant to digitally sign before entering this stage.
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    checked={consentEnabled}
-                    onChange={(e) => {
-                      const enabled = e.target.checked;
-                      onConsentEnabledChange(enabled);
-                      toast.info(enabled ? "Informed consent enabled for this stage" : "Consent disabled");
-                    }}
-                  />
-                  <div className="w-10 h-5 bg-slate-200 dark:bg-slate-700 peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-                </label>
-              </div>
-
-              {consentEnabled ? (
-                <div className="space-y-3 pt-1 animate-in fade-in duration-200">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Consent Form Title
-                    </label>
-                    <input
-                      type="text"
-                      value={consent.title}
-                      onChange={(e) => onConsentChange({ ...consent, title: e.target.value })}
-                      placeholder="e.g. Informed Surgical Consent - Cataract Phacoemulsification"
-                      className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Summary Note
-                    </label>
-                    <input
-                      type="text"
-                      value={consent.description || ""}
-                      onChange={(e) => onConsentChange({ ...consent, description: e.target.value })}
-                      placeholder="e.g. Mandatory clinical authorization prior to entering the procedure area."
-                      className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Legal Authorization Text
-                    </label>
-                    <textarea
-                      value={consent.content}
-                      onChange={(e) => onConsentChange({ ...consent, content: e.target.value })}
-                      rows={4}
-                      className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-200 font-mono leading-relaxed focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic py-2">
-                  Informed consent is disabled for this stage. Turn on the toggle above to require digital signing.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* TAB 4: STEP INSTRUCTIONS */}
+          {/* TAB 3: STEP INSTRUCTIONS */}
           {activeSubTab === "steps" && (
             <div className="space-y-4">
               <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
@@ -663,7 +569,7 @@ export default function PatientCompanionStageBuilder({
                     <span>Step-by-Step Instructions ({instructions.length})</span>
                   </h5>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Ordered list of actions or instructions displayed to the patient.
+                    Ordered list of actions or instructions displayed to the client.
                   </p>
                 </div>
               </div>

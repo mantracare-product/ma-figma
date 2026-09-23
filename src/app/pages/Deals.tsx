@@ -175,7 +175,7 @@ const getClientObj = (clientId?: string, clientName?: string): Client | undefine
 // All calls mapped to valid clients with correct process assignments
 const initialCallLogs: CallLog[] = [
   // Patient Front Journeys (Daycare, OPD, IPD)
-  { id: "CALL-RAMESH-01", client: "Ramesh Iyer", clientId: "CL-001", type: "Inbound", status: "In Progress", process: "Cataract Surgery Daycare", currentStage: "Pre-Op Prep", duration: "4:12", date: "2024-05-18 09:30", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-RAMESH-01", client: "Ramesh Iyer", clientId: "CL-001", type: "Inbound", status: "In Progress", process: "Cataract Surgery Daycare", currentStage: "Pre-Checkin", duration: "4:12", date: "2024-05-18 09:30", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
   { id: "CALL-CAT-02", client: "Sunita Sharma", clientId: "CL-031", type: "Inbound", status: "In Progress", process: "Cataract Surgery Daycare", currentStage: "Checked In", duration: "1:45", date: "2024-05-18 08:45", hasRecording: false, hasTranscript: true, hasScheduledCall: false },
   { id: "CALL-CAT-03", client: "Rajesh Verma", clientId: "CL-032", type: "Outbound", status: "Completed", process: "Cataract Surgery Daycare", currentStage: "Dilation & Drops", duration: "3:10", date: "2024-05-18 09:10", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
   { id: "CALL-OPH-01", client: "Meenakshi Sundaram", clientId: "CL-033", type: "Inbound", status: "In Progress", process: "Ophthalmology Consultation", currentStage: "Optometry & Vitals", duration: "2:30", date: "2024-05-18 10:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
@@ -208,6 +208,8 @@ const initialCallLogs: CallLog[] = [
 const getProcessFromStage = (stage: string): string => {
   const stageToProcessMap: Record<string, string> = {
     // Patient Front Journeys
+    'Pre-Checkin': 'Cataract Surgery Daycare',
+    'Morning (Pre-Checkin)': 'Cataract Surgery Daycare',
     'Checked In': 'Cataract Surgery Daycare',
     'Dilation & Drops': 'Cataract Surgery Daycare',
     'Pre-Op Prep': 'Cataract Surgery Daycare',
@@ -1220,7 +1222,11 @@ export default function Deals() {
     const stages = getStagesListForProcess(processName, stageName);
     if (stages.length === 0) return 1;
     const cleanStage = stageName.includes(":") ? stageName.split(":")[1].trim() : stageName.trim();
-    const idx = stages.findIndex((s) => s.trim().toLowerCase() === cleanStage.toLowerCase());
+    const idx = stages.findIndex((s) => {
+      const a = s.trim().toLowerCase();
+      const b = cleanStage.toLowerCase();
+      return a === b || (b.includes("pre-checkin") && a.includes("pre-checkin"));
+    });
     return idx !== -1 ? idx + 1 : 1;
   };
 

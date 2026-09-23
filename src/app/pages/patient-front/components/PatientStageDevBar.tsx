@@ -41,15 +41,23 @@ export default function PatientStageDevBar({
     setIsExpanded(false);
   };
 
-  const isPreCheckin = currentStageId === "pre-checkin";
+  const isPreCheckin =
+    currentStageId === "pre-checkin" ||
+    currentStageId === "cat-0" ||
+    currentStageId?.toLowerCase().includes("pre-checkin");
   const isQuiet = currentStageId === "quiet";
   const currentStageIndex = stages.findIndex((s) => s.id === currentStageId);
 
   const currentLabel = isPreCheckin
-    ? "Morning (Pre-Checkin)"
+    ? "Pre-Checkin"
     : isQuiet
     ? "Days Later (Quiet)"
     : stages[currentStageIndex]?.name || "Active Visit";
+
+  // Filter out any duplicate pre-checkin stages from the main clinical timeline stages
+  const clinicalStages = stages.filter(
+    (stg) => stg.id !== "cat-0" && stg.id !== "pre-checkin" && !stg.name.toLowerCase().includes("pre-checkin")
+  );
 
   return (
     <div className="fixed bottom-3 right-3 z-40 select-none animate-in fade-in duration-200">
@@ -61,10 +69,10 @@ export default function PatientStageDevBar({
             <span className="text-[9px] text-[#7fa8ff]">Instant</span>
           </div>
 
-          {/* State 0: Morning Before Checkin */}
+          {/* State 0: Pre-Checkin */}
           <button
             type="button"
-            onClick={() => handleSelectStageId("pre-checkin", "Morning (Pre-Checkin)")}
+            onClick={() => handleSelectStageId("cat-0", "Pre-Checkin")}
             className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
               isPreCheckin
                 ? "bg-amber-500/20 text-amber-300 font-semibold"
@@ -73,13 +81,13 @@ export default function PatientStageDevBar({
           >
             <div className="flex items-center gap-2 truncate">
               <Sun className="w-3 h-3 text-amber-400 shrink-0" />
-              <span className="truncate">1. Morning (Pre-Checkin)</span>
+              <span className="truncate">Pre-Checkin (Scheduled)</span>
             </div>
             {isPreCheckin && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
           </button>
 
-          {/* Stages 1 to 5 */}
-          {stages.map((stg, idx) => {
+          {/* Clinical Stages 1 to N */}
+          {clinicalStages.map((stg, idx) => {
             const isCurrent = stg.id === currentStageId;
             const isAttendantStage = stg.id === "cat-4";
 
@@ -113,7 +121,7 @@ export default function PatientStageDevBar({
             );
           })}
 
-          {/* State 6: Post-Discharge / Days Later */}
+          {/* Post-Discharge / Days Later */}
           <button
             type="button"
             onClick={() => handleSelectStageId("quiet", "Days Later (Quiet State)")}
@@ -125,7 +133,7 @@ export default function PatientStageDevBar({
           >
             <div className="flex items-center gap-2 truncate">
               <Moon className="w-3 h-3 text-emerald-400 shrink-0" />
-              <span className="truncate">6. Days Later (Quiet)</span>
+              <span className="truncate">Post-Discharge (Quiet)</span>
             </div>
             {isQuiet && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />}
           </button>

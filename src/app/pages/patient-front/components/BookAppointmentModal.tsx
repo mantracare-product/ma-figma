@@ -335,7 +335,7 @@ export default function BookAppointmentModal({
                 </div>
                 <div className="pt-2 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Your Fast Check-In QR Pass is now available in your Visits tab.</span>
+                  <span>Your Visit Slip & Token are now available in your Visits tab. Report to Reception upon arrival.</span>
                 </div>
               </div>
             )}

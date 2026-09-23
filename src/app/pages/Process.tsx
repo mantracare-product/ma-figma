@@ -3879,16 +3879,6 @@ export default function Process() {
                               setStageChecklist(val);
                               updateStagePfc({ checklist: val });
                             }}
-                            consent={stageConsent}
-                            onConsentChange={(val) => {
-                              setStageConsent(val);
-                              updateStagePfc({ consent: val });
-                            }}
-                            consentEnabled={stageConsentEnabled}
-                            onConsentEnabledChange={(val) => {
-                              setStageConsentEnabled(val);
-                              updateStagePfc({ consent: val ? stageConsent : undefined });
-                            }}
                           />
 
                           {/* Stage Configuration Section */}
@@ -6443,7 +6433,7 @@ export default function Process() {
                     <span className="text-xs font-bold text-slate-900">Patient Front Journey</span>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1 leading-snug">
-                    Powers the patient companion app (/patient-front), tracking stages, checklists, and consents.
+                    Powers the client companion app (/patient-front), tracking stages, checklists, and consents.
                   </p>
                 </button>
 

@@ -40,7 +40,7 @@ export default function AdminSimulatorBar({
   const handleAdvanceStage = () => {
     const stages = getClientProcessStages(currentClientId);
     if (stages.length === 0) {
-      toast.error("No active process to advance. Use QR Check-In first!");
+      toast.error("No active process to advance. Complete Reception Desk Check-In first!");
       return;
     }
 

@@ -7,14 +7,12 @@ import {
   FileText,
   CreditCard,
   User,
-  QrCode,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
 import PatientFrontHome from "./PatientFrontHome";
 import PatientAppointments from "./PatientAppointments";
 import PatientMore, { MoreSection } from "./PatientMore";
-import QRCheckinModal from "./components/QRCheckinModal";
 import { findClientById } from "../../../lib/clientProcessState";
 import logo from "../../../imports/ma_logo.png";
 
@@ -84,8 +82,6 @@ export default function PatientFrontLayout() {
       age: 62,
     };
   });
-
-  const [isHeaderQRModalOpen, setIsHeaderQRModalOpen] = useState(false);
 
   useEffect(() => {
     const matched = findClientById(clientId);
@@ -337,17 +333,6 @@ export default function PatientFrontLayout() {
           </div>
         </nav>
 
-        {/* Desktop Quick Check-in trigger */}
-        <div className="pt-2 border-t border-[rgba(24,30,37,0.07)]">
-          <button
-            type="button"
-            onClick={() => setIsHeaderQRModalOpen(true)}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-[#eff6ff] hover:bg-blue-100/80 text-[#1456f0] text-xs font-semibold cursor-pointer transition-all active:scale-98"
-          >
-            <QrCode className="w-4 h-4 shrink-0" />
-            <span>Fast Check-In</span>
-          </button>
-        </div>
       </aside>
 
       {/* =========================================================================
@@ -420,7 +405,6 @@ export default function PatientFrontLayout() {
                   handleNavigateTab("today");
                 }
               }}
-              onTriggerCheckin={() => setIsHeaderQRModalOpen(true)}
             />
           )}
 
@@ -524,17 +508,6 @@ export default function PatientFrontLayout() {
           </span>
         </button>
       </nav>
-
-      {/* Instant Fast Check-in Modal */}
-      <QRCheckinModal
-        isOpen={isHeaderQRModalOpen}
-        onClose={() => setIsHeaderQRModalOpen(false)}
-        clientId={clientId}
-        clientName={clientName}
-        onCheckinSuccess={() => {
-          handleNavigateTab("today");
-        }}
-      />
     </div>
   );
 }

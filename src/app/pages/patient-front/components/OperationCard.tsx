@@ -3,7 +3,6 @@ import {
   Activity,
   CheckCircle2,
   AlertCircle,
-  FileSignature,
   Clock,
   ChevronRight,
   Stethoscope,
@@ -174,14 +173,10 @@ export default function OperationCard({
           </div>
 
           <div className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-            {isConsentSigned ? (
-              <CheckCircle2 className="w-4 h-4 text-[#10b981] shrink-0" />
-            ) : (
-              <FileSignature className="w-4 h-4 text-amber-500 shrink-0" />
-            )}
+            <CheckCircle2 className="w-4 h-4 text-[#10b981] shrink-0" />
             <div className="min-w-0">
-              <div className="font-medium text-[#222222] dark:text-white text-[11px] truncate">Surgical Consent</div>
-              <div className="text-[10px] text-[#64748b]">{isConsentSigned ? "Digitally Signed" : "Pending Signature"}</div>
+              <div className="font-medium text-[#222222] dark:text-white text-[11px] truncate">Clinical Records</div>
+              <div className="text-[10px] text-[#64748b]">Verified</div>
             </div>
           </div>
 
