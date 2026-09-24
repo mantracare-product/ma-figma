@@ -1,6 +1,11 @@
 import { pipeline } from '@xenova/transformers';
-import pkg from 'wavefile';
-const { WaveFile } = pkg;
+import * as wavefileModule from 'wavefile';
+
+const WaveFile: any =
+  (wavefileModule as any).WaveFile ||
+  (wavefileModule as any).default?.WaveFile ||
+  (wavefileModule as any).default ||
+  wavefileModule;
 
 let transcriberPromise: Promise<any> | null = null;
 

@@ -50,6 +50,9 @@ export interface IMaClient {
     patient: { name: string; phone: string; dob?: string };
     reason?: string;
     processId?: string;
+    providerId?: string;
+    serviceId?: string;
+    responsible?: string;
     idempotencyKey?: string;
   }): Promise<{ success: boolean; ticket: QueueTicket; journey: Journey }>;
 

@@ -44,13 +44,26 @@ const initialCallLogs: CallLog[] = [
   { id: "CALL-021", client: "Sarah Johnson", clientId: "CL-001", type: "Inbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "5:05", date: "2024-04-10 14:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
 ];
 
+export const PROCESS_LOGS_CHANNEL_NAME = "process_logs_broadcast_channel";
+
+let processLogsChannel: BroadcastChannel | null = null;
+if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+  try {
+    processLogsChannel = new BroadcastChannel(PROCESS_LOGS_CHANNEL_NAME);
+  } catch (e) {
+    console.warn("BroadcastChannel not supported in processLogsStore:", e);
+  }
+}
+
 function notifyProcessLogsChanged() {
+  if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(PROCESS_LOGS_STORE_EVENT));
+  processLogsChannel?.postMessage({ type: PROCESS_LOGS_STORE_EVENT });
 }
 
 export function getStoredCallLogs(): CallLog[] {
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = (typeof window !== "undefined" && (localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY))) || null;
     return raw ? JSON.parse(raw) : initialCallLogs;
   } catch {
     return initialCallLogs;
@@ -59,7 +72,11 @@ export function getStoredCallLogs(): CallLog[] {
 
 export function saveCallLogs(logs: CallLog[]): void {
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+    const serialized = JSON.stringify(logs);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_KEY, serialized);
+      sessionStorage.setItem(STORAGE_KEY, serialized);
+    }
     notifyProcessLogsChanged();
   } catch {}
 }

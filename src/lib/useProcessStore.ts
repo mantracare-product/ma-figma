@@ -246,6 +246,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
       { id: "1-1", name: "Initial Contact", description: "First call to patient for basic information gathering", status: "active", color: "#22D3EE" },
       { id: "1-2", name: "Insurance Verify", description: "Verify patient insurance details and coverage", status: "active", color: "#22D3EE" },
       { id: "1-3", name: "Schedule Appointment", description: "Schedule the patient's first appointment", status: "active", color: "#EC4899" },
+      { id: "1-4", name: "Completed", description: "Intake process successfully completed", status: "active", color: "#10B981" },
     ],
   },
   {
@@ -261,8 +262,68 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
       style: "Balanced",
     },
     stages: [
-      { id: "2-1", name: "Post-Visit Check", description: "Check on patient after their visit", status: "active" },
-      { id: "2-2", name: "Medication Reminder", description: "Remind patient to take their medication", status: "active" },
+      { id: "2-1", name: "Initial Contact", description: "First touchpoint for post-visit follow-up", status: "active", color: "#22D3EE" },
+      { id: "2-2", name: "Post-Visit Check", description: "Check on patient after their visit", status: "active", color: "#6366F1" },
+      { id: "2-3", name: "Medication Reminder", description: "Remind patient to take their medication", status: "active", color: "#F59E0B" },
+      { id: "2-4", name: "Completed", description: "Follow-up completed", status: "active", color: "#10B981" },
+    ],
+  },
+  {
+    id: "3",
+    name: "Insurance Verification",
+    description: "Verification of insurance benefits, coverage, and prior authorization",
+    assignedToUserId: 1,
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "3-1", name: "Initial Contact", description: "Initial insurance request received", status: "active", color: "#22D3EE" },
+      { id: "3-2", name: "Document Check", description: "Review insurance policy card and document validity", status: "active", color: "#F59E0B" },
+      { id: "3-3", name: "Verification", description: "Contact insurer to verify benefits and copay", status: "active", color: "#6366F1" },
+      { id: "3-4", name: "Approval", description: "Coverage approved and recorded", status: "active", color: "#10B981" },
+    ],
+  },
+  {
+    id: "4",
+    name: "Appointment Scheduling",
+    description: "Coordination of patient booking, slot selection, and confirmation",
+    assignedToUserId: 1,
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "4-1", name: "Initial Contact", description: "Appointment scheduling request", status: "active", color: "#22D3EE" },
+      { id: "4-2", name: "Slot Selection", description: "Selecting doctor, date, and time slot", status: "active", color: "#F59E0B" },
+      { id: "4-3", name: "Confirmation", description: "Appointment confirmed and booked", status: "active", color: "#6366F1" },
+      { id: "4-4", name: "Completed", description: "Appointment completed", status: "active", color: "#10B981" },
+    ],
+  },
+  {
+    id: "5",
+    name: "Payment Reminder",
+    description: "Billing support, copay collections, and invoice payment reminders",
+    assignedToUserId: 2,
+    aiSettings: {
+      platform: "Anthropic Claude",
+      voiceSpeed: 1.0,
+      voice: "Eva",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "5-1", name: "Initial Contact", description: "Billing statement sent to client", status: "active", color: "#22D3EE" },
+      { id: "5-2", name: "Billing Inquiry", description: "Addressing billing or insurance claim questions", status: "active", color: "#F59E0B" },
+      { id: "5-3", name: "Issue Resolution", description: "Resolution of payment dispute or adjustments", status: "active", color: "#6366F1" },
+      { id: "5-4", name: "Payment Notice", description: "Follow-up reminder notice sent", status: "active", color: "#EC4899" },
+      { id: "5-5", name: "Payment Collected", description: "Payment collected successfully", status: "active", color: "#10B981" },
     ],
   },
 ];
@@ -286,7 +347,18 @@ export const DEFAULT_WORKFLOW_STEPS: Record<string, WorkflowStep[]> = {
 export function getStoredProcesses(): Process[] {
   try {
     const raw = localStorage.getItem(PROCESSES_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : DEFAULT_INITIAL_PROCESSES;
+    if (raw) {
+      const parsed: Process[] = JSON.parse(raw);
+      // Merge with default processes so standard ones (Appointment Scheduling, Insurance Verification, Payment Reminder) are always available
+      const merged = [...parsed];
+      DEFAULT_INITIAL_PROCESSES.forEach((dp) => {
+        if (!merged.some((p) => p.name.toLowerCase() === dp.name.toLowerCase() || p.id === dp.id)) {
+          merged.push(dp);
+        }
+      });
+      return merged;
+    }
+    return DEFAULT_INITIAL_PROCESSES;
   } catch {
     return DEFAULT_INITIAL_PROCESSES;
   }

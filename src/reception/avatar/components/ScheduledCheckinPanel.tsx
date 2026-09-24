@@ -350,25 +350,39 @@ export const ScheduledCheckinPanel: React.FC<ScheduledCheckinPanelProps> = ({
             )}
           </div>
 
-          {/* Quick Synthetic Demo Shortcuts */}
+          {/* Quick Demo Shortcuts from MantraAssist Client Store */}
           <div className="mb-6 p-3 rounded-xl bg-slate-800/40 border border-slate-700/50">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Quick Demo Test Accounts:
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" /> MantraAssist Client Accounts:
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
-                onClick={() => selectDemoProfile('+1 (555) 234-5678')}
+                onClick={() => selectDemoProfile('+91 98201 72818')}
                 className="text-left px-3 py-2 rounded-lg bg-slate-800 hover:bg-blue-900/30 border border-slate-700 hover:border-blue-500/50 transition-all text-xs"
               >
-                <div className="font-bold text-slate-200">Eleanor Vance</div>
-                <div className="text-slate-400 font-mono">+1 (555) 234-5678 (Dr. Sharma 10:30 AM)</div>
+                <div className="font-bold text-slate-200">Priya Sharma (CL-013)</div>
+                <div className="text-slate-400 font-mono">+91 98201 72818 (Dr. Patel 11:00 AM)</div>
               </button>
               <button
-                onClick={() => selectDemoProfile('+91 91234 56780')}
+                onClick={() => selectDemoProfile('+1 (555) 123-4567')}
                 className="text-left px-3 py-2 rounded-lg bg-slate-800 hover:bg-blue-900/30 border border-slate-700 hover:border-blue-500/50 transition-all text-xs"
               >
-                <div className="font-bold text-slate-200">Sunita Rao</div>
-                <div className="text-slate-400 font-mono">+91 91234 56780 (Dr. Patel 11:00 AM)</div>
+                <div className="font-bold text-slate-200">Sarah Johnson (CL-001)</div>
+                <div className="text-slate-400 font-mono">+1 (555) 123-4567 (Dr. Sharma 10:30 AM)</div>
+              </button>
+              <button
+                onClick={() => selectDemoProfile('+91 98765 43210')}
+                className="text-left px-3 py-2 rounded-lg bg-slate-800 hover:bg-blue-900/30 border border-slate-700 hover:border-blue-500/50 transition-all text-xs"
+              >
+                <div className="font-bold text-slate-200">Rahul Patel (CL-014)</div>
+                <div className="text-slate-400 font-mono">+91 98765 43210 (Walk-in Consultation)</div>
+              </button>
+              <button
+                onClick={() => selectDemoProfile('+91 91234 56789')}
+                className="text-left px-3 py-2 rounded-lg bg-slate-800 hover:bg-blue-900/30 border border-slate-700 hover:border-blue-500/50 transition-all text-xs"
+              >
+                <div className="font-bold text-slate-200">Ananya Reddy (CL-015)</div>
+                <div className="text-slate-400 font-mono">+91 91234 56789 (Dr. Desai 02:00 PM)</div>
               </button>
             </div>
           </div>
@@ -684,7 +698,7 @@ export const ScheduledCheckinPanel: React.FC<ScheduledCheckinPanelProps> = ({
             <div>
               <p className="text-xs font-bold text-blue-400 uppercase tracking-wider">Where to go:</p>
               <h4 className="text-base font-bold text-white">
-                {issuedTicket.stationName || 'Room 101 - Dr. Sharma'}
+                {issuedTicket.stationName || 'Doctor Consultation Room'}
               </h4>
               <p className="text-xs text-slate-400">
                 Please be seated in the 1st Floor Waiting Area.

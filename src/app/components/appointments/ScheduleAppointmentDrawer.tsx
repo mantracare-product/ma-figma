@@ -1085,14 +1085,12 @@ export default function ScheduleAppointmentDrawer({
         {/* ================================================================ */}
         <SectionCard>
           <SectionHeader title="Workflow" />
-          <div className="p-3 space-y-1">
-            <FieldRow label="Process">
-              <CustomDropdown
-                value={values.processId}
-                options={processOptions}
-                placeholder="Select a process"
-                onChange={(val) => onChange({ processId: val, stageId: "" })}
-              />
+          <div className="p-3 space-y-2">
+            <FieldRow label="Assigned Process">
+              <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 flex items-center justify-between">
+                <span>{values.processId || "Appointment Scheduling"}</span>
+                <span className="text-[10px] text-slate-400 font-normal">Configured in Module Settings</span>
+              </div>
             </FieldRow>
             <FieldRow label="Stage">
               <CustomDropdown
@@ -1100,7 +1098,6 @@ export default function ScheduleAppointmentDrawer({
                 options={stageOptions}
                 placeholder="Select a stage"
                 onChange={(val) => onChange({ stageId: val })}
-                disabled={!values.processId}
               />
             </FieldRow>
           </div>

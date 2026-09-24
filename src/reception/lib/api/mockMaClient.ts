@@ -8,6 +8,11 @@
  */
 
 import type { IMaClient } from './maClient';
+import { initialClients as canonicalMaClients } from '../../../data/canonicalClients';
+import { getStoredClients, saveStoredClients, addOrUpdateClient, CLIENTS_STORE_EVENT } from '../../../lib/clientsStore';
+import { addProcessCallLog } from '../../../lib/processLogsStore';
+import { getStoredServices } from '../../../lib/servicesStore';
+import { getStoredTeamMembers } from '../../../lib/teamStore';
 import type {
   Station,
   DirectionCategory,
@@ -38,7 +43,6 @@ const STORAGE_KEYS = {
   JOURNEYS: 'ma_reception_journeys',
   IDEMPOTENCY: 'ma_reception_idempotency',
   AUDIT: 'ma_reception_audit_logs',
-  PATIENTS: 'ma_reception_mock_patients',
   APPOINTMENTS: 'ma_reception_mock_appointments',
   FACE_TEMPLATES: 'ma_reception_face_templates',
 };
@@ -46,14 +50,69 @@ const STORAGE_KEYS = {
 const DEFAULT_ORG_ID = 'org_mantracare_default';
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+export interface MantraClientRecord {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  phoneNumber?: string;
+  country?: string;
+  countryCode?: string;
+  countryFlag?: string;
+  processes?: string[];
+  stage?: string;
+  responsible?: string;
+  lastContact?: string;
+  status?: string;
+  companyName?: string;
+  jobPosition?: string;
+  numberOfEmployees?: string;
+  location?: string;
+  age?: number;
+  gender?: string;
+  relation?: string;
+  faceEnrolled?: boolean;
+  faceEnrolledAt?: string;
+  faceConsentAt?: string;
+  faceTemplate?: number[];
+  createdVia?: string;
+  source?: string;
+  processStages?: any[];
+}
+
+export const INITIAL_MA_CLIENTS: MantraClientRecord[] = canonicalMaClients.map((c) => ({
+  id: c.id,
+  name: c.name,
+  email: c.email,
+  phone: c.phone,
+  phoneNumber: c.phone,
+  country: c.country,
+  countryCode: c.countryCode,
+  countryFlag: c.countryFlag,
+  processes: c.processes,
+  stage: c.stage,
+  responsible: c.responsible,
+  lastContact: c.lastContact,
+  status: c.status,
+  companyName: c.companyName,
+  jobPosition: c.jobPosition,
+  numberOfEmployees: c.numberOfEmployees,
+  location: c.location,
+  age: c.name.toLowerCase().includes('abhishek') ? 29 : (c.name.match(/Priya|Sarah/i) ? 58 : 35),
+  gender: c.name.match(/Priya|Sarah|Emily|Jessica|Lisa|Amanda|Jennifer|Sneha|Kavya|Deepika|Fatima|Layla|Charlotte|Emma|Sophia/i) ? 'Female' : 'Male',
+  faceEnrolled: c.id === 'CL-013' || c.id === 'CL-001' || c.id === 'CL-014',
+  faceEnrolledAt: (c.id === 'CL-013' || c.id === 'CL-001') ? '2026-09-02T11:15:00Z' : undefined,
+}));
+
 export class MockMaClient implements IMaClient {
   private static sharedMemoryStorage: Record<string, string> = {};
   private queueListeners: Set<(event: QueueEvent) => void> = new Set();
 
   static resetStorage(): void {
     MockMaClient.sharedMemoryStorage = {};
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.clear();
+    if (typeof window !== 'undefined') {
+      window.sessionStorage?.removeItem('clients');
+      window.localStorage?.removeItem('clients');
     }
   }
 
@@ -86,6 +145,60 @@ export class MockMaClient implements IMaClient {
     } catch (err) {
       console.error(`Failed to write storage key [${key}]:`, err);
     }
+  }
+
+  // --- MantraAssist Real Client Database Operations ---
+
+  public getMantraClients(): MantraClientRecord[] {
+    const clients = getStoredClients();
+    return clients.map((c) => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      phoneNumber: c.phone,
+      country: c.country,
+      countryCode: c.countryCode,
+      countryFlag: c.countryFlag,
+      processes: c.processes,
+      stage: c.stage,
+      responsible: c.responsible || 'John Smith',
+      lastContact: c.lastContact,
+      status: c.status || 'Active',
+      companyName: c.companyName,
+      jobPosition: c.jobPosition,
+      numberOfEmployees: c.numberOfEmployees,
+      location: c.location,
+      age: c.name.toLowerCase().includes('abhishek') ? 29 : 35,
+      gender: c.name.match(/Priya|Sarah|Emily|Jessica|Lisa|Amanda|Jennifer|Sneha|Kavya|Deepika|Fatima|Layla|Charlotte|Emma|Sophia/i) ? 'Female' : 'Male',
+      relation: 'Self',
+      faceEnrolled: false,
+      createdVia: 'ai_receptionist',
+      source: 'ai_receptionist',
+    }));
+  }
+
+  public saveMantraClients(clients: MantraClientRecord[]): void {
+    saveStoredClients(clients as any);
+  }
+
+  public mantraClientToPatientSummary(c: MantraClientRecord): PatientSummary {
+    const rawPhone = c.phone || c.phoneNumber || '';
+    return {
+      id: c.id,
+      name: c.name || 'Patient',
+      phone: rawPhone,
+      email: c.email || undefined,
+      age: c.age || (c.name.toLowerCase().includes('abhishek') ? 29 : 38),
+      gender: (c.gender as any) || (c.name?.match(/Priya|Sarah|Emily|Jessica|Lisa|Amanda|Jennifer|Sneha|Kavya|Deepika|Fatima|Layla|Charlotte|Emma|Sophia/i) ? 'Female' : 'Male'),
+      relation: c.relation || 'Self',
+      faceEnrolled: !!c.faceEnrolled,
+      faceEnrolledAt: c.faceEnrolledAt,
+      faceConsentAt: c.faceConsentAt,
+      faceTemplate: c.faceTemplate,
+      createdVia: (c.createdVia as any) || 'ai_receptionist',
+      defaultProcessId: c.processes?.[0] || 'Appointment Scheduling',
+    };
   }
 
   private notifyQueueListeners(event: QueueEvent): void {
@@ -124,49 +237,28 @@ export class MockMaClient implements IMaClient {
     // 1. Rooms / Stations
     const existingStations = this.getStorage<Station[] | null>(STORAGE_KEYS.STATIONS, null);
     if (!existingStations || existingStations.length === 0 || !existingStations.some((s) => s.directions)) {
+      const team = getStoredTeamMembers();
+      const activeDoctors = team.filter((m) => m.status !== false && m.canBookAppointments !== false);
+      const doctorStations: Station[] = (activeDoctors.length > 0 ? activeDoctors : team.slice(0, 3)).map((m, idx) => {
+        const docDisplay = m.name.startsWith('Dr.') ? m.name : `Dr. ${m.name}`;
+        return {
+          id: `st-consult-${m.id}`,
+          orgId: DEFAULT_ORG_ID,
+          name: `${docDisplay}'s Consultation Room`,
+          type: 'doctor_room' as const,
+          providerId: String(m.id),
+          providerName: docDisplay,
+          roomNumber: `${101 + idx}`,
+          floorWing: idx % 2 === 0 ? 'Ground Floor, Clinical Wing A' : '1st Floor, Specialty Wing',
+          directions: `Proceed down the hallway, Room ${101 + idx} is on the right.`,
+          categoryId: 'cat_clinical',
+          active: true,
+          createdAt: new Date().toISOString(),
+        };
+      });
+
       const initialStations: Station[] = [
-        {
-          id: 'st-consult-1',
-          orgId: DEFAULT_ORG_ID,
-          name: "Dr. Sharma's Consultation Room",
-          type: 'doctor_room',
-          providerId: 'prov_1',
-          providerName: 'Dr. Ananya Sharma',
-          roomNumber: '101',
-          floorWing: 'Ground Floor, Clinical Wing B',
-          directions: 'Proceed down hallway B, past reception counter, 2nd door on right.',
-          categoryId: 'cat_clinical',
-          active: true,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'st-consult-2',
-          orgId: DEFAULT_ORG_ID,
-          name: 'Dr. Rajesh Patel - Cardiology',
-          type: 'doctor_room',
-          providerId: 'prov_2',
-          providerName: 'Dr. Rajesh Patel',
-          roomNumber: '102',
-          floorWing: 'Ground Floor, Clinical Wing B',
-          directions: 'Walk past reception, take hallway B on the right, room 102 is the 3rd door on the right.',
-          categoryId: 'cat_clinical',
-          active: true,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'st-consult-3',
-          orgId: DEFAULT_ORG_ID,
-          name: 'Dr. Priya Nair - Pediatrics',
-          type: 'doctor_room',
-          providerId: 'prov_3',
-          providerName: 'Dr. Priya Nair',
-          roomNumber: '204',
-          floorWing: '1st Floor, Specialty Wing',
-          directions: 'Take the central elevator to the 1st floor, turn left, Room 204 is on the left.',
-          categoryId: 'cat_clinical',
-          active: true,
-          createdAt: new Date().toISOString(),
-        },
+        ...doctorStations,
         {
           id: 'station_pharmacy_1',
           orgId: DEFAULT_ORG_ID,
@@ -264,67 +356,106 @@ export class MockMaClient implements IMaClient {
       this.setStorage(STORAGE_KEYS.CONFIG, initialConfig);
     }
 
-    // 3. Mock Patients & Appointments & Face Biometrics
-    const existingPatients = this.getStorage<PatientSummary[] | null>(STORAGE_KEYS.PATIENTS, null);
-    if (!existingPatients || existingPatients.length === 0) {
-      const demoPatients: PatientSummary[] = [
-        { id: 'pat_1', name: 'Eleanor Vance', phone: '+1 (555) 234-5678', age: 34, gender: 'Female', relation: 'Self', faceEnrolled: true, faceEnrolledAt: '2026-08-14T09:30:00Z', createdVia: 'ai_receptionist', defaultProcessId: 'Appointment Scheduling' },
-        { id: 'pat_2', name: 'Rohan Verma', phone: '+91 98765 43210', age: 34, gender: 'Male', relation: 'Self', faceEnrolled: false, createdVia: 'web', defaultProcessId: 'Patient Intake' },
-        { id: 'pat_3', name: 'Sunita Rao', phone: '+91 91234 56780', age: 58, gender: 'Female', relation: 'Self', faceEnrolled: true, faceEnrolledAt: '2026-09-02T11:15:00Z', createdVia: 'ai_receptionist', defaultProcessId: 'Appointment Scheduling' },
-      ];
-      this.setStorage(STORAGE_KEYS.PATIENTS, demoPatients);
-
+    // 3. Mock Appointments & Face Biometrics
+    const existingAppointments = this.getStorage<AppointmentSummary[] | null>(STORAGE_KEYS.APPOINTMENTS, null);
+    if (!existingAppointments || existingAppointments.length === 0) {
       const todayStr = new Date().toISOString().split('T')[0];
+      const team = getStoredTeamMembers();
+      const doc1 = team.find((m) => String(m.id) === '1') || team[0];
+      const doc2 = team.find((m) => String(m.id) === '2') || team[1] || doc1;
+      const doc3 = team.find((m) => String(m.id) === '5') || team[2] || doc2;
+
+      const doc1Name = doc1 ? (doc1.name.startsWith('Dr.') ? doc1.name : `Dr. ${doc1.name}`) : 'Dr. John Smith';
+      const doc2Name = doc2 ? (doc2.name.startsWith('Dr.') ? doc2.name : `Dr. ${doc2.name}`) : 'Dr. Sarah Johnson';
+      const doc3Name = doc3 ? (doc3.name.startsWith('Dr.') ? doc3.name : `Dr. Robert Martinez`) : 'Dr. Robert Martinez';
+
       const demoAppointments: AppointmentSummary[] = [
         {
           id: 'apt-101',
-          clientId: 'pat_1',
-          clientName: 'Eleanor Vance',
-          clientPhone: '+1 (555) 234-5678',
-          serviceId: 'srv_consult',
+          clientId: 'CL-001',
+          clientName: 'Sarah Johnson',
+          clientPhone: '+1 (555) 123-4567',
+          serviceId: '1',
           serviceName: 'General Consultation',
-          providerId: 'prov_1',
-          providerName: 'Dr. Ananya Sharma',
+          providerId: String(doc1?.id || '1'),
+          providerName: doc1Name,
           date: todayStr,
           time: '10:30 AM',
           status: 'confirmed',
           receptionEnabled: true,
           source: 'ai_receptionist',
-          roomStationId: 'st-consult-1',
-          roomName: 'Dr. Sharma - Room 101',
+          roomStationId: `st-consult-${doc1?.id || '1'}`,
+          roomName: `${doc1Name}'s Consultation Room`,
           tokenNumber: 'D-001',
         },
         {
           id: 'apt_2',
-          clientId: 'pat_3',
-          clientName: 'Sunita Rao',
-          clientPhone: '+91 91234 56780',
-          serviceId: 'srv_cardio',
-          serviceName: 'Cardiology Checkup',
-          providerId: 'prov_2',
-          providerName: 'Dr. Rajesh Patel',
+          clientId: 'CL-013',
+          clientName: 'Priya Sharma',
+          clientPhone: '+91 98201 72818',
+          serviceId: '1',
+          serviceName: 'Medical Consultation',
+          providerId: String(doc2?.id || '2'),
+          providerName: doc2Name,
           date: todayStr,
           time: '11:00 AM',
           status: 'confirmed',
           receptionEnabled: true,
           source: 'ai_receptionist',
-          roomStationId: 'st-consult-1',
-          roomName: 'Dr. Sharma - Room 101',
+          roomStationId: `st-consult-${doc2?.id || '2'}`,
+          roomName: `${doc2Name}'s Consultation Room`,
           tokenNumber: 'D-002',
+        },
+        {
+          id: 'apt_3',
+          clientId: 'CL-015',
+          clientName: 'Ananya Reddy',
+          clientPhone: '+91 91234 56789',
+          serviceId: '3',
+          serviceName: 'Dental Cleaning',
+          providerId: String(doc3?.id || '5'),
+          providerName: doc3Name,
+          date: todayStr,
+          time: '02:00 PM',
+          status: 'confirmed',
+          receptionEnabled: true,
+          source: 'ai_receptionist',
+          roomStationId: `st-consult-${doc3?.id || '5'}`,
+          roomName: `${doc3Name}'s Consultation Room`,
+          tokenNumber: 'D-003',
         },
       ];
       this.setStorage(STORAGE_KEYS.APPOINTMENTS, demoAppointments);
 
       // Seed Face Templates (biometric embeddings prototype)
       const demoFaceTemplates: Record<string, { clientId: string; templateVector: number[]; consentGiven: boolean; enrolledAt: string }> = {
+        'CL-013': {
+          clientId: 'CL-013',
+          templateVector: [0.38, 0.74, 0.22, 0.91, 0.55, 0.18, 0.63, 0.87],
+          consentGiven: true,
+          enrolledAt: '2026-09-02T11:15:00Z',
+        },
+        'CL-001': {
+          clientId: 'CL-001',
+          templateVector: [0.12, 0.44, 0.89, 0.23, 0.61, 0.77, 0.35, 0.49],
+          consentGiven: true,
+          enrolledAt: '2026-08-14T09:30:00Z',
+        },
+        'CL-014': {
+          clientId: 'CL-014',
+          templateVector: [0.72, 0.31, 0.45, 0.68, 0.84, 0.29, 0.51, 0.62],
+          consentGiven: true,
+          enrolledAt: '2026-09-10T14:20:00Z',
+        },
+        // Aliases for compatibility
         pat_3: {
-          clientId: 'pat_3',
+          clientId: 'CL-013',
           templateVector: [0.38, 0.74, 0.22, 0.91, 0.55, 0.18, 0.63, 0.87],
           consentGiven: true,
           enrolledAt: '2026-09-02T11:15:00Z',
         },
         pat_1: {
-          clientId: 'pat_1',
+          clientId: 'CL-001',
           templateVector: [0.12, 0.44, 0.89, 0.23, 0.61, 0.77, 0.35, 0.49],
           consentGiven: true,
           enrolledAt: '2026-08-14T09:30:00Z',
@@ -358,11 +489,57 @@ export class MockMaClient implements IMaClient {
     return result;
   }
 
-  // --- Rooms / Stations ---
-
   async getStations(orgId: string = DEFAULT_ORG_ID): Promise<Station[]> {
     this.seedInitialDataIfEmpty();
-    const stations = this.getStorage<Station[]>(STORAGE_KEYS.STATIONS, []);
+    let stations = this.getStorage<Station[]>(STORAGE_KEYS.STATIONS, []);
+
+    // Dynamically ensure all active team members from teamStore have a matching station
+    try {
+      const team = getStoredTeamMembers();
+      const activeDoctors = team.filter((m) => m.status !== false && m.canBookAppointments !== false);
+      let changed = false;
+
+      for (const [idx, doc] of activeDoctors.entries()) {
+        const stationId = `st-consult-${doc.id}`;
+        const docDisplay = doc.name.startsWith('Dr.') ? doc.name : `Dr. ${doc.name}`;
+        const existingIdx = stations.findIndex((s) => s.id === stationId || s.providerId === String(doc.id));
+
+        if (existingIdx !== -1) {
+          // Update doctor name / room title if team member was updated
+          if (stations[existingIdx].providerName !== docDisplay || stations[existingIdx].name !== `${docDisplay}'s Consultation Room`) {
+            stations[existingIdx] = {
+              ...stations[existingIdx],
+              providerName: docDisplay,
+              name: `${docDisplay}'s Consultation Room`,
+            };
+            changed = true;
+          }
+        } else {
+          stations.unshift({
+            id: stationId,
+            orgId: DEFAULT_ORG_ID,
+            name: `${docDisplay}'s Consultation Room`,
+            type: 'doctor_room',
+            providerId: String(doc.id),
+            providerName: docDisplay,
+            roomNumber: `${101 + idx}`,
+            floorWing: idx % 2 === 0 ? 'Ground Floor, Clinical Wing A' : '1st Floor, Specialty Wing',
+            directions: `Proceed down the hallway, Room ${101 + idx} is on the right.`,
+            categoryId: 'cat_clinical',
+            active: true,
+            createdAt: new Date().toISOString(),
+          });
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        this.setStorage(STORAGE_KEYS.STATIONS, stations);
+      }
+    } catch (e) {
+      console.warn('Error syncing doctor stations with teamStore:', e);
+    }
+
     return stations.filter((s) => !orgId || s.orgId === orgId);
   }
 
@@ -429,8 +606,8 @@ export class MockMaClient implements IMaClient {
   // --- OTP & Identity ---
 
   async sendOtp(phone: string): Promise<{ success: boolean; expiresAt: string }> {
-    const norm = this.normalizePhone(phone);
-    console.log(`[MockMaClient] Demo OTP sent to ${norm}: 1234`);
+    const digits = phone.replace(/\D/g, '');
+    console.log(`[MockMaClient] Demo OTP sent to ${digits}: 1234`);
     return {
       success: true,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
@@ -438,7 +615,7 @@ export class MockMaClient implements IMaClient {
   }
 
   async verifyOtp(phone: string, otp: string): Promise<{ success: boolean; sessionToken: string }> {
-    // In mock demo, '1234' is universal accepted OTP
+    // In mock demo, '1234' or '0000' is universally accepted OTP
     if (otp === '1234' || otp === '0000') {
       return {
         success: true,
@@ -450,9 +627,38 @@ export class MockMaClient implements IMaClient {
 
   async lookupClientsByPhone(phone: string, _sessionToken?: string): Promise<PatientSummary[]> {
     this.seedInitialDataIfEmpty();
-    const norm = this.normalizePhone(phone);
-    const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
-    return patients.filter((p) => this.normalizePhone(p.phone) === norm);
+    const qDigits = phone.replace(/\D/g, '');
+    if (!qDigits || qDigits.length < 3) return [];
+
+    const maClients = this.getMantraClients();
+    const matched = maClients.filter((c) => {
+      const allPhones = [
+        c.phone,
+        c.phoneNumber,
+        (c as any).mobile,
+        (c as any).contact,
+        (c as any).contactNumber,
+        (c as any).clientPhone,
+      ].filter(Boolean) as string[];
+
+      for (const p of allPhones) {
+        const cDigits = p.replace(/\D/g, '');
+        if (!cDigits) continue;
+        if (cDigits === qDigits) return true;
+        if (qDigits.length >= 7 && cDigits.length >= 7) {
+          if (cDigits.slice(-10) === qDigits.slice(-10)) return true;
+          if (cDigits.endsWith(qDigits) || qDigits.endsWith(cDigits)) return true;
+          if (cDigits.includes(qDigits) || qDigits.includes(cDigits)) return true;
+        }
+      }
+      return false;
+    });
+
+    if (matched.length > 0) {
+      return matched.map((c) => this.mantraClientToPatientSummary(c));
+    }
+
+    return [];
   }
 
   async lookupPatientByPhone(phone: string): Promise<{ found: boolean; patient?: PatientSummary }> {
@@ -464,7 +670,7 @@ export class MockMaClient implements IMaClient {
   }
 
   async createWalkInClient(data: CreatePatientPayload, _sessionToken?: string): Promise<PatientSummary> {
-    const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
+    const clients = this.getMantraClients();
     const config = this.getStorage<ReceptionConfig>(STORAGE_KEYS.CONFIG, {
       orgId: DEFAULT_ORG_ID,
       tokenPrefixes: { doctor: 'D-', pharmacy: 'P-', lab: 'L-', billing: 'B-', desk: 'R-' },
@@ -475,34 +681,102 @@ export class MockMaClient implements IMaClient {
       defaultOnboardingProcessId: 'Appointment Scheduling',
     });
 
-    const defaultProcess = config.defaultOnboardingProcessId || 'Appointment Scheduling';
-    const newPatient: PatientSummary = {
-      id: `pat_${Date.now()}`,
-      name: data.name,
+    const defaultProcess =
+      (typeof window !== 'undefined' ? localStorage.getItem('ma_appointment_default_process') : null) ||
+      config.defaultOnboardingProcessId ||
+      'Appointment Scheduling';
+    const rawPhone = data.phone || '';
+    const digits = rawPhone.replace(/\D/g, '');
+
+    let country = 'IN';
+    let countryCode = '+91';
+    let countryFlag = '🇮🇳';
+    let location = 'Mumbai, India';
+
+    if (rawPhone.startsWith('+1') || (digits.length === 10 && digits.startsWith('555'))) {
+      country = 'US';
+      countryCode = '+1';
+      countryFlag = '🇺🇸';
+      location = 'New York, NY';
+    } else if (rawPhone.startsWith('+44')) {
+      country = 'GB';
+      countryCode = '+44';
+      countryFlag = '🇬🇧';
+      location = 'London, UK';
+    } else if (rawPhone.startsWith('+971')) {
+      country = 'AE';
+      countryCode = '+971';
+      countryFlag = '🇦🇪';
+      location = 'Dubai, UAE';
+    }
+
+    const nowIso = new Date().toISOString();
+    const todayStr = nowIso.split('T')[0];
+
+    // Dynamically resolve responsible doctor from teamStore
+    let assignedDoctor = (data.responsible || (data as any).doctorName || '').replace(/^Dr\.\s*/i, '').trim();
+    if (!assignedDoctor && (data as any).providerId && (data as any).providerId !== 'next_available') {
+      const team = getStoredTeamMembers();
+      const matched = team.find((m) => String(m.id) === String((data as any).providerId));
+      if (matched) assignedDoctor = matched.name.replace(/^Dr\.\s*/i, '').trim();
+    }
+    if (!assignedDoctor) {
+      const team = getStoredTeamMembers();
+      const activeDoc = team.find((m) => m.status !== false && m.canBookAppointments !== false) || team[0];
+      assignedDoctor = activeDoc ? activeDoc.name.replace(/^Dr\.\s*/i, '').trim() : 'John Smith';
+    }
+
+    const savedRecord = addOrUpdateClient({
+      name: data.name.trim(),
+      email: data.email?.trim(),
       phone: data.phone,
-      age: data.age,
-      gender: data.gender,
-      email: data.email,
-      relation: 'Self',
+      country,
+      countryCode,
+      countryFlag,
+      processes: [defaultProcess],
+      stage: 'Initial Contact',
+      responsible: assignedDoctor,
+      lastContact: todayStr,
+      status: 'Active',
+      location,
+    });
+
+    const newClientRecord: MantraClientRecord = {
+      ...savedRecord,
+      phoneNumber: savedRecord.phone,
+      age: data.age || 35,
+      gender: data.gender || 'Female',
+      relation: data.relation || 'Self',
       faceEnrolled: !!data.faceEnrolled,
-      faceEnrolledAt: data.faceEnrolled ? new Date().toISOString() : undefined,
-      createdVia: data.createdVia || 'ai_receptionist',
-      defaultProcessId: defaultProcess,
+      faceEnrolledAt: data.faceEnrolled ? nowIso : undefined,
+      faceConsentAt: data.consentAt || (data.faceEnrolled ? nowIso : undefined),
+      faceTemplate: data.faceTemplate,
+      createdVia: 'ai_receptionist',
+      source: 'ai_receptionist',
     };
-    patients.push(newPatient);
-    this.setStorage(STORAGE_KEYS.PATIENTS, patients);
+
+    // Sync deal into Deals / Process pipeline in sessionStorage & localStorage
+    this.syncDealRecord(newClientRecord.name, assignedDoctor, defaultProcess, 'Initial Contact', 'Consultation', 150);
+    addProcessCallLog({
+      clientId: newClientRecord.id,
+      clientName: newClientRecord.name,
+      processName: defaultProcess,
+      stageName: 'Initial Contact',
+    });
+
+    const patientSummary = this.mantraClientToPatientSummary(newClientRecord);
 
     // If face template vector provided, save biometric template
     if (data.faceEnrolled && data.faceTemplate && data.consentGiven) {
-      await this.saveFaceTemplate(newPatient.id, data.faceTemplate, data.consentAt || new Date().toISOString(), 'ai_receptionist');
+      await this.saveFaceTemplate(newClientRecord.id, data.faceTemplate, data.consentAt || nowIso, 'ai_receptionist');
     } else {
       await this.logAuditEvent({
         id: `aud_${Date.now()}_face_skip`,
         orgId: DEFAULT_ORG_ID,
-        clientId: newPatient.id,
+        clientId: newClientRecord.id,
         action: 'receptionist_face_skipped',
         metadata: { reason: 'patient_skipped_or_declined' },
-        timestamp: new Date().toISOString(),
+        timestamp: nowIso,
       });
     }
 
@@ -510,64 +784,259 @@ export class MockMaClient implements IMaClient {
     await this.logAuditEvent({
       id: `aud_${Date.now()}`,
       orgId: DEFAULT_ORG_ID,
-      clientId: newPatient.id,
+      clientId: newClientRecord.id,
       action: 'receptionist_onboarding_completed',
-      metadata: { name: newPatient.name, phone: newPatient.phone, createdVia: 'ai_receptionist' },
-      timestamp: new Date().toISOString(),
+      metadata: { name: newClientRecord.name, phone: newClientRecord.phone, createdVia: 'ai_receptionist' },
+      timestamp: nowIso,
     });
 
     await this.logAuditEvent({
       id: `aud_${Date.now()}_proc`,
       orgId: DEFAULT_ORG_ID,
-      clientId: newPatient.id,
+      clientId: newClientRecord.id,
       action: 'process_assigned',
       metadata: { processName: defaultProcess, assignedVia: 'receptionist_default_rule' },
-      timestamp: new Date().toISOString(),
+      timestamp: nowIso,
     });
 
-    return newPatient;
+    return patientSummary;
   }
 
-  // --- Booking & Appointments ---
+  // --- Booking & Appointments (Linked to MantraAssist Appointments Store) ---
 
   async getTodayAppointments(clientId: string, _sessionToken?: string): Promise<AppointmentSummary[]> {
     this.seedInitialDataIfEmpty();
-    const appointments = this.getStorage<AppointmentSummary[]>(STORAGE_KEYS.APPOINTMENTS, []);
-    return appointments.filter((a) => a.clientId === clientId);
+    const storedAppointments = this.getStorage<AppointmentSummary[]>(STORAGE_KEYS.APPOINTMENTS, []);
+    const result = storedAppointments.filter((a) => a.clientId === clientId || (clientId === 'pat_3' && a.clientId === 'CL-013') || (clientId === 'pat_1' && a.clientId === 'CL-001'));
+
+    // Also fetch from MantraAssist appointments_v1 session/local store
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage?.getItem('appointments_v1') || window.sessionStorage?.getItem('appointments_v1');
+        if (raw) {
+          const maApts = JSON.parse(raw);
+          const clients = this.getMantraClients();
+          const client = clients.find((c) => c.id === clientId || (clientId === 'pat_3' && c.id === 'CL-013') || (clientId === 'pat_1' && c.id === 'CL-001'));
+          const clientPhoneDigits = (client?.phone || client?.phoneNumber || '').replace(/\D/g, '');
+          const clientNameLower = (client?.name || '').toLowerCase();
+          const todayStr = new Date().toISOString().split('T')[0];
+
+          if (Array.isArray(maApts)) {
+            for (const maApt of maApts) {
+              const aptPhoneDigits = (maApt.clientPhone || '').replace(/\D/g, '');
+              const aptNameLower = (maApt.clientName || '').toLowerCase();
+              const isMatch =
+                (maApt.clientId && (maApt.clientId === clientId || (clientId === 'CL-013' && maApt.clientId === 'pat_3'))) ||
+                (clientPhoneDigits && aptPhoneDigits && (clientPhoneDigits === aptPhoneDigits || (clientPhoneDigits.length >= 7 && (clientPhoneDigits.slice(-10) === aptPhoneDigits.slice(-10) || clientPhoneDigits.endsWith(aptPhoneDigits) || aptPhoneDigits.endsWith(clientPhoneDigits))))) ||
+                (clientNameLower && aptNameLower && clientNameLower === aptNameLower);
+
+              if (isMatch) {
+                const alreadyIncluded = result.some((r) => r.id === String(maApt.id) || r.tokenNumber === maApt.tokenNumber);
+                if (!alreadyIncluded) {
+                  const team = getStoredTeamMembers();
+                  const services = getStoredServices();
+                  const matchedProv = team.find((m) => String(m.id) === String(maApt.employeeId));
+                  const matchedSrv = services.find((s) => String(s.id) === String(maApt.serviceId));
+
+                  const doctorRaw = matchedProv?.name || 'Sarah Johnson';
+                  const doctorDisplay = doctorRaw.startsWith('Dr.') ? doctorRaw : `Dr. ${doctorRaw}`;
+                  const dynamicRoom = maApt.roomName || `${doctorDisplay}'s Consultation Room`;
+
+                  result.push({
+                    id: String(maApt.id),
+                    clientId: clientId,
+                    clientName: maApt.clientName || client?.name || 'Patient',
+                    clientPhone: maApt.clientPhone || client?.phone || '',
+                    serviceId: String(matchedSrv?.id || maApt.serviceId || '1'),
+                    serviceName: maApt.serviceName || matchedSrv?.name || 'General Consultation',
+                    providerId: String(matchedProv?.id || maApt.employeeId || '1'),
+                    providerName: maApt.providerName || doctorDisplay,
+                    date: maApt.date || todayStr,
+                    time: maApt.time?.includes(':') ? (maApt.time.includes('AM') || maApt.time.includes('PM') ? maApt.time : `${maApt.time} AM`) : '11:00 AM',
+                    status: (maApt.status as any) || 'confirmed',
+                    receptionEnabled: true,
+                    source: (maApt.source as any) || 'ai_receptionist',
+                    roomStationId: 'st-consult-1',
+                    roomName: dynamicRoom,
+                    tokenNumber: maApt.tokenNumber || 'D-001',
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error reading appointments_v1 store in mockMaClient:', err);
+      }
+    }
+
+    return result;
   }
 
   async getServices(orgId: string = DEFAULT_ORG_ID): Promise<ServiceItem[]> {
+    try {
+      const stored = getStoredServices();
+      if (Array.isArray(stored) && stored.length > 0) {
+        return stored
+          .filter((s) => s.isActive !== false)
+          .map((s) => ({
+            id: String(s.id),
+            orgId,
+            name: s.name,
+            category: s.category || 'Consultation',
+            durationMin: s.duration || 30,
+            basePrice: s.price || 0,
+            cptCode: s.cptCode,
+            receptionEnabled: s.isActive !== false,
+          }));
+      }
+    } catch (e) {
+      console.warn('Error fetching live services from servicesStore:', e);
+    }
     return [
-      { id: 'srv_consult', orgId, name: 'General Physician Consultation', category: 'Doctor', durationMin: 15, basePrice: 500, receptionEnabled: true },
-      { id: 'srv_cardio', orgId, name: 'Cardiology Specialist Consult', category: 'Specialist', durationMin: 30, basePrice: 1200, receptionEnabled: true },
-      { id: 'srv_dental', orgId, name: 'Dental Clean & Polish', category: 'Dental', durationMin: 30, basePrice: 800, receptionEnabled: true },
+      { id: '1', orgId, name: 'Initial Consultation', category: 'Consultation', durationMin: 60, basePrice: 150, receptionEnabled: true },
+      { id: '2', orgId, name: 'Follow-up Visit', category: 'Consultation', durationMin: 30, basePrice: 75, receptionEnabled: true },
+      { id: '3', orgId, name: 'Dental Cleaning', category: 'Dental', durationMin: 45, basePrice: 120, receptionEnabled: true },
     ];
   }
 
   async getProviders(orgId: string = DEFAULT_ORG_ID, serviceId?: string): Promise<ProviderItem[]> {
-    const allProviders: ProviderItem[] = [
-      { id: 'prov_1', orgId, name: 'Dr. Ananya Sharma', specialty: 'General Physician', specialization: 'Family Medicine', assignedStationId: 'st-consult-1', availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] },
-      { id: 'prov_2', orgId, name: 'Dr. Rajesh Patel', specialty: 'Cardiologist', specialization: 'Interventional Cardiology', assignedStationId: 'st-consult-1', availableDays: ['Mon', 'Wed', 'Fri'] },
-      { id: 'prov_3', orgId, name: 'Dr. Priya Desai', specialty: 'Dentist', specialization: 'Orthodontics', assignedStationId: 'st-consult-1', availableDays: ['Tue', 'Thu', 'Sat'] },
+    try {
+      const team = getStoredTeamMembers();
+      const services = getStoredServices();
+      const selectedService = serviceId ? services.find((s) => String(s.id) === String(serviceId)) : null;
+
+      const bookable = team.filter((m) => m.status !== false && m.canBookAppointments !== false);
+      let eligible = bookable;
+
+      if (selectedService && selectedService.assignedEmployees && selectedService.assignedEmployees.length > 0) {
+        eligible = bookable.filter((m) =>
+          selectedService.assignedEmployees?.some((empId) => String(empId) === String(m.id))
+        );
+        if (eligible.length === 0) eligible = bookable;
+      }
+
+      if (eligible.length > 0) {
+        return eligible.map((m) => ({
+          id: String(m.id),
+          orgId,
+          name: m.name.startsWith('Dr.') ? m.name : `Dr. ${m.name}`,
+          specialty: m.role || m.department || 'Consultant',
+          specialization: m.department || 'General Practice',
+          assignedStationId: 'st-consult-1',
+          availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+        }));
+      }
+    } catch (e) {
+      console.warn('Error fetching live team members for reception:', e);
+    }
+
+    return [
+      { id: '1', orgId, name: 'Dr. John Smith', specialty: 'General Physician', specialization: 'Internal Medicine', assignedStationId: 'st-consult-1', availableDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] },
+      { id: '2', orgId, name: 'Dr. Sarah Johnson', specialty: 'Medical Consultant', specialization: 'Family Medicine', assignedStationId: 'st-consult-1', availableDays: ['Mon', 'Wed', 'Fri'] },
+      { id: '5', orgId, name: 'Dr. Robert Martinez', specialty: 'Dentist', specialization: 'Dental Surgery', assignedStationId: 'st-consult-1', availableDays: ['Tue', 'Thu', 'Sat'] },
     ];
-    if (serviceId === 'srv_cardio') return allProviders.filter((p) => p.id === 'prov_2');
-    if (serviceId === 'srv_dental') return allProviders.filter((p) => p.id === 'prov_3');
-    return allProviders;
   }
 
-  async getSlots(_serviceId: string, _date: string, _providerId?: string): Promise<TimeSlot[]> {
-    return [
-      { id: 'slot_1', time: '09:00 AM', startTime: '09:00 AM', endTime: '09:30 AM', available: true },
-      { id: 'slot_2', time: '09:30 AM', startTime: '09:30 AM', endTime: '10:00 AM', available: true },
-      { id: 'slot_3', time: '10:00 AM', startTime: '10:00 AM', endTime: '10:30 AM', available: false },
-      { id: 'slot_4', time: '10:30 AM', startTime: '10:30 AM', endTime: '11:00 AM', available: true },
-      { id: 'slot_5', time: '11:00 AM', startTime: '11:00 AM', endTime: '11:30 AM', available: true },
-      { id: 'slot_6', time: '11:30 AM', startTime: '11:30 AM', endTime: '12:00 PM', available: true },
-      { id: 'slot_7', time: '02:00 PM', startTime: '02:00 PM', endTime: '02:30 PM', available: true },
-      { id: 'slot_8', time: '02:30 PM', startTime: '02:30 PM', endTime: '03:00 PM', available: true },
-      { id: 'slot_9', time: '03:00 PM', startTime: '03:00 PM', endTime: '03:30 PM', available: true },
-      { id: 'slot_10', time: '04:00 PM', startTime: '04:00 PM', endTime: '04:30 PM', available: true },
+  async getSlots(_serviceId: string, date: string, providerId?: string): Promise<TimeSlot[]> {
+    const defaultSlots: Array<{ id: string; time: string; startTime: string; endTime: string }> = [
+      { id: 'slot_1', time: '09:00 AM', startTime: '09:00 AM', endTime: '09:30 AM' },
+      { id: 'slot_2', time: '09:30 AM', startTime: '09:30 AM', endTime: '10:00 AM' },
+      { id: 'slot_3', time: '10:00 AM', startTime: '10:00 AM', endTime: '10:30 AM' },
+      { id: 'slot_4', time: '10:30 AM', startTime: '10:30 AM', endTime: '11:00 AM' },
+      { id: 'slot_5', time: '11:00 AM', startTime: '11:00 AM', endTime: '11:30 AM' },
+      { id: 'slot_6', time: '11:30 AM', startTime: '11:30 AM', endTime: '12:00 PM' },
+      { id: 'slot_7', time: '02:00 PM', startTime: '02:00 PM', endTime: '02:30 PM' },
+      { id: 'slot_8', time: '02:30 PM', startTime: '02:30 PM', endTime: '03:00 PM' },
+      { id: 'slot_9', time: '03:00 PM', startTime: '03:00 PM', endTime: '03:30 PM' },
+      { id: 'slot_10', time: '04:00 PM', startTime: '04:00 PM', endTime: '04:30 PM' },
+      { id: 'slot_11', time: '04:30 PM', startTime: '04:30 PM', endTime: '05:00 PM' },
     ];
+
+    // Check booked appointments in sessionStorage appointments_v1 and mockMaClient
+    const bookedTimes: string[] = [];
+    try {
+      if (typeof window !== 'undefined') {
+        const rawApts = window.localStorage?.getItem('appointments_v1') || window.sessionStorage?.getItem('appointments_v1');
+        const maApts = rawApts ? JSON.parse(rawApts) : [];
+        for (const apt of maApts) {
+          if (apt.date === date && (!providerId || String(apt.employeeId) === String(providerId))) {
+            const t = String(apt.time || '').toLowerCase().replace(/\s+/g, '');
+            bookedTimes.push(t);
+          }
+        }
+      }
+      const receptionApts = this.getStorage<AppointmentSummary[]>(STORAGE_KEYS.APPOINTMENTS, []);
+      for (const apt of receptionApts) {
+        if (apt.date === date && (!providerId || String(apt.providerId) === String(providerId))) {
+          const t = String(apt.time || '').toLowerCase().replace(/\s+/g, '');
+          bookedTimes.push(t);
+        }
+      }
+    } catch (e) {
+      console.warn('Error reading booked appointments for slots:', e);
+    }
+
+    return defaultSlots.map((slot) => {
+      const norm = slot.time.toLowerCase().replace(/\s+/g, '');
+      const isBooked = bookedTimes.some((bt) => bt.includes(norm) || norm.includes(bt));
+      return {
+        ...slot,
+        available: !isBooked,
+      };
+    });
+  }
+
+  private syncDealRecord(
+    clientName: string,
+    doctorName: string,
+    processName: string,
+    stageName: string,
+    serviceName: string = 'Consultation',
+    amount: number = 150
+  ) {
+    try {
+      if (typeof window === 'undefined') return;
+      const raw = localStorage.getItem('deals') || sessionStorage.getItem('deals');
+      const deals: any[] = raw ? JSON.parse(raw) : [];
+      const cleanDoctor = doctorName.replace(/^Dr\.\s*/i, '');
+      const fullStage = `${processName}: ${stageName}`;
+      const existingIdx = deals.findIndex((d) => d.clientName?.toLowerCase() === clientName.toLowerCase());
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      if (existingIdx !== -1) {
+        deals[existingIdx] = {
+          ...deals[existingIdx],
+          dealName: `${serviceName} — ${clientName}`,
+          responsible: cleanDoctor,
+          stage: fullStage,
+          status: 'In Progress',
+        };
+      } else {
+        const dealId = `DEAL-${String(deals.length + 1).padStart(3, '0')}`;
+        deals.unshift({
+          id: dealId,
+          dealName: `${serviceName} — ${clientName}`,
+          clientName: clientName,
+          amount,
+          currency: '₹',
+          createdDate: todayStr,
+          status: 'In Progress',
+          responsible: cleanDoctor,
+          stage: fullStage,
+        });
+      }
+      sessionStorage.setItem('deals', JSON.stringify(deals));
+      localStorage.setItem('deals', JSON.stringify(deals));
+      window.dispatchEvent(new Event('deals_updated'));
+      try {
+        const bc = new BroadcastChannel('deals_broadcast_channel');
+        bc.postMessage({ type: 'DEALS_UPDATED' });
+        bc.close();
+      } catch {}
+    } catch (e) {
+      console.warn('Error syncing deal record in mockMaClient:', e);
+    }
   }
 
   async bookAppointment(
@@ -578,66 +1047,115 @@ export class MockMaClient implements IMaClient {
     return this.withIdempotency(idempotencyKey, async () => {
       this.seedInitialDataIfEmpty();
       const appointments = this.getStorage<AppointmentSummary[]>(STORAGE_KEYS.APPOINTMENTS, []);
-      const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
-      const patient = patients.find((p) => p.id === data.clientId);
+      const mantraClients = this.getMantraClients();
+      const clientRecord = mantraClients.find((c) => c.id === data.clientId);
+
+      const clientName = data.clientName || clientRecord?.name || 'Patient';
+      const clientPhone = data.clientPhone || clientRecord?.phone || clientRecord?.phoneNumber || '';
+      const clientEmail = data.clientEmail || clientRecord?.email || '';
 
       const services = await this.getServices();
-      const srv = services.find((s) => s.id === data.serviceId);
+      const srv = (data.serviceId ? services.find((s) => String(s.id) === String(data.serviceId)) : null) || services[0];
 
       const providers = await this.getProviders();
-      const prov = providers.find((p) => p.id === data.providerId) || providers[0];
+      const prov = (data.providerId ? providers.find((p) => String(p.id) === String(data.providerId)) : null) || providers[0];
 
-      const stations = await this.getStations();
-      const targetStation = stations.find((s) => s.type === 'doctor_room') || stations[0];
+      const cleanDoctorRaw = (prov?.name || 'Sarah Johnson').replace(/^Dr\.\s*/i, '');
+      const doctorDisplayName = prov?.name ? (prov.name.startsWith('Dr.') ? prov.name : `Dr. ${cleanDoctorRaw}`) : `Dr. ${cleanDoctorRaw}`;
+      const dynamicRoomName = `${doctorDisplayName}'s Consultation Room`;
+
+      const defaultProcess =
+        (typeof window !== 'undefined' ? localStorage.getItem('ma_appointment_default_process') : null) ||
+        'Appointment Scheduling';
+
+      // Update Client's responsible doctor & processes in MantraAssist
+      addOrUpdateClient({
+        id: data.clientId,
+        name: clientName,
+        phone: clientPhone,
+        email: clientEmail,
+        responsible: cleanDoctorRaw,
+        processes: [defaultProcess],
+        stage: 'Confirmed',
+      });
+
+      // Sync Deal in Process Pipeline
+      this.syncDealRecord(clientName, cleanDoctorRaw, defaultProcess, 'Confirmed', srv?.name || 'Consultation', srv?.basePrice || 150);
+      addProcessCallLog({
+        clientId: data.clientId,
+        clientName,
+        processName: defaultProcess,
+        stageName: 'Confirmed',
+      });
+
+      // Resolve valid time
+      let validTime = data.time;
+      if (!validTime || validTime.includes('Now') || validTime.includes('Invalid')) {
+        const now = new Date();
+        let hours = now.getHours();
+        const minutes = now.getMinutes();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        validTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${ampm}`;
+      }
 
       const tokenNumber = `D-${String(appointments.length + 1).padStart(3, '0')}`;
 
       const newApt: AppointmentSummary = {
         id: `apt_${Date.now()}`,
         clientId: data.clientId,
-        clientName: patient?.name || 'Patient',
-        clientPhone: patient?.phone || '',
-        serviceId: data.serviceId,
+        clientName,
+        clientPhone,
+        serviceId: String(srv?.id || data.serviceId || '1'),
         serviceName: srv?.name || 'General Consultation',
-        providerId: prov?.id || 'prov_1',
-        providerName: prov?.name || 'Dr. Ananya Sharma',
+        providerId: String(prov?.id || '1'),
+        providerName: doctorDisplayName,
         date: data.date,
-        time: data.time,
+        time: validTime,
         status: 'confirmed',
         receptionEnabled: true,
         source: data.source || 'ai_receptionist',
-        roomStationId: targetStation.id,
-        roomName: targetStation.name,
+        roomStationId: 'st-consult-1',
+        roomName: dynamicRoomName,
         tokenNumber,
       };
 
       appointments.push(newApt);
       this.setStorage(STORAGE_KEYS.APPOINTMENTS, appointments);
 
-      // Sync with sessionStorage appointments_v1 for MA Appointments page
+      // Sync with localStorage & sessionStorage appointments_v1 for MA Appointments page
       try {
-        if (typeof window !== 'undefined' && window.sessionStorage) {
-          const maApts = JSON.parse(sessionStorage.getItem('appointments_v1') || '[]');
+        if (typeof window !== 'undefined') {
+          const rawApts = window.localStorage?.getItem('appointments_v1') || window.sessionStorage?.getItem('appointments_v1');
+          const maApts = rawApts ? JSON.parse(rawApts) : [];
           const numericId = Date.now();
           maApts.unshift({
             id: numericId,
-            clientName: patient?.name || 'Patient',
-            clientEmail: patient?.email || 'patient@example.com',
-            clientPhone: patient?.phone || '',
-            employeeId: prov?.id === 'prov_2' ? 2 : 1,
-            serviceId: data.serviceId === 'srv_cardio' ? 2 : 1,
+            clientName,
+            clientEmail,
+            clientPhone,
+            employeeId: Number(prov?.id) || 1,
+            serviceId: Number(srv?.id) || 1,
             date: data.date,
-            time: data.time.replace(/ AM| PM/i, ''),
+            time: validTime.replace(/ AM| PM/i, ''),
             duration: srv?.durationMin || 30,
             status: 'scheduled',
             notes: data.reason || 'Booked via AI Receptionist',
             source: 'ai_receptionist',
-            roomName: targetStation.name,
+            roomName: dynamicRoomName,
             tokenNumber,
-            processId: 'Appointment Scheduling',
+            processId: defaultProcess,
             stageId: 'Confirmed',
           });
-          sessionStorage.setItem('appointments_v1', JSON.stringify(maApts));
+          window.localStorage?.setItem('appointments_v1', JSON.stringify(maApts));
+          window.sessionStorage?.setItem('appointments_v1', JSON.stringify(maApts));
+          window.dispatchEvent(new CustomEvent('mantra_appointments_updated'));
+          try {
+            const bc = new BroadcastChannel('mantra_appointments_broadcast_channel');
+            bc.postMessage({ type: 'APPOINTMENTS_UPDATED' });
+            bc.close();
+          } catch {}
         }
       } catch (e) {
         console.warn('Failed to sync appointment with MA sessionStore:', e);
@@ -677,20 +1195,43 @@ export class MockMaClient implements IMaClient {
       const aptIdx = appointments.findIndex((a) => a.id === appointmentId);
       const apt = aptIdx !== -1 ? appointments[aptIdx] : null;
 
-      const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
-      const patient = patients.find((p) => p.id === clientId) || {
-        id: clientId,
-        name: apt?.clientName || 'Patient',
-        phone: apt?.clientPhone || '',
-        relation: 'Self' as const,
-      };
+      const mantraClients = this.getMantraClients();
+      const clientRecord = mantraClients.find((c) => c.id === clientId);
+      const patient: PatientSummary = clientRecord
+        ? this.mantraClientToPatientSummary(clientRecord)
+        : {
+            id: clientId,
+            name: apt?.clientName || 'Patient',
+            phone: apt?.clientPhone || '',
+            relation: 'Self' as const,
+          };
+
+      let provRawName = apt?.providerName ? apt.providerName.replace(/^Dr\.\s*/i, '') : '';
+      if (!provRawName && apt?.providerId) {
+        const team = getStoredTeamMembers();
+        const matched = team.find((m) => String(m.id) === String(apt.providerId));
+        if (matched) provRawName = matched.name.replace(/^Dr\.\s*/i, '');
+      }
+      if (!provRawName) {
+        const team = getStoredTeamMembers();
+        const activeDoc = team.find((m) => m.status !== false && m.canBookAppointments !== false) || team[0];
+        provRawName = activeDoc ? activeDoc.name.replace(/^Dr\.\s*/i, '') : 'John Smith';
+      }
+
+      const doctorDisplayName = provRawName.startsWith('Dr.') ? provRawName : `Dr. ${provRawName}`;
+      const dynamicRoomName = apt?.roomName || `${doctorDisplayName}'s Consultation Room`;
 
       const stations = await this.getStations(DEFAULT_ORG_ID);
       const targetStation =
-        (apt?.providerId ? stations.find((s) => s.providerId === apt.providerId) : null) ||
+        stations.find((s) => apt?.roomStationId && s.id === apt.roomStationId) ||
+        stations.find((s) => apt?.providerId && (s.providerId === String(apt.providerId) || s.id === `st-consult-${apt.providerId}`)) ||
         stations.find((s) => s.type === 'doctor_room') ||
         stations.find((s) => s.type === 'desk') ||
         stations[0];
+
+      if (targetStation) {
+        targetStation.name = dynamicRoomName;
+      }
 
       const config = this.getStorage<ReceptionConfig>(STORAGE_KEYS.CONFIG, {
         orgId: DEFAULT_ORG_ID,
@@ -706,7 +1247,7 @@ export class MockMaClient implements IMaClient {
       const queues = this.getStorage<Record<string, QueueTicket[]>>(STORAGE_KEYS.QUEUES, {});
       const stationTickets = queues[targetStation.id] || [];
       const tokenNum = String(stationTickets.length + 1).padStart(3, '0');
-      const tokenLabel = `${prefix}${tokenNum}`;
+      const tokenLabel = apt?.tokenNumber || `${prefix}${tokenNum}`;
 
       const journeyId = `jrn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const stages = await this.getDefaultJourneyTemplate(apt?.serviceId || 'srv_consult', DEFAULT_ORG_ID);
@@ -740,7 +1281,7 @@ export class MockMaClient implements IMaClient {
         id: `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         orgId: DEFAULT_ORG_ID,
         stationId: targetStation.id,
-        stationName: targetStation.name,
+        stationName: dynamicRoomName,
         journeyId,
         journeyStageId: stages[0].stageId,
         clientId: patient.id,
@@ -807,6 +1348,9 @@ export class MockMaClient implements IMaClient {
     patient: { name: string; phone: string; dob?: string };
     reason?: string;
     processId?: string;
+    providerId?: string;
+    serviceId?: string;
+    responsible?: string;
     idempotencyKey?: string;
   }): Promise<{ success: boolean; ticket: QueueTicket; journey: Journey }> {
     const idempotencyKey = payload.idempotencyKey || '';
@@ -817,10 +1361,117 @@ export class MockMaClient implements IMaClient {
           name: payload.patient.name,
           phone: payload.patient.phone,
           relation: 'Self',
+          providerId: payload.providerId,
+          responsible: payload.responsible,
         });
       }
 
-      const checkinRes = await this.checkinAppointment('', patient.id, '', '');
+      // Resolve team member and service
+      const team = getStoredTeamMembers();
+      const services = getStoredServices();
+      let chosenDoc = team.find((m) => String(m.id) === String(payload.providerId));
+      if (!chosenDoc) {
+        chosenDoc = team.find((m) => m.status !== false && m.canBookAppointments !== false) || team[0];
+      }
+      const chosenService = services.find((s) => String(s.id) === String(payload.serviceId)) || services[0];
+      const doctorDisplayName = chosenDoc ? (chosenDoc.name.startsWith('Dr.') ? chosenDoc.name : `Dr. ${chosenDoc.name}`) : 'Doctor Consultation';
+
+      // 1. Sync / create a walk-in appointment record into Appointments store (appointments_v1)
+      const now = new Date();
+      let hours = now.getHours();
+      const minutes = now.getMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const validTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${ampm}`;
+      const todayStr = now.toISOString().split('T')[0];
+
+      const defaultProcess =
+        payload.processId ||
+        (typeof window !== 'undefined' ? localStorage.getItem('ma_appointment_default_process') : null) ||
+        'Appointment Scheduling';
+
+      const existingReceptionApts = this.getStorage<AppointmentSummary[]>(STORAGE_KEYS.APPOINTMENTS, []);
+      const tokenNumber = `D-${String(existingReceptionApts.length + 1).padStart(3, '0')}`;
+      const dynamicRoomName = `${doctorDisplayName}'s Consultation Room`;
+
+      const newApt: AppointmentSummary = {
+        id: `apt_walkin_${Date.now()}`,
+        clientId: patient.id,
+        clientName: patient.name,
+        clientPhone: patient.phone,
+        serviceId: String(chosenService?.id || '1'),
+        serviceName: chosenService?.name || 'Walk-in Consultation',
+        providerId: String(chosenDoc?.id || '1'),
+        providerName: doctorDisplayName,
+        date: todayStr,
+        time: validTime,
+        status: 'confirmed',
+        receptionEnabled: true,
+        source: 'ai_receptionist',
+        roomStationId: `st-consult-${chosenDoc?.id || 1}`,
+        roomName: dynamicRoomName,
+        tokenNumber,
+      };
+
+      existingReceptionApts.push(newApt);
+      this.setStorage(STORAGE_KEYS.APPOINTMENTS, existingReceptionApts);
+
+      // Sync Deal & Process Log
+      this.syncDealRecord(
+        patient.name,
+        doctorDisplayName.replace(/^Dr\.\s*/i, ''),
+        defaultProcess,
+        'Initial Contact',
+        chosenService?.name || 'Walk-in Consultation',
+        (chosenService as any)?.basePrice || 150
+      );
+      addProcessCallLog({
+        clientId: patient.id,
+        clientName: patient.name,
+        processName: defaultProcess,
+        stageName: 'Initial Contact',
+      });
+
+      // Sync to Appointments.tsx storage & dispatch event
+      try {
+        if (typeof window !== 'undefined') {
+          const rawApts = window.localStorage?.getItem('appointments_v1') || window.sessionStorage?.getItem('appointments_v1');
+          const maApts = rawApts ? JSON.parse(rawApts) : [];
+          const numericId = Date.now();
+          maApts.unshift({
+            id: numericId,
+            clientName: patient.name,
+            clientEmail: (patient as any).email || '',
+            clientPhone: patient.phone,
+            employeeId: Number(chosenDoc?.id) || 1,
+            serviceId: Number(chosenService?.id) || 1,
+            date: todayStr,
+            time: validTime.replace(/ AM| PM/i, ''),
+            duration: chosenService?.duration || 30,
+            status: 'arrived',
+            notes: payload.reason || 'Walk-in Registration via AI Receptionist',
+            source: 'ai_receptionist',
+            roomName: dynamicRoomName,
+            tokenNumber,
+            processId: defaultProcess,
+            stageId: 'Initial Contact',
+          });
+          window.localStorage?.setItem('appointments_v1', JSON.stringify(maApts));
+          window.sessionStorage?.setItem('appointments_v1', JSON.stringify(maApts));
+          window.dispatchEvent(new CustomEvent('mantra_appointments_updated'));
+          try {
+            const bc = new BroadcastChannel('mantra_appointments_broadcast_channel');
+            bc.postMessage({ type: 'APPOINTMENTS_UPDATED' });
+            bc.close();
+          } catch {}
+        }
+      } catch (e) {
+        console.warn('Failed to sync walk-in appointment with MA sessionStore:', e);
+      }
+
+      // 2. Perform kiosk checkin & create ticket
+      const checkinRes = await this.checkinAppointment(newApt.id, patient.id, '', '');
       return {
         success: true,
         ticket: {
@@ -1070,17 +1721,15 @@ export class MockMaClient implements IMaClient {
     };
     this.setStorage(STORAGE_KEYS.FACE_TEMPLATES, faceTemplates);
 
-    // Update patient record
-    const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
-    const pIdx = patients.findIndex((p) => p.id === clientId);
-    if (pIdx !== -1) {
-      patients[pIdx].faceEnrolled = true;
-      patients[pIdx].faceEnrolledAt = enrolledAt;
-      patients[pIdx].faceConsentAt = consentAt;
-      patients[pIdx].faceEnrolledVia = source || 'ai_receptionist';
-      patients[pIdx].faceTemplateVersion = '1.0';
-      patients[pIdx].faceTemplate = template;
-      this.setStorage(STORAGE_KEYS.PATIENTS, patients);
+    // Update MantraAssist client record in session/local storage
+    const clients = this.getMantraClients();
+    const cIdx = clients.findIndex((c) => c.id === clientId);
+    if (cIdx !== -1) {
+      clients[cIdx].faceEnrolled = true;
+      clients[cIdx].faceEnrolledAt = enrolledAt;
+      clients[cIdx].faceConsentAt = consentAt;
+      clients[cIdx].faceTemplate = template;
+      this.saveMantraClients(clients);
     }
 
     await this.logAuditEvent({
@@ -1106,7 +1755,8 @@ export class MockMaClient implements IMaClient {
       consentGiven: boolean;
       enrolledAt?: string;
     }>>(STORAGE_KEYS.FACE_TEMPLATES, {});
-    const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
+    const clients = this.getMantraClients();
+    const mappedPatients = clients.map((c) => this.mantraClientToPatientSummary(c));
 
     let bestMatch: { client?: PatientSummary; confidence: number } = { confidence: 0 };
     let matchingCandidatesCount = 0;
@@ -1131,7 +1781,7 @@ export class MockMaClient implements IMaClient {
       if (score >= threshold) {
         matchingCandidatesCount++;
         if (score > bestMatch.confidence) {
-          const patient = patients.find((p) => p.id === clientId);
+          const patient = mappedPatients.find((p) => p.id === clientId || (clientId === 'pat_3' && p.id === 'CL-013') || (clientId === 'pat_1' && p.id === 'CL-001'));
           if (patient) {
             bestMatch = { client: patient, confidence: Math.min(0.99, Number(score.toFixed(3))) };
           }
@@ -1148,13 +1798,13 @@ export class MockMaClient implements IMaClient {
       };
     }
 
-    // Prototype fallback if demo vector matches Sunita
+    // Prototype fallback if demo vector matches Priya Sharma
     if (!bestMatch.client && template.length > 0) {
-      const sunita = patients.find((p) => p.id === 'pat_3') || patients[0];
-      if (sunita) {
+      const priya = mappedPatients.find((p) => p.id === 'CL-013') || mappedPatients[0];
+      if (priya) {
         return {
           matched: true,
-          client: sunita,
+          client: priya,
           confidence: 0.94,
           multipleMatches: false,
         };
@@ -1185,14 +1835,14 @@ export class MockMaClient implements IMaClient {
     delete faceTemplates[clientId];
     this.setStorage(STORAGE_KEYS.FACE_TEMPLATES, faceTemplates);
 
-    const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
-    const pIdx = patients.findIndex((p) => p.id === clientId);
-    if (pIdx !== -1) {
-      patients[pIdx].faceEnrolled = false;
-      patients[pIdx].faceEnrolledAt = undefined;
-      patients[pIdx].faceConsentAt = undefined;
-      patients[pIdx].faceTemplate = undefined;
-      this.setStorage(STORAGE_KEYS.PATIENTS, patients);
+    const clients = this.getMantraClients();
+    const cIdx = clients.findIndex((c) => c.id === clientId);
+    if (cIdx !== -1) {
+      clients[cIdx].faceEnrolled = false;
+      clients[cIdx].faceEnrolledAt = undefined;
+      clients[cIdx].faceConsentAt = undefined;
+      clients[cIdx].faceTemplate = undefined;
+      this.saveMantraClients(clients);
     }
 
     await this.logAuditEvent({
@@ -1218,14 +1868,14 @@ export class MockMaClient implements IMaClient {
         enrolledVia: record.enrolledVia,
       };
     }
-    const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
-    const patient = patients.find((p) => p.id === clientId);
-    if (patient?.faceEnrolled) {
+    const clients = this.getMantraClients();
+    const client = clients.find((c) => c.id === clientId || (clientId === 'pat_3' && c.id === 'CL-013') || (clientId === 'pat_1' && c.id === 'CL-001'));
+    if (client?.faceEnrolled) {
       return {
         enrolled: true,
-        enrolledAt: patient.faceEnrolledAt,
-        consentAt: patient.faceConsentAt,
-        enrolledVia: patient.faceEnrolledVia,
+        enrolledAt: client.faceEnrolledAt,
+        consentAt: client.faceConsentAt,
+        enrolledVia: client.createdVia,
       };
     }
     return { enrolled: false };
@@ -1235,30 +1885,32 @@ export class MockMaClient implements IMaClient {
 
   async getVisitSummary(clientId: string, appointmentId?: string): Promise<VisitSummary> {
     this.seedInitialDataIfEmpty();
-    const patients = this.getStorage<PatientSummary[]>(STORAGE_KEYS.PATIENTS, []);
-    let patient = patients.find((p) => p.id === clientId);
+    const clients = this.getMantraClients();
+    let client = clients.find((c) => c.id === clientId || (clientId === 'pat_3' && c.id === 'CL-013') || (clientId === 'pat_1' && c.id === 'CL-001'));
 
-    if (!patient) {
-      patient = {
-        id: clientId,
-        name: 'Sunita Rao',
-        phone: '+91 91234 56780',
-        age: 58,
-        gender: 'Female',
-        relation: 'Self',
-        faceEnrolled: true,
-      };
+    if (!client && clients.length > 0) {
+      client = clients.find((c) => c.id === 'CL-013') || clients[0];
     }
+
+    const patient = client ? this.mantraClientToPatientSummary(client) : {
+      id: clientId,
+      name: 'Priya Sharma',
+      phone: '+91 98201 72818',
+      age: 58,
+      gender: 'Female' as const,
+      relation: 'Self' as const,
+      faceEnrolled: true,
+    };
 
     const appointments = this.getStorage<AppointmentSummary[]>(STORAGE_KEYS.APPOINTMENTS, []);
     const apt = (appointmentId ? appointments.find((a) => a.id === appointmentId) : null) ||
-      appointments.find((a) => a.clientId === clientId) || {
+      appointments.find((a) => a.clientId === patient.id || (patient.id === 'CL-013' && (a.clientId === 'pat_3' || a.clientId === 'CL-013'))) || {
         id: 'apt_2',
         clientId: patient.id,
         clientName: patient.name,
         clientPhone: patient.phone,
         serviceId: 'srv_cardio',
-        serviceName: 'Cardiology Specialist Checkup',
+        serviceName: 'Cardiology Checkup',
         providerId: 'prov_2',
         providerName: 'Dr. Rajesh Patel',
         date: new Date().toISOString().split('T')[0],
@@ -1282,7 +1934,7 @@ export class MockMaClient implements IMaClient {
     const rawPhone = patient.phone || '';
     const maskedPhone = rawPhone.length >= 7
       ? rawPhone.replace(/(\+?\d{1,3})?\s*(\d{2,3})\d{3,6}(\d{2,4})/, '$1 $2••••$3')
-      : '••••••••80';
+      : '••••••••18';
 
     return {
       patient: {
@@ -1304,10 +1956,10 @@ export class MockMaClient implements IMaClient {
       },
       room: {
         stationId: targetStation.id,
-        roomName: targetStation.name || 'Dr. Sharma - Room 101',
+        roomName: targetStation.name || "Dr. Sharma's Consultation Room",
         floorWing: 'Ground Floor, Clinical Wing B',
         directions: 'Proceed down hallway B, past reception counter, 2nd door on right.',
-        tokenLabel: apt.tokenNumber || 'D-042',
+        tokenLabel: apt.tokenNumber || 'D-002',
         estimatedWaitMin: estWait,
       },
     };

@@ -30,6 +30,7 @@ import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib
 import { getStagesForProcess } from "../components/ui/ProcessStageSelect";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
+import { getStoredClients } from "../../lib/clientsStore";
 
 interface CallLog {
   id: string;
@@ -102,55 +103,16 @@ const initialDeals: Deal[] = [
   { id: "DEAL-018", dealName: "Nutrition Counseling", clientName: "Youssef Said", amount: 9000, currency: "₹", createdDate: "2024-05-01", status: "Lost", responsible: "Michael Chen", stage: "Follow-up Calls: Medication Reminder" },
 ];
 
-// Mock client data for profile drawer
-const mockClients: { [key: string]: Client } = {
-  "CL-001": { id: "CL-001", name: "Sarah Johnson", email: "sarah.j@email.com", phone: "5551234567", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake", "Follow-up Calls"], stage: "Insurance Verification", responsible: "John Smith", lastContact: "2024-04-10", status: "Active", companyName: "TechCorp Inc.", jobPosition: "Senior Manager", numberOfEmployees: "101-250" },
-  "CL-002": { id: "CL-002", name: "Michael Chen", email: "mchen@email.com", phone: "5552345678", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Initial Contact", responsible: "Sarah Johnson", lastContact: "2024-04-09", status: "Active", companyName: "Innovate Solutions", jobPosition: "Product Manager", numberOfEmployees: "51-100" },
-  "CL-003": { id: "CL-003", name: "Emily Davis", email: "emily.d@email.com", phone: "5553456789", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active", companyName: "Healthcare Plus", jobPosition: "Director of Operations", numberOfEmployees: "251-500" },
-  "CL-004": { id: "CL-004", name: "Robert Wilson", email: "rwilson@email.com", phone: "5554567890", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
-  "CL-006": { id: "CL-006", name: "David Martinez", email: "d.martinez@email.com", phone: "5556789012", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls"], stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-04-12", status: "Active" },
-  "CL-007": { id: "CL-007", name: "Lisa Anderson", email: "l.anderson@email.com", phone: "5557890123", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Billing Support", "Follow-up Calls"], stage: "Payment Reminder", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active", companyName: "MediCare Group", jobPosition: "CFO", numberOfEmployees: "501-1000" },
-  "CL-008": { id: "CL-008", name: "James Taylor", email: "jtaylor@email.com", phone: "5558901234", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Schedule Appointment", responsible: "Amanda Taylor", lastContact: "2024-04-11", status: "Active" },
-  "CL-009": { id: "CL-009", name: "Amanda Clark", email: "a.clark@email.com", phone: "5559012345", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling", "Follow-up Calls"], stage: "Confirmation", responsible: "John Smith", lastContact: "2024-04-09", status: "Active" },
-  "CL-011": { id: "CL-011", name: "Jennifer White", email: "j.white@email.com", phone: "5551234568", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support", "Patient Intake"], stage: "Initial Contact", responsible: "Michael Chen", lastContact: "2024-04-13", status: "Active" },
-  "CL-012": { id: "CL-012", name: "Matthew Lewis", email: "m.lewis@email.com", phone: "5552345679", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Insurance Verification"], stage: "Approval", responsible: "Emily Davis", lastContact: "2024-04-06", status: "Active" },
-  "CL-013": { id: "CL-013", name: "Priya Sharma", email: "priya.sharma@email.com", phone: "9820172818", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake", "Follow-up Calls"], stage: "Insurance Verification", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
-  "CL-014": { id: "CL-014", name: "Rahul Patel", email: "rahul.p@email.com", phone: "9876543210", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls"], stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-04-11", status: "Active" },
-  "CL-015": { id: "CL-015", name: "Ananya Reddy", email: "ananya.r@email.com", phone: "9123456789", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Billing Support", "Patient Intake"], stage: "Issue Resolution", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active" },
-  "CL-016": { id: "CL-016", name: "Vikram Singh", email: "vikram.s@email.com", phone: "9234567890", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "Amanda Taylor", lastContact: "2024-04-09", status: "Active" },
-  "CL-018": { id: "CL-018", name: "Arjun Desai", email: "arjun.d@email.com", phone: "9456789012", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Sarah Johnson", lastContact: "2024-04-13", status: "Active" },
-  "CL-019": { id: "CL-019", name: "Kavya Iyer", email: "kavya.i@email.com", phone: "9567890123", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Insurance Verification", "Patient Intake"], stage: "Document Check", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active" },
-  "CL-020": { id: "CL-020", name: "Rohan Kumar", email: "rohan.k@email.com", phone: "9678901234", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake"], stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
-  "CL-021": { id: "CL-021", name: "Deepika Nair", email: "deepika.n@email.com", phone: "9789012345", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Appointment Scheduling", "Follow-up Calls"], stage: "Confirmation", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
-  "CL-023": { id: "CL-023", name: "Ahmed Al-Mansoori", email: "ahmed.am@email.com", phone: "501234567", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Patient Intake", "Insurance Verification"], stage: "Insurance Verification", responsible: "David Martinez", lastContact: "2024-04-13", status: "Active" },
-  "CL-024": { id: "CL-024", name: "Fatima Hassan", email: "fatima.h@email.com", phone: "502345678", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Amanda Taylor", lastContact: "2024-04-10", status: "Active" },
-  "CL-025": { id: "CL-025", name: "Omar Al-Rashid", email: "omar.ar@email.com", phone: "503456789", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "John Smith", lastContact: "2024-04-11", status: "Active" },
-  "CL-027": { id: "CL-027", name: "Youssef Said", email: "youssef.s@email.com", phone: "505678901", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Patient Intake", "Billing Support"], stage: "Follow-up", responsible: "Michael Chen", lastContact: "2024-04-12", status: "Active" },
-  "CL-028": { id: "CL-028", name: "Oliver Thompson", email: "oliver.t@email.com", phone: "7412345678", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Patient Intake", "Follow-up Calls"], stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-09", status: "Active" },
-};
-
 const getClientIdByName = (name: string): string => {
-  try {
-    const raw = sessionStorage.getItem("clients");
-    const cs = raw ? JSON.parse(raw) : [];
-    const found = cs.find((c: any) => c.name?.toLowerCase() === name.toLowerCase());
-    if (found) return found.id;
-  } catch {}
-  const found = Object.values(mockClients).find(
-    (c) => c.name.toLowerCase() === name.toLowerCase()
-  );
+  const cs = getStoredClients();
+  const found = cs.find((c: any) => c.name?.toLowerCase() === name.toLowerCase());
   return found ? found.id : "CL-001";
 };
 
 const getClientObj = (clientId?: string, clientName?: string): Client | undefined => {
-  if (clientId && mockClients[clientId]) return mockClients[clientId];
-  try {
-    const raw = sessionStorage.getItem("clients");
-    const cs: Client[] = raw ? JSON.parse(raw) : [];
-    const found = cs.find((c: any) => (clientId && c.id === clientId) || (clientName && c.name?.toLowerCase() === clientName.toLowerCase()));
-    if (found) return found;
-  } catch {}
-  return clientId && mockClients[clientId] ? mockClients[clientId] : undefined;
+  const cs = getStoredClients();
+  const found = cs.find((c: any) => (clientId && c.id === clientId) || (clientName && c.name?.toLowerCase() === clientName.toLowerCase()));
+  return found;
 };
 
 // Comprehensive call logs dataset (100 calls total)
@@ -344,11 +306,34 @@ export default function Deals() {
         })));
       } catch {}
     };
+
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        handler();
+      }
+    };
+
     window.addEventListener(PROCESS_LOGS_STORE_EVENT, handler);
     window.addEventListener("storage", handler);
+    window.addEventListener("focus", handler);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        channel = new BroadcastChannel("process_logs_broadcast_channel");
+        channel.onmessage = handler;
+      } catch (e) {
+        console.warn("Failed to create BroadcastChannel in Deals:", e);
+      }
+    }
+
     return () => {
       window.removeEventListener(PROCESS_LOGS_STORE_EVENT, handler);
       window.removeEventListener("storage", handler);
+      window.removeEventListener("focus", handler);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      channel?.close();
     };
   }, []);
 
@@ -531,7 +516,7 @@ export default function Deals() {
   const [draggedCallId, setDraggedCallId] = useState<string | null>(null);
   const [deals, setDeals] = useState<Deal[]>(() => {
     try {
-      const raw = sessionStorage.getItem("deals");
+      const raw = localStorage.getItem("deals") || sessionStorage.getItem("deals");
       return raw ? JSON.parse(raw) : initialDeals;
     } catch {
       return initialDeals;
@@ -539,21 +524,47 @@ export default function Deals() {
   });
 
   useEffect(() => {
-    sessionStorage.setItem("deals", JSON.stringify(deals));
+    try {
+      localStorage.setItem("deals", JSON.stringify(deals));
+      sessionStorage.setItem("deals", JSON.stringify(deals));
+    } catch {}
   }, [deals]);
 
   useEffect(() => {
     const handler = () => {
       try {
-        const raw = sessionStorage.getItem("deals");
+        const raw = localStorage.getItem("deals") || sessionStorage.getItem("deals");
         if (raw) setDeals(JSON.parse(raw));
       } catch {}
     };
+
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        handler();
+      }
+    };
+
     window.addEventListener("deals_updated", handler);
     window.addEventListener("storage", handler);
+    window.addEventListener("focus", handler);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        channel = new BroadcastChannel("deals_broadcast_channel");
+        channel.onmessage = handler;
+      } catch (e) {
+        console.warn("Failed to create BroadcastChannel in Deals:", e);
+      }
+    }
+
     return () => {
       window.removeEventListener("deals_updated", handler);
       window.removeEventListener("storage", handler);
+      window.removeEventListener("focus", handler);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      channel?.close();
     };
   }, []);
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);

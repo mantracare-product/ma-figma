@@ -27,6 +27,8 @@ import {
   LayoutGrid,
   List,
   CalendarClock,
+  Settings,
+  Check,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import AppointmentCard from "../components/appointments/AppointmentCard";
@@ -36,6 +38,7 @@ import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppoin
 import TeamAvailabilityTab from "../components/appointments/TeamAvailabilityTab";
 import TargetUserLocationBar from "../components/appointments/TargetUserLocationBar";
 import { useSearchParams } from "react-router";
+import { useClients } from "../../lib/clientsStore";
 import { useInvoices } from "../context/InvoiceContext";
 import { initialClients } from "./ClientProfile";
 import { useTeamMembers } from "../../lib/teamStore";
@@ -122,10 +125,10 @@ export default function Appointments() {
   ];
 
   const [appointments, setAppointments] = useState<Appointment[]>(() => {
-    const saved = sessionStorage.getItem("appointments_v1");
-    if (saved) {
-      try { return JSON.parse(saved); } catch {}
-    }
+    try {
+      const saved = localStorage.getItem("appointments_v1") || sessionStorage.getItem("appointments_v1");
+      if (saved) return JSON.parse(saved);
+    } catch {}
     return [
       {
         id: 101,
@@ -258,7 +261,10 @@ export default function Appointments() {
   });
 
   useEffect(() => {
-    sessionStorage.setItem("appointments_v1", JSON.stringify(appointments));
+    try {
+      localStorage.setItem("appointments_v1", JSON.stringify(appointments));
+      sessionStorage.setItem("appointments_v1", JSON.stringify(appointments));
+    } catch {}
   }, [appointments]);
 
   const [searchParams] = useSearchParams();
@@ -290,12 +296,26 @@ export default function Appointments() {
   });
   const [sessionType, setSessionType] = useState<"video" | "inPerson">("video");
   // New flat form fields
+  const [moduleDefaultProcess, setModuleDefaultProcess] = useState<string>(() => {
+    try {
+      return localStorage.getItem("ma_appointment_default_process") || "Appointment Scheduling";
+    } catch {
+      return "Appointment Scheduling";
+    }
+  });
+  const [showProcessSettings, setShowProcessSettings] = useState(false);
   const [bookingTitle, setBookingTitle] = useState("");
   const [bookingDescription, setBookingDescription] = useState("");
   const [bookingNote, setBookingNote] = useState("");
   const [bookingTags, setBookingTags] = useState("");
-  const [bookingProcessId, setBookingProcessId] = useState("");
-  const [bookingStageId, setBookingStageId] = useState("");
+  const [bookingProcessId, setBookingProcessId] = useState(() => {
+    try {
+      return localStorage.getItem("ma_appointment_default_process") || "Appointment Scheduling";
+    } catch {
+      return "Appointment Scheduling";
+    }
+  });
+  const [bookingStageId, setBookingStageId] = useState("Confirmed");
   const [bookingStartHour, setBookingStartHour] = useState(9);
   const [bookingStartMinute, setBookingStartMinute] = useState(0);
   const [drawerMode, setDrawerMode] = useState<"create" | "reschedule">("create");
@@ -319,30 +339,53 @@ export default function Appointments() {
   const [providerSpecialtyFilter, setProviderSpecialtyFilter] = useState<string>("all");
   const [providerLocationFilter, setProviderLocationFilter] = useState<string>("all");
 
-  // Dynamic clients data loaded from sessionStorage + initialClients
-  const [storedClients, setStoredClients] = useState<any[]>(() => {
-    try {
-      const raw = sessionStorage.getItem("clients");
-      return raw ? JSON.parse(raw) : initialClients;
-    } catch {
-      return initialClients;
-    }
-  });
+  const { clients: liveClients } = useClients();
 
   useEffect(() => {
-    const handleStorageUpdate = () => {
+    const handleStorageUpdate = (e?: any) => {
       try {
-        const raw = sessionStorage.getItem("clients");
-        if (raw) setStoredClients(JSON.parse(raw));
-      } catch {
-        // ignore
+        const rawApts = localStorage.getItem("appointments_v1") || sessionStorage.getItem("appointments_v1");
+        if (rawApts) {
+          const parsed = JSON.parse(rawApts);
+          console.log('[Appointments] Received update event, new appointments count:', parsed.length, 'Latest client:', parsed[0]?.clientName);
+          setAppointments(parsed);
+        }
+      } catch (err) {
+        console.warn('Error reading appointments on storage update:', err);
       }
     };
+
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        handleStorageUpdate();
+      }
+    };
+
     window.addEventListener("storage", handleStorageUpdate);
-    return () => window.removeEventListener("storage", handleStorageUpdate);
+    window.addEventListener("mantra_appointments_updated", handleStorageUpdate);
+    window.addEventListener("focus", handleStorageUpdate);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        channel = new BroadcastChannel("mantra_appointments_broadcast_channel");
+        channel.onmessage = handleStorageUpdate;
+      } catch (e) {
+        console.warn("Failed to create BroadcastChannel in Appointments:", e);
+      }
+    }
+
+    return () => {
+      window.removeEventListener("storage", handleStorageUpdate);
+      window.removeEventListener("mantra_appointments_updated", handleStorageUpdate);
+      window.removeEventListener("focus", handleStorageUpdate);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      channel?.close();
+    };
   }, []);
 
-  const clients = (storedClients && storedClients.length > 0 ? storedClients : initialClients).map((c: any, idx: number) => ({
+  const clients = liveClients.map((c: any, idx: number) => ({
     id: c.id ?? idx + 1,
     name: c.name,
     email: c.email || "",
@@ -593,6 +636,17 @@ export default function Appointments() {
     resetBookingWorkflow();
   };
 
+  const handleSetModuleDefaultProcess = (processName: string) => {
+    setModuleDefaultProcess(processName);
+    setBookingProcessId(processName);
+    try {
+      localStorage.setItem("ma_appointment_default_process", processName);
+      window.dispatchEvent(new CustomEvent("ma_appointment_default_process_updated", { detail: processName }));
+    } catch {}
+    toast.success(`Default appointment process set to "${processName}"`);
+    setShowProcessSettings(false);
+  };
+
   const resetBookingWorkflow = () => {
     setDrawerMode("create");
     setSelectedAppointment(null);
@@ -604,8 +658,8 @@ export default function Appointments() {
     setBookingDescription("");
     setBookingNote("");
     setBookingTags("");
-    setBookingProcessId("");
-    setBookingStageId("");
+    setBookingProcessId(moduleDefaultProcess || "Appointment Scheduling");
+    setBookingStageId("Confirmed");
     setBookingStartHour(9);
     setBookingStartMinute(0);
     setBookingLocation("Main Clinic — Suite 400");
@@ -910,6 +964,56 @@ export default function Appointments() {
                 <CalendarClock className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Availability</span>
               </button>
+            </div>
+
+            {/* Module Default Process Config Gear Button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowProcessSettings((prev) => !prev)}
+                className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all border border-slate-200 cursor-pointer shadow-xs active:scale-95"
+                title={`Module Process: ${moduleDefaultProcess} (Click to change)`}
+              >
+                <Settings className="w-4 h-4 text-slate-600 hover:text-slate-900" />
+              </button>
+
+              {showProcessSettings && (
+                <div className="absolute right-0 top-11 w-64 bg-white rounded-xl shadow-xl border border-slate-200 p-3 z-50 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                    <div>
+                      <p className="text-xs font-bold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>Appointment Process</p>
+                      <p className="text-[10px] text-slate-500">Auto-assigned to appointments & kiosk</p>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => setShowProcessSettings(false)}
+                      className="text-slate-400 hover:text-slate-600 text-xs p-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    {Object.keys(processStages).map((proc) => {
+                      const isSelected = moduleDefaultProcess === proc;
+                      return (
+                        <button
+                          key={proc}
+                          type="button"
+                          onClick={() => handleSetModuleDefaultProcess(proc)}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? "bg-blue-50 text-[#1456f0] font-semibold"
+                              : "text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span>{proc}</span>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-[#1456f0]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Book Appointment CTA (Electric Blue Pill) */}

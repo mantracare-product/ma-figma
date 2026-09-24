@@ -42,6 +42,7 @@ import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appo
 import { appendActivity } from "../../lib/activityEngine";
 import { getActivityForProcess, getActivityForClient } from "../../lib/activityLog";
 import { CLIENTS_STORE_EVENT, ClientProcessStage } from "../../lib/clientProcessState";
+import { useClients } from "../../lib/clientsStore";
 import { useInvoices } from "../context/InvoiceContext";
 import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
 import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
@@ -361,41 +362,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Clients list — backed by sessionStorage so WebForms can read updated client data
-  const [clients, setClients] = useState<Client[]>(() => {
-    try {
-      const saved = sessionStorage.getItem("clients");
-      return saved ? JSON.parse(saved) : initialClients;
-    } catch {
-      return initialClients;
-    }
-  });
+  // Reactive client store hook (synced with localStorage, sessionStorage, and BroadcastChannel)
+  const { clients, setClients } = useClients();
   const client = clients.find((c) => c.id === id) ?? null;
-
-  // Persist any client mutations back to sessionStorage
-  useEffect(() => {
-    sessionStorage.setItem("clients", JSON.stringify(clients));
-    try {
-      window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT));
-      window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
-    } catch {}
-  }, [clients]);
-
-  // Live-sync: pick up clients written by TestProcessChatDrawer or other tabs
-  useEffect(() => {
-    const handler = () => {
-      try {
-        const saved = sessionStorage.getItem("clients");
-        if (saved) setClients(JSON.parse(saved));
-      } catch { }
-    };
-    window.addEventListener(CLIENTS_STORE_EVENT, handler);
-    window.addEventListener("storage", handler);
-    return () => {
-      window.removeEventListener(CLIENTS_STORE_EVENT, handler);
-      window.removeEventListener("storage", handler);
-    };
-  }, []);
 
   // Custom field and section definitions from shared context (same ones Settings.tsx & Admin manage)
   const { getAllFields, addCustomField, getCustomSections, getAllSections } = useFieldRegistry();
@@ -1023,28 +992,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [processDropdownOpen, showFieldPicker]);
 
-  if (!client) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-lg font-semibold" style={{ color: "#1F2937", fontFamily: "DM Sans, sans-serif" }}>
-            Client not found
-          </p>
-          <button
-            onClick={handleClose}
-            className="mt-4 text-sm"
-            style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif" }}
-          >
-            ← Back to Clients
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // ─── Derived data (verbatim from Clients.tsx) ─────────────────────────────
 
   const drawerClientProcesses = useMemo(() => {
+    if (!client) return [];
     const storedCallLogs = getStoredCallLogs().filter(
       (l) => l.clientId === client.id || l.client.toLowerCase() === client.name.toLowerCase()
     );
@@ -1052,7 +1003,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     const headings = new Set<string>();
 
     storedCallLogs.forEach((l) => headings.add(l.process));
-    client.processes.forEach((processName) => {
+    (client.processes || []).forEach((processName) => {
       const parts = processName.split(":");
       if (parts.length >= 1) headings.add(parts[0].trim());
     });
@@ -1140,6 +1091,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   }, [client, drawerProcessStages]);
 
   const drawerActivityItems = useMemo(() => {
+    if (!client) return [];
     const findProcessId = (heading: string) => {
       const process = drawerClientProcesses.find((p) => p.name === heading);
       return process?.id || "process-1";
@@ -1386,7 +1338,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     }
   })();
 
-  const clientSubmissions = allSubmissions.filter(s => s.clientId === client.id);
+  const clientSubmissions = client ? allSubmissions.filter(s => s.clientId === client.id) : [];
   const groupedSubmissions = allForms.map(form => {
     const subs = clientSubmissions.filter(s => s.formId === form.id);
     return { form, subs };
@@ -1495,6 +1447,25 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────
+
+  if (!client) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-lg font-semibold" style={{ color: "#1F2937", fontFamily: "DM Sans, sans-serif" }}>
+            Client not found
+          </p>
+          <button
+            onClick={handleClose}
+            className="mt-4 text-sm"
+            style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif" }}
+          >
+            ← Back to Clients
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

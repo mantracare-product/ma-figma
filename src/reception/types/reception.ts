@@ -284,6 +284,9 @@ export interface CreatePatientPayload {
   email?: string;
   reason?: string;
   relation?: string;
+  providerId?: string;
+  responsible?: string;
+  doctorName?: string;
   faceEnrolled?: boolean;
   faceTemplate?: number[];
   consentGiven?: boolean;
@@ -348,6 +351,9 @@ export interface AppointmentSummary {
 
 export interface BookAppointmentPayload {
   clientId: string;
+  clientName?: string;
+  clientPhone?: string;
+  clientEmail?: string;
   serviceId: string;
   providerId?: string;
   date: string;
