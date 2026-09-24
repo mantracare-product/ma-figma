@@ -1,5 +1,16 @@
-import { pipeline } from '@xenova/transformers';
+import { pipeline, env } from '@xenova/transformers';
 import * as wavefileModule from 'wavefile';
+import os from 'os';
+import path from 'path';
+
+// Fix read-only filesystem on Vercel / AWS Lambda
+env.allowLocalModels = false;
+env.useBrowserCache = false;
+if (typeof process !== 'undefined' && (process.env?.VERCEL || process.env?.AWS_LAMBDA_FUNCTION_NAME || process.env?.NODE_ENV === 'production')) {
+  try {
+    env.cacheDir = path.join(os.tmpdir(), '.transformers_cache');
+  } catch {}
+}
 
 const WaveFile: any =
   (wavefileModule as any).WaveFile ||
@@ -11,10 +22,57 @@ let transcriberPromise: Promise<any> | null = null;
 
 async function getTranscriber() {
   if (!transcriberPromise) {
-    console.log('[Whisper Server] ⚙️ Initializing Whisper ASR pipeline (Xenova/whisper-base)...');
-    transcriberPromise = pipeline('automatic-speech-recognition', 'Xenova/whisper-base');
+    console.log('[Whisper Server] ⚙️ Initializing Whisper ASR pipeline (Xenova/whisper-tiny)...');
+    transcriberPromise = pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny');
   }
   return transcriberPromise;
+}
+
+/**
+ * Cloud Whisper transcription via Groq or OpenAI API
+ */
+async function transcribeViaCloud(buffer: Buffer, language?: string): Promise<string | null> {
+  const groqKey = process.env.GROQ_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+
+  if (!groqKey && !openaiKey) return null;
+
+  try {
+    const isGroq = Boolean(groqKey);
+    const endpoint = isGroq
+      ? 'https://api.groq.com/openai/v1/audio/transcriptions'
+      : 'https://api.openai.com/v1/audio/transcriptions';
+    const apiKey = isGroq ? groqKey : openaiKey;
+    const model = isGroq ? 'whisper-large-v3-turbo' : 'whisper-1';
+
+    const formData = new FormData();
+    const blob = new Blob([buffer as unknown as BlobPart], { type: 'audio/wav' });
+    formData.append('file', blob, 'recording.wav');
+    formData.append('model', model);
+    if (language && language !== 'auto') {
+      formData.append('language', language === 'hi' ? 'hi' : 'en');
+    }
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn(`[Whisper Server] Cloud STT (${isGroq ? 'Groq' : 'OpenAI'}) error:`, res.status, errText);
+      return null;
+    }
+
+    const data: any = await res.json();
+    return data?.text || '';
+  } catch (err) {
+    console.warn('[Whisper Server] Cloud STT request exception:', err);
+    return null;
+  }
 }
 
 export interface WhisperTranscribeRequest {
@@ -40,8 +98,28 @@ export async function handleWhisperTranscribeRequest(
       return { text: '', error: 'Missing audioBase64 in request' };
     }
 
-    const transcriber = await getTranscriber();
     const buffer = Buffer.from(body.audioBase64, 'base64');
+
+    // 1. Fast Path: Use Cloud API (Groq / OpenAI) if key is provided
+    const cloudText = await transcribeViaCloud(buffer, body.language);
+    if (cloudText !== null) {
+      const inferenceTimeMs = Date.now() - startTime;
+      const cleanText = cloudText
+        .replace(/\([^)]*\)/g, ' ')
+        .replace(/\[[^\]]*\]/g, ' ')
+        .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      console.log(`[Whisper Server] ⚡ Cloud Whisper Transcribed (${inferenceTimeMs}ms): "${cleanText}"`);
+      return {
+        text: cleanText,
+        durationSeconds: 1,
+      };
+    }
+
+    // 2. Local / Serverless ONNX Fallback
+    const transcriber = await getTranscriber();
 
     const wav = new WaveFile(buffer);
     wav.toSampleRate(16000);
