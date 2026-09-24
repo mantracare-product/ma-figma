@@ -1227,6 +1227,8 @@ export const AvatarReceptionView: React.FC = () => {
         onError: (err) => {
           console.warn('[Whisper STT] Recorder notice:', err);
           setIsUserSpeaking(false);
+          try { whisperRecorder.stop(); } catch {}
+          whisperRecorderRef.current = null;
           // Seamless fallback to browser Web Speech API if server Whisper STT is unavailable (e.g. 405/500/offline)
           if (!intentHandled && typeof window !== 'undefined') {
             const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
