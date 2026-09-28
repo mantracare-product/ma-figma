@@ -29,7 +29,7 @@ function apiServerPlugin() {
           req.on('end', async () => {
             try {
               const reqBody = JSON.parse(body);
-              const { handleWhisperTranscribeRequest } = await server.ssrLoadModule('./server/routes/whisperStt.ts');
+              const { handleWhisperTranscribeRequest } = await server.ssrLoadModule('./api/stt/transcribe.ts');
               const result = await handleWhisperTranscribeRequest(reqBody);
               res.statusCode = result.error ? (result.upstreamStatus || 500) : 200;
               res.setHeader('Content-Type', 'application/json');
