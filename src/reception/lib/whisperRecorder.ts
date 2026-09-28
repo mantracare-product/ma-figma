@@ -1,12 +1,13 @@
 /**
  * Browser-side audio recorder with Voice Activity Detection (VAD)
  * Features:
- * - Dynamic AudioContext sample rate detection (48kHz/44.1kHz -> 16kHz resampled)
+ * - Dynamic AudioContext sample rate detection with client-side 16kHz mono downsampling
+ * - Mono audio channel mixing for minimal payload size (~250 KB for 8s clip vs 4.5MB Vercel limit)
  * - Mute node isolation to prevent speaker feedback loop
  * - Adaptive noise floor calibration for soft mics & noisy rooms
  * - 600ms rolling pre-buffer so initial syllables are never clipped
  * - Responsive 750ms speech pause detector with 8s maximum window
- * - Accurate 16-bit PCM WAV base64 packaging sent to /api/stt/transcribe
+ * - Robust 8-second request timeout with explicit error handling & Web Speech API fallback triggering
  */
 
 export interface WhisperRecorderOptions {
@@ -15,7 +16,7 @@ export interface WhisperRecorderOptions {
   silenceDurationMs?: number; // Milliseconds of silence to trigger transcription
   maxDurationMs?: number; // Max speech window before force-transcribing
   onTranscript?: (transcript: string) => void;
-  onError?: (err: Error) => void;
+  onError?: (err: Error, isServerUnavailable?: boolean) => void;
   onListeningStateChange?: (isListening: boolean) => void;
   onAudioLevel?: (level: number) => void; // Normalized 0..1 for UI animation
 }
@@ -27,7 +28,7 @@ export class WhisperAudioRecorder {
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private gainNode: GainNode | null = null;
   private muteNode: GainNode | null = null;
-  
+
   private isRecording = false;
   private speechDetected = false;
   private rollingPreBuffer: Float32Array[] = [];
@@ -62,6 +63,7 @@ export class WhisperAudioRecorder {
       console.log('[Whisper Client] 🎤 Requesting microphone stream...');
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
+          channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
@@ -72,10 +74,10 @@ export class WhisperAudioRecorder {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       this.audioContext = new AudioCtx();
       this.sampleRate = this.audioContext.sampleRate || 44100;
-      console.log(`[Whisper Client] 🎚️ AudioContext active at ${this.sampleRate}Hz`);
-      
+      console.log(`[Whisper Client] 🎚️ AudioContext active at ${this.sampleRate}Hz (will downsample to 16kHz mono)`);
+
       this.sourceNode = this.audioContext.createMediaStreamSource(stream);
-      
+
       // Add Pre-amplifier GainNode
       this.gainNode = this.audioContext.createGain();
       this.gainNode.gain.value = 1.5;
@@ -110,7 +112,7 @@ export class WhisperAudioRecorder {
       return true;
     } catch (err: any) {
       console.warn('[Whisper Client] ❌ Failed to start audio capture:', err);
-      this.options.onError?.(err);
+      this.options.onError?.(err, false);
       return false;
     }
   }
@@ -153,7 +155,6 @@ export class WhisperAudioRecorder {
 
     // 2. Adaptive noise floor calibration
     if (!this.speechDetected) {
-      // Exponential moving average for noise baseline
       this.noiseFloor = this.noiseFloor * 0.9 + rms * 0.1;
     }
 
@@ -178,7 +179,6 @@ export class WhisperAudioRecorder {
       if (!this.speechDetected) {
         this.speechDetected = true;
         this.speechStartTime = now;
-        // Prepend rolling pre-buffer so beginning consonants are preserved
         this.collectedSamples = [...this.rollingPreBuffer, chunkCopy];
         this.rollingPreBuffer = [];
         console.log(
@@ -229,24 +229,38 @@ export class WhisperAudioRecorder {
     }
     this.collectedSamples = [];
 
-    // Encode to WAV with actual audioContext sampleRate
-    const wavBase64 = encodeWAVBase64(merged, this.sampleRate);
+    // Downsample from AudioContext sample rate (e.g. 48kHz/44.1kHz) to 16kHz mono
+    const downsampled16k = downsampleAudio(merged, this.sampleRate, 16000);
+    const wavBase64 = encodeWAVBase64(downsampled16k, 16000);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 8000);
 
     try {
       console.log(
-        `[Whisper Client] 🚀 Sending ${merged.length} samples (${durationSec}s @ ${this.sampleRate}Hz) to /api/stt/transcribe...`
+        `[Whisper Client] 🚀 Sending ${downsampled16k.length} samples (${durationSec}s @ 16kHz mono, payload: ~${Math.round(wavBase64.length / 1024)} KB) to /api/stt/transcribe...`
       );
       const res = await fetch('/api/stt/transcribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           audioBase64: wavBase64,
-          language: this.options.language || 'en',
+          language: this.options.language === 'hi' ? 'hi' : 'en',
         }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
       if (!res.ok) {
-        throw new Error(`Whisper STT endpoint responded with ${res.status}`);
+        const errorData = await res.json().catch(() => ({}));
+        const message = errorData?.detail || errorData?.error || `STT endpoint responded with HTTP ${res.status}`;
+        const err = new Error(message);
+        (err as any).status = res.status;
+        (err as any).isServerUnavailable = true;
+        throw err;
       }
 
       const data = await res.json();
@@ -263,16 +277,48 @@ export class WhisperAudioRecorder {
         console.log('[Whisper Client] ℹ️ STT returned empty text');
       }
     } catch (err: any) {
-      console.error('[Whisper Client] ❌ STT Request Error:', err);
-      this.options.onError?.(err);
+      clearTimeout(timeoutId);
+      const isTimeout = err.name === 'AbortError';
+      const customErr = isTimeout
+        ? new Error('STT request timed out after 8 seconds')
+        : err;
+      (customErr as any).isServerUnavailable = true;
+      console.error('[Whisper Client] ❌ STT Request Error:', customErr);
+      this.options.onError?.(customErr, true);
     }
   }
 }
 
 /**
+ * Downsamples Float32Array PCM samples to 16kHz mono using linear interpolation
+ */
+function downsampleAudio(inputSamples: Float32Array, inputRate: number, targetRate = 16000): Float32Array {
+  if (inputRate === targetRate || targetRate <= 0) {
+    return inputSamples;
+  }
+  if (inputSamples.length === 0) {
+    return new Float32Array(0);
+  }
+
+  const ratio = inputRate / targetRate;
+  const targetLength = Math.round(inputSamples.length / ratio);
+  const result = new Float32Array(targetLength);
+
+  for (let i = 0; i < targetLength; i++) {
+    const origIndex = i * ratio;
+    const indexFloor = Math.floor(origIndex);
+    const indexCeil = Math.min(inputSamples.length - 1, indexFloor + 1);
+    const weight = origIndex - indexFloor;
+    result[i] = inputSamples[indexFloor] * (1 - weight) + inputSamples[indexCeil] * weight;
+  }
+
+  return result;
+}
+
+/**
  * Encodes Float32Array PCM samples into a standard 16-bit PCM WAV base64 string
  */
-function encodeWAVBase64(samples: Float32Array, sampleRate: number): string {
+function encodeWAVBase64(samples: Float32Array, sampleRate = 16000): string {
   const buffer = new ArrayBuffer(44 + samples.length * 2);
   const view = new DataView(buffer);
 

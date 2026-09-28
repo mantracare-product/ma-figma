@@ -15,13 +15,23 @@ export default async function handler(req: any, res: any) {
   try {
     let body = req.body;
     if (typeof body === 'string') {
-      body = JSON.parse(body);
+      try {
+        body = JSON.parse(body);
+      } catch {
+        return res.status(400).json({ error: 'Invalid JSON payload' });
+      }
     }
+
     const result = await handleWhisperTranscribeRequest(body);
+    if (result.error) {
+      const statusCode = result.upstreamStatus || 500;
+      return res.status(statusCode).json(result);
+    }
+
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).json(result);
   } catch (error: any) {
-    console.error('[API /api/stt/transcribe] Error:', error);
+    console.error('[API /api/stt/transcribe] Serverless function error:', error?.message || error);
     return res.status(500).json({ error: 'Transcription failed', detail: String(error?.message || error) });
   }
 }

@@ -1229,44 +1229,94 @@ export const AvatarReceptionView: React.FC = () => {
           setIsUserSpeaking(false);
           try { whisperRecorder.stop(); } catch {}
           whisperRecorderRef.current = null;
-          // Seamless fallback to browser Web Speech API if server Whisper STT is unavailable (e.g. 405/500/offline)
-          if (!intentHandled && typeof window !== 'undefined') {
-            const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-            if (SpeechRec) {
-              try {
-                if (speechRecognitionRef.current) {
-                  try { speechRecognitionRef.current.stop(); } catch {}
-                }
-                const fallbackRec = new SpeechRec();
-                fallbackRec.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
-                fallbackRec.continuous = false;
-                fallbackRec.interimResults = false;
-                fallbackRec.onresult = (evt: any) => {
-                  const fallbackText = evt.results?.[0]?.[0]?.transcript || '';
-                  if (fallbackText && !isAriaSpeakingRef.current && !intentHandled) {
-                    console.log(`[User Spoke Fallback STT 🗣️]: "${fallbackText}"`);
-                    setUserTranscriptText(fallbackText);
-                    setIsUserSpeaking(false);
-                    intentHandled = true;
-                    setAmbientPhase('routing');
-                    try { fallbackRec.stop(); } catch {}
-                    stopCameraStream();
-                    setTimeout(async () => {
-                      if (resolveIntentRef.current) {
-                        await resolveIntentRef.current(fallbackText, { isAmbient: true });
-                      }
-                    }, 80);
-                  }
-                };
-                fallbackRec.onerror = () => {
-                  setIsUserSpeaking(false);
-                };
-                speechRecognitionRef.current = fallbackRec;
-                fallbackRec.start();
-              } catch (recErr) {
-                console.warn('[STT Fallback] Browser speech recognition error:', recErr);
+
+          if (intentHandled || screenRef.current !== 'AMBIENT') return;
+
+          // Seamless fallback to browser Web Speech API if server Whisper STT is unavailable (e.g. 500/timeout/offline)
+          const SpeechRec =
+            typeof window !== 'undefined'
+              ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+              : null;
+
+          if (SpeechRec) {
+            try {
+              if (ambientSpeechRecognitionRef.current) {
+                try { ambientSpeechRecognitionRef.current.stop(); } catch {}
               }
+
+              console.log('[STT Fallback] 🎙️ Switching to browser Web Speech API...');
+              setCaptionText(
+                currentLanguage === 'hi'
+                  ? 'कृपया बोलें, हम सुन रहे हैं...'
+                  : 'Please speak, listening...'
+              );
+
+              const fallbackRec = new SpeechRec();
+              fallbackRec.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
+              fallbackRec.continuous = false;
+              fallbackRec.interimResults = false;
+
+              fallbackRec.onstart = () => {
+                console.log('[STT Fallback] Web Speech API active and listening.');
+              };
+
+              fallbackRec.onresult = (evt: any) => {
+                const fallbackText = evt.results?.[0]?.[0]?.transcript || '';
+                if (fallbackText && !isAriaSpeakingRef.current && !intentHandled) {
+                  console.log(`[User Spoke Fallback STT 🗣️]: "${fallbackText}"`);
+                  setUserTranscriptText(fallbackText);
+                  setIsUserSpeaking(false);
+                  intentHandled = true;
+                  setAmbientPhase('routing');
+                  try { fallbackRec.stop(); } catch {}
+                  stopCameraStream();
+                  setTimeout(async () => {
+                    if (resolveIntentRef.current) {
+                      await resolveIntentRef.current(fallbackText, { isAmbient: true });
+                    }
+                  }, 80);
+                }
+              };
+
+              fallbackRec.onerror = (recErr: any) => {
+                console.warn('[STT Fallback] Browser speech recognition notice:', recErr?.error || recErr);
+                setIsUserSpeaking(false);
+                // Guard against fallback loop: show brief guidance and keep touch buttons usable
+                setCaptionText(
+                  currentLanguage === 'hi'
+                    ? 'आवाज़ पहचानी नहीं गई। कृपया नीचे दिए गए विकल्पों में से चुनें।'
+                    : 'Voice not recognized. Please tap an option below.'
+                );
+                setAvatarState('idle');
+              };
+
+              fallbackRec.onend = () => {
+                setIsUserSpeaking(false);
+                ambientSpeechRecognitionRef.current = null;
+                if (!intentHandled) {
+                  setAvatarState('idle');
+                }
+              };
+
+              ambientSpeechRecognitionRef.current = fallbackRec;
+              fallbackRec.start();
+            } catch (recErr) {
+              console.warn('[STT Fallback] Browser speech recognition start failed:', recErr);
+              setCaptionText(
+                currentLanguage === 'hi'
+                  ? 'आवाज़ सेवा अनुपलब्ध है। कृपया नीचे दिए गए विकल्पों में से चुनें।'
+                  : 'Voice service unavailable. Please tap an option below.'
+              );
+              setAvatarState('idle');
             }
+          } else {
+            // SpeechRecognition not supported in this browser
+            setCaptionText(
+              currentLanguage === 'hi'
+                ? 'आवाज़ सेवा अनुपलब्ध है। कृपया नीचे दिए गए विकल्पों में से चुनें।'
+                : 'Voice recognition unavailable. Please tap an option below.'
+            );
+            setAvatarState('idle');
           }
         },
       });
