@@ -1757,14 +1757,17 @@ export function AdminFieldDrawer({
       if (matchedField) {
         const isMulti = matchedField.inputType === "multiselect" || matchedField.selectionMode === "multiple";
         const finalType: SubFieldInputType = isMulti ? "multiselect" : (col.inputType || (matchedField.inputType as SubFieldInputType) || "text");
+        const allowCustom = Boolean(matchedField.allowCustomOptions ?? matchedField.listConfig?.allowCustomOptions ?? matchedField.newListConfig?.allowCustomOptions ?? col.allowCustomOptions);
         return {
           ...col,
           inputType: finalType,
-          options: (col.options && col.options.length > 0) ? col.options : matchedField.options,
+          options: (matchedField.options && matchedField.options.length > 0) ? matchedField.options : col.options,
           selectionMode: isMulti ? "multiple" : (matchedField.selectionMode || col.selectionMode),
           currency: col.currency || matchedField.currency,
           crmBindConfig: col.crmBindConfig || matchedField.crmBindConfig,
           listBindConfig: col.listBindConfig || matchedField.listBindConfig,
+          allowCustomOptions: allowCustom,
+          allowSearch: matchedField.allowSearch ?? matchedField.listConfig?.allowSearch ?? col.allowSearch,
         };
       }
       return col;
@@ -1822,6 +1825,7 @@ export function AdminFieldDrawer({
       selectionMode: isMulti ? "multiple" : (f.selectionMode || "single"),
       crmBindConfig: f.crmBindConfig ? { ...f.crmBindConfig } : undefined,
       maxRating: f.maxRating,
+      allowCustomOptions: f.allowCustomOptions ?? f.listConfig?.allowCustomOptions ?? f.newListConfig?.allowCustomOptions,
     };
     setForm((p) => ({
       ...p,

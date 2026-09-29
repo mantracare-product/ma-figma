@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import type {
   FieldDefinition,
+  FieldModule,
   SubFieldConfig,
   SubFieldInputType,
   FieldOption,
@@ -357,9 +358,10 @@ function MultiSelectDropdown({
     }
   };
 
-  const selectedLabels = options
-    .filter((o) => selected.includes(o.value))
-    .map((o) => o.label);
+  const selectedLabels = selected.map((selVal) => {
+    const found = options.find((o) => o.value === selVal);
+    return found ? found.label : selVal;
+  });
 
   const displayText =
     selectedLabels.length === 0
@@ -1246,20 +1248,10 @@ function NewListInputRenderer({
             placeholder={isAdminDefault ? "— No Default (Empty) —" : (field?.placeholder || `Select ${label}...`)}
             options={[
               { value: "", label: "— Clear Selection —" },
-              ...rawOptions.map((opt) => {
-                let subtitle: string | undefined = undefined;
-                if (typeof opt.value === "object" && opt.value !== null) {
-                  const entries = Object.entries(opt.value).filter(([k, v]) => String(v).trim() !== "" && String(v) !== opt.label);
-                  if (entries.length > 0) {
-                    subtitle = entries.map(([k, v]) => String(v)).slice(0, 2).join(" • ");
-                  }
-                }
-                return {
-                  value: opt.label || String(opt.value),
-                  label: opt.label || String(opt.value),
-                  subtitle,
-                };
-              }),
+              ...rawOptions.map((opt) => ({
+                value: opt.label || String(opt.value),
+                label: opt.label || String(opt.value),
+              })),
             ]}
             size="sm"
             triggerClassName={borderClass}
@@ -1397,11 +1389,9 @@ function NewListInputRenderer({
 
   // Retrieve all rows from the source composite or field-defined options
   const sourceRows: Record<string, any>[] = useMemo(() => {
-    let rows: Record<string, any>[] = [];
-
-    // 0. Primary source: Options directly configured on this Option List field
+    // 0. Primary source: Options directly configured on this Option List / Advance List field
     if (field?.options && Array.isArray(field.options) && field.options.length > 0) {
-      rows = field.options.map((opt, idx) => {
+      return field.options.map((opt, idx) => {
         if (typeof opt.value === "object" && opt.value !== null) {
           return {
             id: String(opt.id || `opt_${idx + 1}`),
@@ -1416,7 +1406,7 @@ function NewListInputRenderer({
       });
     }
 
-    // 1. In-memory record data
+    let rows: Record<string, any>[] = [];
     if (rows.length === 0 && recordData && sourceCompositeKey && Array.isArray(recordData[sourceCompositeKey]) && recordData[sourceCompositeKey].length > 0) {
       rows = recordData[sourceCompositeKey];
     }
@@ -1586,21 +1576,13 @@ function NewListInputRenderer({
 
   // Derive dropdown options from sourceRows + any locally added custom options
   const options = useMemo(() => {
-    const builtOptions: Array<{ value: string; label: string; subtitle?: string }> = sourceRows.map((row, idx) => {
+    const builtOptions: Array<{ value: string; label: string }> = sourceRows.map((row, idx) => {
       const rowId = String(row.id || row.key || `row_${idx + 1}`);
       const primaryVal = String(row[primaryColId] || row.name || row.label || rowId);
-
-      // Subtitle from other columns
-      const otherCols = compositeColumns.filter((col) => col.id !== primaryColId);
-      const subParts = otherCols
-        .map((col) => row[col.id])
-        .filter((val) => val !== undefined && val !== null && String(val).trim() !== "");
-      const subtitle = subParts.length > 0 ? subParts.slice(0, 2).join(" • ") : undefined;
 
       return {
         value: rowId,
         label: primaryVal,
-        subtitle,
       };
     });
 
@@ -1615,7 +1597,7 @@ function NewListInputRenderer({
     });
 
     return builtOptions;
-  }, [sourceRows, primaryColId, compositeColumns, localExtraOptions]);
+  }, [sourceRows, primaryColId, localExtraOptions]);
 
   // Handle single-select selection
   const handleSingleSelectChange = (selectedId: string) => {
@@ -1799,6 +1781,116 @@ function NewListInputRenderer({
     );
   };
 
+  const isTableView =
+    sourceCompositeDef?.compositeDisplayMode === "table" ||
+    field?.compositeDisplayMode === "table" ||
+    sourceCompositeDef?.inputType === "table" ||
+    (!sourceCompositeDef?.compositeDisplayMode && sourceCompositeDef?.inputType !== "group" && sourceCompositeDef?.inputType !== "group_repeatable");
+
+  const renderTableView = (items: NewListSelectionItem[]) => {
+    return (
+      <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/80 border-b border-slate-200">
+                <th className="w-8 px-2.5 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">
+                  #
+                </th>
+                {compositeColumns.map((col) => {
+                  const colCfg = columnConfigs.find((c) => c.columnId === col.id);
+                  const isPrimary = colCfg?.isPrimary ?? (col.id === primaryColId);
+                  return (
+                    <th
+                      key={col.id}
+                      className="px-3 py-2 text-[11px] font-bold text-slate-600 uppercase tracking-wider min-w-[130px]"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>{col.name}</span>
+                        {isPrimary && (
+                          <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.2 rounded font-normal lowercase">
+                            primary
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
+                {!disabled && (
+                  <th className="w-10 px-2 py-2 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Actions
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {items.map((item, itemIdx) => {
+                const sourceRow = sourceRows.find((r) => String(r.id || r.key) === String(item.selectedRowId));
+                const displayPrimaryVal =
+                  item.primaryValue ||
+                  (sourceRow ? String(sourceRow[primaryColId] || sourceRow.name || sourceRow.label || item.selectedRowId) : String(item.selectedRowId));
+
+                return (
+                  <tr key={`${item.selectedRowId}_${itemIdx}`} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-2.5 py-2 text-center text-[10px] font-bold text-slate-400 bg-slate-50/30">
+                      {itemIdx + 1}
+                    </td>
+                    {compositeColumns.map((col) => {
+                      const colCfg = columnConfigs.find((c) => c.columnId === col.id) || {
+                        columnId: col.id,
+                        isPrimary: col.id === primaryColId,
+                        isDisable: false,
+                        isEditable: col.id !== primaryColId,
+                      };
+                      const isPrimary = Boolean(colCfg.isPrimary);
+                      const isColEditable = Boolean(colCfg.isEditable);
+
+                      const baseRowVal = sourceRow ? sourceRow[col.id] : "";
+                      const overrideVal = item.overrides?.[col.id];
+                      const currentVal = overrideVal !== undefined ? overrideVal : (isPrimary ? displayPrimaryVal : (baseRowVal ?? ""));
+
+                      return (
+                        <td key={col.id} className="px-2.5 py-1.5 min-w-[130px]">
+                          {!isColEditable || disabled ? (
+                            <div className="px-2.5 py-1.5 bg-slate-50/80 border border-slate-200/80 rounded-lg text-xs text-slate-700 font-medium truncate min-h-[30px] flex items-center">
+                              {currentVal !== undefined && currentVal !== ""
+                                ? (Array.isArray(currentVal) ? currentVal.join(", ") : String(currentVal))
+                                : <span className="text-slate-400 italic font-normal">—</span>}
+                            </div>
+                          ) : (
+                            <FieldInputRenderer
+                              subField={col}
+                              value={currentVal}
+                              disabled={disabled}
+                              onChange={(val) => handleColumnOverrideChange(itemIdx, col.id, val)}
+                              isSubField={true}
+                            />
+                          )}
+                        </td>
+                      );
+                    })}
+                    {!disabled && (
+                      <td className="px-2 py-1.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRow(itemIdx)}
+                          className="p-1 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 cursor-pointer transition-colors"
+                          title="Remove item"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   // If no source group field is configured
   if (!sourceCompositeKey) {
     return (
@@ -1829,7 +1921,6 @@ function NewListInputRenderer({
                   .map((opt) => ({
                     value: opt.value,
                     label: opt.label,
-                    subtitle: opt.subtitle,
                   })),
               ]}
               size="sm"
@@ -1844,7 +1935,7 @@ function NewListInputRenderer({
           </div>
         )}
 
-        {/* Selected Record Blocks List */}
+        {/* Selected Record Items List (Table View or Card View) */}
         {normalizedSelection.length === 0 ? (
           <div className="p-4 border border-dashed border-slate-200 rounded-xl bg-slate-50/50 text-center">
             <p className="text-xs text-slate-400 font-medium">
@@ -1853,6 +1944,8 @@ function NewListInputRenderer({
                 : `No ${label.toLowerCase()} selected. Pick an option above to populate associated columns.`}
             </p>
           </div>
+        ) : isTableView ? (
+          renderTableView(normalizedSelection)
         ) : (
           <div className="space-y-2.5">
             {normalizedSelection.map((item, idx) => renderRecordBlock(item, idx))}
@@ -1878,7 +1971,6 @@ function NewListInputRenderer({
           ...options.map((opt) => ({
             value: opt.value,
             label: opt.label,
-            subtitle: opt.subtitle,
           })),
         ]}
         size="sm"
@@ -1891,8 +1983,10 @@ function NewListInputRenderer({
         } : undefined}
       />
 
-      {/* Populated Associated Column Block */}
-      {singleSelected && singleSelected.selectedRowId && renderRecordBlock(singleSelected, 0)}
+      {/* Populated Associated Column Block / Table */}
+      {singleSelected && singleSelected.selectedRowId && (
+        isTableView ? renderTableView([singleSelected]) : renderRecordBlock(singleSelected, 0)
+      )}
     </div>
   );
 }
@@ -1907,9 +2001,21 @@ export function FieldInputRenderer({
   isSubField = false,
   recordData,
 }: FieldInputRendererProps) {
+  const { getAllFields, updateCustomField } = useFieldRegistry();
+
   // Resolve effective metadata
   const rawType = subField?.inputType || field?.inputType || "text";
-  const effectiveType: FieldInputType = (rawType === "group_repeatable" ? "list_open" : rawType) as FieldInputType;
+  let effectiveType: FieldInputType = (rawType === "group_repeatable" ? "list_open" : rawType) as FieldInputType;
+
+  // If this is a composite / group field, respect compositeDisplayMode setting:
+  if (!isSubField) {
+    if (field?.compositeDisplayMode === "table" || rawType === "table") {
+      effectiveType = "table";
+    } else if (field?.compositeDisplayMode === "group") {
+      effectiveType = "group_repeatable";
+    }
+  }
+
   const effectiveOptions: FieldOption[] = subField?.options || field?.options || [];
   const effectiveListBindConfig = subField?.listBindConfig || field?.listBindConfig;
   const effectiveListConfig = field?.listConfig;
@@ -1926,6 +2032,41 @@ export function FieldInputRenderer({
   const borderClass = isAdminDefault
     ? "border-blue-300/80 bg-blue-50/20 focus:border-blue-500"
     : "border-slate-200 bg-white focus:border-blue-500";
+
+  // Helper to sync newly typed/added custom option to the underlying Basic List field
+  const handleSyncNewOptionToBasicList = (newVal: string, sf?: SubFieldConfig, f?: Partial<FieldDefinition>) => {
+    if (!newVal || !newVal.trim()) return;
+    const cleanVal = newVal.trim();
+    const targetModule = (f?.module || "client") as FieldModule;
+    const allFields = getAllFields(targetModule);
+    const matchedField = allFields.find((regF) =>
+      (sf && (
+        regF.key === sf.id ||
+        sf.id.startsWith(`col_${regF.key}_`) ||
+        sf.id.startsWith(`col_${regF.key}__`) ||
+        (sf.name && regF.label.toLowerCase() === sf.name.toLowerCase())
+      )) ||
+      (f && regF.key === f.key)
+    );
+
+    if (matchedField) {
+      const exists = (matchedField.options || []).some(
+        (o) => o.label.toLowerCase() === cleanVal.toLowerCase() || String(o.value).toLowerCase() === cleanVal.toLowerCase()
+      );
+      if (!exists) {
+        const newOpt: FieldOption = {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          label: cleanVal,
+          value: cleanVal,
+          index: (matchedField.options?.length || 0) + 1,
+        };
+        const updatedOptions = [...(matchedField.options || []), newOpt];
+        updateCustomField(matchedField.module, matchedField.id, {
+          options: updatedOptions,
+        });
+      }
+    }
+  };
 
   // ─────────────────────────────────────────────────────────────
   // 1. CRM BIND
@@ -1972,7 +2113,12 @@ export function FieldInputRenderer({
   // ─────────────────────────────────────────────────────────────
   if (effectiveType === "list_select" || effectiveType === "select" || effectiveType === "multiselect" || effectiveType === "list") {
     const isMultiple = subField?.selectionMode === "multiple" || field?.selectionMode === "multiple" || effectiveType === "multiselect";
-    const allowCustom = Boolean(effectiveListConfig?.allowCustomOptions ?? field?.allowCustomOptions);
+    const allowCustom = Boolean(
+      subField?.allowCustomOptions ??
+      subField?.listConfig?.allowCustomOptions ??
+      effectiveListConfig?.allowCustomOptions ??
+      field?.allowCustomOptions
+    );
 
     if (isMultiple) {
       return (
@@ -1984,8 +2130,11 @@ export function FieldInputRenderer({
           placeholder={effectivePlaceholder}
           isAdminDefault={isAdminDefault}
           borderClass={borderClass}
-          allowSearch={effectiveListConfig?.allowSearch}
+          allowSearch={subField?.allowSearch ?? effectiveListConfig?.allowSearch}
           allowCustomOptions={allowCustom}
+          onAddOption={(newVal) => {
+            handleSyncNewOptionToBasicList(newVal, subField, field);
+          }}
         />
       );
     }
@@ -2001,13 +2150,13 @@ export function FieldInputRenderer({
         options={dynamicOptions.map((opt) => ({
           value: opt.value,
           label: opt.label,
-          subtitle: (opt as any).subtitle,
         }))}
         size="sm"
         triggerClassName={borderClass}
-        allowSearch={effectiveListConfig?.allowSearch}
+        allowSearch={subField?.allowSearch ?? effectiveListConfig?.allowSearch}
         allowCustomOptions={allowCustom}
         onAddOption={(newVal) => {
+          handleSyncNewOptionToBasicList(newVal, subField, field);
           onChange(newVal);
         }}
       />

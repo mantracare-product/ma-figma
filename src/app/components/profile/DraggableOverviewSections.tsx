@@ -1000,7 +1000,7 @@ export default function DraggableOverviewSections({
               </DropdownMenu>
             )}
           </div>
-        ) : key === "prescribed_medications" || key === "medications" ? (
+        ) : !regField && (key === "prescribed_medications" || key === "medications") ? (
           <div className="space-y-3">
             {(() => {
               let medsList: any[] = [];
@@ -1161,15 +1161,7 @@ export default function DraggableOverviewSections({
               );
             })()}
           </div>
-        ) : regField?.inputType === "table" ||
-            regField?.inputType === "group" ||
-            regField?.inputType === "group_repeatable" ||
-            regField?.inputType === "crm_bind" ||
-            regField?.inputType === "list_select" ||
-            regField?.inputType === "new_list" ||
-            regField?.inputType === "multiselect" ||
-            regField?.inputType === "rating" ||
-            (regField?.inputType === "list_open" && key !== "prescribed_medications" && key !== "medications") ? (
+        ) : regField ? (
           <FieldInputRenderer
             field={regField}
             value={effectiveVal}

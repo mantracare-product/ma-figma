@@ -165,6 +165,8 @@ export interface TableColumnConfig {
   selectionMode?: "single" | "multiple"; // for list_select columns
   maxRating?: number; // for rating columns
   listBindConfig?: ListBindConfig; // for list_select columns
+  allowCustomOptions?: boolean;
+  allowSearch?: boolean;
   phoneConfig?: {
     countryCodeDisplay?: "name" | "code";
     showFlags?: boolean;
@@ -1742,8 +1744,14 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
   } else if (rawType === "list") {
     normalizedType = "list_select";
     if (!normalizedSelectionMode) normalizedSelectionMode = "single";
-  } else if (rawType === "group_repeatable") {
-    normalizedType = "group_repeatable";
+  } else if (rawType === "group_repeatable" || rawType === "group" || rawType === "table") {
+    if (f.compositeDisplayMode === "table" || rawType === "table") {
+      normalizedType = "table";
+    } else if (f.compositeDisplayMode === "group") {
+      normalizedType = "group_repeatable";
+    } else {
+      normalizedType = rawType as FieldInputType;
+    }
   } else if (rawType === "list_open" && (f.listEntryType === "structured" || f.compositeDisplayMode !== undefined || (f.subFields && f.subFields.length > 0))) {
     normalizedType = f.compositeDisplayMode === "table" ? "table" : "group_repeatable";
   }
