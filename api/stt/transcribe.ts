@@ -14,8 +14,11 @@ export interface WhisperTranscribeResponse {
   isNoise?: boolean;
   durationSeconds?: number;
   error?: string;
+  unconfigured?: boolean;
   upstreamStatus?: number;
 }
+
+let hasWarnedMissingKey = false;
 
 /**
  * Pure, self-contained Groq Whisper transcription logic.
@@ -32,11 +35,15 @@ export async function handleWhisperTranscribeRequest(
 
   const groqApiKey = process.env.GROQ_API_KEY;
   if (!groqApiKey) {
-    console.error('[STT Server] GROQ_API_KEY is not configured on server');
+    if (!hasWarnedMissingKey) {
+      hasWarnedMissingKey = true;
+      console.warn('[STT Server] GROQ_API_KEY is not configured in environment variables. Web client will use browser Web Speech API fallback.');
+    }
     return {
       text: '',
+      unconfigured: true,
       error: 'GROQ_API_KEY is not configured on the server',
-      upstreamStatus: 500,
+      upstreamStatus: 200,
     };
   }
 
@@ -63,6 +70,15 @@ export async function handleWhisperTranscribeRequest(
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
+    if (res.status === 429 || res.status === 401 || res.status === 402) {
+      console.warn(`[STT Server] Groq API key exhausted or rate-limited (HTTP ${res.status}). Automatically switching to browser Web Speech API.`);
+      return {
+        text: '',
+        unconfigured: true,
+        error: `Groq STT key exhausted or rate limited (HTTP ${res.status})`,
+        upstreamStatus: 200,
+      };
+    }
     console.error(`[STT Server] Groq upstream error (HTTP ${res.status}): ${errText}`);
     return {
       text: '',
@@ -149,7 +165,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const result = await handleWhisperTranscribeRequest(body || {});
-    if (result.error) {
+    if (result.error && !result.unconfigured) {
       const statusCode = result.upstreamStatus || 500;
       return res.status(statusCode).json({ text: '', error: result.error });
     }

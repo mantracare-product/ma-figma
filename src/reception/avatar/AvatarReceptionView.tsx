@@ -419,7 +419,12 @@ export const AvatarReceptionView: React.FC = () => {
   const ambientSpeechRecognitionRef = useRef<any>(null);
   const whisperRecorderRef = useRef<WhisperAudioRecorder | null>(null);
   const isAriaSpeakingRef = useRef<boolean>(false);
+  const lastSpokenTextRef = useRef<string>('');
+  const lastSpokenEndTimeRef = useRef<number>(0);
+  const isWhisperServerAvailableRef = useRef<boolean>(true);
   const startAmbientListeningRef = useRef<(() => void) | null>(null);
+  const startVoiceListeningRef = useRef<(() => void) | null>(null);
+  const handleVoiceCommandRef = useRef<((rawTranscript: string) => Promise<boolean | void>) | null>(null);
   const noticedDwellRef = useRef<number>(0);
   const closeDwellRef = useRef<number>(0);
   const lastFaceSeenTimeRef = useRef<number>(0);
@@ -831,6 +836,7 @@ export const AvatarReceptionView: React.FC = () => {
       thinkMsg?: string,
       onEnd?: () => void
     ) => {
+      lastSpokenTextRef.current = text.toLowerCase();
       setCaptionText(text);
       setUserTranscriptText('');
       setIsUserSpeaking(false);
@@ -843,11 +849,13 @@ export const AvatarReceptionView: React.FC = () => {
           isAriaSpeakingRef.current = true;
           setTimeout(() => {
             isAriaSpeakingRef.current = false;
+            lastSpokenEndTimeRef.current = Date.now();
             setAvatarState('idle');
             onEnd?.();
           }, 2400);
         } else {
           isAriaSpeakingRef.current = false;
+          lastSpokenEndTimeRef.current = Date.now();
           onEnd?.();
         }
         return;
@@ -878,30 +886,36 @@ export const AvatarReceptionView: React.FC = () => {
         };
         utterance.onend = () => {
           isAriaSpeakingRef.current = false;
+          lastSpokenEndTimeRef.current = Date.now();
           if (state !== 'success' && state !== 'thinking') {
             setAvatarState('idle');
           }
-          // Small 150ms acoustic buffer before triggering next step
           setTimeout(() => {
             onEnd?.();
-          }, 150);
+            // Automatically resume continuous voice listening after Aria speaks
+            startVoiceListeningRef.current?.();
+          }, 450);
         };
         utterance.onerror = () => {
           isAriaSpeakingRef.current = false;
+          lastSpokenEndTimeRef.current = Date.now();
           if (state !== 'success' && state !== 'thinking') {
             setAvatarState('idle');
           }
           setTimeout(() => {
             onEnd?.();
-          }, 150);
+            startVoiceListeningRef.current?.();
+          }, 450);
         };
 
         isAriaSpeakingRef.current = true;
         window.speechSynthesis.speak(utterance);
       } catch {
         isAriaSpeakingRef.current = false;
+        lastSpokenEndTimeRef.current = Date.now();
         setAvatarState('idle');
         onEnd?.();
+        startVoiceListeningRef.current?.();
       }
     },
     [isMuted, currentLanguage, getFemaleVoice]
@@ -1144,25 +1158,26 @@ export const AvatarReceptionView: React.FC = () => {
     }
   }, [screen, facePhase, ambientPhase]);
 
-  // Speech listening and keyword intent resolver for AMBIENT screen
+  // Universal Voice Listening & Conversational Assistant across ALL screens
   const ambientListeningTimeoutRef = useRef<any>(null);
   const unrecognizedAttemptsRef = useRef<number>(0);
 
-  const startAmbientListening = useCallback(() => {
-    if (screenRef.current !== 'AMBIENT') return;
+  const startVoiceListening = useCallback(() => {
     if (typeof window === 'undefined') return;
 
     // Delay start if Aria is actively speaking to prevent mic picking up speaker output
     if (isAriaSpeakingRef.current) {
       setTimeout(() => {
-        if (screenRef.current === 'AMBIENT') {
-          startAmbientListening();
+        if (!isAriaSpeakingRef.current) {
+          startVoiceListening();
         }
-      }, 300);
+      }, 350);
       return;
     }
 
-    setAmbientPhase('listening');
+    if (screenRef.current === 'AMBIENT') {
+      setAmbientPhase('listening');
+    }
     setAvatarState('idle');
 
     if (ambientListeningTimeoutRef.current) {
@@ -1176,9 +1191,82 @@ export const AvatarReceptionView: React.FC = () => {
       whisperRecorderRef.current = null;
     }
 
-    let intentHandled = false;
+    // Fallback: Browser Web Speech API
+    const startBrowserSpeechFallback = () => {
+      const SpeechRec =
+        typeof window !== 'undefined'
+          ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+          : null;
 
-    // 1. Primary Engine: Neural Whisper STT via /api/stt/transcribe
+      if (!SpeechRec || isAriaSpeakingRef.current) return;
+
+      // If speech recognition is already running, avoid recreating
+      if (ambientSpeechRecognitionRef.current) {
+        return;
+      }
+
+      try {
+        const fallbackRec = new SpeechRec();
+        fallbackRec.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
+        fallbackRec.continuous = false;
+        fallbackRec.interimResults = false;
+
+        fallbackRec.onstart = () => {
+          console.log('[STT Fallback] Web Speech API active and listening.');
+        };
+
+        fallbackRec.onresult = async (evt: any) => {
+          const fallbackText = evt.results?.[0]?.[0]?.transcript || '';
+          if (fallbackText && !isAriaSpeakingRef.current) {
+            console.log(`[User Spoke Fallback STT 🗣️]: "${fallbackText}"`);
+            setUserTranscriptText(fallbackText);
+            setIsUserSpeaking(false);
+            if (screenRef.current === 'AMBIENT') {
+              setAmbientPhase('routing');
+            }
+            try { fallbackRec.stop(); } catch {}
+            if (handleVoiceCommandRef.current) {
+              await handleVoiceCommandRef.current(fallbackText);
+            }
+          }
+        };
+
+        fallbackRec.onerror = (recErr: any) => {
+          const errCode = recErr?.error;
+          if (errCode !== 'aborted' && errCode !== 'no-speech') {
+            console.warn('[STT Fallback] Browser speech recognition notice:', errCode || recErr);
+          }
+          setIsUserSpeaking(false);
+          ambientSpeechRecognitionRef.current = null;
+        };
+
+        fallbackRec.onend = () => {
+          setIsUserSpeaking(false);
+          ambientSpeechRecognitionRef.current = null;
+          if (!isAriaSpeakingRef.current) {
+            setAvatarState('idle');
+            setTimeout(() => {
+              if (!isAriaSpeakingRef.current && !ambientSpeechRecognitionRef.current) {
+                startVoiceListening();
+              }
+            }, 350);
+          }
+        };
+
+        ambientSpeechRecognitionRef.current = fallbackRec;
+        fallbackRec.start();
+      } catch (recErr) {
+        ambientSpeechRecognitionRef.current = null;
+      }
+    };
+
+    // If server Whisper STT is unconfigured / unavailable, run browser Web Speech API directly
+    if (!isWhisperServerAvailableRef.current) {
+      startBrowserSpeechFallback();
+      return;
+    }
+
+    // 1. Primary Engine: Neural Whisper STT via /api/stt/transcribe (Groq Turbo)
     try {
       const whisperRecorder = new WhisperAudioRecorder({
         language: currentLanguage === 'hi' ? 'hi' : 'en',
@@ -1188,10 +1276,20 @@ export const AvatarReceptionView: React.FC = () => {
           }
         },
         onTranscript: async (transcript: string) => {
-          if (isAriaSpeakingRef.current || intentHandled) return;
+          if (isAriaSpeakingRef.current) return;
+          if (Date.now() - lastSpokenEndTimeRef.current < 450) {
+            console.log('[Whisper STT] Ignored speech captured during cooldown:', transcript);
+            setIsUserSpeaking(false);
+            return;
+          }
 
           const normalizedLower = transcript.toLowerCase();
+          const lastSpoken = lastSpokenTextRef.current;
+          
           const isEcho =
+            (Boolean(lastSpoken) && lastSpoken.length > 5 && (lastSpoken.includes(normalizedLower) || normalizedLower.includes(lastSpoken.slice(0, 20)))) ||
+            normalizedLower.includes('look into the camera') ||
+            normalizedLower.includes('phone number below') ||
             normalizedLower.includes('how can i help') ||
             normalizedLower.includes('welcome to mantracare') ||
             normalizedLower.includes('welcome to mantra care') ||
@@ -1204,120 +1302,36 @@ export const AvatarReceptionView: React.FC = () => {
             normalizedLower.includes('नमस्ते') ||
             normalizedLower.includes('सहायता कर सकती');
 
-          if (isEcho) {
+          if (isEcho && Date.now() - lastSpokenEndTimeRef.current < 4000) {
             console.log('[Whisper STT] Ignored system voice echo:', transcript);
             setIsUserSpeaking(false);
             return;
           }
 
-          console.log(`[User Spoke 🗣️]: "${transcript}"`);
+          console.log(`[User Spoke 🗣️]: "${transcript}" (Current Screen: ${screenRef.current})`);
           setUserTranscriptText(transcript);
           setIsUserSpeaking(false);
-          intentHandled = true;
-          setAmbientPhase('routing');
-          whisperRecorder.stop();
-          stopCameraStream();
 
-          setTimeout(async () => {
-            if (resolveIntentRef.current) {
-              await resolveIntentRef.current(transcript, { isAmbient: true });
-            }
-          }, 80);
+          if (screenRef.current === 'AMBIENT') {
+            setAmbientPhase('routing');
+          }
+
+          if (handleVoiceCommandRef.current) {
+            await handleVoiceCommandRef.current(transcript);
+          }
         },
-        onError: (err) => {
+        onError: (err, isServerUnavailable) => {
           console.warn('[Whisper STT] Recorder notice:', err);
           setIsUserSpeaking(false);
           try { whisperRecorder.stop(); } catch {}
           whisperRecorderRef.current = null;
 
-          if (intentHandled || screenRef.current !== 'AMBIENT') return;
-
-          // Seamless fallback to browser Web Speech API if server Whisper STT is unavailable (e.g. 500/timeout/offline)
-          const SpeechRec =
-            typeof window !== 'undefined'
-              ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-              : null;
-
-          if (SpeechRec) {
-            try {
-              if (ambientSpeechRecognitionRef.current) {
-                try { ambientSpeechRecognitionRef.current.stop(); } catch {}
-              }
-
-              console.log('[STT Fallback] 🎙️ Switching to browser Web Speech API...');
-              setCaptionText(
-                currentLanguage === 'hi'
-                  ? 'कृपया बोलें, हम सुन रहे हैं...'
-                  : 'Please speak, listening...'
-              );
-
-              const fallbackRec = new SpeechRec();
-              fallbackRec.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
-              fallbackRec.continuous = false;
-              fallbackRec.interimResults = false;
-
-              fallbackRec.onstart = () => {
-                console.log('[STT Fallback] Web Speech API active and listening.');
-              };
-
-              fallbackRec.onresult = (evt: any) => {
-                const fallbackText = evt.results?.[0]?.[0]?.transcript || '';
-                if (fallbackText && !isAriaSpeakingRef.current && !intentHandled) {
-                  console.log(`[User Spoke Fallback STT 🗣️]: "${fallbackText}"`);
-                  setUserTranscriptText(fallbackText);
-                  setIsUserSpeaking(false);
-                  intentHandled = true;
-                  setAmbientPhase('routing');
-                  try { fallbackRec.stop(); } catch {}
-                  stopCameraStream();
-                  setTimeout(async () => {
-                    if (resolveIntentRef.current) {
-                      await resolveIntentRef.current(fallbackText, { isAmbient: true });
-                    }
-                  }, 80);
-                }
-              };
-
-              fallbackRec.onerror = (recErr: any) => {
-                console.warn('[STT Fallback] Browser speech recognition notice:', recErr?.error || recErr);
-                setIsUserSpeaking(false);
-                // Guard against fallback loop: show brief guidance and keep touch buttons usable
-                setCaptionText(
-                  currentLanguage === 'hi'
-                    ? 'आवाज़ पहचानी नहीं गई। कृपया नीचे दिए गए विकल्पों में से चुनें।'
-                    : 'Voice not recognized. Please tap an option below.'
-                );
-                setAvatarState('idle');
-              };
-
-              fallbackRec.onend = () => {
-                setIsUserSpeaking(false);
-                ambientSpeechRecognitionRef.current = null;
-                if (!intentHandled) {
-                  setAvatarState('idle');
-                }
-              };
-
-              ambientSpeechRecognitionRef.current = fallbackRec;
-              fallbackRec.start();
-            } catch (recErr) {
-              console.warn('[STT Fallback] Browser speech recognition start failed:', recErr);
-              setCaptionText(
-                currentLanguage === 'hi'
-                  ? 'आवाज़ सेवा अनुपलब्ध है। कृपया नीचे दिए गए विकल्पों में से चुनें।'
-                  : 'Voice service unavailable. Please tap an option below.'
-              );
-              setAvatarState('idle');
-            }
-          } else {
-            // SpeechRecognition not supported in this browser
-            setCaptionText(
-              currentLanguage === 'hi'
-                ? 'आवाज़ सेवा अनुपलब्ध है। कृपया नीचे दिए गए विकल्पों में से चुनें।'
-                : 'Voice recognition unavailable. Please tap an option below.'
-            );
-            setAvatarState('idle');
+          if (isServerUnavailable) {
+            isWhisperServerAvailableRef.current = false;
           }
+
+          // Seamless fallback to browser Web Speech API
+          startBrowserSpeechFallback();
         },
       });
 
@@ -1327,17 +1341,11 @@ export const AvatarReceptionView: React.FC = () => {
       whisperRecorderRef.current = whisperRecorder;
     } catch (err) {
       console.warn('[Whisper STT] Init failed:', err);
+      startBrowserSpeechFallback();
     }
-
-    // Reset to dormant if no speech heard within 16 seconds
-    ambientListeningTimeoutRef.current = setTimeout(() => {
-      if (!intentHandled && screenRef.current === 'AMBIENT' && ambientPhaseRef.current === 'listening') {
-        whisperRecorderRef.current?.stop();
-        setAmbientPhase('dormant');
-      }
-    }, 16000);
-  }, [currentLanguage, stopCameraStream]);
-  startAmbientListeningRef.current = startAmbientListening;
+  }, [currentLanguage]);
+  startAmbientListeningRef.current = startVoiceListening;
+  startVoiceListeningRef.current = startVoiceListening;
 
   // Presence Trigger Flow on AMBIENT screen (Button tap OR close face auto-detection)
   // Sequence: dormant -> engaged (300-500ms attentive pose) -> greeting (TTS welcome) -> listening (chained onend) -> routing -> destination
@@ -1390,7 +1398,7 @@ export const AvatarReceptionView: React.FC = () => {
           setTimeout(() => {
             if (screenRef.current === 'AMBIENT') {
               setAmbientPhase('listening');
-              startAmbientListening();
+              startVoiceListening();
             }
           }, 200);
         }
@@ -1398,7 +1406,15 @@ export const AvatarReceptionView: React.FC = () => {
 
       speak(greetingText, 'speaking', undefined, onGreetingFinished);
     }, 300);
-  }, [currentLanguage, speak, startAmbientListening]);
+  }, [currentLanguage, speak, startVoiceListening]);
+
+  // Continuous Voice Listening Lifecycle across all screens
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!isAriaSpeakingRef.current) {
+      startVoiceListening();
+    }
+  }, [screen, currentLanguage, startVoiceListening]);
 
   // Presence Detection Loop: Only runs on AMBIENT (Throttled ~5 FPS / 200ms)
   // Bounding-box numbers stay strictly in memory and are discarded immediately after calculation.
@@ -1496,7 +1512,7 @@ export const AvatarReceptionView: React.FC = () => {
         if (phase === 'engaged' || phase === 'greeting') {
           triggerPresenceFlow();
         } else if (phase === 'listening') {
-          startAmbientListening();
+          startVoiceListening();
         }
       };
       (window as any).__triggerAmbientIntent = async (phrase: string) => {
@@ -1511,7 +1527,7 @@ export const AvatarReceptionView: React.FC = () => {
         }, 500);
       };
     }
-  }, [triggerPresenceFlow, startAmbientListening, stopCameraStream]);
+  }, [triggerPresenceFlow, startVoiceListening, stopCameraStream]);
 
   // Cancel scanning & reset to idle preview
   const cancelScanning = useCallback(() => {
@@ -2698,7 +2714,11 @@ export const AvatarReceptionView: React.FC = () => {
       // 3B. Unified Appointment & Walk-in Intent (PRD Section 3.1 & Global Principle 1)
       if (isAppointment || isWalkin) {
         unrecognizedAttemptsRef.current = 0;
-        console.log('[Voice Intent Resolver] 🎯 PRIORITY 3 MATCH: Unified Appointment & Walk-in -> enterAppointmentFlow()');
+        console.log('[Voice Intent Resolver] 🎯 PRIORITY 3 MATCH: Unified Appointment & Walk-in');
+        if (screenRef.current === 'FACE_SCAN' || screenRef.current === 'VERIFY_CHOICE' || screenRef.current === 'FACE_CONSENT') {
+          startScanning();
+          return true;
+        }
         enterAppointmentFlow();
         return true;
       }
@@ -2786,27 +2806,28 @@ export const AvatarReceptionView: React.FC = () => {
   resolveIntentRef.current = handleResolveIntent;
   processDirectionsIntentRef.current = handleResolveIntent;
 
-  // Global Floating Mic & Voice Command State
-  const [isListeningGlobal, setIsListeningGlobal] = useState(false);
-  const [heardSuccessGlobal, setHeardSuccessGlobal] = useState(false);
-  const globalRecognitionRef = useRef<any>(null);
-  const globalTimeoutRef = useRef<any>(null);
   const activeFocusedFieldRef = useRef<'name' | 'reason' | 'email' | null>(null);
 
   // Screen Contextual Voice Command Handler
   const handleVoiceCommand = useCallback(
-    (rawTranscript: string) => {
-      const text = rawTranscript.trim().toLowerCase();
-      console.log(`[Voice Assistant] Heard: "${rawTranscript}" on screen: ${screen}`);
+    async (rawTranscript: string) => {
+      const text = (rawTranscript || '').trim().toLowerCase();
+      console.log(`[Voice Assistant] 🎙️ Processing user utterance: "${rawTranscript}" on screen: ${screen}`);
 
-      if (screen === 'IDLE' || screen === 'AMBIENT') {
+      if (!text) return;
+
+      // 1. If on AMBIENT screen, route directly via global intent resolver
+      if (screen === 'AMBIENT') {
         if (resolveIntentRef.current) {
-          resolveIntentRef.current(rawTranscript, { isAmbient: screen === 'AMBIENT' });
+          const handled = await resolveIntentRef.current(rawTranscript, { isAmbient: true });
+          if (handled) {
+            console.log(`[Voice Assistant] 🎯 Handled globally via resolveIntent on AMBIENT`);
+            return;
+          }
         }
-        return;
       }
 
-      // 1. Text input focus routing
+      // 2. Text input focus routing (Dictation into active field)
       if (activeFocusedFieldRef.current === 'name') {
         setOnboardingForm((prev) => ({ ...prev, name: rawTranscript.trim() }));
         setDictationSuccessField('name');
@@ -2824,31 +2845,54 @@ export const AvatarReceptionView: React.FC = () => {
         return;
       }
 
-      // 2. Screen-specific voice command routing
+      // 3. Screen-specific voice command routing
       if (screen === 'FACE_SCAN' || screen === 'VERIFY_CHOICE' || screen === 'FACE_CONSENT') {
-        if (text.includes('start') || text.includes('scan') || text.includes('begin') || text.includes('ready')) {
+        if (
+          text.includes('start scanning') ||
+          text.includes('start scan') ||
+          text.includes('scan my face') ||
+          text.includes('scan face') ||
+          text.includes('start') ||
+          text.includes('scan') ||
+          text.includes('begin') ||
+          text.includes('ready to scan') ||
+          text.includes('ready') ||
+          text.includes('check in') ||
+          text.includes('check-in') ||
+          text.includes('haan') ||
+          text.includes('shuru')
+        ) {
           startScanning();
+          return;
         } else if (text.includes('phone') || text.includes('number') || text.includes('mobile')) {
           stopCameraStream();
           startPhoneVerification();
-        } else if (text.includes('cancel') || text.includes('stop')) {
+          return;
+        } else if (text.includes('cancel') || text.includes('stop') || text.includes('home') || text.includes('back')) {
           cancelScanning();
+          return;
         }
       } else if (screen === 'FACE_CONFIRM') {
         if (text.includes('yes') || text.includes('me') || text.includes('confirm') || text.includes('correct') || text.includes('haan')) {
           handleFaceConfirmYes();
+          return;
         } else if (text.includes('no') || text.includes('not') || text.includes('nahin')) {
           handleFaceConfirmNo();
+          return;
         }
       } else if (screen === 'PHONE') {
         if (text.includes('clear') || text.includes('reset')) {
           setPhoneNumber('');
+          return;
         } else if (text.includes('back') || text.includes('delete')) {
           setPhoneNumber((prev) => prev.slice(0, -1));
+          return;
         } else if (text.includes('continue') || text.includes('send') || text.includes('next') || text.includes('code')) {
           handleSendOtp();
+          return;
         } else if (text.includes('face') || text.includes('camera')) {
           handleResetSession();
+          return;
         } else {
           const wordToNum: Record<string, string> = {
             zero: '0', one: '1', two: '2', three: '3', four: '4',
@@ -2861,13 +2905,16 @@ export const AvatarReceptionView: React.FC = () => {
           });
           if (digits) {
             setPhoneNumber((prev) => (prev + digits).slice(0, 15));
+            return;
           }
         }
       } else if (screen === 'OTP') {
         if (text.includes('clear') || text.includes('reset')) {
           setOtp('');
+          return;
         } else if (text.includes('back') || text.includes('delete')) {
           setOtp((prev) => prev.slice(0, -1));
+          return;
         } else {
           const wordToNum: Record<string, string> = {
             zero: '0', one: '1', two: '2', three: '3', four: '4',
@@ -2880,77 +2927,99 @@ export const AvatarReceptionView: React.FC = () => {
           });
           if (digits) {
             setOtp((prev) => (prev + digits).slice(0, 4));
+            return;
           }
         }
       } else if (screen === 'PATIENT_PICK') {
         const found = patients.find((p) => text.includes(p.name.toLowerCase()));
         if (found) {
           handleSelectFamilyPatient(found);
+          return;
         }
       } else if (screen === 'DETAILS_SUMMARY') {
         if (text.includes('confirm') || text.includes('check in') || text.includes('yes') || text.includes('print') || text.includes('done') || text.includes('token')) {
           handleConfirmCheckin();
+          return;
         } else if (text.includes('not me') || text.includes('cancel') || text.includes('no') || text.includes('back')) {
           handleResetSession();
+          return;
         }
       } else if (screen === 'ONBOARDING_DETAILS') {
         if (text.includes('next') || text.includes('continue') || text.includes('submit') || text.includes('review') || text.includes('face')) {
           handleOnboardingStep1Next();
+          return;
         } else if (!onboardingForm.name) {
           setOnboardingForm((prev) => ({ ...prev, name: rawTranscript.trim() }));
+          return;
         } else {
           setOnboardingForm((prev) => ({ ...prev, reason: rawTranscript.trim() }));
+          return;
         }
       } else if (screen === 'ONBOARDING_FACE') {
         if (faceRegPhase === 'intro') {
           if (text.includes('register') || text.includes('face') || text.includes('start') || text.includes('yes') || text.includes('camera')) {
             handleStartFaceRegistration();
+            return;
           } else if (text.includes('skip') || text.includes('no') || text.includes('later') || text.includes('cancel')) {
             handleSkipFaceRegistration();
+            return;
           }
         } else if (faceRegPhase === 'capturing') {
           if (text.includes('cancel') || text.includes('skip') || text.includes('stop')) {
             handleSkipFaceRegistration();
+            return;
           }
         } else if (faceRegPhase === 'duplicate_found') {
           if (text.includes('yes') || text.includes('me') || text.includes('confirm')) {
             handleDuplicateConfirmYes();
+            return;
           } else if (text.includes('no') || text.includes('new') || text.includes('continue')) {
             handleDuplicateConfirmNo();
+            return;
           }
         } else if (faceRegPhase === 'success') {
           if (text.includes('continue') || text.includes('review') || text.includes('next') || text.includes('done')) {
             handleContinueToReview();
+            return;
           }
         }
       } else if (screen === 'ONBOARDING_REVIEW') {
         if (text.includes('approve') || text.includes('confirm') || text.includes('yes') || text.includes('submit') || text.includes('done')) {
           handleOnboardingApprove();
+          return;
         } else if (text.includes('edit') || text.includes('change') || text.includes('back')) {
           setScreen('ONBOARDING_DETAILS');
+          return;
         } else if (text.includes('decline') || text.includes('cancel') || text.includes('no')) {
           handleResetSession();
+          return;
         }
       } else if (screen === 'SERVICE_DOCTOR') {
         if (text.includes('general') || text.includes('consultation') || text.includes('general consultation')) {
           setSelectedServiceId('srv_consult');
           setSelectedProviderId('next_available');
+          return;
         } else if (text.includes('cardio') || text.includes('heart') || text.includes('cardiology')) {
           setSelectedServiceId('srv_cardio');
           setSelectedProviderId('next_available');
+          return;
         } else if (text.includes('dental') || text.includes('tooth') || text.includes('teeth') || text.includes('clean')) {
           setSelectedServiceId('srv_dental');
           setSelectedProviderId('next_available');
+          return;
         } else if (text.includes('next available') || text.includes('first available') || text.includes('any')) {
           setSelectedProviderId('next_available');
+          return;
         } else if (text.includes('confirm') || text.includes('issue') || text.includes('ticket') || text.includes('book') || text.includes('done')) {
           if (selectedServiceId && selectedProviderId) {
             handleBookWalkIn();
           }
+          return;
         } else {
           const matchProv = providers.find((p) => text.includes(p.name.toLowerCase()));
           if (matchProv) {
             setSelectedProviderId(matchProv.id);
+            return;
           }
         }
       } else if (screen === 'TOKEN_ISSUED') {
@@ -2959,42 +3028,53 @@ export const AvatarReceptionView: React.FC = () => {
             maClient.sendTokenNotification(issuedTicket.id, phoneNumber || '+91 98765 43210', 'sms');
             showToast('Token details sent via SMS!');
           }
+          return;
         } else if (text.includes('done') || text.includes('finish') || text.includes('home') || text.includes('close')) {
           handleResetSession();
+          return;
         }
       } else if (screen === 'MY_VISIT') {
         if (text.includes('close') || text.includes('home') || text.includes('done') || text.includes('back')) {
           handleResetSession();
+          return;
         }
       } else if (screen === 'DIRECTIONS_CATEGORIES') {
         if (text.includes('back') || text.includes('home') || text.includes('cancel')) {
           handleResetSession();
+          return;
         } else {
           if (processDirectionsIntentRef.current) {
             processDirectionsIntentRef.current(rawTranscript);
+            return;
           }
         }
       } else if (screen === 'DIRECTIONS_ROOMS') {
         if (text.includes('back') || text.includes('categories') || text.includes('category')) {
           setScreen('DIRECTIONS_CATEGORIES');
+          return;
         } else if (text.includes('home') || text.includes('done')) {
           handleResetSession();
+          return;
         } else {
           if (processDirectionsIntentRef.current) {
             processDirectionsIntentRef.current(rawTranscript);
+            return;
           }
         }
       } else if (screen === 'DIRECTIONS_RESULT') {
         if (text.includes('done') || text.includes('finish') || text.includes('home') || text.includes('close')) {
           handleResetSession();
+          return;
         } else if (text.includes('back')) {
           handleDirectionsBack();
+          return;
         }
-      } else {
-        // Global intent trigger fallback
-        if (resolveIntentRef.current) {
-          resolveIntentRef.current(rawTranscript);
-        }
+      }
+
+      // 4. Global Conversational & Wayfinding Intent Fallback (Always executes if screen-specific logic did not match)
+      if (resolveIntentRef.current) {
+        console.log(`[Voice Assistant] 🧭 Routing to resolveIntent for "${rawTranscript}" from screen: ${screen}`);
+        await resolveIntentRef.current(rawTranscript, { isAmbient: false });
       }
     },
     [
@@ -3030,72 +3110,9 @@ export const AvatarReceptionView: React.FC = () => {
       showToast,
     ]
   );
+  handleVoiceCommandRef.current = handleVoiceCommand;
 
-  const startGlobalDictation = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    const SpeechRecognitionClass =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognitionClass) return;
 
-    if (isListeningGlobal) {
-      if (globalRecognitionRef.current) {
-        try {
-          globalRecognitionRef.current.stop();
-        } catch {}
-      }
-      if (globalTimeoutRef.current) clearTimeout(globalTimeoutRef.current);
-      setIsListeningGlobal(false);
-      return;
-    }
-
-    if (globalRecognitionRef.current) {
-      try {
-        globalRecognitionRef.current.stop();
-      } catch {}
-    }
-    if (globalTimeoutRef.current) clearTimeout(globalTimeoutRef.current);
-
-    try {
-      const recognition = new SpeechRecognitionClass();
-      recognition.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
-      recognition.continuous = false;
-      recognition.interimResults = false;
-
-      recognition.onstart = () => {
-        setIsListeningGlobal(true);
-      };
-
-      recognition.onresult = (event: any) => {
-        const transcript = event.results?.[0]?.[0]?.transcript || '';
-        if (transcript) {
-          handleVoiceCommand(transcript);
-          setHeardSuccessGlobal(true);
-          setTimeout(() => setHeardSuccessGlobal(false), 1500);
-        }
-        setIsListeningGlobal(false);
-      };
-
-      recognition.onerror = () => {
-        setIsListeningGlobal(false);
-      };
-
-      recognition.onend = () => {
-        setIsListeningGlobal(false);
-      };
-
-      globalRecognitionRef.current = recognition;
-      recognition.start();
-
-      globalTimeoutRef.current = setTimeout(() => {
-        try {
-          recognition.stop();
-        } catch {}
-        setIsListeningGlobal(false);
-      }, 10000);
-    } catch {
-      setIsListeningGlobal(false);
-    }
-  }, [isListeningGlobal, currentLanguage, handleVoiceCommand]);
 
   // Step Progress Calculation
   const getStepProgress = () => {
@@ -3574,15 +3591,17 @@ export const AvatarReceptionView: React.FC = () => {
               <div className="flex items-center justify-between mb-0.5">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                   {isUserSpeaking
-                    ? 'You are speaking...'
+                    ? currentLanguage === 'hi' ? 'आप बोल रहे हैं...' : 'You are speaking...'
                     : userTranscriptText && avatarState !== 'speaking'
-                    ? 'You said'
+                    ? currentLanguage === 'hi' ? 'आपने कहा' : 'You said'
                     : avatarState === 'thinking'
                     ? thinkingMessage
-                    : 'Aria Speaking'}
+                    : avatarState === 'speaking'
+                    ? currentLanguage === 'hi' ? 'एरिया बोल रही हैं' : 'Aria Speaking'
+                    : currentLanguage === 'hi' ? 'सुन रहे हैं...' : 'Listening...'}
                 </p>
                 {/* CSS Animated Voice Waveform Bars */}
-                {(avatarState === 'speaking' || isUserSpeaking) && (
+                {(avatarState === 'speaking' || isUserSpeaking || avatarState === 'idle') && (
                   <div className="flex items-center gap-1 h-3.5">
                     {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
                       <span
@@ -5336,47 +5355,6 @@ export const AvatarReceptionView: React.FC = () => {
                 <span>Back to Home</span>
               </button>
             </div>
-          </div>
-        )}
-
-        {/* ===================================================================== */}
-        {/* GLOBAL FLOATING MIC ASSISTANT BUTTON                                  */}
-        {/* ===================================================================== */}
-        {screen !== 'IDLE' && isSpeechRecognitionSupported && (
-          <div className="absolute bottom-5 right-5 z-40 pointer-events-auto">
-            <button
-              onClick={startGlobalDictation}
-              title={
-                isListeningGlobal
-                  ? 'Listening... Speak a command or dictation'
-                  : 'Tap to speak / voice control'
-              }
-              className={`w-13 h-13 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer shadow-lg active:scale-95 group relative ${
-                isListeningGlobal
-                  ? 'bg-gradient-to-br from-[#1456f0] to-[#2563eb] text-white ring-4 ring-blue-400/40 shadow-blue-500/30 scale-105 animate-pulse'
-                  : heardSuccessGlobal
-                  ? 'bg-emerald-600 text-white ring-4 ring-emerald-400/40 shadow-emerald-500/30'
-                  : 'bg-white/90 hover:bg-white text-slate-600 hover:text-[#1456f0] border-2 border-slate-200/90 hover:border-blue-300 shadow-[0_8px_20px_rgba(24,30,37,0.12)]'
-              }`}
-            >
-              {isListeningGlobal ? (
-                <div className="flex items-center gap-0.5">
-                  <Mic className="w-5 h-5" />
-                  <span className="w-1 h-3 bg-white rounded-full animate-bounce" />
-                  <span className="w-1 h-4 bg-white rounded-full animate-bounce [animation-delay:0.15s]" />
-                  <span className="w-1 h-2 bg-white rounded-full animate-bounce [animation-delay:0.3s]" />
-                </div>
-              ) : heardSuccessGlobal ? (
-                <CheckCircle2 className="w-6 h-6 text-white" />
-              ) : (
-                <Mic className="w-5 h-5 group-hover:scale-110 transition-transform" />
-              )}
-
-              {/* Floating Tooltip Pill */}
-              <span className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-slate-900/90 backdrop-blur-md text-white text-xs font-semibold rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-y-1 group-hover:translate-y-0 whitespace-nowrap z-50">
-                {isListeningGlobal ? 'Listening... Speak command' : 'Voice Assistant'}
-              </span>
-            </button>
           </div>
         )}
       </main>

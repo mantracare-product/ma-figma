@@ -43,7 +43,7 @@ export class WhisperAudioRecorder {
   constructor(options: WhisperRecorderOptions = {}) {
     this.options = {
       language: 'en',
-      silenceThreshold: 0.012,
+      silenceThreshold: 0.020,
       silenceDurationMs: 800,
       maxDurationMs: 8000,
       ...options,
@@ -160,8 +160,8 @@ export class WhisperAudioRecorder {
 
     // Dynamic threshold based on calibrated ambient noise
     const dynamicThreshold = Math.max(
-      this.options.silenceThreshold || 0.012,
-      this.noiseFloor * 2.2
+      this.options.silenceThreshold || 0.020,
+      this.noiseFloor * 2.8
     );
 
     // Maintain rolling ~600ms pre-buffer
@@ -197,7 +197,7 @@ export class WhisperAudioRecorder {
       const silenceLimit = this.options.silenceDurationMs || 800;
       const maxLimit = this.options.maxDurationMs || 8000;
 
-      if ((silenceElapsed >= silenceLimit && totalElapsed >= 350) || totalElapsed >= maxLimit) {
+      if ((silenceElapsed >= silenceLimit && totalElapsed >= 400) || totalElapsed >= maxLimit) {
         console.log(
           `[Whisper Client] ⏱️ Speech finished (${(silenceElapsed / 1000).toFixed(2)}s silence, ${(totalElapsed / 1000).toFixed(2)}s total). Transcribing...`
         );
@@ -214,9 +214,9 @@ export class WhisperAudioRecorder {
     const totalLength = this.collectedSamples.reduce((acc, c) => acc + c.length, 0);
     const durationSec = (totalLength / this.sampleRate).toFixed(2);
 
-    // Discard ultra short clicks (< 0.25s)
-    if (totalLength < this.sampleRate * 0.25) {
-      console.log(`[Whisper Client] ℹ️ Discarded ultra-short noise burst (${durationSec}s)`);
+    // Discard short bursts / mouth clicks (< 0.40s)
+    if (totalLength < this.sampleRate * 0.40) {
+      console.log(`[Whisper Client] ℹ️ Discarded short noise burst (${durationSec}s)`);
       this.collectedSamples = [];
       return;
     }
@@ -264,6 +264,15 @@ export class WhisperAudioRecorder {
       }
 
       const data = await res.json();
+      if (data.unconfigured) {
+        console.log('[Whisper Client] ℹ️ STT server is unconfigured on server. Switching to browser Web Speech API.');
+        const err = new Error('GROQ_API_KEY is not configured on the server');
+        (err as any).isServerUnavailable = true;
+        this.stop();
+        this.options.onError?.(err, true);
+        return;
+      }
+
       if (data.isNoise) {
         console.log('[Whisper Client] 🔇 Non-speech noise detected, continuing active listening.');
         return;

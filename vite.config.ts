@@ -23,24 +23,35 @@ function apiServerPlugin() {
     name: 'api-server-plugin',
     configureServer(server: any) {
       server.middlewares.use(async (req: any, res: any, next: any) => {
-        if (req.url === '/api/stt/transcribe' && req.method === 'POST') {
-          let body = '';
-          req.on('data', (chunk: any) => { body += chunk; });
-          req.on('end', async () => {
-            try {
-              const reqBody = JSON.parse(body);
-              const { handleWhisperTranscribeRequest } = await server.ssrLoadModule('./api/stt/transcribe.ts');
-              const result = await handleWhisperTranscribeRequest(reqBody);
-              res.statusCode = result.error ? (result.upstreamStatus || 500) : 200;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify(result));
-            } catch (err: any) {
-              res.statusCode = 500;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ error: 'Whisper STT failed', detail: String(err?.message || err) }));
-            }
-          });
-          return;
+        if (req.url === '/api/stt/transcribe') {
+          if (req.method === 'GET') {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({
+              ok: true,
+              model: 'whisper-large-v3-turbo',
+              hasKey: Boolean(process.env.GROQ_API_KEY),
+            }));
+            return;
+          }
+          if (req.method === 'POST') {
+            let body = '';
+            req.on('data', (chunk: any) => { body += chunk; });
+            req.on('end', async () => {
+              try {
+                const reqBody = JSON.parse(body);
+                const { handleWhisperTranscribeRequest } = await server.ssrLoadModule('./api/stt/transcribe.ts');
+                const result = await handleWhisperTranscribeRequest(reqBody);
+                res.statusCode = (result.error && !result.unconfigured) ? (result.upstreamStatus || 500) : 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify(result));
+              } catch (err: any) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ error: 'Whisper STT failed', detail: String(err?.message || err) }));
+              }
+            });
+            return;
+          }
         }
         if (req.url === '/api/process/simulate-reply' && req.method === 'POST') {
           let body = '';
