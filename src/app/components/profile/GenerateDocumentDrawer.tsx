@@ -9,6 +9,7 @@ import {
   DocumentTemplate,
   getStoredDocumentTemplates,
   DOCUMENT_TEMPLATES_EVENT,
+  extractTemplateFields,
 } from "../../../lib/documentTemplatesStore";
 import {
   StoredClientDocument,
@@ -17,6 +18,8 @@ import {
 import { loadClientSubmissions, ClientFormSubmission } from "../../../data/submissionsStore";
 import { getScribeSessions, ScribeSession } from "../../../lib/scribeSessionStore";
 import { generateClientPdf } from "../../../lib/pdfGenerator";
+import { generatePopulatedDocx } from "../../../lib/docxProcessor";
+import { renderAsync as renderDocxAsync } from "docx-preview";
 import AddDocumentTemplateDrawer from "./AddDocumentTemplateDrawer";
 import ShareDocumentDrawer from "./ShareDocumentDrawer";
 import DrawerShell from "../ui/DrawerShell";
@@ -87,12 +90,269 @@ export default function GenerateDocumentDrawer({
   );
   const transcriptSources = clientScribeSessions.length > 0 ? clientScribeSessions : allScribeSessions.slice(0, 4);
 
+  const docxContainerRef = React.useRef<HTMLDivElement>(null);
+  const previewOuterRef = React.useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState<number>(0.65);
+
+  // Dynamically compute preview scaling so A4 Word documents fit 100% inside container without any edge clipping
+  useEffect(() => {
+    if (!previewOuterRef.current) return;
+    const updateScale = () => {
+      if (previewOuterRef.current) {
+        const containerWidth = previewOuterRef.current.clientWidth;
+        if (containerWidth > 0) {
+          // Standard A4 width in docx-preview is 816px. Leave 48px padding
+          const targetWidth = Math.max(280, containerWidth - 48);
+          const calculatedScale = Math.min(1, Math.max(0.4, Number((targetWidth / 816).toFixed(2))));
+          setPreviewScale(calculatedScale);
+        }
+      }
+    };
+
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(previewOuterRef.current);
+    window.addEventListener("resize", updateScale);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateScale);
+    };
+  }, [selectedTemplate?.id, isOpen]);
+
   // Listen to template store updates
   useEffect(() => {
     const handleUpdate = () => setTemplates(getStoredDocumentTemplates());
     window.addEventListener(DOCUMENT_TEMPLATES_EVENT, handleUpdate);
     return () => window.removeEventListener(DOCUMENT_TEMPLATES_EVENT, handleUpdate);
   }, []);
+
+  const [isDocxRendered, setIsDocxRendered] = useState(false);
+
+  // Render authentic docx with 100% fidelity (backgrounds, logos, colors, tables) via docx-preview
+  useEffect(() => {
+    let isMounted = true;
+    if (isGeneratingDoc) return;
+
+    const renderDocx = async () => {
+      if (selectedTemplate?.rawDocxBase64 && docxContainerRef.current) {
+        try {
+          docxContainerRef.current.innerHTML = "";
+          const populatedBlob = await generatePopulatedDocx(
+            selectedTemplate.rawDocxBase64,
+            fieldValues,
+            selectedTemplate.fieldMappings
+          );
+          if (!isMounted || !docxContainerRef.current) return;
+          await renderDocxAsync(populatedBlob, docxContainerRef.current, undefined, {
+            className: "docx-doc-viewer",
+            inWrapper: true,
+            ignoreWidth: false,
+            ignoreHeight: false,
+            ignoreFonts: false,
+            breakPages: true,
+            renderHeaders: true,
+            renderFooters: true,
+            renderFootnotes: true,
+            renderEndnotes: true,
+          });
+          if (isMounted) setIsDocxRendered(true);
+        } catch (err) {
+          console.error("docx-preview rendering error:", err);
+          if (isMounted) setIsDocxRendered(false);
+        }
+      } else {
+        if (isMounted) setIsDocxRendered(false);
+      }
+    };
+
+    renderDocx();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedTemplate?.id, selectedTemplate?.rawDocxBase64, fieldValues, isGeneratingDoc]);
+
+  // Smart helper to resolve a placeholder name to real client / system / source data
+  const resolvePlaceholderValue = (
+    rawKey: string,
+    clientObj: any,
+    sourceValues: Record<string, string>,
+    tpl: DocumentTemplate | null
+  ): string => {
+    // 1. Direct match in sourceValues (e.g. from webform or transcript)
+    if (sourceValues[rawKey] !== undefined && sourceValues[rawKey] !== "") {
+      return sourceValues[rawKey];
+    }
+    const rawKeyLower = rawKey.toLowerCase().trim();
+    if (sourceValues[rawKeyLower] !== undefined && sourceValues[rawKeyLower] !== "") {
+      return sourceValues[rawKeyLower];
+    }
+
+    // 2. Check template field mappings if available
+    if (tpl?.fieldMappings) {
+      const mapping = tpl.fieldMappings.find(
+        (m) =>
+          m.templateField.toLowerCase().trim() === rawKeyLower ||
+          m.mappedFieldKey.toLowerCase().trim() === rawKeyLower
+      );
+      if (mapping) {
+        const mappedVal = sourceValues[mapping.mappedFieldKey] || (clientObj as any)[mapping.mappedFieldKey];
+        if (mappedVal) return String(mappedVal);
+      }
+    }
+
+    // 3. Direct match on clientObj
+    if (clientObj[rawKey] !== undefined && clientObj[rawKey] !== null) {
+      return String(clientObj[rawKey]);
+    }
+    if (clientObj[rawKeyLower] !== undefined && clientObj[rawKeyLower] !== null) {
+      return String(clientObj[rawKeyLower]);
+    }
+
+    // 4. Normalized alias / semantic matching
+    const cleaned = rawKeyLower.replace(/[^a-z0-9]/g, "");
+    const todayFormatted = new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+
+    // Name matches
+    if (
+      cleaned === "name" ||
+      cleaned === "fullname" ||
+      cleaned === "clientname" ||
+      cleaned === "patientname" ||
+      cleaned === "customername" ||
+      cleaned === "patient" ||
+      cleaned === "client"
+    ) {
+      return clientObj.name || "Sarah Johnson";
+    }
+
+    // ID matches (Patient ID, PCompanyId, Client ID, etc.)
+    if (
+      cleaned === "id" ||
+      cleaned === "clientid" ||
+      cleaned === "patientid" ||
+      cleaned === "pcompanyid" ||
+      cleaned === "companyid" ||
+      cleaned === "pid" ||
+      cleaned === "regno" ||
+      cleaned === "registrationnumber" ||
+      cleaned === "recordid"
+    ) {
+      return clientObj.id || "CL-001";
+    }
+
+    // Voucher / Document / Invoice / Receipt number
+    if (
+      cleaned.includes("voucher") ||
+      cleaned.includes("documentnumber") ||
+      cleaned.includes("docnumber") ||
+      cleaned.includes("invoicenumber") ||
+      cleaned.includes("voucherno") ||
+      cleaned.includes("docno") ||
+      cleaned.includes("invoiceno") ||
+      cleaned.includes("receiptno")
+    ) {
+      const numericId = String(clientObj.id || "001").replace(/[^0-9]/g, "").padStart(3, "0") || "001";
+      return `VCH-${new Date().getFullYear()}-${numericId}`;
+    }
+
+    // Age matches
+    if (cleaned === "age" || cleaned === "patientage" || cleaned === "clientage") {
+      return clientObj.age || (clientObj as any).age || "32";
+    }
+
+    // Gender matches
+    if (cleaned === "gender" || cleaned === "sex" || cleaned === "patientgender" || cleaned === "clientgender") {
+      return clientObj.gender || (clientObj as any).gender || "Female";
+    }
+
+    // Date / Bill Date / Voucher Date
+    if (
+      cleaned.includes("date") ||
+      cleaned.includes("bill") ||
+      cleaned === "today" ||
+      cleaned === "now" ||
+      cleaned === "issueddate" ||
+      cleaned === "createdat" ||
+      cleaned === "submissiondate"
+    ) {
+      return todayFormatted;
+    }
+
+    // Address / Location
+    if (
+      cleaned.includes("address") ||
+      cleaned.includes("location") ||
+      cleaned.includes("city") ||
+      cleaned.includes("delivery") ||
+      cleaned === "companyrequisitedeliveryaddresstext"
+    ) {
+      return clientObj.location || clientObj.address || "New York, NY";
+    }
+
+    // Email
+    if (cleaned.includes("email") || cleaned === "mail") {
+      return clientObj.email || "sarah.j@email.com";
+    }
+
+    // Phone / Contact
+    if (cleaned.includes("phone") || cleaned.includes("mobile") || cleaned.includes("contact") || cleaned.includes("tel")) {
+      return clientObj.phone || "5551234567";
+    }
+
+    // Company / Organization
+    if (cleaned.includes("company") || cleaned.includes("organization") || cleaned.includes("org")) {
+      return clientObj.companyName || "TechCorp Inc.";
+    }
+
+    // Job Position / Designation
+    if (cleaned.includes("position") || cleaned.includes("title") || cleaned.includes("designation") || cleaned.includes("role")) {
+      return clientObj.jobPosition || "Client Representative";
+    }
+
+    // Responsible / Doctor / Attending
+    if (
+      cleaned.includes("responsible") ||
+      cleaned.includes("doctor") ||
+      cleaned.includes("physician") ||
+      cleaned.includes("specialist") ||
+      cleaned.includes("provider") ||
+      cleaned.includes("staff")
+    ) {
+      return clientObj.responsible || "John Smith";
+    }
+
+    // Status
+    if (cleaned.includes("status")) {
+      return clientObj.status || "Active";
+    }
+
+    // Consent / Signature
+    if (cleaned.includes("signature") || cleaned.includes("consent")) {
+      return clientObj.name || "Sarah Johnson";
+    }
+
+    // Allergies
+    if (cleaned.includes("allerg")) {
+      return "None Reported";
+    }
+
+    // Medical notes / History / Diagnosis / Chief Complaint
+    if (cleaned.includes("diagno") || cleaned.includes("complaint") || cleaned.includes("medical") || cleaned.includes("history") || cleaned.includes("notes")) {
+      return "Regular Consultation";
+    }
+
+    // Emergency contact
+    if (cleaned.includes("emergency")) {
+      return clientObj.phone || "—";
+    }
+
+    // Fallback: Return empty string instead of raw placeholder name
+    return "";
+  };
 
   // Helper to compute field values for a specific source ID
   const getSourceFieldValues = (sourceId: string, tpl: DocumentTemplate | null): Record<string, string> => {
@@ -103,28 +363,32 @@ export default function GenerateDocumentDrawer({
     });
 
     const defaultValues: Record<string, string> = {
-      client_name: client.name || "",
-      name: client.name || "",
-      email: client.email || "",
-      phone: client.phone || "",
-      company_name: client.companyName || "",
-      companyName: client.companyName || "",
-      job_position: client.jobPosition || "",
-      jobPosition: client.jobPosition || "",
-      location: client.location || "",
-      responsible: client.responsible || "Staff Member",
+      client_name: client.name || "Sarah Johnson",
+      name: client.name || "Sarah Johnson",
+      email: client.email || "sarah.j@email.com",
+      phone: client.phone || "5551234567",
+      company_name: client.companyName || "TechCorp Inc.",
+      companyName: client.companyName || "TechCorp Inc.",
+      job_position: client.jobPosition || "Client Representative",
+      jobPosition: client.jobPosition || "Client Representative",
+      location: client.location || "New York, NY",
+      responsible: client.responsible || "John Smith",
       status: client.status || "Active",
       date: dateStr,
       current_date: dateStr,
-      consent_signature: client.name || "",
+      consent_signature: client.name || "Sarah Johnson",
       allergies: "None Reported",
       medical_notes: "Regular Consultation",
-      emergency_contact: client.phone || "—",
+      emergency_contact: client.phone || "5551234567",
       tax_id: "TAX-998823",
       payment_terms: "Net 30 Days",
       service_name: "Healthcare Consultation",
       price: "$150.00",
       tax_rate: "5%",
+      age: (client as any).age || "32",
+      gender: (client as any).gender || "Female",
+      id: client.id || "CL-001",
+      document_number: `VCH-${new Date().getFullYear()}-${String(client.id || "001").replace(/[^0-9]/g, "").padStart(3, "0") || "001"}`,
     };
 
     if (sourceId.startsWith("webform_")) {
@@ -146,6 +410,7 @@ export default function GenerateDocumentDrawer({
         Object.entries(sub.fields).forEach(([k, v]) => {
           const snakeKey = k.toLowerCase().replace(/[^a-z0-9]+/g, "_");
           wfValues[snakeKey] = v;
+          wfValues[k] = v;
         });
         return wfValues;
       }
@@ -193,17 +458,20 @@ export default function GenerateDocumentDrawer({
   const handleSourceChange = (newSourceId: string) => {
     setSelectedSourceId(newSourceId);
     setSelectedSourceType(getSourceTypeFromId(newSourceId));
-    const newVals = getSourceFieldValues(newSourceId, selectedTemplate);
+    const rawSourceVals = getSourceFieldValues(newSourceId, selectedTemplate);
+    const resolvedVals: Record<string, string> = { ...rawSourceVals };
 
-    if (selectedTemplate?.extractedFields) {
-      selectedTemplate.extractedFields.forEach((field) => {
-        if (!newVals[field]) {
-          newVals[field] = (client as any)[field] || field.replace(/_/g, " ");
-        }
-      });
-    }
+    const placeholders = Array.from(new Set([
+      ...(selectedTemplate?.extractedFields || []),
+      ...extractTemplateFields(selectedTemplate?.templateText || ""),
+      ...(selectedTemplate?.fieldMappings || []).map((m) => m.templateField),
+    ])).filter(Boolean);
 
-    setFieldValues(newVals);
+    placeholders.forEach((field) => {
+      resolvedVals[field] = resolvePlaceholderValue(field, client, rawSourceVals, selectedTemplate);
+    });
+
+    setFieldValues(resolvedVals);
 
     if (newSourceId === "current") {
       toast.info("Filled document fields from Client Profile Data");
@@ -246,19 +514,23 @@ export default function GenerateDocumentDrawer({
   // When a template is selected, initialize filled field values and simulate loading state
   const handleSelectTemplate = (tpl: DocumentTemplate) => {
     setSelectedTemplate(tpl);
+    setIsDocxRendered(false);
     setIsGeneratingDoc(true);
 
-    const initialValues = getSourceFieldValues(selectedSourceId, tpl);
+    const rawSourceVals = getSourceFieldValues(selectedSourceId, tpl);
+    const resolvedVals: Record<string, string> = { ...rawSourceVals };
 
-    if (tpl.extractedFields) {
-      tpl.extractedFields.forEach((field) => {
-        if (!initialValues[field]) {
-          initialValues[field] = (client as any)[field] || field.replace(/_/g, " ");
-        }
-      });
-    }
+    const placeholders = Array.from(new Set([
+      ...(tpl?.extractedFields || []),
+      ...extractTemplateFields(tpl?.templateText || ""),
+      ...(tpl?.fieldMappings || []).map((m) => m.templateField),
+    ])).filter(Boolean);
 
-    setFieldValues(initialValues);
+    placeholders.forEach((field) => {
+      resolvedVals[field] = resolvePlaceholderValue(field, client, rawSourceVals, tpl);
+    });
+
+    setFieldValues(resolvedVals);
 
     // Simulate 750ms "Generating document..." loader animation
     setTimeout(() => {
@@ -271,17 +543,45 @@ export default function GenerateDocumentDrawer({
     if (!selectedTemplate) return "";
     let text = selectedTemplate.templateText || "";
 
-    // Replace mapped fields
-    selectedTemplate.fieldMappings.forEach((m) => {
-      const val = fieldValues[m.templateField] || fieldValues[m.mappedFieldKey] || "";
-      const regex = new RegExp(`\\{${m.templateField}\\}`, "g");
-      text = text.replace(regex, val);
+    // 1. Replace mapped fields
+    if (selectedTemplate.fieldMappings) {
+      selectedTemplate.fieldMappings.forEach((m) => {
+        const val =
+          fieldValues[m.templateField] !== undefined
+            ? fieldValues[m.templateField]
+            : fieldValues[m.mappedFieldKey] !== undefined
+            ? fieldValues[m.mappedFieldKey]
+            : "";
+        const escaped = m.templateField.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        text = text.replace(new RegExp(`\\{\\{\\s*${escaped}\\s*\\}\\}`, "gi"), val);
+        text = text.replace(new RegExp(`\\{\\s*${escaped}\\s*\\}`, "gi"), val);
+        text = text.replace(new RegExp(`\\[\\s*${escaped}\\s*\\]`, "gi"), val);
+        text = text.replace(new RegExp(`«\\s*${escaped}\\s*»`, "gi"), val);
+      });
+    }
+
+    // 2. Replace all remaining fieldValues entries
+    Object.keys(fieldValues).forEach((key) => {
+      const val = fieldValues[key] !== undefined ? fieldValues[key] : "";
+      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      text = text.replace(new RegExp(`\\{\\{\\s*${escaped}\\s*\\}\\}`, "gi"), val);
+      text = text.replace(new RegExp(`\\{\\s*${escaped}\\s*\\}`, "gi"), val);
+      text = text.replace(new RegExp(`\\[\\s*${escaped}\\s*\\]`, "gi"), val);
+      text = text.replace(new RegExp(`«\\s*${escaped}\\s*»`, "gi"), val);
     });
 
-    // Replace all remaining {key} placeholders with fieldValues
-    Object.keys(fieldValues).forEach((key) => {
-      const regex = new RegExp(`\\{${key}\\}`, "g");
-      text = text.replace(regex, fieldValues[key] || "");
+    // 3. Fallback: replace any remaining unfulfilled placeholders
+    text = text.replace(/\{\{\s*([a-zA-Z0-9_\- ]+?)\s*\}\}/g, (match, p1) => {
+      const trimmed = p1.trim();
+      return fieldValues[trimmed] !== undefined ? fieldValues[trimmed] : "";
+    });
+    text = text.replace(/\{\s*([a-zA-Z0-9_\- ]+?)\s*\}/g, (match, p1) => {
+      const trimmed = p1.trim();
+      return fieldValues[trimmed] !== undefined ? fieldValues[trimmed] : "";
+    });
+    text = text.replace(/«\s*([a-zA-Z0-9_\- ]+?)\s*»/g, (match, p1) => {
+      const trimmed = p1.trim();
+      return fieldValues[trimmed] !== undefined ? fieldValues[trimmed] : "";
     });
 
     return text;
@@ -376,7 +676,25 @@ export default function GenerateDocumentDrawer({
         if (onDocumentGenerated) onDocumentGenerated(newDoc);
       } else {
         // Download Word DOCX format
-        downloadAsWordDoc(`${baseName}.docx`, renderedText);
+        if (selectedTemplate.rawDocxBase64) {
+          // Process the authentic uploaded DOCX file and substitute tokens inside Word OpenXML
+          const populatedDocxBlob = await generatePopulatedDocx(
+            selectedTemplate.rawDocxBase64,
+            fieldValues,
+            selectedTemplate.fieldMappings
+          );
+          const blobUrl = URL.createObjectURL(populatedDocxBlob);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = `${baseName}.docx`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(blobUrl);
+        } else {
+          // Fallback for canvas templates created without an uploaded docx
+          downloadAsWordDoc(`${baseName}.docx`, renderedText);
+        }
 
         const newDoc: StoredClientDocument = {
           id: `doc-${Date.now()}`,
@@ -406,16 +724,80 @@ export default function GenerateDocumentDrawer({
     }
   };
 
-  // Print Document
-  const handlePrintDocument = async () => {
+  // Print Document with 1:1 layout fidelity (logos, positions, backgrounds, tables)
+  const handlePrintDocument = () => {
     if (!selectedTemplate) return;
     try {
+      // 1. If docx-preview is rendered, print the authentic Word canvas directly
+      const docxContainer = docxContainerRef.current;
+      if (docxContainer && isDocxRendered && selectedTemplate.rawDocxBase64 && docxContainer.innerHTML.trim().length > 0) {
+        const printWindow = window.open("", "_blank");
+        if (printWindow) {
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>${selectedTemplate.name}</title>
+                <style>
+                  @page { size: auto; margin: 10mm; }
+                  body { margin: 0; background: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                  .docx-doc-viewer { width: 100% !important; margin: 0 auto !important; }
+                  section.docx { box-shadow: none !important; margin: 0 auto !important; border: none !important; }
+                </style>
+              </head>
+              <body>
+                ${docxContainer.innerHTML}
+              </body>
+            </html>
+          `);
+          printWindow.document.close();
+          printWindow.focus();
+          setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+          }, 400);
+          toast.info("Opened print dialog for Word document");
+          return;
+        }
+      }
+
+      // 2. High-fidelity print for styled HTML / table templates
       const renderedText = getRenderedText();
-      const pdfResult = await generateClientPdf(selectedTemplate, renderedText, client);
-      const blobUrl = URL.createObjectURL(pdfResult.blob);
-      window.open(blobUrl, "_blank");
-      toast.info("Opened printable document view");
+      const isHtml = /<[a-z][\s\S]*>/i.test(renderedText);
+      const printWindow = window.open("", "_blank");
+      if (printWindow) {
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>${selectedTemplate.name}</title>
+              <style>
+                @page { size: A4; margin: 15mm; }
+                body { font-family: Calibri, Arial, -apple-system, sans-serif; color: #111; margin: 0; padding: 20px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+                th, td { border: 1px solid #000; padding: 6px 10px; font-size: 13px; text-align: left; }
+                th { background: #f2f2f2; font-weight: bold; }
+                h1 { font-size: 22px; color: #2E75B6; margin-bottom: 8px; font-weight: bold; }
+                h2 { font-size: 16px; color: #2E75B6; margin-top: 14px; font-weight: bold; }
+                p { font-size: 13px; line-height: 1.5; margin: 6px 0; }
+                hr { border: 0; border-top: 1px solid #ccc; margin: 14px 0; }
+              </style>
+            </head>
+            <body>
+              ${isHtml ? renderedText : `<div style="white-space:pre-wrap;">${renderedText}</div>`}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+          printWindow.print();
+          printWindow.close();
+        }, 400);
+        toast.info("Opened print dialog");
+      }
     } catch (err) {
+      console.error("Print error:", err);
       toast.error("Failed to prepare printable view.");
     }
   };
@@ -423,9 +805,10 @@ export default function GenerateDocumentDrawer({
   // Extract unique placeholders present in the selected template
   const activePlaceholders = selectedTemplate
     ? Array.from(new Set([
-      ...selectedTemplate.extractedFields,
-      ...selectedTemplate.fieldMappings.map((m) => m.templateField),
-    ]))
+      ...(selectedTemplate.extractedFields || []),
+      ...extractTemplateFields(selectedTemplate.templateText || ""),
+      ...(selectedTemplate.fieldMappings || []).map((m) => m.templateField),
+    ])).filter(Boolean)
     : [];
 
   const getSelectedSourceInfo = () => {
@@ -751,7 +1134,7 @@ export default function GenerateDocumentDrawer({
             /* STEP 2: SPLIT SCREEN (Left: Live Document Preview | Right: Filled Editable Fields) */
             <div className="grid grid-cols-12 gap-6 items-start">
               {/* LEFT PANEL: Document Preview Canvas */}
-              <div className="col-span-7 space-y-3 min-w-0">
+              <div className="col-span-12 lg:col-span-7 xl:col-span-8 space-y-3 min-w-0">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
                     DOCUMENT PREVIEW
@@ -773,30 +1156,205 @@ export default function GenerateDocumentDrawer({
                     </p>
                   </div>
                 ) : (
-                  <div className="border border-slate-200 rounded-2xl bg-white shadow-md p-8 min-h-[480px] animate-in fade-in-50 duration-150 overflow-hidden w-full">
-                    {/* Document Content as-is */}
-                    <div className="overflow-x-auto max-w-full">
-                      {/<[a-z][\s\S]*>/i.test(getRenderedText()) ? (
-                        <div
-                          className="prose prose-slate max-w-full text-slate-900 leading-relaxed font-sans break-words [&_*]:max-w-full [&_table]:w-full [&_table]:table-auto [&_td]:break-all [&_th]:break-words [&_pre]:overflow-x-auto [&_code]:break-all"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                          dangerouslySetInnerHTML={{ __html: getRenderedText() }}
-                        />
-                      ) : (
-                        <pre
-                          className="whitespace-pre-wrap text-sm text-slate-800 leading-relaxed font-sans break-words overflow-x-auto max-w-full"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
+                  <div
+                    ref={previewOuterRef}
+                    className="border border-slate-300 rounded-2xl bg-slate-200/80 p-4 sm:p-6 min-h-[560px] animate-in fade-in-50 duration-150 overflow-y-auto overflow-x-hidden max-h-[calc(100vh-230px)] shadow-inner flex flex-col items-center"
+                  >
+                    {/* Zoom & Canvas Scale Bar */}
+                    <div className="w-full flex items-center justify-between mb-3 px-1 text-xs text-slate-500">
+                      <span className="font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        A4 Page View
+                      </span>
+                      <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-0.5 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewScale((s) => Math.max(0.35, Number((s - 0.05).toFixed(2))))}
+                          className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-slate-700 font-bold text-xs cursor-pointer"
+                          title="Zoom Out"
                         >
-                          {getRenderedText()}
-                        </pre>
-                      )}
+                          -
+                        </button>
+                        <span className="font-mono text-[11px] font-bold text-slate-800 min-w-[34px] text-center">
+                          {Math.round(previewScale * 100)}%
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewScale((s) => Math.min(1.2, Number((s + 0.05).toFixed(2))))}
+                          className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-slate-700 font-bold text-xs cursor-pointer"
+                          title="Zoom In"
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (previewOuterRef.current) {
+                              const targetWidth = Math.max(280, previewOuterRef.current.clientWidth - 48);
+                              setPreviewScale(Math.min(1, Math.max(0.4, Number((targetWidth / 816).toFixed(2)))));
+                            }
+                          }}
+                          className="ml-1 text-[10px] text-slate-500 hover:text-slate-900 underline font-medium cursor-pointer"
+                        >
+                          Fit
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Scaled Authentic Word Document Canvas Container */}
+                    <div
+                      className={`w-full flex justify-center overflow-visible ${
+                        isDocxRendered && selectedTemplate?.rawDocxBase64 ? "flex" : "hidden"
+                      }`}
+                      style={{
+                        minHeight: `calc(1056px * ${previewScale})`,
+                      }}
+                    >
+                      <div
+                        ref={docxContainerRef}
+                        className="docx-preview-wrapper transition-transform duration-100 [&_.docx-wrapper]:bg-transparent [&_.docx-wrapper]:p-0 [&_.docx-wrapper]:w-full [&_.docx-wrapper]:flex [&_.docx-wrapper]:justify-center [&_section.docx]:shadow-2xl [&_section.docx]:rounded-xl [&_section.docx]:mx-auto [&_section.docx]:border [&_section.docx]:border-slate-300"
+                        style={{
+                          width: "816px",
+                          minWidth: "816px",
+                          maxWidth: "816px",
+                          transform: `scale(${previewScale})`,
+                          transformOrigin: "top center",
+                        }}
+                      />
+                    </div>
+
+                    {/* Styled A4 Paper Sheet Frame (Always active fallback when docx is not rendered or for HTML/text templates) */}
+                    {(!isDocxRendered || !selectedTemplate?.rawDocxBase64) && (
+                      <div
+                        className="bg-white border border-slate-300/80 rounded-xl shadow-xl p-8 sm:p-10 pb-16 min-h-[580px] w-full max-w-[620px] text-slate-900 transition-all text-left animate-in fade-in-50 box-border overflow-hidden"
+                        style={{
+                          fontFamily: "Calibri, Arial, -apple-system, sans-serif",
+                          boxShadow: "0 10px 30px -5px rgba(0, 0, 0, 0.12), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+                        }}
+                      >
+                        {/<[a-z][\s\S]*>/i.test(getRenderedText()) ? (
+                          <div
+                            className="word-doc-preview text-slate-900 leading-normal break-words text-left w-full overflow-hidden
+                              [&_*]:!max-w-full [&_*]:!box-border
+                              [&_h1]:text-[22px] [&_h1]:font-bold [&_h1]:text-[#2E75B6] [&_h1]:mb-1.5 [&_h1]:text-left [&_h1]:tracking-tight
+                              [&_h2]:text-[17px] [&_h2]:font-bold [&_h2]:text-[#2E75B6] [&_h2]:mt-4 [&_h2]:mb-2 [&_h2]:text-left
+                              [&_h3]:text-[14px] [&_h3]:font-bold [&_h3]:text-[#1F4E78] [&_h3]:mt-3 [&_h3]:mb-1.5 [&_h3]:text-left
+                              [&_p]:mb-2.5 [&_p]:text-[13px] [&_p]:text-slate-800 [&_p]:leading-relaxed
+                              [&_p.subtitle]:text-[13px] [&_p.subtitle]:text-[#595959] [&_p.subtitle]:italic [&_p.subtitle]:mb-4
+                              [&_em]:italic [&_em]:text-[#595959]
+                              [&_table]:!w-full [&_table]:!border-collapse [&_table]:my-4 [&_table]:!border [&_table]:!border-slate-400 [&_table]:!table-fixed
+                              [&_th]:!border [&_th]:!border-slate-400 [&_th]:!bg-slate-50 [&_th]:!p-2.5 [&_th]:!font-bold [&_th]:!text-[12px] [&_th]:!text-black [&_th]:!text-left [&_th]:!break-words
+                              [&_td]:!border [&_td]:!border-slate-300 [&_td]:!p-2.5 [&_td]:!text-[13px] [&_td]:!text-slate-900 [&_td]:!align-middle [&_td]:!break-words
+                              [&_tr>td:first-child]:!font-bold [&_tr>td:first-child]:!text-slate-800 [&_tr>td:first-child]:!w-[30%]
+                              [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-slate-300 [&_hr]:my-4
+                              [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2.5
+                              [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-2.5
+                              [&_img]:!max-w-full [&_img]:!h-auto"
+                            dangerouslySetInnerHTML={{ __html: getRenderedText() }}
+                          />
+                        ) : (
+                          <div className="word-doc-preview text-slate-900 space-y-4 text-left">
+                            {(() => {
+                              const raw = getRenderedText();
+                              const lines = raw.split("\n").map((l) => l.trim());
+                              const headerLines: string[] = [];
+                              const tableRows: { label: string; value: string }[] = [];
+                              const footerLines: string[] = [];
+
+                              let state: "header" | "table" | "footer" = "header";
+
+                              for (let i = 0; i < lines.length; i++) {
+                                const line = lines[i];
+                                if (!line) continue;
+
+                                if (
+                                  line.toLowerCase().includes("automatically") ||
+                                  line.toLowerCase().includes("generated automatically")
+                                ) {
+                                  state = "footer";
+                                  footerLines.push(line);
+                                  continue;
+                                }
+
+                                const colonIdx = line.indexOf(":");
+                                if (colonIdx > 0 && colonIdx < 40) {
+                                  state = "table";
+                                  tableRows.push({
+                                    label: line.slice(0, colonIdx).trim(),
+                                    value: line.slice(colonIdx + 1).trim(),
+                                  });
+                                } else if (state === "header" && tableRows.length === 0) {
+                                  headerLines.push(line);
+                                } else if (state === "table" && i + 1 < lines.length && !lines[i + 1].includes(":")) {
+                                  tableRows.push({
+                                    label: line,
+                                    value: lines[i + 1] || "",
+                                  });
+                                  i++;
+                                } else if (state === "footer") {
+                                  footerLines.push(line);
+                                } else {
+                                  tableRows.push({
+                                    label: line,
+                                    value: "",
+                                  });
+                                }
+                              }
+
+                              return (
+                                <div className="space-y-3">
+                                  {headerLines.length > 0 && (
+                                    <div className="space-y-1 mb-3">
+                                      <h1 className="text-[24px] font-bold text-[#2E75B6] tracking-tight leading-tight">
+                                        {headerLines[0]}
+                                      </h1>
+                                      {headerLines.slice(1).map((hl, hIdx) => (
+                                        <p key={hIdx} className="text-[13px] italic text-[#595959] mb-2">
+                                          {hl}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {tableRows.length > 0 && (
+                                    <table className="w-full border-collapse border border-black my-3.5 text-xs">
+                                      <tbody>
+                                        {tableRows.map((row, rIdx) => (
+                                          <tr key={rIdx}>
+                                            <td className="border border-black p-1.5 px-2.5 font-bold text-black w-[28%] min-w-[110px] text-[13px]">
+                                              {row.label}
+                                            </td>
+                                            <td className="border border-black p-1.5 px-2.5 text-slate-900 text-[13px]">
+                                              {row.value}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+
+                                  {footerLines.length > 0 && (
+                                    <div className="pt-2">
+                                      <hr className="border-0 border-t border-slate-300 my-3.5" />
+                                      {footerLines.map((fl, fIdx) => (
+                                        <p key={fIdx} className="text-[11px] text-[#666666] leading-normal">
+                                          {fl}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
               {/* RIGHT PANEL: Extracted Filled Fields Editor (Sticky to top) */}
-              <div className="col-span-5 space-y-3 min-w-0 sticky top-0 self-start z-10">
+              <div className="col-span-12 lg:col-span-5 xl:col-span-4 space-y-3 min-w-0 sticky top-0 self-start z-10">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
                     FILLED FIELDS & VALUES ({activePlaceholders.length})

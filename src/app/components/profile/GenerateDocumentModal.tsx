@@ -63,7 +63,7 @@ export default function GenerateDocumentModal({
 
   // Helper to replace template variables with real client data
   const generateMergedText = (tpl: DocumentTemplate): string => {
-    let result = tpl.templateText;
+    let result = tpl.templateText || "";
     const nowStr = new Date().toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
@@ -71,35 +71,46 @@ export default function GenerateDocumentModal({
     });
 
     const clientValues: Record<string, string> = {
-      name: client.name || "Client Name",
-      email: client.email || "client@email.com",
-      phone: client.phone || "—",
-      companyName: client.companyName || "Client Org",
+      name: client.name || "Sarah Johnson",
+      client_name: client.name || "Sarah Johnson",
+      patient_name: client.name || "Sarah Johnson",
+      email: client.email || "sarah.j@email.com",
+      phone: client.phone || "5551234567",
+      companyName: client.companyName || "TechCorp Inc.",
+      company_name: client.companyName || "TechCorp Inc.",
       jobPosition: client.jobPosition || "Client Representative",
-      location: client.location || "Location",
-      responsible: client.responsible || "Staff Member",
+      job_position: client.jobPosition || "Client Representative",
+      location: client.location || "New York, NY",
+      address: client.location || "New York, NY",
+      responsible: client.responsible || "John Smith",
       status: client.status || "Active",
       date: nowStr,
+      current_date: nowStr,
+      age: (client as any).age || "32",
+      gender: (client as any).gender || "Female",
+      id: client.id || "CL-001",
+      document_number: `VCH-${new Date().getFullYear()}-${String(client.id || "001").replace(/[^0-9]/g, "").padStart(3, "0") || "001"}`,
     };
 
-    tpl.fieldMappings.forEach((m) => {
-      const val = clientValues[m.mappedFieldKey] || (client as any)[m.mappedFieldKey] || "—";
-      const regex = new RegExp(`\\{${m.templateField}\\}`, "g");
-      result = result.replace(regex, val);
-    });
+    if (tpl.fieldMappings) {
+      tpl.fieldMappings.forEach((m) => {
+        const val = clientValues[m.mappedFieldKey] || (client as any)[m.mappedFieldKey] || "";
+        const escaped = m.templateField.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        result = result.replace(new RegExp(`\\{\\{\\s*${escaped}\\s*\\}\\}`, "gi"), val);
+        result = result.replace(new RegExp(`\\{\\s*${escaped}\\s*\\}`, "gi"), val);
+        result = result.replace(new RegExp(`\\[\\s*${escaped}\\s*\\]`, "gi"), val);
+        result = result.replace(new RegExp(`«\\s*${escaped}\\s*»`, "gi"), val);
+      });
+    }
 
-    // Fallback for unmapped variables
-    result = result
-      .replace(/\{client_name\}/g, client.name || "Client Name")
-      .replace(/\{email\}/g, client.email || "client@email.com")
-      .replace(/\{phone\}/g, client.phone || "—")
-      .replace(/\{company_name\}/g, client.companyName || "Client Org")
-      .replace(/\{job_position\}/g, client.jobPosition || "Client Representative")
-      .replace(/\{location\}/g, client.location || "Location")
-      .replace(/\{responsible\}/g, client.responsible || "Staff Member")
-      .replace(/\{status\}/g, client.status || "Active")
-      .replace(/\{current_date\}/g, nowStr)
-      .replace(/\{date\}/g, nowStr);
+    Object.keys(clientValues).forEach((k) => {
+      const val = clientValues[k];
+      const escaped = k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      result = result.replace(new RegExp(`\\{\\{\\s*${escaped}\\s*\\}\\}`, "gi"), val);
+      result = result.replace(new RegExp(`\\{\\s*${escaped}\\s*\\}`, "gi"), val);
+      result = result.replace(new RegExp(`\\[\\s*${escaped}\\s*\\]`, "gi"), val);
+      result = result.replace(new RegExp(`«\\s*${escaped}\\s*»`, "gi"), val);
+    });
 
     return result;
   };

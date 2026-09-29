@@ -14,6 +14,8 @@ export interface DocumentTemplate {
   fieldMappings: DocumentTemplateFieldMapping[];
   createdAt: string;
   createdBy: string;
+  rawDocxBase64?: string;
+  htmlPreviewTemplate?: string;
 }
 
 export const DOCUMENT_TEMPLATES_EVENT = "documentTemplates_updated";
@@ -308,13 +310,35 @@ export function saveTemplateCategory(category: string): void {
   }
 }
 
-/** Helper to extract unique variables inside {} from template text */
+/** Helper to extract unique variables inside {}, {{}}, «», or [] from template text */
 export function extractTemplateFields(text: string): string[] {
-  const regex = /\{([a-zA-Z0-9_]+)\}/g;
+  if (!text) return [];
   const matches = new Set<string>();
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    if (match[1]) matches.add(match[1].trim());
+
+  // 1. Double curly: {{ field }}
+  const doubleCurlyRegex = /\{\{\s*([a-zA-Z0-9_\- ]+?)\s*\}\}/g;
+  let m;
+  while ((m = doubleCurlyRegex.exec(text)) !== null) {
+    if (m[1] && m[1].trim()) matches.add(m[1].trim());
   }
+
+  // 2. Single curly: { field }
+  const singleCurlyRegex = /\{\s*([a-zA-Z0-9_\- ]+?)\s*\}/g;
+  while ((m = singleCurlyRegex.exec(text)) !== null) {
+    if (m[1] && m[1].trim()) matches.add(m[1].trim());
+  }
+
+  // 3. Guillemets: «field»
+  const guillemetsRegex = /«\s*([a-zA-Z0-9_\- ]+?)\s*»/g;
+  while ((m = guillemetsRegex.exec(text)) !== null) {
+    if (m[1] && m[1].trim()) matches.add(m[1].trim());
+  }
+
+  // 4. Square brackets: [DocumentNumber], [PatientName] (at least 2 chars, letters/numbers/underscore)
+  const squareBracketRegex = /\[\s*([a-zA-Z0-9_]{2,})\s*\]/g;
+  while ((m = squareBracketRegex.exec(text)) !== null) {
+    if (m[1] && m[1].trim()) matches.add(m[1].trim());
+  }
+
   return Array.from(matches);
 }

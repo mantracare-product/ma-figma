@@ -35,6 +35,10 @@ const SYSTEM_FIELDS_BY_MODULE = [
     module: "CLIENTS",
     fields: [
       { key: "name", label: "Client Full Name" },
+      { key: "id", label: "Client ID / Patient ID" },
+      { key: "age", label: "Age" },
+      { key: "gender", label: "Gender" },
+      { key: "document_number", label: "Voucher / Document Number" },
       { key: "status", label: "Client Status" },
       { key: "email", label: "Email Address" },
       { key: "phone", label: "Phone Number" },
@@ -370,6 +374,7 @@ export default function AddDocumentTemplateDrawer({
   const [templateName, setTemplateName] = useState("");
   const [templateText, setTemplateText] = useState("");
   const [fileName, setFileName] = useState("");
+  const [rawDocxBase64, setRawDocxBase64] = useState<string | undefined>(undefined);
   const [fieldMappings, setFieldMappings] = useState<DocumentTemplateFieldMapping[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -533,26 +538,34 @@ export default function AddDocumentTemplateDrawer({
         const existing = prev.find((p) => p.templateField === field);
         if (existing) return existing;
 
-        const lower = field.toLowerCase();
+        const lower = field.toLowerCase().replace(/[^a-z0-9]/g, "");
         let defaultKey = "name";
         let defaultLabel = "Client Full Name";
 
-        if (lower.includes("email")) {
+        if (lower.includes("email") || lower.includes("mail")) {
           defaultKey = "email"; defaultLabel = "Email Address";
-        } else if (lower.includes("phone") || lower.includes("mobile")) {
+        } else if (lower.includes("phone") || lower.includes("mobile") || lower.includes("contact")) {
           defaultKey = "phone"; defaultLabel = "Phone Number";
         } else if (lower.includes("company") || lower.includes("org")) {
           defaultKey = "companyName"; defaultLabel = "Company Name";
         } else if (lower.includes("title") || lower.includes("position") || lower.includes("role")) {
           defaultKey = "jobPosition"; defaultLabel = "Job Position / Title";
-        } else if (lower.includes("address") || lower.includes("location") || lower.includes("city")) {
+        } else if (lower.includes("address") || lower.includes("location") || lower.includes("city") || lower.includes("delivery") || lower === "companyrequisitedeliveryaddresstext") {
           defaultKey = "location"; defaultLabel = "Location / Address";
-        } else if (lower.includes("responsible") || lower.includes("agent") || lower.includes("officer")) {
+        } else if (lower.includes("responsible") || lower.includes("agent") || lower.includes("officer") || lower.includes("doctor") || lower.includes("provider") || lower.includes("physician")) {
           defaultKey = "responsible"; defaultLabel = "Responsible Staff Member";
         } else if (lower.includes("status")) {
           defaultKey = "status"; defaultLabel = "Client Status";
-        } else if (lower.includes("date") || lower.includes("time")) {
+        } else if (lower.includes("date") || lower.includes("time") || lower.includes("bill")) {
           defaultKey = "date"; defaultLabel = "Current Date";
+        } else if (lower.includes("voucher") || lower.includes("docnum") || lower.includes("documentnumber") || lower.includes("invoicenum") || lower.includes("number")) {
+          defaultKey = "document_number"; defaultLabel = "Voucher / Document Number";
+        } else if (lower.includes("age")) {
+          defaultKey = "age"; defaultLabel = "Age";
+        } else if (lower.includes("gender") || lower.includes("sex")) {
+          defaultKey = "gender"; defaultLabel = "Gender";
+        } else if (lower.includes("id") || lower.includes("patientid") || lower.includes("companyid") || lower === "pcompanyid") {
+          defaultKey = "id"; defaultLabel = "Client ID / Patient ID";
         }
 
         return {
@@ -581,29 +594,49 @@ export default function AddDocumentTemplateDrawer({
 
     if (isDocx) {
       setIsExtracting(true);
-      const reader = new FileReader();
-      reader.onload = async (evt) => {
+
+      // 1. Read as Data URL to store 100% authentic base64 of the original Word file
+      const dataUrlReader = new FileReader();
+      dataUrlReader.onload = (evt) => {
+        const dataUrl = evt.target?.result as string;
+        if (dataUrl) {
+          setRawDocxBase64(dataUrl);
+        }
+      };
+      dataUrlReader.readAsDataURL(file);
+
+      // 2. Read as ArrayBuffer for Mammoth HTML and field extraction
+      const arrayBufferReader = new FileReader();
+      arrayBufferReader.onload = async (evt) => {
         try {
           const arrayBuffer = evt.target?.result as ArrayBuffer;
-          const result = await mammoth.extractRawText({ arrayBuffer });
-          const extractedText = result.value;
 
-          if (!extractedText || !extractedText.trim()) {
-            setFileError("Word document contains no extractable plain text.");
-            toast.error("Word document contains no text.");
+          // Extract rich HTML to preserve tables, grid layouts, bold text, headings, and lists
+          const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
+          let extractedContent = htmlResult.value;
+
+          // Fallback to raw text if HTML is empty
+          if (!extractedContent || !extractedContent.trim()) {
+            const rawResult = await mammoth.extractRawText({ arrayBuffer });
+            extractedContent = rawResult.value;
+          }
+
+          if (!extractedContent || !extractedContent.trim()) {
+            setFileError("Word document contains no extractable content.");
+            toast.error("Word document contains no content.");
           } else {
-            setTemplateText(extractedText);
-            toast.success(`Extracted text from "${file.name}"!`);
+            setTemplateText(extractedContent);
+            toast.success(`Imported document layout from "${file.name}"!`);
           }
         } catch (err) {
           console.error("Mammoth extraction error:", err);
-          setFileError("Failed to extract text from Word document.");
+          setFileError("Failed to extract content from Word document.");
           toast.error("Failed to parse Word document.");
         } finally {
           setIsExtracting(false);
         }
       };
-      reader.readAsArrayBuffer(file);
+      arrayBufferReader.readAsArrayBuffer(file);
     } else {
       const reader = new FileReader();
       reader.onload = (evt) => {
@@ -668,6 +701,7 @@ export default function AddDocumentTemplateDrawer({
       templateText: templateText.trim(),
       extractedFields: extracted,
       fieldMappings,
+      rawDocxBase64,
       createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
       createdBy: "Admin User",
     };
