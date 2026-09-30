@@ -7,7 +7,7 @@ import { Modal } from "../components/ui/Modal";
 import { Drawer } from "../components/ui/drawer";
 import { Tooltip } from "../components/ui/Tooltip";
 import { toast } from "sonner";
-import { useNavigate, useLocation } from "react-router";
+import { useNavigate, useLocation, useParams, useSearchParams } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
 import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg } from "../context/FieldRegistryContext";
 import { TelephonyIntegrationPanel } from "../components/telephony/TelephonyIntegrationPanel";
@@ -664,8 +664,10 @@ export default function Settings() {
   const { activeOrganization, updateOrganization, setActiveOrganization } = useOrganization();
   const navigate = useNavigate();
   const location = useLocation();
-  const { setCollapsed } = useSidebar();
+  const { tab: urlTab, subtab: urlSubtab } = useParams<{ tab?: string; subtab?: string }>();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("organization");
+  const [billingSubTab, setBillingSubTab] = useState<"plans" | "payments" | "credit-usage">("plans");
   const [billingExpanded, setBillingExpanded] = useState(true);
   const [selectedLanguage, setSelectedLanguage] = useState("English");
 
@@ -720,8 +722,36 @@ export default function Settings() {
   const [editBillingAddress, setEditBillingAddress] = useState(billingAddress);
 
   useEffect(() => {
-    setCollapsed(true);
-  }, [setCollapsed]);
+    const queryTab = searchParams.get("tab");
+    const rawTab = urlTab || queryTab || "organization";
+
+    if (rawTab === "organization") {
+      setActiveTab("organization");
+    } else if (rawTab === "team" || rawTab === "users") {
+      setActiveTab("users");
+    } else if (rawTab === "billing" || rawTab === "plans" || rawTab === "payments" || rawTab === "credit-usage") {
+      setActiveTab("billing");
+      if (rawTab === "plans" || rawTab === "payments" || rawTab === "credit-usage") {
+        setBillingSubTab(rawTab);
+      } else if (urlSubtab === "payments" || urlSubtab === "credit-usage" || urlSubtab === "plans") {
+        setBillingSubTab(urlSubtab);
+      }
+    } else if (rawTab === "voices" || rawTab === "voice-config") {
+      setActiveTab("voice-config");
+    } else if (rawTab === "numbers") {
+      setActiveTab("numbers");
+    } else if (rawTab === "sections-fields" || rawTab === "custom-fields" || rawTab === "layout") {
+      setActiveTab("custom-fields");
+    } else if (rawTab === "integrations") {
+      setActiveTab("integrations");
+    } else if (rawTab === "audit-logs" || rawTab === "audit") {
+      setActiveTab("audit-logs");
+    } else if (rawTab === "security") {
+      setActiveTab("security");
+    } else {
+      setActiveTab(rawTab);
+    }
+  }, [urlTab, urlSubtab, searchParams]);
 
   useEffect(() => {
     try {
@@ -3371,105 +3401,33 @@ export default function Settings() {
           <HowItWorksButton label="How it works" onClick={() => openHowItWorks(activeTab)} />
         </PageHeader>
 
-        <div className="flex gap-6 items-start">
-          {/* Left Navigation */}
-          <div className="w-[230px] flex-shrink-0 bg-white/80 backdrop-blur-xl border border-white/80 shadow-[0_4px_24px_rgba(0,0,0,0.03)] rounded-[28px] p-3.5 space-y-1 self-start">
-            {/* Header Label */}
-            <div className="px-3.5 pt-1.5 pb-2 text-[10px] font-bold uppercase tracking-widest text-[#8e8e93] font-display">
-              SETTINGS
-            </div>
-
-            <nav className="space-y-1">
-              {tabs.map((tab: any) => {
-                const isBillingChild = ["plans", "payments", "credit-usage"].includes(activeTab);
-                const isBillingActive = tab.id === "billing-parent" && isBillingChild;
-                const isActive = activeTab === tab.id || isBillingActive;
-                const Icon = tab.icon;
-
-                return (
-                  <div key={tab.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (tab.isParent) {
-                          setBillingExpanded(!billingExpanded);
-                          if (!billingExpanded) {
-                            setActiveTab("plans");
-                          }
-                        } else {
-                          setActiveTab(tab.id);
-                        }
-                      }}
-                      className={`relative w-full flex items-center justify-between px-3.5 py-2.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer ${
-                        isActive && !tab.isParent
-                          ? "text-white shadow-sm"
-                          : isActive && tab.isParent
-                          ? "text-[#181e25] bg-slate-100/70"
-                          : "text-[#45515e] hover:text-[#222222] hover:bg-slate-100/60"
-                      }`}
-                    >
-                      {isActive && !tab.isParent && (
-                        <motion.div
-                          layoutId="settingsTabActivePill"
-                          className="absolute inset-0 bg-gradient-to-r from-[#181e25] to-[#2c3e50] rounded-full -z-10 shadow-sm"
-                          transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                        />
-                      )}
-
-                      <div className="flex items-center gap-3 min-w-0">
-                        {Icon && (
-                          <Icon
-                            className={`w-4 h-4 flex-shrink-0 transition-colors ${
-                              isActive && !tab.isParent ? "text-white" : "text-slate-500"
-                            }`}
-                          />
-                        )}
-                        <span className="truncate">{tab.label}</span>
-                      </div>
-
-                      {tab.isParent && (
-                        <span className="text-slate-400">
-                          {billingExpanded ? (
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          ) : (
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          )}
-                        </span>
-                      )}
-                    </button>
-
-                    {tab.isParent && billingExpanded && tab.children && (
-                      <div className="ml-7 my-1 pl-2 border-l border-slate-200/60 space-y-1">
-                        {tab.children.map((child: any) => {
-                          const isChildActive = activeTab === child.id;
-                          return (
-                            <button
-                              key={child.id}
-                              type="button"
-                              onClick={() => setActiveTab(child.id)}
-                              className={`w-full text-left px-3 py-1.5 rounded-full text-xs transition-colors cursor-pointer flex items-center justify-between ${
-                                isChildActive
-                                  ? "text-[#1456f0] bg-blue-50/80 font-bold"
-                                  : "text-[#64748b] hover:text-[#222222] hover:bg-slate-100/50 font-medium"
-                              }`}
-                            >
-                              <span>{child.label}</span>
-                              {isChildActive && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#1456f0]" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </nav>
+        <div className="w-full min-w-0 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 lg:p-8" style={{ overflowX: "hidden" }}>
+          {/* Breadcrumb Navigation */}
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-6 pb-3 border-b border-slate-100">
+            <span className="text-slate-400">Settings</span>
+            <span className="text-slate-300">/</span>
+            <span className="text-[#181e25] font-bold">
+              {activeTab === "organization"
+                ? "Organization"
+                : activeTab === "users"
+                ? "Team"
+                : activeTab === "billing" || ["plans", "payments", "credit-usage"].includes(activeTab)
+                ? `Billing / ${billingSubTab === "plans" ? "Plans" : billingSubTab === "payments" ? "Payments" : "Credit Usage"}`
+                : activeTab === "voice-config"
+                ? "AI Voices / Models"
+                : activeTab === "numbers"
+                ? "Numbers"
+                : activeTab === "custom-fields"
+                ? "Sections / Fields"
+                : activeTab === "integrations"
+                ? "Integrations"
+                : activeTab === "audit-logs"
+                ? "Audit Logs"
+                : activeTab === "security"
+                ? "Security"
+                : "Organization"}
+            </span>
           </div>
-
-          {/* Content Area */}
-          <div className="flex-1 min-w-0 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 lg:p-8" style={{ overflowX: "hidden" }}>
             {/* Organization Tab */}
             {activeTab === "organization" && (
               <div className="space-y-6">
@@ -3810,8 +3768,67 @@ export default function Settings() {
               </div>
             )}
 
-            {/* Billing Plans */}
-            {activeTab === "plans" && (
+            {/* Unified Billing & Subscription Page */}
+            {(activeTab === "billing" || ["plans", "payments", "credit-usage"].includes(activeTab)) && (
+              <div className="space-y-6">
+                {/* Billing Top Sub-Tabs Navigation */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-3">
+                  <div>
+                    <h2 className="text-xl font-bold" style={TEXT_STYLES.heading}>Billing & Subscription</h2>
+                    <p className="text-sm mt-0.5" style={TEXT_STYLES.subtext}>Manage plans, payment methods, and credit balance</p>
+                  </div>
+
+                  <div className="inline-flex p-1 bg-slate-100 rounded-2xl border border-slate-200/80 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBillingSubTab("plans");
+                        navigate("/settings/billing/plans");
+                      }}
+                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        billingSubTab === "plans"
+                          ? "bg-[#181e25] text-white shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      Plans
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBillingSubTab("payments");
+                        navigate("/settings/billing/payments");
+                      }}
+                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        billingSubTab === "payments"
+                          ? "bg-[#181e25] text-white shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      Payments
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBillingSubTab("credit-usage");
+                        navigate("/settings/billing/credit-usage");
+                      }}
+                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        billingSubTab === "credit-usage"
+                          ? "bg-[#181e25] text-white shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      Credit Usage
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-tab 1: Plans */}
+                {billingSubTab === "plans" && (
               <div className="space-y-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
@@ -4039,8 +4056,6 @@ export default function Settings() {
                     )}
                   </div>
                 </div>
-              </div>
-            )}
 
             {/* Manage Plan Drawer */}
             <Drawer
@@ -4153,9 +4168,11 @@ export default function Settings() {
                 </div>
               </div>
             </Drawer>
+          </div>
+        )}
 
-            {/* Billing Payments */}
-            {activeTab === "payments" && (
+          {/* Sub-tab 2: Payments */}
+          {billingSubTab === "payments" && (
               <div className="space-y-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
@@ -4379,8 +4396,8 @@ export default function Settings() {
               </div>
             )}
 
-            {/* Credit Usage Tab */}
-            {activeTab === "credit-usage" && (
+            {/* Sub-tab 3: Credit Usage */}
+            {billingSubTab === "credit-usage" && (
               <div className="space-y-0">
                 {/* Page Header */}
                 <div className="mb-4">
@@ -5315,6 +5332,8 @@ export default function Settings() {
                 )}
               </div>
             )}
+          </div>
+        )}
 
 
             {/* AI Voices / Models Tab */}
@@ -7221,7 +7240,6 @@ export default function Settings() {
               </div>
             )}
           </div>
-        </div>
 
         {/* Edit Organization Modal */}
         <Modal

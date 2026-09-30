@@ -1,8 +1,17 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { useNavigate } from "react-router";
+import { createContext, useContext, useState, ReactNode } from "react";
+import type { Role } from "../config/navigation";
+
+interface UserData {
+  name: string;
+  email: string;
+  role: Role;
+}
 
 interface AuthContextType {
   isAuthenticated: boolean;
+  user: UserData | null;
+  role: Role;
+  setRole: (role: Role) => void;
   login: () => void;
   logout: () => void;
 }
@@ -15,14 +24,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return localStorage.getItem("auth_token") !== null;
   });
 
+  const [role, setRoleState] = useState<Role>(() => {
+    return (localStorage.getItem("user_role") as Role) || "SystemAdmin";
+  });
+
+  const [user, setUser] = useState<UserData | null>(() => {
+    const raw = localStorage.getItem("user_data");
+    if (raw) {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        // fallback
+      }
+    }
+    return {
+      name: "Admin User",
+      email: "admin@mantrahealth.com",
+      role: (localStorage.getItem("user_role") as Role) || "SystemAdmin",
+    };
+  });
+
+  const setRole = (newRole: Role) => {
+    localStorage.setItem("user_role", newRole);
+    setRoleState(newRole);
+    setUser((prev) => (prev ? { ...prev, role: newRole } : { name: "User", email: "user@mantrahealth.com", role: newRole }));
+  };
+
   const login = () => {
-    // Set authentication token (in a real app, this would come from API)
     localStorage.setItem("auth_token", "dummy_token");
     setIsAuthenticated(true);
   };
 
   const logout = () => {
-    // Clear all authentication data
     localStorage.removeItem("auth_token");
     localStorage.removeItem("user_data");
     sessionStorage.clear();
@@ -30,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, role, setRole, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

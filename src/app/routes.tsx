@@ -2,6 +2,7 @@ import { createBrowserRouter } from "react-router";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import MainLayout from "./components/layout/MainLayout";
 import AdminLayout from "./components/layout/AdminLayout";
+import SettingsGuard from "./components/auth/SettingsGuard";
 import Overview from "./pages/Overview";
 import Clients from "./pages/Clients";
 import ClientProfile from "./pages/ClientProfile";
@@ -79,8 +80,15 @@ export const router = createBrowserRouter([
           { path: "claims", Component: Claims },
           { path: "reports", Component: Reports },
           { path: "transactions", Component: Transactions },
-          { path: "settings", Component: Settings },
-          { path: "settings/team/:id", Component: ManageTeamMember },
+          {
+            Component: SettingsGuard,
+            children: [
+              { path: "settings", Component: Settings },
+              { path: "settings/:tab", Component: Settings },
+              { path: "settings/billing/:subtab", Component: Settings },
+              { path: "settings/team/:id", Component: ManageTeamMember },
+            ],
+          },
           { path: "services", Component: Services },
           { path: "appointments", Component: Appointments },
           { path: "chats", Component: Chats },
