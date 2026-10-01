@@ -145,299 +145,371 @@ export default function Claims() {
     }
   };
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+
+  const totalPages = Math.max(1, Math.ceil(filteredClaims.length / rowsPerPage));
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = Math.min(startIndex + rowsPerPage, filteredClaims.length);
+  const paginatedClaims = filteredClaims.slice(startIndex, endIndex);
+
   return (
-    <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
-      {/* Top Header */}
-      <PageHeader
-        title="Insurance & Claims"
-        subtitle="End-to-end RCM: Auto-link appointments, CPT codes, and AI Scribe ICD-10 notes into electronic 837P claims and CMS-1500 forms."
-        badge={
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
-            RCM Clearinghouse
-          </span>
-        }
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
+        {/* Top Header */}
+        <PageHeader
+          title="Insurance & Claims"
+          subtitle="End-to-end RCM: Auto-link appointments, CPT codes, and AI Scribe ICD-10 notes into electronic 837P claims and CMS-1500 forms."
+        />
+
+        {/* Filter and Search Bar — Unified Top Toolbar */}
+        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs space-y-2.5">
+          {/* Tabs row */}
+          <div className="flex items-center justify-between flex-wrap gap-2 border-b border-border/60 pb-2">
+            <div className="flex items-center gap-1 flex-wrap">
+              {[
+                { id: "all", label: "All Claims", count: claims.length },
+                { id: "ready", label: "Ready to Submit", count: stats.readyCount },
+                { id: "submitted", label: "Submitted & Review", count: stats.submittedCount },
+                { id: "paid", label: "Paid", count: stats.paidCount },
+                { id: "draft", label: "Drafts", count: stats.draftCount },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedStatusTab(tab.id);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    selectedStatusTab === tab.id
+                      ? "bg-[#1E293B] text-white shadow-xs"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                      selectedStatusTab === tab.id ? "bg-slate-700 text-slate-200" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Payer Filter dropdown */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>Filter Payer:</span>
+              <select
+                value={selectedPayerFilter}
+                onChange={(e) => {
+                  setSelectedPayerFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-[32px] text-xs px-2 py-0.5 border border-input rounded-lg bg-input-background text-foreground focus:outline-none cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="all">All Payers</option>
+                {uniquePayers.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Search row with Action Button */}
+          <div className="flex items-center gap-2 flex-wrap justify-between">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Search by Claim #, Patient Name, Insurance Payer, ICD-10 or CPT code..."
+                className="w-full h-[36px] pl-9 pr-3 bg-input-background border border-input rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              />
+            </div>
+
+            <button
+              type="button"
               onClick={() => {
                 setEditingClaim(null);
                 setIsCreateDrawerOpen(true);
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-xs cursor-pointer text-xs"
+              className="h-[36px] px-3.5 bg-[#1E293B] hover:bg-black text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
+              style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              <Plus className="w-3.5 h-3.5" />
-              Create Claim
-            </Button>
-          </div>
-        }
-      />
-
-      {/* Filter and Search Bar */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-2.5 shadow-xs space-y-2">
-        {/* Tabs */}
-        <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-100 pb-2">
-          <div className="flex items-center gap-1 flex-wrap">
-            {[
-              { id: "all", label: "All Claims", count: claims.length },
-              { id: "ready", label: "Ready to Submit", count: stats.readyCount },
-              { id: "submitted", label: "Submitted & Review", count: stats.submittedCount },
-              { id: "paid", label: "Paid", count: stats.paidCount },
-              { id: "draft", label: "Drafts", count: stats.draftCount },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setSelectedStatusTab(tab.id)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${selectedStatusTab === tab.id
-                    ? "bg-slate-900 text-white shadow-xs"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-              >
-                <span>{tab.label}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedStatusTab === tab.id ? "bg-slate-700 text-slate-200" : "bg-slate-200/70 text-slate-600"
-                    }`}
-                >
-                  {tab.count}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {/* Payer Filter dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">Filter Payer:</span>
-            <select
-              value={selectedPayerFilter}
-              onChange={(e) => setSelectedPayerFilter(e.target.value)}
-              className="text-xs px-2 py-1 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 focus:outline-none focus:border-blue-500 cursor-pointer"
-            >
-              <option value="all">All Payers</option>
-              {uniquePayers.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Search row */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by Claim #, Patient Name, Insurance Payer, ICD-10 or CPT code..."
-              className="w-full pl-8 pr-3 py-1 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all"
-            />
-          </div>
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery("")}
-              className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1 cursor-pointer"
-            >
-              Clear
+              <Plus className="w-4 h-4" />
+              <span>Create Claim</span>
             </button>
-          )}
+          </div>
         </div>
-      </div>
 
-      {/* Claims Table Card */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-700/80 bg-[#181e25] select-none" style={{ height: "30px" }}>
-                {/* CLIENT Column */}
-                <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                  CLIENT
-                </th>
+        {/* Claims Table Card with Dark Thead */}
+        <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-[#1E293B] text-white">
+                <tr className="h-[34px] select-none">
+                  {/* CLIENT Column */}
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                    CLIENT
+                  </th>
 
-                {/* CLAIM ID Column */}
-                <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                  CLAIM ID
-                </th>
+                  {/* CLAIM ID Column */}
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                    CLAIM ID
+                  </th>
 
-                {/* INSURANCE PAYER Column */}
-                <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                  INSURANCE PAYER
-                </th>
+                  {/* INSURANCE PAYER Column */}
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                    INSURANCE PAYER
+                  </th>
 
-                {/* STAGE Column (Dedicated Column) */}
-                <th className="px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                  <div className="flex items-center justify-center gap-1">
-                    STAGE
-                    <InfoTooltip text="Claim lifecycle: Draft → Ready to Submit → Submitted → Under Review → Accepted → Paid. Click to change stage." />
-                  </div>
-                </th>
+                  {/* STAGE Column */}
+                  <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                    <div className="flex items-center justify-center gap-1">
+                      STAGE
+                      <InfoTooltip text="Claim lifecycle: Draft → Ready to Submit → Submitted → Under Review → Accepted → Paid. Click to change stage." />
+                    </div>
+                  </th>
 
-                {/* STATUS Column */}
-                <th className="px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                  STATUS
-                </th>
+                  {/* STATUS Column */}
+                  <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                    STATUS
+                  </th>
 
-                {/* SERVICE DATE Column */}
-                <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                  SERVICE DATE
-                </th>
+                  {/* SERVICE DATE Column */}
+                  <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                    SERVICE DATE
+                  </th>
 
-                {/* BILLED AMOUNT Column */}
-                <th className="px-3 py-1 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                  BILLED AMOUNT
-                </th>
+                  {/* BILLED AMOUNT Column */}
+                  <th className="px-3 py-1.5 text-right text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                    BILLED AMOUNT
+                  </th>
 
-                {/* ACTIONS Column */}
-                <th className="px-3 py-1 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                  ACTIONS
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredClaims.length > 0 ? (
-                filteredClaims.map((claim) => (
-                  <tr key={claim.id} className="h-[30px] hover:bg-slate-50/60 transition-colors">
-                    {/* Client Name in blue link style */}
-                    <td className="px-3 py-1 whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => handleEditClaim(claim)}
-                        className="font-semibold text-[#1456f0] hover:underline text-xs cursor-pointer text-left"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        {claim.patientName}
-                      </button>
-                    </td>
-
-                    {/* Claim ID */}
-                    <td className="px-3 py-1 whitespace-nowrap font-mono font-bold text-slate-800 text-xs">
-                      {claim.claimNumber}
-                    </td>
-
-                    {/* Insurance Payer */}
-                    <td className="px-3 py-1 whitespace-nowrap">
-                      <span className="font-medium text-slate-700 text-xs truncate max-w-[180px] block" title={claim.payer.name} style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {claim.payer.name}
-                      </span>
-                    </td>
-
-                    {/* STAGE (Dedicated Column with Visual Progress Bar) */}
-                    <td className="px-3 py-1 text-center whitespace-nowrap">
-                      <div className="flex items-center justify-center">
-                        <ClaimProgressBar
-                          status={claim.status}
-                          onStatusChange={(newSt) => handleStatusChange(claim.id, newSt)}
-                          interactive={true}
-                          claimId={claim.id}
-                        />
-                      </div>
-                    </td>
-
-                    {/* STATUS Column */}
-                    <td className="px-3 py-1 text-center whitespace-nowrap">
-                      {getStatusBadge(claim.status)}
-                    </td>
-
-                    {/* Service Date */}
-                    <td className="px-3 py-1 whitespace-nowrap">
-                      <span className="text-slate-600 font-medium text-xs font-mono">
-                        {claim.serviceDate}
-                      </span>
-                    </td>
-
-                    {/* Billed Amount */}
-                    <td className="px-3 py-1 text-right whitespace-nowrap">
-                      <span className="font-mono font-bold text-slate-900 text-xs">
-                        ${claim.totalCharge.toFixed(2)}
-                      </span>
-                    </td>
-
-                    {/* Actions: All 3 styled as unified icon action buttons */}
-                    <td className="px-3 py-1 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1">
-                        {/* 1. Edit Action Icon Button */}
+                  {/* ACTIONS Column */}
+                  <th className="px-3 py-1.5 text-right text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                    ACTIONS
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {paginatedClaims.length > 0 ? (
+                  paginatedClaims.map((claim) => (
+                    <tr key={claim.id} className="h-[32px] hover:bg-slate-50/60 transition-colors">
+                      {/* Client Name in blue link style */}
+                      <td className="px-3 py-1 whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => handleEditClaim(claim)}
-                          className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded inline-flex items-center justify-center transition-colors cursor-pointer"
-                          title="Edit Claim"
-                          aria-label="Edit Claim"
+                          className="font-semibold text-[#1456f0] hover:underline text-xs cursor-pointer text-left"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
                         >
-                          <Pencil className="w-3.5 h-3.5" />
+                          {claim.patientName}
                         </button>
+                      </td>
 
-                        {/* 2. Submit or View Transmission Status Icon Button */}
-                        {["Ready to Submit", "Draft"].includes(claim.status) ? (
+                      {/* Claim ID */}
+                      <td className="px-3 py-1 whitespace-nowrap font-mono font-bold text-slate-800 text-xs">
+                        {claim.claimNumber}
+                      </td>
+
+                      {/* Insurance Payer */}
+                      <td className="px-3 py-1 whitespace-nowrap">
+                        <span className="font-medium text-slate-700 text-xs truncate max-w-[180px] block" title={claim.payer.name} style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {claim.payer.name}
+                        </span>
+                      </td>
+
+                      {/* STAGE (Dedicated Column with Visual Progress Bar) */}
+                      <td className="px-3 py-1 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center">
+                          <ClaimProgressBar
+                            status={claim.status}
+                            onStatusChange={(newSt) => handleStatusChange(claim.id, newSt)}
+                            interactive={true}
+                            claimId={claim.id}
+                          />
+                        </div>
+                      </td>
+
+                      {/* STATUS Column */}
+                      <td className="px-3 py-1 text-center whitespace-nowrap">
+                        {getStatusBadge(claim.status)}
+                      </td>
+
+                      {/* Service Date */}
+                      <td className="px-3 py-1 whitespace-nowrap">
+                        <span className="text-slate-600 font-medium text-xs font-mono">
+                          {claim.serviceDate}
+                        </span>
+                      </td>
+
+                      {/* Billed Amount */}
+                      <td className="px-3 py-1 text-right whitespace-nowrap">
+                        <span className="font-mono font-bold text-slate-900 text-xs">
+                          ${claim.totalCharge.toFixed(2)}
+                        </span>
+                      </td>
+
+                      {/* Actions: All 3 styled as unified icon action buttons */}
+                      <td className="px-3 py-1 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
+                          {/* 1. Edit Action Icon Button */}
                           <button
                             type="button"
-                            onClick={() => setActiveSubmissionClaim(claim)}
-                            className="p-1 rounded inline-flex items-center justify-center transition-colors cursor-pointer border text-blue-600 hover:text-blue-700 bg-blue-50/70 hover:bg-blue-100 border-blue-200"
-                            title="Submit Electronic Claim (EDI 837P)"
-                            aria-label="Submit Electronic Claim"
+                            onClick={() => handleEditClaim(claim)}
+                            className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded inline-flex items-center justify-center transition-colors cursor-pointer"
+                            title="Edit Claim"
+                            aria-label="Edit Claim"
                           >
-                            <Send className="w-3.5 h-3.5" />
+                            <Pencil className="w-3.5 h-3.5" />
                           </button>
-                        ) : (
+
+                          {/* 2. Submit or View Transmission Status Icon Button */}
+                          {["Ready to Submit", "Draft"].includes(claim.status) ? (
+                            <button
+                              type="button"
+                              onClick={() => setActiveSubmissionClaim(claim)}
+                              className="p-1 rounded inline-flex items-center justify-center transition-colors cursor-pointer border text-blue-600 hover:text-blue-700 bg-blue-50/70 hover:bg-blue-100 border-blue-200"
+                              title="Submit Electronic Claim (EDI 837P)"
+                              aria-label="Submit Electronic Claim"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setActiveStatusClaim(claim)}
+                              className="p-1 rounded inline-flex items-center justify-center transition-colors cursor-pointer border text-indigo-600 hover:text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 border-indigo-200"
+                              title="View Clearinghouse Transmission & Gateway Status"
+                              aria-label="View Transmission Status"
+                            >
+                              <FileCheck className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          {/* 3. View CMS-1500 Eye Icon Button */}
                           <button
                             type="button"
-                            onClick={() => setActiveStatusClaim(claim)}
-                            className="p-1 rounded inline-flex items-center justify-center transition-colors cursor-pointer border text-indigo-600 hover:text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 border-indigo-200"
-                            title="View Clearinghouse Transmission & Gateway Status"
-                            aria-label="View Transmission Status"
+                            onClick={() => setActiveCMS1500Claim(claim)}
+                            className="p-1 text-slate-600 hover:text-red-600 hover:bg-red-50/60 border border-slate-200 hover:border-red-200 rounded inline-flex items-center justify-center transition-colors cursor-pointer"
+                            title="View CMS-1500 Form"
+                            aria-label="View CMS-1500 Form"
                           >
-                            <FileCheck className="w-3.5 h-3.5" />
+                            <Eye className="w-3.5 h-3.5" />
                           </button>
-                        )}
-
-                        {/* 3. View CMS-1500 Eye Icon Button */}
-                        <button
-                          type="button"
-                          onClick={() => setActiveCMS1500Claim(claim)}
-                          className="p-1 text-slate-600 hover:text-red-600 hover:bg-red-50/60 border border-slate-200 hover:border-red-200 rounded inline-flex items-center justify-center transition-colors cursor-pointer"
-                          title="View CMS-1500 Form"
-                          aria-label="View CMS-1500 Form"
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                      <Shield className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                      <p className="font-semibold text-slate-600">No insurance claims found</p>
+                      <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                        {searchQuery
+                          ? `No claims match "${searchQuery}". Try clearing search filters.`
+                          : "Create your first claim linking booked appointments, service CPT codes, and AI Scribe diagnosis."}
+                      </p>
+                      <div className="mt-4">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => {
+                            setEditingClaim(null);
+                            setIsCreateDrawerOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 text-xs bg-blue-600 text-white cursor-pointer"
                         >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
+                          <Plus className="w-3.5 h-3.5" />
+                          Create Claim
+                        </Button>
                       </div>
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    <Shield className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                    <p className="font-semibold text-slate-600">No insurance claims found</p>
-                    <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                      {searchQuery
-                        ? `No claims match "${searchQuery}". Try clearing search filters.`
-                        : "Create your first claim linking booked appointments, service CPT codes, and AI Scribe diagnosis."}
-                    </p>
-                    <div className="mt-4">
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => {
-                          setEditingClaim(null);
-                          setIsCreateDrawerOpen(true);
-                        }}
-                        className="inline-flex items-center gap-1.5 text-xs bg-blue-600 text-white cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Create Claim
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Standard Pagination Footer (matching Clients.tsx) */}
+          <div className="px-4 py-2 border-t border-border bg-white flex items-center justify-between text-xs text-muted-foreground select-none">
+            <div className="flex items-center gap-2">
+              <span>Rows per page:</span>
+              <select
+                value={rowsPerPage}
+                onChange={(e) => {
+                  setRowsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="border border-input rounded px-2 py-0.5 bg-input-background text-xs cursor-pointer focus:outline-none"
+              >
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span className="ml-2">
+                Showing {filteredClaims.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredClaims.length}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                title="First page"
+              >
+                <span className="text-xs">«</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                title="Previous page"
+              >
+                <span className="text-xs">‹</span>
+              </button>
+              <span className="px-2 font-medium text-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                title="Next page"
+              >
+                <span className="text-xs">›</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                title="Last page"
+              >
+                <span className="text-xs">»</span>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
 
       {/* Create / Edit Claim Drawer */}
       <CreateClaimDrawer
@@ -472,12 +544,13 @@ export default function Claims() {
         onOpenCMS1500={(c) => setActiveCMS1500Claim(c)}
       />
 
-      {/* CMS-1500 Form Modal */}
-      <CMS1500Modal
-        claim={activeCMS1500Claim}
-        isOpen={!!activeCMS1500Claim}
-        onClose={() => setActiveCMS1500Claim(null)}
-      />
+        {/* CMS-1500 Form Modal */}
+        <CMS1500Modal
+          claim={activeCMS1500Claim}
+          isOpen={!!activeCMS1500Claim}
+          onClose={() => setActiveCMS1500Claim(null)}
+        />
+      </div>
     </div>
   );
 }

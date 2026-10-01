@@ -2180,23 +2180,36 @@ export default function Clients() {
                 )}
               </div>
 
-              <Tooltip text="Add Client">
-                <Button variant="primary" onClick={() => setShowAddModal(true)}>
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </Tooltip>
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                className="h-[36px] px-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-border rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              >
+                <Upload className="w-3.5 h-3.5 text-slate-500" />
+                <span>Import</span>
+              </button>
 
-              <Tooltip text="Import">
-                <Button variant="outline" onClick={() => setShowImportModal(true)}>
-                  <Upload className="w-4 h-4" />
-                </Button>
-              </Tooltip>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={isExporting}
+                className="h-[36px] px-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-border rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0 disabled:opacity-60"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+                <span>{isExporting ? "Exporting..." : "Export"}</span>
+              </button>
 
-              <Tooltip text="Export">
-                <Button variant="outline" onClick={handleExport} loading={isExporting}>
-                  <Download className="w-4 h-4" />
-                </Button>
-              </Tooltip>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="h-[36px] px-4 bg-[#1E293B] hover:bg-black text-white rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Client</span>
+              </button>
             </div>
           </div>
 

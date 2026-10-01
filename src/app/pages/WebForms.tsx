@@ -17,6 +17,7 @@ import { useClientFields } from "../context/ClientFieldsContext";
 import { appendClientSubmission } from "../../data/submissionsStore";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
+import PageHeader from "../components/layout/PageHeader";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -276,6 +277,9 @@ function SubmissionsTab({ submissions, forms, onViewSubmission }: {
   const [subSearch, setSubSearch] = useState("");
   const [subFormFilter, setSubFormFilter] = useState("all");
   const [subStatusFilter, setSubStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+
   const formName = (id: number) => forms.find(f => f.id === id)?.name ?? "Unknown";
 
   const filteredSubs = submissions.filter(sub => {
@@ -287,116 +291,203 @@ function SubmissionsTab({ submissions, forms, onViewSubmission }: {
     return matchesSearch && matchesForm && matchesStatus;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredSubs.length / rowsPerPage));
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = Math.min(startIndex + rowsPerPage, filteredSubs.length);
+  const paginatedSubs = filteredSubs.slice(startIndex, endIndex);
+
   return (
     <>
-      {/* Filter bar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search submissions…"
-            value={subSearch}
-            onChange={e => setSubSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          />
-        </div>
-        <div className="shrink-0">
-          <select value={subFormFilter} onChange={e => setSubFormFilter(e.target.value)} className={SELECT_STYLE} style={SELECT_INLINE}>
-            <option value="all">All Forms</option>
-            <optgroup label="Standard">
-              <option value="1">Contact Us</option>
-              <option value="2">Book a Demo</option>
-              <option value="3">Support Request</option>
-              <option value="4">Newsletter Signup</option>
-            </optgroup>
-            <optgroup label="Meta Ads">
-              <option value="10">Healthcare Campaign Form</option>
-              <option value="11">Free Consultation Ad</option>
-            </optgroup>
-          </select>
-        </div>
-        <div className="shrink-0">
-          <select value={subStatusFilter} onChange={e => setSubStatusFilter(e.target.value)} className={SELECT_STYLE} style={SELECT_INLINE}>
-            <option value="all">Filter</option>
-            <option value="completed">Completed</option>
-            <option value="sent">Sent</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
-          </select>
+      {/* Unified Action / Filter Toolbar */}
+      <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search submissions…"
+              value={subSearch}
+              onChange={e => {
+                setSubSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full h-[36px] bg-input-background border border-input rounded-lg pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={subFormFilter}
+              onChange={e => {
+                setSubFormFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <option value="all">All Forms</option>
+              <optgroup label="Standard">
+                <option value="1">Contact Us</option>
+                <option value="2">Book a Demo</option>
+                <option value="3">Support Request</option>
+                <option value="4">Newsletter Signup</option>
+              </optgroup>
+              <optgroup label="Meta Ads">
+                <option value="10">Healthcare Campaign Form</option>
+                <option value="11">Free Consultation Ad</option>
+              </optgroup>
+            </select>
+
+            <select
+              value={subStatusFilter}
+              onChange={e => {
+                setSubStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <option value="all">All Statuses</option>
+              <option value="completed">Completed</option>
+              <option value="sent">Sent</option>
+              <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-border shadow-2xs overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-gray-50" style={{ height: "30px" }}>
-              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Name</th>
-              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Email</th>
-              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Form</th>
-              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Date submitted</th>
-              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
-              <th className="text-right px-3 py-1 text-[11px] font-semibold uppercase tracking-wide"
-                style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredSubs.map((sub, i) => (
-              <tr
-                key={sub.id}
-                className={`h-[30px] transition-colors hover:bg-gray-50/60 ${sub.status === "sent" ? "bg-gray-50/60 grayscale-[30%]" : ""
-                  } ${i < filteredSubs.length - 1 ? "border-b border-border" : ""}`}
-              >
-                <td className="px-3 py-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-medium" style={{ color: sub.status === "sent" ? "#94A3B8" : "#020817" }}>{sub.name}</span>
-                    {!sub.clientId && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full bg-amber-50 border border-amber-200 text-[10px] font-medium text-amber-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        No client
-                      </span>
-                    )}
-                  </div>
-                </td>
-
-                <td className="px-3 py-1 text-xs" style={{ fontFamily: "Outfit, sans-serif", color: sub.status === "sent" ? "#94A3B8" : "#64748B" }}>
-                  {sub.email}
-                </td>
-                <td className="px-3 py-1">
-                  <div className="flex items-center gap-1 flex-wrap">
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 text-[11px] font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                      {formName(sub.formId)}
-                    </span>
-                  </div>
-                </td>
-
-                <td className="px-3 py-1 text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-                  {sub.date}
-                </td>
-                <td className="px-3 py-1">
-                  <SubStatusBadge status={sub.status} />
-                </td>
-                <td className="px-3 py-1 text-right">
-                  <button
-                    onClick={() => onViewSubmission(sub)}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded border border-border hover:bg-gray-50 transition-colors"
-                    style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
-                  >
-                    View
-                    <ChevronRight className="w-3 h-3" />
-                  </button>
-                </td>
+      <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-[#1E293B] text-white">
+              <tr className="h-[34px]">
+                <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Name</th>
+                <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Email</th>
+                <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Form</th>
+                <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Date submitted</th>
+                <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Status</th>
+                <th className="text-right px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-border text-xs">
+              {paginatedSubs.map((sub) => (
+                <tr
+                  key={sub.id}
+                  className={`h-[32px] transition-colors hover:bg-slate-50/80 ${sub.status === "sent" ? "bg-slate-50/40" : ""}`}
+                >
+                  <td className="px-3 py-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-medium" style={{ color: sub.status === "sent" ? "#94A3B8" : "#020817" }}>{sub.name}</span>
+                      {!sub.clientId && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full bg-amber-50 border border-amber-200 text-[10px] font-medium text-amber-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          No client
+                        </span>
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="px-3 py-1 text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {sub.email}
+                  </td>
+                  <td className="px-3 py-1">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-[11px] font-medium text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {formName(sub.formId)}
+                      </span>
+                    </div>
+                  </td>
+
+                  <td className="px-3 py-1 text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {sub.date}
+                  </td>
+                  <td className="px-3 py-1">
+                    <SubStatusBadge status={sub.status} />
+                  </td>
+                  <td className="px-3 py-1 text-right">
+                    <button
+                      onClick={() => onViewSubmission(sub)}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded border border-border hover:bg-slate-100 transition-colors cursor-pointer"
+                      style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+                    >
+                      View
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         {filteredSubs.length === 0 && (
-          <div className="py-16 text-center">
-            <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>No submissions found.</p>
+          <div className="py-12 text-center text-xs text-muted-foreground">
+            No submissions found.
           </div>
         )}
+
+        {/* Standard Pagination Footer (matching Clients.tsx) */}
+        <div className="px-4 py-2 border-t border-border bg-white flex items-center justify-between text-xs text-muted-foreground select-none">
+          <div className="flex items-center gap-2">
+            <span>Rows per page:</span>
+            <select
+              value={rowsPerPage}
+              onChange={(e) => {
+                setRowsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="border border-input rounded px-2 py-0.5 bg-input-background text-xs cursor-pointer focus:outline-none"
+            >
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <span className="ml-2">
+              Showing {filteredSubs.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredSubs.length}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+              title="First page"
+            >
+              <span className="text-xs">«</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+              title="Previous page"
+            >
+              <span className="text-xs">‹</span>
+            </button>
+            <span className="px-2 font-medium text-foreground">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+              title="Next page"
+            >
+              <span className="text-xs">›</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+              title="Last page"
+            >
+              <span className="text-xs">»</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <SubmissionDrawer
@@ -1458,31 +1549,26 @@ export default function WebForms() {
   const isPreviewStepValid = () => true;
 
   return (
-    <div className="h-full overflow-auto">
-      <div className="max-w-7xl mx-auto p-3 sm:p-4 space-y-2.5">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold mb-0.5" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
-              Web Forms
-            </h1>
-            <p className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-              Collect leads from your website and turn every submission into a client automatically
-            </p>
-          </div>
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
+        {/* Top Header */}
+        <PageHeader
+          title="Web Forms"
+          subtitle="Collect leads from your website and turn every submission into a client automatically"
+        >
           <div className="flex items-center gap-2 shrink-0">
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Web Forms Works" />
             <Button
               variant="primary"
               onClick={() => navigate("/web-forms/new")}
-              className="flex items-center gap-1.5 bg-black hover:bg-black/90 text-white px-3 py-1.5 rounded-lg text-xs font-semibold"
-              style={{ fontFamily: "DM Sans, sans-serif" }}
+              className="flex items-center gap-1.5 bg-[#1E293B] hover:bg-black text-white px-3.5 h-[36px] rounded-lg text-xs font-semibold"
+              style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-4 h-4" />
               New form
             </Button>
           </div>
-        </div>
+        </PageHeader>
 
         {/* Stats Cards — thin capsule style */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -1557,62 +1643,62 @@ export default function WebForms() {
             {/* ── Forms sub-tab ── */}
             {formsSubTab === "forms" && (
               <div className="space-y-4">
-
-
-                {/* Filter bar */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="relative flex-1 min-w-[200px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <input
-                      type="text"
-                      placeholder="Search forms…"
-                      value={formSearch}
-                      onChange={e => setFormSearch(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    />
-                  </div>
-                  {/* Type segmented control */}
-                  <div className="inline-flex border border-border rounded-lg overflow-hidden shrink-0">
-                    {(["all", "standard", "intake", "meta-ads"] as const).map(t => (
-                      <button
-                        key={t}
-                        onClick={() => setTypeFilter(t)}
-                        className={`px-3 py-2 text-xs font-medium transition-colors ${typeFilter === t ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
-                          }`}
+                {/* Unified Filter bar */}
+                <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="relative flex-1 min-w-[200px]">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Search forms…"
+                        value={formSearch}
+                        onChange={e => setFormSearch(e.target.value)}
+                        className="w-full h-[36px] bg-input-background border border-input rounded-lg pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
                         style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        {t === "all" ? "All Types" : t === "standard" ? "Standard" : t === "intake" ? "Intake" : "Meta Ads"}
-                      </button>
-                    ))}
+                      />
+                    </div>
+                    {/* Type segmented control */}
+                    <div className="inline-flex border border-border rounded-lg overflow-hidden shrink-0">
+                      {(["all", "standard", "intake", "meta-ads"] as const).map(t => (
+                        <button
+                          key={t}
+                          onClick={() => setTypeFilter(t)}
+                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${typeFilter === t ? "bg-[#1E293B] text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
+                            }`}
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {t === "all" ? "All Types" : t === "standard" ? "Standard" : t === "intake" ? "Intake" : "Meta Ads"}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                {/* Forms table */}
-                <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-white/80 shadow-2xs overflow-hidden">
+                {/* Forms table with Dark Thead */}
+                <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden">
                   <table className="w-full">
-                    <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                      <tr style={{ height: "30px" }}>
-                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    <thead className="bg-[#1E293B] text-white">
+                      <tr className="h-[34px]">
+                        <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                           <button className="flex items-center gap-1 hover:text-blue-300 transition-colors" onClick={() => handleSortCol("name")}>
                             Title {sortCol === "name" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
                           </button>
                         </th>
-                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Type</th>
-                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Status</th>
-                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Type</th>
+                        <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Status</th>
+                        <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                           <button className="flex items-center gap-1 hover:text-blue-300 transition-colors" onClick={() => handleSortCol("submissions")}>
                             Submissions {sortCol === "submissions" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
                           </button>
                         </th>
-                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Created By</th>
-                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Created By</th>
+                        <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                           <button className="flex items-center gap-1 hover:text-blue-300 transition-colors" onClick={() => handleSortCol("lastUpdated")}>
                             Last Updated {sortCol === "lastUpdated" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
                           </button>
                         </th>
-                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Enabled</th>
-                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-right" style={{ fontFamily: "Outfit, sans-serif" }}>Actions</th>
+                        <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Enabled</th>
+                        <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-right" style={{ fontFamily: "Outfit, sans-serif" }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>

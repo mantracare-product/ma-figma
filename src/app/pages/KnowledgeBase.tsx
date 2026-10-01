@@ -1173,7 +1173,7 @@ const SEED_SOURCES: GlobalKnowledgeSource[] = [
   },
 ];
 
-const PAGE_SIZES = [10, 25, 50] as const;
+const PAGE_SIZES = [20, 50, 100] as const;
 type PageSizeValue = (typeof PAGE_SIZES)[number];
 
 const TABLE_HEADERS = ["Actions", "Name", "Type", "Scope", "Tags", "Status", "Created"];
@@ -1191,7 +1191,7 @@ export default function KnowledgeBase() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSizeValue>(10);
+  const [pageSize, setPageSize] = useState<PageSizeValue>(20);
 
   // Derived list
   const filtered = useMemo(() => {
@@ -1431,86 +1431,35 @@ export default function KnowledgeBase() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         
         {/* ── Page Header ── */}
         <PageHeader
           title="Knowledge Base"
           subtitle="Give your AI reference material, scoped to the exact processes and stages where it should be used."
-          badge={
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
-              AI Context
-            </span>
-          }
         >
           <HowItWorksButton onClick={() => setShowHelp(true)} label="How Knowledge Base Works" />
         </PageHeader>
 
-        {/* ── Action Toolbar (Two Rows) ── */}
-        <div className="space-y-3">
-          {/* Row 1: Search + Create button */}
-          <div className="bg-card rounded-xl p-4 border border-border shadow-sm flex flex-wrap items-center justify-between gap-3">
-            <div className="relative flex-1 min-w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none z-10" />
-              <input
-                id="kb-search-input"
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-                placeholder="Search sources…"
-                className="w-full h-[44px] pl-10 pr-4 bg-input-background border border-input rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-all"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              />
-            </div>
-
-            <Tooltip text="Create a new Knowledge Base">
-              <Button
-                id="kb-create-btn"
-                variant="primary"
-                onClick={() => {
-                  setEditingSource(null);
-                  setPrefillProcessId(null);
-                  setCreateOpen(true);
-                }}
-                className="h-10 ml-auto"
-              >
-                <Plus className="w-4 h-4" />
-                Create Knowledge Base
-              </Button>
-            </Tooltip>
+        {/* ── Action Toolbar (Single Unified Row matching Clients.tsx / Deals.tsx) ── */}
+        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+          {/* Search Input */}
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              id="kb-search-input"
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              placeholder="Search sources…"
+              className="w-full h-[36px] pl-9 pr-3 bg-input-background border border-input rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            />
           </div>
 
-          {/* Row 2: View toggle + Filter tabs */}
-          <div className="flex items-center gap-3 bg-white border border-border rounded-xl px-4 py-2.5 shadow-sm justify-start">
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 flex-shrink-0">
-              <Tooltip text="List view">
-                <button
-                  id="kb-view-list"
-                  onClick={() => setViewMode("list")}
-                  className={`h-8 w-8 rounded-md flex items-center justify-center transition-all ${
-                    viewMode === "list"
-                      ? "bg-white text-blue-600 shadow-xs"
-                      : "bg-transparent text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  <List className={`w-4 h-4 ${viewMode === "list" ? "text-blue-600" : "text-gray-500"}`} />
-                </button>
-              </Tooltip>
-              <Tooltip text="Grid view">
-                <button
-                  id="kb-view-grid"
-                  onClick={() => setViewMode("grid")}
-                  className={`h-8 w-8 rounded-md flex items-center justify-center transition-all ${
-                    viewMode === "grid"
-                      ? "bg-white text-blue-600 shadow-xs"
-                      : "bg-transparent text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  <LayoutGrid className={`w-4 h-4 ${viewMode === "grid" ? "text-blue-600" : "text-gray-500"}`} />
-                </button>
-              </Tooltip>
-            </div>
-
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 flex-wrap">
+          {/* Filter Tabs & View Mode & Primary Action */}
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {/* Filter Tabs Pill */}
+            <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-lg">
               {filterTabs.map((tab) => {
                 const active = activeFilter === tab.key;
                 return (
@@ -1518,19 +1467,56 @@ export default function KnowledgeBase() {
                     key={tab.key}
                     id={`kb-filter-${tab.key}`}
                     onClick={() => handleSetFilter(tab.key)}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-md transition-all animate-in duration-100"
-                    style={{
-                      fontFamily: "DM Sans, sans-serif",
-                      backgroundColor: active ? "#FFFFFF" : "transparent",
-                      color: active ? "#020817" : "#64748B",
-                      boxShadow: active ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-                    }}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                      active ? "bg-white text-[#0F172A] shadow-2xs" : "text-[#64748B] hover:text-[#0F172A]"
+                    }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     {tab.label}
                   </button>
                 );
               })}
             </div>
+
+            {/* List / Grid Switch */}
+            <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-lg">
+              <button
+                id="kb-view-list"
+                onClick={() => setViewMode("list")}
+                className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${
+                  viewMode === "list" ? "bg-white text-blue-600 shadow-2xs" : "text-gray-500 hover:text-gray-900"
+                }`}
+                title="List view"
+              >
+                <List className="w-3.5 h-3.5" />
+              </button>
+              <button
+                id="kb-view-grid"
+                onClick={() => setViewMode("grid")}
+                className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${
+                  viewMode === "grid" ? "bg-white text-blue-600 shadow-2xs" : "text-gray-500 hover:text-gray-900"
+                }`}
+                title="Grid view"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Primary Action Button */}
+            <button
+              id="kb-create-btn"
+              type="button"
+              onClick={() => {
+                setEditingSource(null);
+                setPrefillProcessId(null);
+                setCreateOpen(true);
+              }}
+              className="h-[36px] px-3.5 bg-[#1E293B] hover:bg-black text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Knowledge Base</span>
+            </button>
           </div>
         </div>
 
@@ -1589,7 +1575,7 @@ export default function KnowledgeBase() {
           </div>
         ) : (
           /* List View (Table card matching Clients page) */
-          <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/80 shadow-2xs overflow-hidden relative animate-in fade-in duration-200">
+          <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden relative animate-in fade-in duration-200">
             <div
               ref={tableScrollRef}
               className="overflow-x-auto scrollbar-hide"
@@ -1604,11 +1590,11 @@ export default function KnowledgeBase() {
                 }
               }}
             >
-              <table className="w-full">
-                <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                  <tr>
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-[#1E293B] text-white">
+                  <tr className="h-[34px]">
                     {/* Checkbox Header */}
-                    <th className="px-4 py-2.5 w-10">
+                    <th className="px-3 py-1.5 w-8 text-center">
                       <input
                         type="checkbox"
                         checked={allSelected}
@@ -1622,14 +1608,14 @@ export default function KnowledgeBase() {
                     {TABLE_HEADERS.map((h) => (
                       <th
                         key={h}
-                        className={`px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-white ${
+                        className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-white ${
                           h === "Scope" ? "w-[280px] max-w-[280px]" : ""
-                        } ${h === "Actions" ? "w-16 max-w-16" : ""}`}
+                        } ${h === "Actions" ? "w-10 max-w-10 text-center" : "text-left"}`}
                         style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
                       >
                         {h === "Actions" ? (
                           <div className="flex items-center justify-center">
-                            <Settings className="w-4 h-4 text-white" />
+                            <Settings className="w-3.5 h-3.5 text-white/80" />
                           </div>
                         ) : (
                           h
@@ -1638,11 +1624,11 @@ export default function KnowledgeBase() {
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody className="divide-y divide-border text-xs">
                   {paginated.map((src) => (
                     <tr
                       key={src.id}
-                      className={`transition-colors ${
+                      className={`h-[32px] transition-colors ${
                         selectedRows.has(src.id) ? "bg-[#E8F0FE]" : "hover:bg-[#F1F5F9]"
                       }`}
                     >

@@ -220,11 +220,6 @@ export default function Invoices() {
         <PageHeader
           title="Invoices"
           subtitle="Manage client billing, view automated call-flow invoices, and collect payments"
-          badge={
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
-              Billing Hub
-            </span>
-          }
         >
           <div className="flex items-center gap-2">
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Invoices Works" />
@@ -233,14 +228,14 @@ export default function Invoices() {
                 setPaymentModalInvoice(null);
                 setIsRecordPaymentOpen(true);
               }}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-xs transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+              className="px-3.5 h-[36px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <CreditCard className="w-3.5 h-3.5" /> + Record Payment
             </button>
             <button
               onClick={handleCreateInvoice}
-              className="px-3 py-1.5 bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] text-white rounded-full font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+              className="px-3.5 h-[36px] bg-[#1E293B] hover:bg-black text-white rounded-lg font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <Plus className="w-3.5 h-3.5 text-blue-400" /> Create Invoice
@@ -248,91 +243,95 @@ export default function Invoices() {
           </div>
         </PageHeader>
 
-
-        {/* View Mode Toggle & Filter Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2">
-            {/* View Mode Tabs: List | Kanban */}
-            <div className="inline-flex items-center p-0.5 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
-              <button
-                onClick={() => setViewMode("list")}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
-                  viewMode === "list"
-                    ? "bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white shadow-2xs"
-                    : "text-[#45515e] hover:text-[#222222]"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <List className="w-3 h-3" /> List
-              </button>
-              <button
-                onClick={() => setViewMode("kanban")}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
-                  viewMode === "kanban"
-                    ? "bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white shadow-2xs"
-                    : "text-[#45515e] hover:text-[#222222]"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <LayoutGrid className="w-3 h-3" /> Kanban
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Search Bar */}
-            <div className="relative w-60">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search invoices..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-2.5 py-1 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+        {/* View Mode Toggle & Filter Bar — Unified Toolbar */}
+        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2">
+              {/* View Mode Tabs: List | Kanban */}
+              <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border rounded-lg shadow-2xs">
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
+                    viewMode === "list"
+                      ? "bg-[#1E293B] text-white shadow-2xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <List className="w-3.5 h-3.5" /> List
+                </button>
+                <button
+                  onClick={() => setViewMode("kanban")}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
+                    viewMode === "kanban"
+                      ? "bg-[#1E293B] text-white shadow-2xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" /> Kanban
+                </button>
+              </div>
             </div>
 
-            {/* Status Filter Dropdown */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-2.5 py-1 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white focus:outline-none"
-            >
-              <option value="all">All Statuses</option>
-              <option value="draft">Draft</option>
-              <option value="sent">Sent</option>
-              <option value="viewed">Viewed</option>
-              <option value="partial">Partial</option>
-              <option value="paid">Paid</option>
-              <option value="overdue">Overdue</option>
-              <option value="void">Void</option>
-            </select>
+            <div className="flex flex-wrap items-center gap-2 flex-1 justify-end">
+              {/* Search Bar */}
+              <div className="relative flex-1 min-w-[200px] max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search invoices..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-[36px] pl-9 pr-2.5 bg-input-background border border-input rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                />
+              </div>
 
-            {/* Client Filter Dropdown */}
-            <select
-              value={clientFilter}
-              onChange={(e) => setClientFilter(e.target.value)}
-              className="px-2.5 py-1 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white focus:outline-none max-w-[140px] truncate"
-            >
-              <option value="all">All Clients</option>
-              {allClients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                </option>
-              ))}
-            </select>
+              {/* Status Filter Dropdown */}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="all">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="sent">Sent</option>
+                <option value="viewed">Viewed</option>
+                <option value="partial">Partial</option>
+                <option value="paid">Paid</option>
+                <option value="overdue">Overdue</option>
+                <option value="void">Void</option>
+              </select>
+
+              {/* Client Filter Dropdown */}
+              <select
+                value={clientFilter}
+                onChange={(e) => setClientFilter(e.target.value)}
+                className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none max-w-[150px] truncate cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="all">All Clients</option>
+                {allClients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
-        {/* View Mode: List View (Matching Deals.tsx Table Layout 100%) */}
+        {/* View Mode: List View (Connected seamlessly to Toolbar) */}
         {viewMode === "list" && (
-          <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-white/80 shadow-2xs overflow-hidden">
+          <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
-                <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                  <tr style={{ height: "30px" }}>
+                <thead className="bg-[#1E293B] text-white">
+                  <tr className="h-[34px]">
                     {/* Checkbox Header */}
-                    <th className="px-3 py-1 w-8">
+                    <th className="px-3 py-1.5 w-8 text-center">
                       <input
                         type="checkbox"
                         checked={allSelected}
@@ -340,12 +339,12 @@ export default function Invoices() {
                           if (el) el.indeterminate = someSelected;
                         }}
                         onChange={handleSelectAll}
-                        className="w-3.5 h-3.5 cursor-pointer"
+                        className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
                       />
                     </th>
 
                     {/* Column Toggle Gear Icon Header */}
-                    <th className="px-1 py-1 text-center relative" style={{ width: "28px" }}>
+                    <th className="px-1 py-1.5 text-center relative" style={{ width: "28px" }}>
                       <div className="relative inline-block">
                         <button
                           onClick={() => setShowColumnToggle(!showColumnToggle)}

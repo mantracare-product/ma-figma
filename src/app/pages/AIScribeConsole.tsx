@@ -91,6 +91,10 @@ export default function AIScribeConsole() {
     toast.success("Transcript deleted");
   };
 
+  // Pagination State (matching Clients.tsx)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+
   // Filtered Transcripts
   const filteredTranscripts = sessions.filter((s) => {
     const matchesSearch =
@@ -101,15 +105,20 @@ export default function AIScribeConsole() {
     return matchesSearch;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredTranscripts.length / rowsPerPage));
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = Math.min(startIndex + rowsPerPage, filteredTranscripts.length);
+  const paginatedTranscripts = filteredTranscripts.slice(startIndex, endIndex);
+
   const allSelected =
-    filteredTranscripts.length > 0 &&
-    filteredTranscripts.every((s) => selectedRows.has(s.id));
+    paginatedTranscripts.length > 0 &&
+    paginatedTranscripts.every((s) => selectedRows.has(s.id));
   const someSelected =
-    filteredTranscripts.some((s) => selectedRows.has(s.id)) && !allSelected;
+    paginatedTranscripts.some((s) => selectedRows.has(s.id)) && !allSelected;
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedRows(new Set(filteredTranscripts.map((s) => s.id)));
+      setSelectedRows(new Set(paginatedTranscripts.map((s) => s.id)));
     } else {
       setSelectedRows(new Set());
     }
@@ -126,7 +135,7 @@ export default function AIScribeConsole() {
     if (status === "recording" || status === "transcribed") {
       return (
         <span
-          className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"
+          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"
           style={{ fontFamily: "Outfit, sans-serif" }}
         >
           In Progress
@@ -136,7 +145,7 @@ export default function AIScribeConsole() {
     if (status === "upcoming" || status === "scheduled") {
       return (
         <span
-          className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"
+          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"
           style={{ fontFamily: "Outfit, sans-serif" }}
         >
           Upcoming
@@ -145,7 +154,7 @@ export default function AIScribeConsole() {
     }
     return (
       <span
-        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
+        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
         style={{ fontFamily: "Outfit, sans-serif" }}
       >
         Completed
@@ -155,17 +164,11 @@ export default function AIScribeConsole() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-5">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         {/* ─── PageHeader (Clean and Unified) ─────────────────────────────────── */}
         <PageHeader
           title="AI Scribe"
           subtitle="Ambient clinical voice intelligence & prescription engine"
-          badge={
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60 flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live STT
-            </span>
-          }
         >
           <div className="flex items-center gap-2.5">
             <HowItWorksButton
@@ -176,55 +179,45 @@ export default function AIScribeConsole() {
         </PageHeader>
 
         {/* ─── Search & Action Bar ───────────────────────────────────────────── */}
-        <div className="bg-card rounded-t-xl p-4 border border-border shadow-sm">
-          <div className="flex items-center gap-3">
+        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Search Bar */}
-            <div className="flex-1">
-              <div className="relative search-bar-container">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none z-10" />
-                <div className="w-full h-[44px] bg-input-background border border-input rounded-xl flex items-center pl-10 pr-3">
-                  <input
-                    type="text"
-                    placeholder="Search transcripts by patient name, keyword..."
-                    value={transcriptSearch}
-                    onChange={(e) => setTranscriptSearch(e.target.value)}
-                    className="flex-1 bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground h-full"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  />
-                  {transcriptSearch && (
-                    <button
-                      onClick={() => setTranscriptSearch("")}
-                      className="text-xs text-muted-foreground hover:text-foreground px-2"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      ✕ Clear
-                    </button>
-                  )}
-                </div>
-              </div>
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search transcripts by patient name, keyword..."
+                value={transcriptSearch}
+                onChange={(e) => {
+                  setTranscriptSearch(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full h-[36px] bg-input-background border border-input rounded-lg pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              />
             </div>
 
-            {/* Capsule Button to Add Scribe / Open Drawer */}
-            <Button
-              variant="primary"
+            {/* Button to Add Scribe / Open Drawer */}
+            <button
+              type="button"
               onClick={() => setIsNewConsultationOpen(true)}
-              className="h-[44px] px-5 rounded-full whitespace-nowrap flex items-center gap-2 text-xs font-semibold shadow-xs"
+              className="h-[36px] px-3.5 bg-[#1E293B] hover:bg-black text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <Plus className="w-4 h-4" />
               <span>Add Scribe</span>
-            </Button>
+            </button>
           </div>
         </div>
 
-        {/* ─── Transcripts Table with Dark Gradient Thead ─────────────────────── */}
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
+        {/* ─── Transcripts Table with Dark Thead ─────────────────────── */}
+        <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden relative">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px]">
-              <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                <tr>
+            <table className="w-full min-w-[760px] text-left border-collapse">
+              <thead className="bg-[#1E293B] text-white">
+                <tr className="h-[34px]">
                   {/* Checkbox Column */}
-                  <th className="px-4 py-2.5 w-10">
+                  <th className="px-3 py-1.5 w-8 text-center">
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -236,81 +229,63 @@ export default function AIScribeConsole() {
                     />
                   </th>
 
-                  {/* Hamburger Menu Column Header */}
-                  <th className="px-2 py-2.5 text-center w-8">
-                    <SettingsIcon className="w-4 h-4 text-[#E5E7EB] mx-auto opacity-70" />
+                  {/* Settings Column Header */}
+                  <th className="px-1 py-1.5 text-center w-8">
+                    <SettingsIcon className="w-3.5 h-3.5 text-[#E5E7EB] mx-auto opacity-70" />
                   </th>
 
                   {/* NAME */}
                   <th
-                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                    className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                     style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
                   >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 opacity-50" />
-                      NAME
-                    </div>
+                    NAME
                   </th>
 
                   {/* SESSION */}
                   <th
-                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                    className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                     style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
                   >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 opacity-50" />
-                      SESSION
-                    </div>
+                    SESSION
                   </th>
 
                   {/* DURATION */}
                   <th
-                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                    className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                     style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
                   >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 opacity-50" />
-                      DURATION
-                    </div>
+                    DURATION
                   </th>
 
                   {/* RESPONSIBLE */}
                   <th
-                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                    className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                     style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
                   >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 opacity-50" />
-                      RESPONSIBLE
-                    </div>
+                    RESPONSIBLE
                   </th>
 
                   {/* CREATED AT */}
                   <th
-                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                    className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                     style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
                   >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 opacity-50" />
-                      CREATED AT
-                    </div>
+                    CREATED AT
                   </th>
 
                   {/* STATUS */}
                   <th
-                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                    className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                     style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
                   >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 opacity-50" />
-                      STATUS
-                    </div>
+                    STATUS
                   </th>
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-border">
-                {filteredTranscripts.length === 0 ? (
+              <tbody className="divide-y divide-border text-xs">
+                {paginatedTranscripts.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-muted-foreground">
                       <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
@@ -323,16 +298,16 @@ export default function AIScribeConsole() {
                     </td>
                   </tr>
                 ) : (
-                  filteredTranscripts.map((s) => (
+                  paginatedTranscripts.map((s) => (
                     <tr
                       key={s.id}
-                      className={`transition-colors cursor-pointer ${
+                      className={`h-[32px] transition-colors cursor-pointer ${
                         selectedRows.has(s.id) ? "bg-[#E8F0FE]" : "hover:bg-[#F1F5F9]"
                       }`}
                       onClick={() => handleOpenDetailDrawer(s)}
                     >
                       {/* Checkbox */}
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-3 py-1 text-center" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={selectedRows.has(s.id)}
@@ -342,18 +317,18 @@ export default function AIScribeConsole() {
                       </td>
 
                       {/* Hamburger / Kebab Menu with Dropdown in front of name */}
-                      <td className="px-2 py-3 relative kebab-menu-container" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-1 py-1 text-center relative kebab-menu-container" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => setOpenMenuSessionId(openMenuSessionId === s.id ? null : s.id)}
-                          className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center"
+                          className="p-1 hover:bg-muted rounded transition-colors inline-flex items-center justify-center"
                           style={{ width: "24px", height: "24px" }}
                         >
-                          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                          <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
                         </button>
 
                         {openMenuSessionId === s.id && (
                           <div
-                            className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl z-50 border border-border py-1"
+                            className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl z-50 border border-border py-1 text-left"
                             style={{
                               boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
                               minWidth: "180px",
@@ -407,18 +382,18 @@ export default function AIScribeConsole() {
                         )}
                       </td>
 
-                      {/* NAME (Clean without subtext) */}
-                      <td className="px-4 py-3">
+                      {/* NAME */}
+                      <td className="px-3 py-1">
                         <span
-                          className="font-medium text-sm text-[#1A73E8] hover:underline cursor-pointer"
+                          className="font-medium text-xs text-[#1A73E8] hover:underline cursor-pointer"
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
                           {s.clientName}
                         </span>
                       </td>
 
-                      {/* SESSION (Only date of the selected session) */}
-                      <td className="px-4 py-3 text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      {/* SESSION */}
+                      <td className="px-3 py-1 text-xs text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
                         {s.appointmentId && s.appointmentId !== "none"
                           ? new Date(s.sessionDate || s.createdAt).toLocaleDateString("en-IN", {
                               month: "short",
@@ -434,18 +409,18 @@ export default function AIScribeConsole() {
                               : "—")}
                       </td>
 
-                      {/* DURATION (Clean without subtext) */}
-                      <td className="px-4 py-3 font-mono text-xs text-foreground">
+                      {/* DURATION */}
+                      <td className="px-3 py-1 font-mono text-xs text-foreground">
                         {formatTime(s.durationSeconds)}
                       </td>
 
-                      {/* RESPONSIBLE (Doctor / Staff) */}
-                      <td className="px-4 py-3 text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      {/* RESPONSIBLE */}
+                      <td className="px-3 py-1 text-xs text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
                         {s.doctorName || "Dr. Priya Sharma"}
                       </td>
 
-                      {/* LAST CONTACT / DATE (Clean without subtext) */}
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {/* LAST CONTACT / DATE */}
+                      <td className="px-3 py-1 text-xs text-muted-foreground">
                         <span style={{ fontFamily: "Outfit, sans-serif" }}>
                           {new Date(s.createdAt).toLocaleDateString("en-IN", {
                             month: "short",
@@ -455,8 +430,8 @@ export default function AIScribeConsole() {
                         </span>
                       </td>
 
-                      {/* STATUS (Completed / Upcoming / In Progress) */}
-                      <td className="px-4 py-3">
+                      {/* STATUS */}
+                      <td className="px-3 py-1">
                         {getStatusBadge(s.status)}
                       </td>
                     </tr>
@@ -466,12 +441,68 @@ export default function AIScribeConsole() {
             </table>
           </div>
 
-          {/* Table Footer */}
-          <div className="px-4 py-3 border-t border-border bg-slate-50/60 flex items-center justify-between text-xs text-muted-foreground">
-            <span style={{ fontFamily: "Outfit, sans-serif" }}>
-              Showing <strong>{filteredTranscripts.length}</strong> transcripts • Click any row or the menu icon to inspect
-            </span>
-            <span className="font-mono text-[11px]">Deepgram Nova-2 Medical STT</span>
+          {/* Standard Pagination Footer (matching Clients.tsx) */}
+          <div className="px-4 py-2 border-t border-border bg-white flex items-center justify-between text-xs text-muted-foreground select-none">
+            <div className="flex items-center gap-2">
+              <span>Rows per page:</span>
+              <select
+                value={rowsPerPage}
+                onChange={(e) => {
+                  setRowsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="border border-input rounded px-2 py-0.5 bg-input-background text-xs cursor-pointer focus:outline-none"
+              >
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span className="ml-2">
+                Showing {filteredTranscripts.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredTranscripts.length}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                title="First page"
+              >
+                <span className="text-xs">«</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                title="Previous page"
+              >
+                <span className="text-xs">‹</span>
+              </button>
+              <span className="px-2 font-medium text-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                title="Next page"
+              >
+                <span className="text-xs">›</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                title="Last page"
+              >
+                <span className="text-xs">»</span>
+              </button>
+            </div>
           </div>
         </div>
 

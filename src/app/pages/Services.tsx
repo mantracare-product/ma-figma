@@ -687,62 +687,72 @@ export default function Services() {
     </div>
   );
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+
+  const totalPages = Math.max(1, Math.ceil(filteredServices.length / rowsPerPage));
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = Math.min(startIndex + rowsPerPage, filteredServices.length);
+  const paginatedServices = filteredServices.slice(startIndex, endIndex);
+
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-2.5">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
           title="Product / Services"
           subtitle="Define what you offer, how long it takes, and who is qualified to deliver it"
-          badge={
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
-              Catalog
-            </span>
-          }
         >
-          <HowItWorksButton onClick={() => setShowHelp(true)} label="How Product/Services Works" />
+          <div className="flex items-center gap-2">
+            <HowItWorksButton onClick={() => setShowHelp(true)} label="How Product/Services Works" />
+          </div>
         </PageHeader>
 
-        {/* Toolbar */}
-        <div className="flex items-center justify-between gap-2.5">
-          <div className="relative max-w-xs w-full">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search product/services..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100 transition-all shadow-xs"
-              style={{ fontFamily: "DM Sans, sans-serif" }}
-            />
+        {/* Action / Search Toolbar */}
+        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="relative flex-1 min-w-[240px] max-w-md">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search product/services..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full h-[36px] bg-input-background border border-input rounded-lg pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              />
+            </div>
+            <button
+              onClick={() => { resetForm(); setShowAddDrawer(true); }}
+              className="h-[36px] px-3.5 bg-[#1E293B] hover:bg-black text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <Plus className="w-4 h-4" /> Add Service
+            </button>
           </div>
-          <button
-            onClick={() => { resetForm(); setShowAddDrawer(true); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs cursor-pointer"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            <Plus className="w-3.5 h-3.5" /> Add Service
-          </button>
         </div>
 
-        {/* Improved Table View with Glassmorphism */}
-        {filteredServices.length > 0 ? (
-          <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-white/80 shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                  <tr style={{ height: "30px" }}>
-                    {/* Checkbox Column */}
-                    <th className="py-1 px-3 w-8 text-center">
-                      <input
-                        type="checkbox"
-                        checked={selectedServiceIds.length === filteredServices.length && filteredServices.length > 0}
-                        onChange={toggleSelectAll}
-                        className="w-3.5 h-3.5 rounded border-slate-400 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                      />
-                    </th>
+        {/* Table View Connected with Dark Thead */}
+        <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-[#1E293B] text-white">
+                <tr className="h-[34px]">
+                  {/* Checkbox Column */}
+                  <th className="py-1.5 px-3 w-8 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedServiceIds.length === filteredServices.length && filteredServices.length > 0}
+                      onChange={toggleSelectAll}
+                      className="w-3.5 h-3.5 rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7] cursor-pointer"
+                    />
+                  </th>
 
-                    {/* Column Configuration Gear Button Column */}
-                    <th className="py-1 px-1 text-center relative" style={{ width: "28px" }}>
+                  {/* Column Configuration Gear Button Column */}
+                  <th className="py-1.5 px-1 text-center relative" style={{ width: "28px" }}>
                       <div className="relative inline-block">
                         <button
                           type="button"
@@ -887,22 +897,22 @@ export default function Services() {
                     )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredServices.map((service) => {
+                <tbody className="divide-y divide-border">
+                  {paginatedServices.map((service) => {
                     const assignedEmps = allTeamEmps.filter((e) =>
                       service.assignedEmployees?.some((id) => String(id) === String(e.id))
                     );
                     const isSelected = selectedServiceIds.includes(service.id);
 
                     return (
-                      <tr key={service.id} className={`h-[30px] hover:bg-gray-50/80 transition-colors group ${isSelected ? "bg-blue-50/40" : ""}`}>
+                      <tr key={service.id} className={`h-[32px] hover:bg-slate-50/80 transition-colors group ${isSelected ? "bg-blue-50/40" : ""}`}>
                         {/* Checkbox */}
                         <td className="py-1 px-3 text-center">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => toggleSelectRow(service.id)}
-                            className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            className="w-3.5 h-3.5 rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7] cursor-pointer"
                           />
                         </td>
 
@@ -1088,32 +1098,74 @@ export default function Services() {
                 </tbody>
               </table>
             </div>
-          </div>
-        ) : (
-          <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-gray-200">
-            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Briefcase className="w-8 h-8 text-gray-400" />
-            </div>
-            <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-              {searchQuery ? "No services match your search" : "No services yet"}
-            </h3>
-            <p className="text-sm text-gray-500 mb-5" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {searchQuery ? "Try a different keyword" : "Add your first service to get started"}
-            </p>
-            {!searchQuery && (
-              <button
-                onClick={() => { resetForm(); setShowAddDrawer(true); }}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <Plus className="w-4 h-4" /> Add Service
-              </button>
-            )}
-          </div>
-        )}
-      </div>
 
-      <DrawerShell
+            {/* Standard Pagination Footer (matching Clients.tsx) */}
+            <div className="px-4 py-2 border-t border-border bg-white flex items-center justify-between text-xs text-muted-foreground select-none">
+              <div className="flex items-center gap-2">
+                <span>Rows per page:</span>
+                <select
+                  value={rowsPerPage}
+                  onChange={(e) => {
+                    setRowsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="border border-input rounded px-2 py-0.5 bg-input-background text-xs cursor-pointer focus:outline-none"
+                >
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <span className="ml-2">
+                  Showing {filteredServices.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredServices.length}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                  title="First page"
+                >
+                  <span className="text-xs">«</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                  title="Previous page"
+                >
+                  <span className="text-xs">‹</span>
+                </button>
+                <span className="px-2 font-medium text-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                  title="Next page"
+                >
+                  <span className="text-xs">›</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                  title="Last page"
+                >
+                  <span className="text-xs">»</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <DrawerShell
         isOpen={showAddDrawer}
         onClose={() => { setShowAddDrawer(false); resetForm(); }}
         title="Add New Service"

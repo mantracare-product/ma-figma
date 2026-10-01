@@ -80,12 +80,21 @@ export default function Reports() {
   const [builderInitialReport, setBuilderInitialReport] = useState<ReportDefinition | null>(null);
   const [showHelp, setShowHelp] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+
   const filteredReports = reports.filter(
     (r) =>
       r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (r.description && r.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
       r.dataSource.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const totalPages = Math.max(1, Math.ceil(filteredReports.length / rowsPerPage));
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = Math.min(startIndex + rowsPerPage, filteredReports.length);
+  const paginatedReports = filteredReports.slice(startIndex, endIndex);
 
   const handleViewReport = (report: ReportDefinition) => {
     setSelectedReport(report);
@@ -143,175 +152,219 @@ export default function Reports() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-2.5">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
           title="Reports"
           subtitle="Generate pre-built performance reports or build custom queries from live operational data"
-          badge={
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
-              Analytics
-            </span>
-          }
         >
           <div className="flex items-center gap-2">
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Reports Works" />
-            <button
-              onClick={() => setIsCreateChoiceOpen(true)}
-              className="px-3 py-1.5 bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] text-white rounded-full font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <Plus className="w-3.5 h-3.5 text-blue-400" /> Create Report
-            </button>
           </div>
         </PageHeader>
 
-        {/* Stats Capsules */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
-            <BarChart3 className="w-3.5 h-3.5 text-[#1456f0]" />
-            <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {reports.length}
-            </span>
-            <span className="text-[10px] text-slate-400 font-medium">Total Reports</span>
-          </div>
+        {/* Action / Search Toolbar */}
+        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-[240px] max-w-md">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search reports by name, type, or data source..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full h-[36px] bg-input-background border border-input rounded-lg pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              />
+            </div>
 
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
-            <Eye className="w-3.5 h-3.5 text-[#10b981]" />
-            <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {reports.length * 4}
-            </span>
-            <span className="text-[10px] text-slate-400 font-medium">Views This Month</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs opacity-75">
-            <Calendar className="w-3.5 h-3.5 text-slate-500" />
-            <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
-              0
-            </span>
-            <span className="text-[10px] text-slate-400 font-medium">Scheduled Delivery</span>
-            <span className="ml-1 px-1.5 py-0.2 bg-slate-100 text-slate-500 rounded-full text-[9px] font-bold">
-              COMING SOON
-            </span>
+            {/* Create Report Button */}
+            <button
+              onClick={() => setIsCreateChoiceOpen(true)}
+              className="h-[36px] px-3.5 bg-[#1E293B] hover:bg-black text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <Plus className="w-4 h-4 text-blue-400" /> Create Report
+            </button>
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div className="bg-white p-2.5 rounded-xl border border-border shadow-2xs flex items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search reports by name, type, or data source..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-2.5 py-1 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-            />
-          </div>
-
-          <span className="text-[11px] font-medium text-slate-500">
-            {filteredReports.length} Available Reports
-          </span>
-        </div>
-
-        {/* Reports Table */}
-        <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-white/80 shadow-2xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white text-xs font-semibold uppercase tracking-wider">
-              <tr className="h-7">
-                <th className="py-1 px-3 font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>REPORT NAME</th>
-                <th className="py-1 px-3 font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>TYPE</th>
-                <th className="py-1 px-3 font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>DATA SOURCE</th>
-                <th className="py-1 px-3 font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>LAST RUN</th>
-                <th className="py-1 px-3 text-right font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border text-xs">
-              {filteredReports.map((report) => (
-                <tr key={report.id} className="h-[30px] hover:bg-slate-50/80 transition-colors">
-                  <td className="py-1 px-3">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleViewReport(report)}
-                        className="font-semibold text-slate-900 hover:text-blue-600 text-xs text-left truncate max-w-xs"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        {report.name}
-                      </button>
-                      {report.sharedWith && report.sharedWith.length > 0 && (
-                        <span className="px-1.5 py-0.2 bg-purple-50 border border-purple-200 rounded text-[10px] text-purple-700 font-medium">
-                          Shared
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="py-1 px-3 whitespace-nowrap">
-                    {report.type === "template" ? (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                        Template
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                        Custom
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="py-1 px-3 font-mono text-[11px] font-semibold text-slate-700 uppercase whitespace-nowrap">
-                    {report.dataSource}
-                  </td>
-
-                  <td className="py-1 px-3 text-xs text-slate-600 whitespace-nowrap">
-                    {report.lastRun}
-                  </td>
-
-                  <td className="py-1 px-3 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => handleViewReport(report)}
-                        className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors"
-                      >
-                        <Eye className="w-3 h-3" /> View
-                      </button>
-
-                      {/* Edit Button for Custom Reports and Copies */}
-                      {report.type === "custom" && (
-                        <button
-                          onClick={() => handleEditReport(report)}
-                          className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-colors"
-                          title="Edit Custom Report"
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                      )}
-
-                      {/* Duplicate Button */}
-                      <button
-                        onClick={() => handleDuplicateReport(report)}
-                        className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
-                        title="Duplicate as Custom Report"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
-
-                      {/* Delete Button for Custom Reports and Copies */}
-                      {report.type === "custom" && (
-                        <button
-                          onClick={() => handleDelete(report.id, report.name)}
-                          className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
+        {/* Reports Table with Dark Thead */}
+        <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-[#1E293B] text-white">
+                <tr className="h-[34px]">
+                  <th className="py-1.5 px-3 font-semibold text-xs uppercase tracking-wider" style={{ fontFamily: 'Outfit, sans-serif' }}>REPORT NAME</th>
+                  <th className="py-1.5 px-3 font-semibold text-xs uppercase tracking-wider" style={{ fontFamily: 'Outfit, sans-serif' }}>TYPE</th>
+                  <th className="py-1.5 px-3 font-semibold text-xs uppercase tracking-wider" style={{ fontFamily: 'Outfit, sans-serif' }}>DATA SOURCE</th>
+                  <th className="py-1.5 px-3 font-semibold text-xs uppercase tracking-wider" style={{ fontFamily: 'Outfit, sans-serif' }}>LAST RUN</th>
+                  <th className="py-1.5 px-3 text-right font-semibold text-xs uppercase tracking-wider" style={{ fontFamily: 'Outfit, sans-serif' }}>ACTIONS</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border text-xs">
+                {paginatedReports.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-muted-foreground text-xs">
+                      No reports found
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedReports.map((report) => (
+                    <tr key={report.id} className="h-[32px] hover:bg-slate-50/80 transition-colors">
+                      <td className="py-1 px-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleViewReport(report)}
+                            className="font-semibold text-slate-900 hover:text-blue-600 text-xs text-left truncate max-w-xs cursor-pointer"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            {report.name}
+                          </button>
+                          {report.sharedWith && report.sharedWith.length > 0 && (
+                            <span className="px-1.5 py-0.2 bg-purple-50 border border-purple-200 rounded text-[10px] text-purple-700 font-medium">
+                              Shared
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="py-1 px-3 whitespace-nowrap">
+                        {report.type === "template" ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            Template
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            Custom
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-1 px-3 font-mono text-[11px] font-semibold text-slate-700 uppercase whitespace-nowrap">
+                        {report.dataSource}
+                      </td>
+
+                      <td className="py-1 px-3 text-xs text-slate-600 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {report.lastRun}
+                      </td>
+
+                      <td className="py-1 px-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleViewReport(report)}
+                            className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <Eye className="w-3 h-3" /> View
+                          </button>
+
+                          {/* Edit Button for Custom Reports and Copies */}
+                          {report.type === "custom" && (
+                            <button
+                              onClick={() => handleEditReport(report)}
+                              className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-colors cursor-pointer"
+                              title="Edit Custom Report"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          )}
+
+                          {/* Duplicate Button */}
+                          <button
+                            onClick={() => handleDuplicateReport(report)}
+                            className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="Duplicate as Custom Report"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+
+                          {/* Delete Button for Custom Reports and Copies */}
+                          {report.type === "custom" && (
+                            <button
+                              onClick={() => handleDelete(report.id, report.name)}
+                              className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-colors cursor-pointer"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Standard Pagination Footer (matching Clients.tsx) */}
+          <div className="px-4 py-2 border-t border-border bg-white flex items-center justify-between text-xs text-muted-foreground select-none">
+            <div className="flex items-center gap-2">
+              <span>Rows per page:</span>
+              <select
+                value={rowsPerPage}
+                onChange={(e) => {
+                  setRowsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="border border-input rounded px-2 py-0.5 bg-input-background text-xs cursor-pointer focus:outline-none"
+              >
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span className="ml-2">
+                Showing {filteredReports.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredReports.length}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                title="First page"
+              >
+                <span className="text-xs">«</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                title="Previous page"
+              >
+                <span className="text-xs">‹</span>
+              </button>
+              <span className="px-2 font-medium text-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                title="Next page"
+              >
+                <span className="text-xs">›</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                title="Last page"
+              >
+                <span className="text-xs">»</span>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
 
       {/* Create Choice Modal */}
       <Modal
@@ -400,19 +453,20 @@ export default function Reports() {
         onSaved={(created) => handleViewReport(created)}
       />
 
-      <HowItWorksModal
-        isOpen={showHelp}
-        onClose={() => setShowHelp(false)}
-        title="How Reports Works"
-        summary="Reports provides live aggregated operational & financial reporting directly from your shared in-memory mock system."
-        bullets={[
-          "View pre-built templates or click '+ Create Report' to build from a template or scratch",
-          "Duplicate any template to create a fully editable custom report",
-          "Click the Pencil icon on custom reports to edit fields, aggregations, periods & charts",
-          "Export report datasets to CSV with a single click",
-        ]}
-        guideUrl="/guide/reports"
-      />
+        <HowItWorksModal
+          isOpen={showHelp}
+          onClose={() => setShowHelp(false)}
+          title="How Reports Works"
+          summary="Reports provides live aggregated operational & financial reporting directly from your shared in-memory mock system."
+          bullets={[
+            "View pre-built templates or click '+ Create Report' to build from a template or scratch",
+            "Duplicate any template to create a fully editable custom report",
+            "Click the Pencil icon on custom reports to edit fields, aggregations, periods & charts",
+            "Export report datasets to CSV with a single click",
+          ]}
+          guideUrl="/guide/reports"
+        />
+      </div>
     </div>
   );
 }
