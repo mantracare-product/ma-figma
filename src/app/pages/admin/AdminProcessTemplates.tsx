@@ -49,6 +49,7 @@ import {
   ScopingRule,
   ProcessPermissions,
   isProcessMatchingScope,
+  ProcessTransitionTarget,
 } from "../../../lib/useProcessStore";
 
 interface AISettings {
@@ -73,6 +74,8 @@ export interface Stage {
   color?: string;
   isInitial?: boolean;
   isFinal?: boolean;
+  isFinalStage?: boolean;
+  nextProcessTransitions?: ProcessTransitionTarget[];
   stagePosition?: "initial" | "final" | null;
   aiSettings?: AISettings;
   // Persisted stage configuration
@@ -309,18 +312,23 @@ const DraggableStage = ({ stage, index, totalStages = 1, moveStage, onRemove, on
           isDragOver ? "ring-2 ring-white scale-105" : ""
         }`}
         style={{
-          backgroundColor: stage.color || "#22D3EE",
+          backgroundColor: stage.color || (stage.isFinalStage || stage.isFinal ? "#EC4899" : "#22D3EE"),
           opacity: isDragging || isLocalDragging ? 0.4 : 1,
-          minWidth: "165px",
+          minWidth: "170px",
           clipPath: "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)",
         }}
         onDoubleClick={() => onEdit(stage)}
-        title="Drag to reorder stage, or click edit"
+        title={stage.isFinalStage || stage.isFinal ? "Final Stage (Completion Point) - Double click to edit" : "Drag to reorder stage, or click edit"}
       >
         <GripVertical className="w-3.5 h-3.5 text-white/70 group-hover:text-white shrink-0" />
-        <span className="text-sm font-semibold text-white pr-2 flex-1 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+        <span className="text-sm font-semibold text-white pr-1.5 flex-1 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
           {stage.name}
         </span>
+        {(stage.isFinalStage || stage.isFinal) && (
+          <span className="text-[10px] font-bold bg-black/35 text-white px-1.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs whitespace-nowrap">
+            🏁 Final
+          </span>
+        )}
         <button
           type="button"
           onClick={(e) => {
@@ -1886,7 +1894,18 @@ export default function AdminProcessTemplates() {
   const [showDeleteStageModal, setShowDeleteStageModal] = useState(false);
   const [stageToDelete, setStageToDelete] = useState<Stage | null>(null);
   const [showEditStageModal, setShowEditStageModal] = useState(false);
-  const [editingStage, setEditingStage] = useState<{ id: string; name: string; color: string } | null>(null);
+  const [editingStage, setEditingStage] = useState<{
+    id: string;
+    name: string;
+    color: string;
+    isFinalStage?: boolean;
+    nextProcessTransitions?: ProcessTransitionTarget[];
+  } | null>(null);
+  const [showTransitionModal, setShowTransitionModal] = useState(false);
+  const [transitionSourceStageId, setTransitionSourceStageId] = useState<string | null>(null);
+  const [handoffTargetProcessId, setHandoffTargetProcessId] = useState<string>("");
+  const [handoffTargetStageName, setHandoffTargetStageName] = useState<string>("");
+  const [handoffAutoMove, setHandoffAutoMove] = useState<boolean>(true);
   const [isColorGridExpanded, setIsColorGridExpanded] = useState(false);
   const [isEditColorGridExpanded, setIsEditColorGridExpanded] = useState(false);
   const [hasInteractedWithColor, setHasInteractedWithColor] = useState(false);
@@ -2162,7 +2181,9 @@ export default function AdminProcessTemplates() {
     setEditingStage({
       id: stage.id,
       name: stage.name,
-      color: stage.color || "#22D3EE"
+      color: stage.color || "#22D3EE",
+      isFinalStage: stage.isFinalStage || stage.isFinal || false,
+      nextProcessTransitions: stage.nextProcessTransitions ? [...stage.nextProcessTransitions] : [],
     });
     setShowEditStageModal(true);
   };
@@ -2177,7 +2198,14 @@ export default function AdminProcessTemplates() {
             ...p,
             stages: p.stages.map((s) =>
               s.id === editingStage.id
-                ? { ...s, name: editingStage.name, color: editingStage.color }
+                ? {
+                    ...s,
+                    name: editingStage.name,
+                    color: editingStage.color,
+                    isFinalStage: editingStage.isFinalStage,
+                    isFinal: editingStage.isFinalStage,
+                    nextProcessTransitions: editingStage.nextProcessTransitions || [],
+                  }
                 : s
             ),
           }
@@ -2187,6 +2215,93 @@ export default function AdminProcessTemplates() {
     setShowEditStageModal(false);
     setEditingStage(null);
     toast.success("Stage updated successfully");
+  };
+
+  const handleOpenTransitionModal = (stageId: string) => {
+    setTransitionSourceStageId(stageId);
+    const otherProc = processes.find((p) => p.id !== selectedProcess);
+    if (otherProc) {
+      setHandoffTargetProcessId(otherProc.id);
+      setHandoffTargetStageName(otherProc.stages[0]?.name || "Initial Contact");
+    } else {
+      setHandoffTargetProcessId("");
+      setHandoffTargetStageName("");
+    }
+    setHandoffAutoMove(true);
+    setShowTransitionModal(true);
+  };
+
+  const handleSaveQuickTransition = () => {
+    if (!selectedProcess || !transitionSourceStageId) {
+      toast.error("Please select a valid stage");
+      return;
+    }
+
+    const targetProcId = handoffTargetProcessId || processes.find((p) => p.id !== selectedProcess)?.id;
+    if (!targetProcId) {
+      toast.error("Please select a target process template");
+      return;
+    }
+
+    const targetProc = processes.find((p) => p.id === targetProcId);
+    if (!targetProc) return;
+
+    const targetStage = targetProc.stages.find((s) => s.name === handoffTargetStageName) || targetProc.stages[0];
+    const targetStageName = targetStage?.name || handoffTargetStageName || "Initial Contact";
+
+    const newTransition: ProcessTransitionTarget = {
+      id: `trans-${Date.now()}`,
+      targetProcessId: targetProc.id,
+      targetProcessName: targetProc.name,
+      targetStageId: targetStage?.id,
+      targetStageName,
+      autoMove: handoffAutoMove,
+    };
+
+    setProcesses((prev) =>
+      prev.map((p) =>
+        p.id === selectedProcess
+          ? {
+              ...p,
+              stages: p.stages.map((s) =>
+                s.id === transitionSourceStageId
+                  ? {
+                      ...s,
+                      isFinalStage: true,
+                      isFinal: true,
+                      nextProcessTransitions: [...(s.nextProcessTransitions || []), newTransition],
+                    }
+                  : s
+              ),
+            }
+          : p
+      )
+    );
+
+    setShowTransitionModal(false);
+    toast.success(`Handoff to "${targetProc.name}: ${targetStageName}" connected ✓`);
+  };
+
+  const handleRemoveTransitionFromStage = (sourceStageId: string, transitionIndex: number) => {
+    if (!selectedProcess) return;
+    setProcesses((prev) =>
+      prev.map((p) =>
+        p.id === selectedProcess
+          ? {
+              ...p,
+              stages: p.stages.map((s) =>
+                s.id === sourceStageId
+                  ? {
+                      ...s,
+                      nextProcessTransitions: (s.nextProcessTransitions || []).filter((_, idx) => idx !== transitionIndex),
+                    }
+                  : s
+              ),
+            }
+          : p
+      )
+    );
+    toast.success("Transition removed");
   };
 
   const handleQuickAddStage = () => {
@@ -2713,9 +2828,21 @@ export default function AdminProcessTemplates() {
                   <div className="p-8 space-y-6">
                     {/* Stage Management */}
                     <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-                      <h3 className="text-xl font-bold mb-5" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Stages</h3>
+                      <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Stages</h3>
+                          <span className="text-xs bg-blue-50 text-blue-700 font-semibold px-2.5 py-0.5 rounded-full border border-blue-200">
+                            {selectedProcessData.stages.length} Stages
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-500 flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
+                          <span className="inline-block w-2 h-2 rounded-full bg-pink-500"></span>
+                          <span className="font-medium">Final Stage connects across Partition to other process stages</span>
+                        </div>
+                      </div>
 
                       <div className="flex items-center gap-3 overflow-x-auto overflow-y-hidden pb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                        {/* Process's own stages */}
                         {selectedProcessData.stages.map((stage, index) => (
                           <DraggableStage
                             key={stage.id}
@@ -2728,10 +2855,103 @@ export default function AdminProcessTemplates() {
                         ))}
                         <button
                           onClick={handleQuickAddStage}
-                          className="flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 transition-all flex-shrink-0 shadow-lg hover:shadow-xl"
+                          className="flex items-center justify-center w-11 h-11 rounded-full bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 transition-all flex-shrink-0 shadow-md hover:shadow-lg"
+                          title="Add new stage to this process template"
                         >
-                          <Plus className="w-6 h-6 text-white" />
+                          <Plus className="w-5 h-5 text-white" />
                         </button>
+
+                        {/* Visual Partition Divider */}
+                        <div className="flex items-center gap-2 px-3.5 py-2.5 flex-shrink-0 border-l-2 border-dashed border-slate-300 bg-slate-100/80 rounded-r-xl my-1 select-none">
+                          <div className="flex flex-col items-start">
+                            <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400">PARTITION</span>
+                            <span className="text-xs font-bold text-slate-700 whitespace-nowrap flex items-center gap-1">
+                              <span>Next Process Handoff</span>
+                              <span className="text-slate-400 font-normal">→</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Other Stages (Handoff Target Stages from Other Processes) */}
+                        {(() => {
+                          const stagesWithTransitions = selectedProcessData.stages.filter(
+                            (s) => s.nextProcessTransitions && s.nextProcessTransitions.length > 0
+                          );
+                          const allTransitions = stagesWithTransitions.flatMap((s) =>
+                            (s.nextProcessTransitions || []).map((t, idx) => ({
+                              ...t,
+                              sourceStageId: s.id,
+                              sourceStageName: s.name,
+                              transitionIndex: idx,
+                            }))
+                          );
+
+                          return (
+                            <>
+                              {allTransitions.map((trans, tIdx) => (
+                                <div
+                                  key={`trans-${tIdx}-${trans.targetProcessId}-${trans.targetStageName}`}
+                                  className="relative flex-shrink-0 group flex items-center gap-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl px-4 py-2.5 shadow-md hover:shadow-lg transition-all border border-purple-400/40"
+                                  style={{
+                                    minWidth: "210px",
+                                    clipPath: "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)",
+                                  }}
+                                >
+                                  <div className="flex flex-col flex-1 min-w-0 pr-1">
+                                    <div className="flex items-center gap-1 text-[9px] text-purple-200 font-bold uppercase tracking-wider">
+                                      <span>From: {trans.sourceStageName}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 font-bold text-xs text-white truncate">
+                                      <span className="text-purple-200">🔀</span>
+                                      <span className="text-purple-100 truncate">{trans.targetProcessName || "Process"}:</span>
+                                      <span className="text-amber-300 underline underline-offset-2 truncate font-extrabold">{trans.targetStageName}</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1 pr-2 opacity-90 group-hover:opacity-100">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const srcStage = selectedProcessData.stages.find((s) => s.id === trans.sourceStageId);
+                                        if (srcStage) handleEditStage(srcStage);
+                                      }}
+                                      className="p-1 hover:bg-white/20 rounded transition-colors text-white"
+                                      title="Edit Stage / Transitions"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveTransitionFromStage(trans.sourceStageId, trans.transitionIndex)}
+                                      className="p-1 hover:bg-red-500/30 rounded transition-colors text-purple-200 hover:text-red-200"
+                                      title="Remove transition"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+
+                              {/* Button to connect / add next process stage transition */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const finalStage = selectedProcessData.stages.find((s) => s.isFinalStage || s.isFinal) ||
+                                    selectedProcessData.stages[selectedProcessData.stages.length - 1];
+                                  if (finalStage) {
+                                    handleOpenTransitionModal(finalStage.id);
+                                  } else {
+                                    toast.error("Please add a stage first");
+                                  }
+                                }}
+                                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-dashed border-purple-300 transition-all text-xs font-semibold flex-shrink-0 shadow-2xs hover:shadow-xs cursor-pointer"
+                                title="Connect a stage from another process template across the partition"
+                              >
+                                <Plus className="w-4 h-4 text-purple-600" />
+                                <span>Connect Next Stage</span>
+                              </button>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -6642,6 +6862,181 @@ export default function AdminProcessTemplates() {
               </div>
             </div>
 
+            {/* Final Stage Toggle */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                      Mark as Final Stage
+                    </span>
+                    <span className="text-[11px] bg-pink-100 text-pink-700 font-bold px-2 py-0.5 rounded-full">
+                      🏁 Completion Point
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    When a lead reaches this stage, the process completes and transitions across the partition to other process templates.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={Boolean(editingStage?.isFinalStage)}
+                    onChange={(e) => {
+                      if (!editingStage) return;
+                      setEditingStage({
+                        ...editingStage,
+                        isFinalStage: e.target.checked,
+                      });
+                    }}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                </label>
+              </div>
+
+              {/* Next Process Handoff / Transitions Configuration */}
+              {editingStage?.isFinalStage && (
+                <div className="mt-3 pt-3 border-t border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Handoff to Stages in Other Processes (Partition)
+                    </span>
+                  </div>
+
+                  {/* Existing transitions list */}
+                  {editingStage.nextProcessTransitions && editingStage.nextProcessTransitions.length > 0 ? (
+                    <div className="space-y-2">
+                      {editingStage.nextProcessTransitions.map((t, tIdx) => (
+                        <div
+                          key={tIdx}
+                          className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-purple-200 text-xs shadow-2xs"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-purple-600 font-bold">🔀</span>
+                            <span className="font-semibold text-slate-800">{t.targetProcessName}</span>
+                            <span className="text-slate-400">→</span>
+                            <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                              {t.targetStageName}
+                            </span>
+                            {t.autoMove && (
+                              <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.2 rounded font-medium">
+                                Auto-move
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = (editingStage.nextProcessTransitions || []).filter((_, i) => i !== tIdx);
+                              setEditingStage({ ...editingStage, nextProcessTransitions: updated });
+                            }}
+                            className="text-slate-400 hover:text-red-500 p-1"
+                            title="Remove Transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">No transitions linked yet. Add one below:</p>
+                  )}
+
+                  {/* Add transition form */}
+                  <div className="bg-purple-50/60 p-3 rounded-lg border border-purple-200/80 space-y-2.5">
+                    <div className="text-xs font-semibold text-purple-900">Add Transition Target:</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] text-slate-600 mb-1 font-medium">Target Process</label>
+                        <select
+                          className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md"
+                          value={handoffTargetProcessId || (processes.find((p) => p.id !== selectedProcess)?.id || "")}
+                          onChange={(e) => {
+                            setHandoffTargetProcessId(e.target.value);
+                            const p = processes.find((proc) => proc.id === e.target.value);
+                            if (p && p.stages.length > 0) {
+                              setHandoffTargetStageName(p.stages[0].name);
+                            }
+                          }}
+                        >
+                          {processes
+                            .filter((p) => p.id !== selectedProcess)
+                            .map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-600 mb-1 font-medium">Target Stage</label>
+                        <select
+                          className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md"
+                          value={handoffTargetStageName}
+                          onChange={(e) => setHandoffTargetStageName(e.target.value)}
+                        >
+                          {(
+                            processes.find(
+                              (p) => p.id === (handoffTargetProcessId || processes.find((pr) => pr.id !== selectedProcess)?.id)
+                            )?.stages || []
+                          ).map((s) => (
+                            <option key={s.id} value={s.name}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={handoffAutoMove}
+                          onChange={(e) => setHandoffAutoMove(e.target.checked)}
+                          className="rounded text-purple-600"
+                        />
+                        <span>Auto-move client on reaching stage</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetProcId = handoffTargetProcessId || processes.find((p) => p.id !== selectedProcess)?.id;
+                          if (!targetProcId) {
+                            toast.error("No other processes available to link");
+                            return;
+                          }
+                          const targetProc = processes.find((p) => p.id === targetProcId);
+                          if (!targetProc) return;
+                          const chosenStageName = handoffTargetStageName || targetProc.stages[0]?.name || "Initial Contact";
+                          const chosenStage = targetProc.stages.find((s) => s.name === chosenStageName) || targetProc.stages[0];
+
+                          const newT: ProcessTransitionTarget = {
+                            id: `trans-${Date.now()}`,
+                            targetProcessId: targetProc.id,
+                            targetProcessName: targetProc.name,
+                            targetStageId: chosenStage?.id,
+                            targetStageName: chosenStageName,
+                            autoMove: handoffAutoMove,
+                          };
+
+                          setEditingStage({
+                            ...editingStage,
+                            nextProcessTransitions: [...(editingStage.nextProcessTransitions || []), newT],
+                          });
+                          toast.success(`Added transition to ${targetProc.name}: ${chosenStageName}`);
+                        }}
+                        className="px-2.5 py-1 bg-purple-600 text-white rounded text-xs font-semibold hover:bg-purple-700 transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Link Stage</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-between pt-4">
               <Button
                 variant="outline"
@@ -6671,6 +7066,112 @@ export default function AdminProcessTemplates() {
                   Save Changes
                 </Button>
               </div>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Connect Next Process Stage Modal */}
+        <Modal
+          isOpen={showTransitionModal}
+          onClose={() => {
+            setShowTransitionModal(false);
+            setTransitionSourceStageId(null);
+          }}
+          title="Connect Next Process Stage (Partition Handoff)"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              Define where leads should move when they complete this stage. This connects this process template to other workflows across the partition.
+            </p>
+
+            <div>
+              <label className="block text-sm font-medium mb-1.5 text-slate-700">Source Final Stage</label>
+              <select
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
+                value={transitionSourceStageId || ""}
+                onChange={(e) => setTransitionSourceStageId(e.target.value)}
+              >
+                {selectedProcessData?.stages.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} {s.isFinalStage || s.isFinal ? "(Final Stage)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-slate-700">Destination Process</label>
+                <select
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
+                  value={handoffTargetProcessId || (processes.find((p) => p.id !== selectedProcess)?.id || "")}
+                  onChange={(e) => {
+                    setHandoffTargetProcessId(e.target.value);
+                    const targetP = processes.find((p) => p.id === e.target.value);
+                    if (targetP && targetP.stages.length > 0) {
+                      setHandoffTargetStageName(targetP.stages[0].name);
+                    }
+                  }}
+                >
+                  {processes
+                    .filter((p) => p.id !== selectedProcess)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-slate-700">Destination Stage</label>
+                <select
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
+                  value={handoffTargetStageName}
+                  onChange={(e) => setHandoffTargetStageName(e.target.value)}
+                >
+                  {(
+                    processes.find(
+                      (p) => p.id === (handoffTargetProcessId || processes.find((pr) => pr.id !== selectedProcess)?.id)
+                    )?.stages || []
+                  ).map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={handoffAutoMove}
+                  onChange={(e) => setHandoffAutoMove(e.target.checked)}
+                  className="rounded text-purple-600"
+                />
+                <span className="font-medium">Automatically advance client to this stage upon reaching final stage</span>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowTransitionModal(false);
+                  setTransitionSourceStageId(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                className="bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
+                onClick={handleSaveQuickTransition}
+              >
+                Save & Connect Stage
+              </Button>
             </div>
           </div>
         </Modal>

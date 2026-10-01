@@ -241,60 +241,60 @@ export default function UserManagement() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-2.5">
       <PageHeader
         title="User Management"
         subtitle="Manage users and their credits"
       >
-        <Button variant="primary" onClick={() => setShowAddModal(true)}>
-          <Plus className="w-4 h-4" />
+        <Button variant="primary" onClick={() => setShowAddModal(true)} className="px-3 py-1.5 text-xs">
+          <Plus className="w-3.5 h-3.5" />
           Add User
         </Button>
       </PageHeader>
 
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+      <div className="bg-card rounded-xl border border-border shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-muted border-b border-border">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold">User</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Credits (Used / Total)</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Usage</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Status</th>
-                <th className="px-6 py-4 text-right text-sm font-semibold">Actions</th>
+            <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
+              <tr style={{ height: "30px" }}>
+                <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wide">User</th>
+                <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wide">Credits (Used / Total)</th>
+                <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wide">Usage</th>
+                <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wide">Status</th>
+                <th className="px-3 py-1 text-right text-[11px] font-semibold uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {users.map((user) => (
-                <tr key={user.id} className="hover:bg-muted transition-colors">
-                  <td className="px-6 py-4">
-                    <div>
-                      <p className="font-medium">{user.name}</p>
-                      <p className="text-sm text-muted-foreground">{user.email}</p>
+                <tr key={user.id} className="h-[30px] hover:bg-muted/50 transition-colors">
+                  <td className="px-3 py-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-xs text-foreground">{user.name}</span>
+                      <span className="text-[11px] text-muted-foreground">({user.email})</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-baseline gap-1">
+                  <td className="px-3 py-1">
+                    <div className="flex items-baseline gap-1 text-xs">
                       <span className="font-semibold text-foreground">{user.credits}</span>
                       <span className="text-muted-foreground">/</span>
                       <span className="font-medium text-muted-foreground">{user.maxCredits}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="w-full">
-                      <div className="h-2 bg-border rounded-full overflow-hidden">
+                  <td className="px-3 py-1">
+                    <div className="w-28 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
                         <div
                           className="h-full bg-primary"
                           style={{ width: `${(user.credits / user.maxCredits) * 100}%` }}
                         />
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {Math.round((user.credits / user.maxCredits) * 100)}% used
-                      </p>
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {Math.round((user.credits / user.maxCredits) * 100)}%
+                      </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
+                  <td className="px-3 py-1">
+                    <div className="flex items-center gap-2">
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
                           type="checkbox"
@@ -302,26 +302,26 @@ export default function UserManagement() {
                           checked={user.status === "Active"}
                           onChange={() => handleToggleStatus(user)}
                         />
-                        <div className="w-11 h-6 bg-[#E5E7EB] peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                        <div className="w-8 h-4 bg-[#E5E7EB] peer-focus:ring-1 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-primary"></div>
                       </label>
-                      <span className={`text-sm font-medium ${
+                      <span className={`text-xs font-medium ${
                         user.status === "Active" ? "text-success" : "text-muted-foreground"
                       }`}>
                         {user.status}
                       </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-3">
+                  <td className="px-3 py-1">
+                    <div className="flex items-center justify-end gap-1.5">
                       <Tooltip text="Manage Permissions">
                         <button
                           onClick={() => {
                             setEditingPermissionsUser(user);
                             setShowPermissionsModal(true);
                           }}
-                          className="p-2 hover:bg-primary/10 rounded-lg transition-colors text-[#6B7280] hover:text-primary"
+                          className="p-1 hover:bg-primary/10 rounded transition-colors text-[#6B7280] hover:text-primary"
                         >
-                          <Shield className="w-[18px] h-[18px]" />
+                          <Shield className="w-3.5 h-3.5" />
                         </button>
                       </Tooltip>
                       <Tooltip text="Manage Credits">
@@ -330,9 +330,9 @@ export default function UserManagement() {
                             setSelectedUser(user);
                             setShowCreditModal(true);
                           }}
-                          className="p-2 hover:bg-primary/10 rounded-lg transition-colors text-[#6B7280] hover:text-primary"
+                          className="p-1 hover:bg-primary/10 rounded transition-colors text-[#6B7280] hover:text-primary"
                         >
-                          <CreditCard className="w-[18px] h-[18px]" />
+                          <CreditCard className="w-3.5 h-3.5" />
                         </button>
                       </Tooltip>
                       <Tooltip text="Delete User">
@@ -341,9 +341,9 @@ export default function UserManagement() {
                             setUserToDelete(user);
                             setShowDeleteModal(true);
                           }}
-                          className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-[#6B7280] hover:text-[#DC2626]"
+                          className="p-1 hover:bg-destructive/10 rounded transition-colors text-[#6B7280] hover:text-[#DC2626]"
                         >
-                          <Trash2 className="w-[18px] h-[18px]" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </Tooltip>
                     </div>

@@ -149,7 +149,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
 
   return (
     <aside
-      className={`fixed top-16 left-0 h-[calc(100vh-4rem)] w-64 bg-white flex flex-col z-40 shadow-xl transition-transform duration-300 ease-in-out select-none border-r border-gray-200/90 ${
+      className={`fixed top-12 left-0 h-[calc(100vh-3rem)] w-64 bg-white flex flex-col z-40 shadow-xl transition-transform duration-300 ease-in-out select-none border-r border-gray-200/90 ${
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}
     >

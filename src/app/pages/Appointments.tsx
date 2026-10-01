@@ -120,7 +120,7 @@ export default function Appointments() {
   const [appointments, setAppointments] = useState<Appointment[]>(() => {
     const saved = sessionStorage.getItem("appointments_v1");
     if (saved) {
-      try { return JSON.parse(saved); } catch {}
+      try { return JSON.parse(saved); } catch { }
     }
     return [
       {
@@ -505,20 +505,20 @@ export default function Appointments() {
         appointments.map((a) =>
           a.id === selectedAppointment.id
             ? {
-                ...a,
-                clientName: selectedClient.name,
-                clientEmail: selectedClient.email,
-                clientPhone: selectedClient.phone,
-                employeeId: selectedProvider.id,
-                date: selectedDate,
-                time: timeStr,
-                notes: bookingNote || `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
-                title: bookingTitle.trim(),
-                description: bookingDescription.trim() || undefined,
-                tags: parsedTags,
-                processId: bookingProcessId || undefined,
-                stageId: bookingStageId || undefined,
-              }
+              ...a,
+              clientName: selectedClient.name,
+              clientEmail: selectedClient.email,
+              clientPhone: selectedClient.phone,
+              employeeId: selectedProvider.id,
+              date: selectedDate,
+              time: timeStr,
+              notes: bookingNote || `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
+              title: bookingTitle.trim(),
+              description: bookingDescription.trim() || undefined,
+              tags: parsedTags,
+              processId: bookingProcessId || undefined,
+              stageId: bookingStageId || undefined,
+            }
             : a
         )
       );
@@ -698,7 +698,7 @@ export default function Appointments() {
       const vis = resolveVisibility(f);
       const val = (appointment as any)[f.key];
       const hasValue = val !== undefined && val !== null && val !== "";
-      
+
       if (hasValue) {
         values[f.key] = String(val);
       }
@@ -827,83 +827,80 @@ export default function Appointments() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
           title="Appointments"
           subtitle="Schedule and manage appointments with your clients"
           badge={
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               Schedule
             </span>
           }
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <HowItWorksButton label="How Appointments Works" onClick={() => setShowHelp(true)} />
           </div>
         </PageHeader>
 
         {/* Navigation & Controls Row: Segmented View Switcher (List | Calendar | Availability) + Book Appointment */}
         <div className="flex items-center justify-end gap-3">
-            {/* Segmented View Switcher */}
-            <div className="inline-flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setView("list")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  view === "list"
-                    ? "bg-[#181e25] text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-                }`}
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-                title="List View"
-              >
-                <List className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">List</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("calendar")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  view === "calendar"
-                    ? "bg-[#181e25] text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-                }`}
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-                title="Calendar View"
-              >
-                <CalendarIcon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Calendar</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("availability")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  view === "availability"
-                    ? "bg-[#181e25] text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-                }`}
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-                title="Team Availability & Days Off"
-              >
-                <CalendarClock className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Availability</span>
-              </button>
-            </div>
-
-            {/* Book Appointment CTA (Electric Blue Pill) */}
+          {/* Segmented View Switcher */}
+          <div className="inline-flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 shadow-2xs">
             <button
               type="button"
-              onClick={() => {
-                resetBookingWorkflow();
-                setShowAddModal(true);
-              }}
-              className="inline-flex items-center justify-center gap-1.5 px-4.5 py-2 rounded-full bg-[#1456f0] hover:bg-[#1044bf] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer active:scale-98"
-              style={{ fontFamily: "Outfit, sans-serif", height: '36px' }}
+              onClick={() => setView("list")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${view === "list"
+                  ? "bg-[#181e25] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                }`}
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+              title="List View"
             >
-              <Plus className="w-4 h-4" />
-              Book Appointment
+              <List className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">List</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("calendar")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${view === "calendar"
+                  ? "bg-[#181e25] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                }`}
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+              title="Calendar View"
+            >
+              <CalendarIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Calendar</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("availability")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${view === "availability"
+                  ? "bg-[#181e25] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                }`}
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+              title="Team Availability & Days Off"
+            >
+              <CalendarClock className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Availability</span>
             </button>
           </div>
+
+          {/* Book Appointment CTA (Electric Blue Pill) */}
+          <button
+            type="button"
+            onClick={() => {
+              resetBookingWorkflow();
+              setShowAddModal(true);
+            }}
+            className="inline-flex items-center justify-center gap-1.5 px-4.5 py-2 rounded-full bg-[#1456f0] hover:bg-[#1044bf] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer active:scale-98"
+            style={{ fontFamily: "Outfit, sans-serif", height: '36px' }}
+          >
+            <Plus className="w-4 h-4" />
+            Book Appointment
+          </button>
+        </div>
 
         {/* Calendar View */}
         {view === "calendar" && (

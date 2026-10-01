@@ -143,21 +143,21 @@ export default function Reports() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-2.5">
         <PageHeader
           title="Reports"
           subtitle="Generate pre-built performance reports or build custom queries from live operational data"
           badge={
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               Analytics
             </span>
           }
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Reports Works" />
             <button
               onClick={() => setIsCreateChoiceOpen(true)}
-              className="px-4 py-2 bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] text-white rounded-full font-semibold text-xs transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+              className="px-3 py-1.5 bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] text-white rounded-full font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <Plus className="w-3.5 h-3.5 text-blue-400" /> Create Report
@@ -166,29 +166,29 @@ export default function Reports() {
         </PageHeader>
 
         {/* Stats Capsules */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
             <BarChart3 className="w-3.5 h-3.5 text-[#1456f0]" />
             <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
               {reports.length}
             </span>
-            <span className="text-[11px] text-slate-400 font-medium">Total Reports</span>
+            <span className="text-[10px] text-slate-400 font-medium">Total Reports</span>
           </div>
 
-          <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
             <Eye className="w-3.5 h-3.5 text-[#10b981]" />
             <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
               {reports.length * 4}
             </span>
-            <span className="text-[11px] text-slate-400 font-medium">Views This Month</span>
+            <span className="text-[10px] text-slate-400 font-medium">Views This Month</span>
           </div>
 
-          <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs opacity-75">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs opacity-75">
             <Calendar className="w-3.5 h-3.5 text-slate-500" />
             <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
               0
             </span>
-            <span className="text-[11px] text-slate-400 font-medium">Scheduled Delivery</span>
+            <span className="text-[10px] text-slate-400 font-medium">Scheduled Delivery</span>
             <span className="ml-1 px-1.5 py-0.2 bg-slate-100 text-slate-500 rounded-full text-[9px] font-bold">
               COMING SOON
             </span>
@@ -196,119 +196,112 @@ export default function Reports() {
         </div>
 
         {/* Search Bar */}
-        <div className="bg-white p-4 rounded-2xl border border-border shadow-sm flex items-center justify-between gap-4">
+        <div className="bg-white p-2.5 rounded-xl border border-border shadow-2xs flex items-center justify-between gap-3">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
               type="text"
               placeholder="Search reports by name, type, or data source..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="w-full pl-8 pr-2.5 py-1 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
             />
           </div>
 
-          <span className="text-xs font-medium text-slate-500">
+          <span className="text-[11px] font-medium text-slate-500">
             {filteredReports.length} Available Reports
           </span>
         </div>
 
         {/* Reports Table */}
-        <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/80 shadow-2xs overflow-hidden">
+        <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-white/80 shadow-2xs overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white text-xs font-semibold uppercase tracking-wider">
-              <tr>
-                <th className="py-3.5 px-4 font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>REPORT NAME</th>
-                <th className="py-3.5 px-4 font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>TYPE</th>
-                <th className="py-3.5 px-4 font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>DATA SOURCE</th>
-                <th className="py-3.5 px-4 font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>LAST RUN</th>
-                <th className="py-3.5 px-4 text-right font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>ACTIONS</th>
+              <tr className="h-7">
+                <th className="py-1 px-3 font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>REPORT NAME</th>
+                <th className="py-1 px-3 font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>TYPE</th>
+                <th className="py-1 px-3 font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>DATA SOURCE</th>
+                <th className="py-1 px-3 font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>LAST RUN</th>
+                <th className="py-1 px-3 text-right font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>ACTIONS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border text-sm">
+            <tbody className="divide-y divide-border text-xs">
               {filteredReports.map((report) => (
-                <tr key={report.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-3.5 px-4">
-                    <div>
+                <tr key={report.id} className="h-[30px] hover:bg-slate-50/80 transition-colors">
+                  <td className="py-1 px-3">
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleViewReport(report)}
-                        className="font-bold text-slate-900 hover:text-blue-600 text-sm text-left block"
+                        className="font-semibold text-slate-900 hover:text-blue-600 text-xs text-left truncate max-w-xs"
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       >
                         {report.name}
                       </button>
-                      {report.description && (
-                        <p className="text-xs text-slate-500 mt-0.5 max-w-lg line-clamp-1">
-                          {report.description}
-                        </p>
-                      )}
                       {report.sharedWith && report.sharedWith.length > 0 && (
-                        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-purple-700 font-medium">
-                          <span className="px-2 py-0.5 bg-purple-50 border border-purple-200 rounded-md">
-                            Shared with: {report.sharedWith.join(", ")}
-                          </span>
-                        </div>
+                        <span className="px-1.5 py-0.2 bg-purple-50 border border-purple-200 rounded text-[10px] text-purple-700 font-medium">
+                          Shared
+                        </span>
                       )}
                     </div>
                   </td>
 
-                  <td className="py-3.5 px-4">
+                  <td className="py-1 px-3 whitespace-nowrap">
                     {report.type === "template" ? (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                         Template
                       </span>
                     ) : (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
                         Custom
                       </span>
                     )}
                   </td>
 
-                  <td className="py-3.5 px-4 font-mono text-xs font-semibold text-slate-700 uppercase">
+                  <td className="py-1 px-3 font-mono text-[11px] font-semibold text-slate-700 uppercase whitespace-nowrap">
                     {report.dataSource}
                   </td>
 
-                  <td className="py-3.5 px-4 text-xs text-slate-600">
+                  <td className="py-1 px-3 text-xs text-slate-600 whitespace-nowrap">
                     {report.lastRun}
                   </td>
 
-                  <td className="py-3.5 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
+                  <td className="py-1 px-3 text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => handleViewReport(report)}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                        className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors"
                       >
-                        <Eye className="w-3.5 h-3.5" /> View Report
+                        <Eye className="w-3 h-3" /> View
                       </button>
 
                       {/* Edit Button for Custom Reports and Copies */}
                       {report.type === "custom" && (
                         <button
                           onClick={() => handleEditReport(report)}
-                          className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-colors"
+                          className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-colors"
                           title="Edit Custom Report"
                         >
-                          <Pencil className="w-3.5 h-3.5" />
+                          <Pencil className="w-3 h-3" />
                         </button>
                       )}
 
                       {/* Duplicate Button */}
                       <button
                         onClick={() => handleDuplicateReport(report)}
-                        className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+                        className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
                         title="Duplicate as Custom Report"
                       >
-                        <Copy className="w-3.5 h-3.5" />
+                        <Copy className="w-3 h-3" />
                       </button>
 
                       {/* Delete Button for Custom Reports and Copies */}
                       {report.type === "custom" && (
                         <button
                           onClick={() => handleDelete(report.id, report.name)}
-                          className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-colors"
+                          className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-colors"
                           title="Delete"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3 h-3" />
                         </button>
                       )}
                     </div>

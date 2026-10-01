@@ -265,16 +265,14 @@ function MetricGroup({
           {label}
         </p>
         <ChevronDown
-          className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
-            open ? "rotate-180" : ""
-          }`}
+          className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? "rotate-180" : ""
+            }`}
         />
       </button>
       {open && (
         <div
-          className={`grid gap-2.5 items-stretch ${
-            columns === 3 ? "grid-cols-3" : "grid-cols-2"
-          }`}
+          className={`grid gap-2.5 items-stretch ${columns === 3 ? "grid-cols-3" : "grid-cols-2"
+            }`}
           style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
         >
           {children}
@@ -364,10 +362,10 @@ const SENTIMENT_OPTIONS: Array<{
   tone: MetricTone;
   phrases: string[];
 }> = [
-  { value: "Positive", tone: "success", phrases: ["Warm greeting", "Engaged and responsive", "Upbeat throughout", "Resolution confirmed"] },
-  { value: "Neutral",  tone: "neutral", phrases: ["Steady tone", "Clarifying details", "Matter-of-fact", "Calm and focused"] },
-  { value: "Negative", tone: "warning", phrases: ["Sounded hesitant", "Signs of frustration", "Uncertain responses", "Needed reassurance"] },
-];
+    { value: "Positive", tone: "success", phrases: ["Warm greeting", "Engaged and responsive", "Upbeat throughout", "Resolution confirmed"] },
+    { value: "Neutral", tone: "neutral", phrases: ["Steady tone", "Clarifying details", "Matter-of-fact", "Calm and focused"] },
+    { value: "Negative", tone: "warning", phrases: ["Sounded hesitant", "Signs of frustration", "Uncertain responses", "Needed reassurance"] },
+  ];
 
 function pickSentiment(rng: () => number) {
   const weights = [0.5, 0.35, 0.15]; // positive, neutral, negative
@@ -394,8 +392,8 @@ function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
     call.status !== "Completed"
       ? { value: "No Outcome", tone: "neutral", phrase: call.status === "Failed" ? "Call did not connect" : "Call hasn't happened yet" }
       : call.lastStage && call.lastStage !== "N/A" && call.lastStage !== call.currentStage
-      ? { value: "Stage Advanced", tone: "success", phrase: `${call.lastStage} → ${call.currentStage}` }
-      : { value: "No Change", tone: "neutral", phrase: `Remained at ${call.currentStage}` };
+        ? { value: "Stage Advanced", tone: "success", phrase: `${call.lastStage} → ${call.currentStage}` }
+        : { value: "No Change", tone: "neutral", phrase: `Remained at ${call.currentStage}` };
 
   const rawDuration = call.duration;
   const noDuration = !rawDuration || rawDuration === "0:00";
@@ -447,9 +445,9 @@ function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
   }
 
   // ── Sentiment arc ────────────────────────────────────────────────────────
-  const sentimentStart    = isCompleted ? pickSentiment(rng) : { ...noData };
-  const sentimentMid      = isCompleted ? pickSentiment(rng) : { ...noData };
-  const sentimentEnd      = isCompleted ? pickSentiment(rng) : { ...noData };
+  const sentimentStart = isCompleted ? pickSentiment(rng) : { ...noData };
+  const sentimentMid = isCompleted ? pickSentiment(rng) : { ...noData };
+  const sentimentEnd = isCompleted ? pickSentiment(rng) : { ...noData };
 
   // ── Talk-time ────────────────────────────────────────────────────────────
   let aiSpokePercent: CallReviewMetrics["aiSpokePercent"];
@@ -462,15 +460,15 @@ function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
     const stretch = Math.round(randRange(rng, 20, 60));
     const silence = Math.round(randRange(rng, 5, 25));
     const warmth = Math.round(randRange(rng, 40, 80));
-    aiSpokePercent  = { value: `${ai}%`,       phrase: `${Math.round(ai / 100 * parseFloat(rawDuration || "4") * 60)}s of the call` };
-    longestStretch  = { value: `${stretch}s`,  phrase: stretch < 40 ? "Short enough to stay natural" : "Slightly long for a single stretch" };
-    silencePercent  = { value: `${silence}%`,  phrase: silence < 15 ? "Less than average" : "A normal amount of pause" };
-    warmthPercent   = { value: `${warmth}%`,   phrase: warmth >= 60 ? "Friendly and empathetic" : "Fairly professional tone" };
+    aiSpokePercent = { value: `${ai}%`, phrase: `${Math.round(ai / 100 * parseFloat(rawDuration || "4") * 60)}s of the call` };
+    longestStretch = { value: `${stretch}s`, phrase: stretch < 40 ? "Short enough to stay natural" : "Slightly long for a single stretch" };
+    silencePercent = { value: `${silence}%`, phrase: silence < 15 ? "Less than average" : "A normal amount of pause" };
+    warmthPercent = { value: `${warmth}%`, phrase: warmth >= 60 ? "Friendly and empathetic" : "Fairly professional tone" };
   } else {
-    aiSpokePercent  = { value: "—", phrase: "No data for this call" };
-    longestStretch  = { value: "—", phrase: "No data for this call" };
-    silencePercent  = { value: "—", phrase: "No data for this call" };
-    warmthPercent   = { value: "—", phrase: "No data for this call" };
+    aiSpokePercent = { value: "—", phrase: "No data for this call" };
+    longestStretch = { value: "—", phrase: "No data for this call" };
+    silencePercent = { value: "—", phrase: "No data for this call" };
+    warmthPercent = { value: "—", phrase: "No data for this call" };
   }
 
   return {
@@ -675,7 +673,7 @@ export default function CallLogs() {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const totalRecords = 5380; // Mock total for demonstration
 
   // Team members and stages for filters
@@ -833,9 +831,9 @@ export default function CallLogs() {
   const scMonth = scCalendarMonth.getMonth();
   const scDaysInMonth = getDaysInMonth(scYear, scMonth);
   const scFirstDay = getFirstDayOfMonth(scYear, scMonth);
-  const scMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const scMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const today = new Date();
-  today.setHours(0,0,0,0);
+  today.setHours(0, 0, 0, 0);
 
   const handleScPrevMonth = () => setScCalendarMonth(new Date(scYear, scMonth - 1, 1));
   const handleScNextMonth = () => setScCalendarMonth(new Date(scYear, scMonth + 1, 1));
@@ -861,8 +859,8 @@ export default function CallLogs() {
     }
     setScIsScheduling(true);
     setTimeout(() => {
-      const dateStr = `${scSelectedDate.getFullYear()}-${String(scSelectedDate.getMonth()+1).padStart(2,'0')}-${String(scSelectedDate.getDate()).padStart(2,'0')}`;
-      const timeStr = `${String(scHour).padStart(2,'0')}:${String(scMinute).padStart(2,'0')}`;
+      const dateStr = `${scSelectedDate.getFullYear()}-${String(scSelectedDate.getMonth() + 1).padStart(2, '0')}-${String(scSelectedDate.getDate()).padStart(2, '0')}`;
+      const timeStr = `${String(scHour).padStart(2, '0')}:${String(scMinute).padStart(2, '0')}`;
       const newCall: CallLog = {
         id: `CALL-${Date.now()}`,
         client: scSelectedClient.name,
@@ -1072,7 +1070,7 @@ export default function CallLogs() {
   const totalPages = Math.ceil(totalRecords / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
   const endIndex = Math.min(startIndex + rowsPerPage, totalRecords);
-  const paginatedLogs = filteredLogs.slice(0, rowsPerPage); // Show only first page of filtered results
+  const paginatedLogs = filteredLogs.slice(startIndex, endIndex);
 
   // Check if all rows on current page are selected
   const currentPageLogIds = paginatedLogs.map((l) => l.id);
@@ -1256,12 +1254,12 @@ export default function CallLogs() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
           title="Call Logs"
           subtitle="View and manage call logs and recordings with precision"
           badge={
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               Telephony
             </span>
           }
@@ -1271,16 +1269,16 @@ export default function CallLogs() {
 
         {/* Active Client Filter Banner */}
         {activeClientFilter && (
-          <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Filter className="w-4 h-4 text-primary" />
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-2.5 px-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 bg-primary/10 rounded-lg flex items-center justify-center">
+                <Filter className="w-3.5 h-3.5 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-medium text-foreground">
+                <p className="text-xs font-medium text-foreground">
                   Showing call logs for <span className="font-semibold">{activeClientFilter}</span>
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[10px] text-muted-foreground">
                   Click the button to view all call logs
                 </p>
               </div>
@@ -1289,28 +1287,28 @@ export default function CallLogs() {
               variant="outline"
               size="sm"
               onClick={handleClearClientFilter}
-              className="flex items-center gap-2"
+              className="flex items-center gap-1.5 text-xs py-1"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
               Clear Filter
             </Button>
           </div>
         )}
 
         {/* Action Bar */}
-        <div className="bg-card rounded-xl p-4 border border-border shadow-sm">
-          <div className="flex items-center gap-4">
+        <div className="bg-card rounded-xl p-2.5 px-3 border border-border shadow-xs">
+          <div className="flex items-center gap-3">
             {/* Search Bar */}
             <div className="flex-1 relative">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search call logs..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setShowSearchModal(true)}
-                  className="w-full pl-9 pr-4 py-2 bg-input-background border border-input rounded-lg text-sm"
+                  className="w-full pl-8 pr-3 py-1.5 bg-input-background border border-input rounded-lg text-xs"
                 />
               </div>
 
@@ -1909,7 +1907,7 @@ export default function CallLogs() {
             <table className="w-full">
               <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
                 <tr>
-                  <th className="px-4 py-2.5 w-10">
+                  <th className="px-3 py-1.5 w-10">
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -1917,44 +1915,44 @@ export default function CallLogs() {
                         if (el) el.indeterminate = someSelected;
                       }}
                       onChange={handleSelectAll}
-                      className="w-4 h-4 cursor-pointer"
+                      className="w-3.5 h-3.5 cursor-pointer"
                     />
                   </th>
-                  <th className="px-2 py-2.5 w-8"></th>
-                  {visibleColumns.callId && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Call ID</th>}
-                  {visibleColumns.client && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Client</th>}
-                  {visibleColumns.stage && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Stage</th>}
-                  {visibleColumns.status && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>}
-                  {visibleColumns.date && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Date & Time</th>}
-                  {visibleColumns.duration && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Duration</th>}
+                  <th className="px-2 py-1.5 w-8"></th>
+                  {visibleColumns.callId && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Call ID</th>}
+                  {visibleColumns.client && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Client</th>}
+                  {visibleColumns.stage && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Stage</th>}
+                  {visibleColumns.status && <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>}
+                  {visibleColumns.date && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Date & Time</th>}
+                  {visibleColumns.duration && <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Duration</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {paginatedLogs.map((log) => (
                   <tr
                     key={log.id}
-                    className={`transition-colors ${selectedRows.has(log.id)
+                    className={`transition-colors h-[30px] ${selectedRows.has(log.id)
                       ? "bg-[#E8F0FE]"
                       : "hover:bg-[#F1F5F9]"
                       }`}
                   >
-                    <td className="px-4 py-2.5">
+                    <td className="px-3 py-1">
                       <input
                         type="checkbox"
                         checked={selectedRows.has(log.id)}
                         onChange={() => handleSelectRow(log.id)}
-                        className="w-4 h-4 cursor-pointer"
+                        className="w-3.5 h-3.5 cursor-pointer"
                       />
                     </td>
                     {/* Hamburger menu column */}
-                    <td className="px-2 py-2.5 relative">
+                    <td className="px-2 py-1 relative">
                       <div className="hamburger-menu-container">
                         <button
                           onClick={() => setOpenMenuCallId(openMenuCallId === log.id ? null : log.id)}
-                          className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center"
-                          style={{ width: '24px', height: '24px' }}
+                          className="p-0.5 hover:bg-muted rounded transition-colors flex items-center justify-center"
+                          style={{ width: '22px', height: '22px' }}
                         >
-                          <MoreVertical className="w-4 h-4" style={{ color: '#9CA3AF' }} />
+                          <MoreVertical className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />
                         </button>
 
                         {/* Hamburger menu popup */}
@@ -1973,10 +1971,10 @@ export default function CallLogs() {
                                 setShowCallDetailsDrawer(true);
                                 setOpenMenuCallId(null);
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded hover:bg-[#E8F0FE] transition-colors"
                               style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
                             >
-                              <Eye className="w-4 h-4" />
+                              <Eye className="w-3.5 h-3.5" />
                               <span>View</span>
                             </button>
                             <button
@@ -1984,10 +1982,10 @@ export default function CallLogs() {
                                 toast.info('Call feature coming soon');
                                 setOpenMenuCallId(null);
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded hover:bg-[#E8F0FE] transition-colors"
                               style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
                             >
-                              <Phone className="w-4 h-4" />
+                              <Phone className="w-3.5 h-3.5" />
                               <span>Call</span>
                             </button>
                             <button
@@ -1995,10 +1993,10 @@ export default function CallLogs() {
                                 toast.success(`Call log ${log.id} deleted`);
                                 setOpenMenuCallId(null);
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded hover:bg-[#E8F0FE] transition-colors"
                               style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                               <span>Delete</span>
                             </button>
                           </div>
@@ -2006,7 +2004,7 @@ export default function CallLogs() {
                       </div>
                     </td>
                     {visibleColumns.callId && (
-                      <td className="px-4 py-2.5 font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                      <td className="px-3 py-1 font-medium text-xs" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                         <button
                           onClick={() => {
                             setSelectedCallForDetails(log);
@@ -2020,12 +2018,12 @@ export default function CallLogs() {
                       </td>
                     )}
                     {visibleColumns.client && (
-                      <td className="px-4 py-2.5 font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                      <td className="px-3 py-1 font-medium text-xs" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                         <div className="flex items-center" style={{ gap: '6px' }}>
                           {log.type === "Outbound" ? (
-                            <PiPhoneOutgoing style={{ width: '14px', height: '14px', color: '#1A73E8', flexShrink: 0 }} />
+                            <PiPhoneOutgoing style={{ width: '13px', height: '13px', color: '#1A73E8', flexShrink: 0 }} />
                           ) : (
-                            <PiPhoneIncoming style={{ width: '14px', height: '14px', color: '#22C55E', flexShrink: 0 }} />
+                            <PiPhoneIncoming style={{ width: '13px', height: '13px', color: '#22C55E', flexShrink: 0 }} />
                           )}
                           <span
                             className="text-left"
@@ -2037,7 +2035,7 @@ export default function CallLogs() {
                       </td>
                     )}
                     {visibleColumns.stage && (
-                      <td className="px-4 py-2.5 text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                      <td className="px-3 py-1 text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>
                         {log.lastStage && log.lastStage !== "N/A" ? (
                           <span className="flex items-center gap-1 flex-wrap">
                             <span style={{ color: '#94A3B8' }}>{log.lastStage}</span>
@@ -2050,8 +2048,8 @@ export default function CallLogs() {
                       </td>
                     )}
                     {visibleColumns.status && (
-                      <td className="px-4 py-2.5 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${log.status === "Completed"
+                      <td className="px-3 py-1 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${log.status === "Completed"
                           ? "bg-success-bg text-success"
                           : log.status === "Pending"
                             ? "bg-warning/10 text-warning"
@@ -2061,8 +2059,8 @@ export default function CallLogs() {
                         </span>
                       </td>
                     )}
-                    {visibleColumns.date && <td className="px-4 py-2.5 text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.date}</td>}
-                    {visibleColumns.duration && <td className="px-4 py-2.5 text-xs text-center tabular-nums" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.duration}</td>}
+                    {visibleColumns.date && <td className="px-3 py-1 text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.date}</td>}
+                    {visibleColumns.duration && <td className="px-3 py-1 text-xs text-center tabular-nums" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.duration}</td>}
                   </tr>
                 ))}
               </tbody>
@@ -2080,9 +2078,9 @@ export default function CallLogs() {
                     onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
                     className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
                   >
-                    <option value={15}>15</option>
-                    <option value={25}>25</option>
+                    <option value={20}>20</option>
                     <option value={50}>50</option>
+                    <option value={100}>100</option>
                   </select>
                 </div>
                 <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
@@ -2441,16 +2439,16 @@ export default function CallLogs() {
         values={{
           client: scSelectedClient
             ? {
-                id: scSelectedClient.id,
-                name: scSelectedClient.name,
-                email: scSelectedClient.email,
-                phone: scSelectedClient.phone,
-                countryCode: scSelectedClient.countryCode,
-                countryFlag: scSelectedClient.countryFlag,
-                country: scSelectedClient.country,
-                status: scSelectedClient.status,
-                processes: scSelectedClient.processes,
-              }
+              id: scSelectedClient.id,
+              name: scSelectedClient.name,
+              email: scSelectedClient.email,
+              phone: scSelectedClient.phone,
+              countryCode: scSelectedClient.countryCode,
+              countryFlag: scSelectedClient.countryFlag,
+              country: scSelectedClient.country,
+              status: scSelectedClient.status,
+              processes: scSelectedClient.processes,
+            }
             : null,
           clientSearch: scClientSearch,
           process: scSelectedProcess,

@@ -471,7 +471,7 @@ export default function Clients() {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const totalRecords = 5380; // Mock total for demonstration
 
   // Selection state
@@ -710,19 +710,19 @@ export default function Clients() {
     switch (columnKey) {
       case 'name':
         return (
-          <td key="name" className="px-4 py-2.5 whitespace-nowrap">
+          <td key="name" className="px-3 py-1 whitespace-nowrap">
             {isBulkEditMode && selectedRows.has(client.id) ? (
               <input
                 type="text"
                 value={editedClients[client.id]?.name ?? client.name}
                 onChange={(e) => handleEditClient(client.id, 'name', e.target.value)}
-                className="w-full px-3 py-1.5 bg-input-background border-2 border-primary/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full px-2.5 py-1 bg-input-background border-2 border-primary/50 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary"
                 style={{ fontFamily: 'DM Sans, sans-serif' }}
               />
             ) : (
               <button
                 onClick={() => navigate(`/clients/${client.id}`)}
-                className="font-medium text-sm hover:underline cursor-pointer text-left"
+                className="font-medium text-xs hover:underline cursor-pointer text-left"
                 style={{
                   fontFamily: 'DM Sans, sans-serif',
                   color: '#4F8EF7',
@@ -736,13 +736,13 @@ export default function Clients() {
         );
       case 'email':
         return (
-          <td key="email" className="px-4 py-2.5 whitespace-nowrap">
+          <td key="email" className="px-3 py-1 whitespace-nowrap">
             {isBulkEditMode && selectedRows.has(client.id) ? (
               <input
                 type="email"
                 value={editedClients[client.id]?.email ?? client.email}
                 onChange={(e) => handleEditClient(client.id, 'email', e.target.value)}
-                className="w-full px-3 py-1.5 bg-input-background border-2 border-primary/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full px-2.5 py-1 bg-input-background border-2 border-primary/50 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary"
                 style={{ fontFamily: 'Outfit, sans-serif' }}
               />
             ) : (
@@ -752,13 +752,13 @@ export default function Clients() {
         );
       case 'phone':
         return (
-          <td key="phone" className="px-4 py-2.5 whitespace-nowrap">
+          <td key="phone" className="px-3 py-1 whitespace-nowrap">
             {isBulkEditMode && selectedRows.has(client.id) ? (
               <input
                 type="tel"
                 value={editedClients[client.id]?.phone ?? client.phone}
                 onChange={(e) => handleEditClient(client.id, 'phone', e.target.value)}
-                className="w-full px-3 py-1.5 bg-input-background border-2 border-primary/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full px-2.5 py-1 bg-input-background border-2 border-primary/50 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary"
                 style={{ fontFamily: 'Outfit, sans-serif' }}
               />
             ) : (
@@ -768,7 +768,7 @@ export default function Clients() {
         );
       case 'responsible':
         return (
-          <td key="responsible" className="px-4 py-2.5 text-xs whitespace-nowrap" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+          <td key="responsible" className="px-3 py-1 text-xs whitespace-nowrap" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
             {isBulkEditMode && selectedRows.has(client.id) ? (
               <select
                 value={client.responsible}
@@ -777,7 +777,7 @@ export default function Clients() {
                     c.id === client.id ? { ...c, responsible: e.target.value } : c
                   ));
                 }}
-                className="text-xs px-2 py-1 border border-input rounded-lg bg-input-background"
+                className="text-xs px-2 py-0.5 border border-input rounded-lg bg-input-background"
                 style={{ fontFamily: 'Outfit, sans-serif', minWidth: '140px' }}
               >
                 <option value="John Smith">John Smith</option>
@@ -796,7 +796,7 @@ export default function Clients() {
         );
       case 'lastContact':
         return (
-          <td key="lastContact" className="px-4 py-2.5 text-xs whitespace-nowrap" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+          <td key="lastContact" className="px-3 py-1 text-xs whitespace-nowrap" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
             {isBulkEditMode && selectedRows.has(client.id) ? (
               <input
                 type="date"
@@ -806,7 +806,7 @@ export default function Clients() {
                     c.id === client.id ? { ...c, lastContact: e.target.value } : c
                   ));
                 }}
-                className="text-xs px-2 py-1 border border-input rounded-lg bg-input-background"
+                className="text-xs px-2 py-0.5 border border-input rounded-lg bg-input-background"
                 style={{ fontFamily: 'Outfit, sans-serif', minWidth: '130px' }}
               />
             ) : (
@@ -816,7 +816,7 @@ export default function Clients() {
         );
       case 'status':
         return (
-          <td key="status" className="px-4 py-2.5 whitespace-nowrap">
+          <td key="status" className="px-3 py-1 whitespace-nowrap">
             {isBulkEditMode && selectedRows.has(client.id) ? (
               <select
                 value={client.status}
@@ -825,7 +825,7 @@ export default function Clients() {
                     c.id === client.id ? { ...c, status: e.target.value } : c
                   ));
                 }}
-                className="text-xs px-2 py-1 border border-input rounded-lg bg-input-background"
+                className="text-xs px-2 py-0.5 border border-input rounded-lg bg-input-background"
                 style={{ fontFamily: 'Outfit, sans-serif', minWidth: '100px' }}
               >
                 <option value="Active">Active</option>
@@ -833,7 +833,7 @@ export default function Clients() {
               </select>
             ) : (
               <span
-                className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${client.status === "Active"
+                className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${client.status === "Active"
                   ? "bg-success-bg text-success"
                   : client.status === "Pending"
                     ? "bg-warning-bg text-warning"
@@ -1479,7 +1479,7 @@ export default function Clients() {
   const totalPages = Math.ceil(totalRecords / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
   const endIndex = Math.min(startIndex + rowsPerPage, totalRecords);
-  const paginatedClients = filteredClients.slice(0, rowsPerPage); // Show only first page of filtered results
+  const paginatedClients = filteredClients.slice(startIndex, endIndex);
 
   // Check if all rows on current page are selected
   const currentPageClientIds = paginatedClients.map((c) => c.id);
@@ -1489,12 +1489,12 @@ export default function Clients() {
   return (
     <>
       <div className="min-h-screen bg-[#fafafa]">
-        <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+        <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
           <PageHeader
             title="Clients"
             subtitle="Manage your medical intelligence and client interactions with precision"
             badge={
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
                 Directory
               </span>
             }
@@ -1503,14 +1503,14 @@ export default function Clients() {
           </PageHeader>
 
           {/* Action Bar */}
-          <div className="bg-card rounded-t-xl p-4 border border-border shadow-sm" style={{ borderBottomLeftRadius: showFilterPanel ? 0 : '0.75rem', borderBottomRightRadius: showFilterPanel ? 0 : '0.75rem' }}>
-            <div className="flex flex-wrap items-center gap-3">
+          <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs" style={{ borderBottomLeftRadius: showFilterPanel ? 0 : '0.75rem', borderBottomRightRadius: showFilterPanel ? 0 : '0.75rem' }}>
+            <div className="flex flex-wrap items-center gap-2">
               {/* Smart Search Bar with Filter Tags */}
               <div className="flex-1 min-w-64">
                 <div className="relative search-bar-container">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none z-10" />
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
                   <div
-                    className="w-full h-[44px] bg-input-background border border-input rounded-xl flex items-center cursor-text overflow-hidden"
+                    className="w-full h-[36px] bg-input-background border border-input rounded-lg flex items-center cursor-text overflow-hidden"
                     onClick={() => {
                       setShowSearchModal(true);
                       setShowColumnToggle(false);
@@ -3001,7 +3001,7 @@ export default function Clients() {
                 <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
                   <tr>
                     {/* Checkbox column */}
-                    <th className="px-4 py-2.5 w-10">
+                    <th className="px-3 py-1.5 w-10">
                       <input
                         type="checkbox"
                         checked={allSelected}
@@ -3013,17 +3013,17 @@ export default function Clients() {
                       />
                     </th>
                     {/* Settings icon above hamburger menu column */}
-                    <th className="px-2 py-2.5 text-center relative" style={{ width: '32px' }}>
+                    <th className="px-2 py-1.5 text-center relative" style={{ width: '32px' }}>
                       <div className="relative inline-block">
                         <button
                           onClick={() => {
                             setShowColumnToggle(!showColumnToggle);
                             setShowFilterPanel(false);
                           }}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
+                          className="inline-flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-white/10"
                           aria-label="Customize Columns"
                         >
-                          <SettingsIcon className="w-4 h-4 text-[#E5E7EB] hover:text-white transition-colors" />
+                          <SettingsIcon className="w-3.5 h-3.5 text-[#E5E7EB] hover:text-white transition-colors" />
                         </button>
                         {showColumnToggle && (
                           <div className="absolute left-0 top-full mt-2 w-56 bg-card border border-border rounded-xl shadow-lg p-4 z-50">
@@ -3076,13 +3076,13 @@ export default function Clients() {
                   {paginatedClients.map((client) => (
                     <tr
                       key={client.id}
-                      className={`transition-colors ${selectedRows.has(client.id)
+                      className={`transition-colors h-[30px] ${selectedRows.has(client.id)
                         ? "bg-[#E8F0FE]"
                         : "hover:bg-[#F1F5F9]"
                         }`}
                     >
                       {/* Checkbox column */}
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-1">
                         <input
                           type="checkbox"
                           checked={selectedRows.has(client.id)}
@@ -3091,12 +3091,12 @@ export default function Clients() {
                         />
                       </td>
                       {/* Hamburger menu column */}
-                      <td className="px-2 py-2.5 relative">
+                      <td className="px-2 py-1 relative">
                         <div className="hamburger-menu-container">
                           <button
                             onClick={() => setOpenMenuClientId(openMenuClientId === client.id ? null : client.id)}
-                            className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center"
-                            style={{ width: '24px', height: '24px' }}
+                            className="p-0.5 hover:bg-muted rounded transition-colors flex items-center justify-center"
+                            style={{ width: '22px', height: '22px' }}
                           >
                             <MoreVertical className="w-4 h-4" style={{ color: '#9CA3AF' }} />
                           </button>
@@ -3253,9 +3253,9 @@ export default function Clients() {
                       onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
                       className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
                     >
-                      <option value={15}>15</option>
-                      <option value={25}>25</option>
+                      <option value={20}>20</option>
                       <option value={50}>50</option>
+                      <option value={100}>100</option>
                     </select>
                   </div>
                   <span className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>

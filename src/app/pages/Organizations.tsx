@@ -119,7 +119,7 @@ export default function Organizations() {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
 
   // New Organization Form
   const [newOrg, setNewOrg] = useState({
@@ -280,95 +280,96 @@ export default function Organizations() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fafafa] p-6 lg:p-8">
-      <div className="max-w-[1440px] mx-auto flex gap-6 items-start">
+    <div className="min-h-screen bg-[#fafafa] p-3 sm:p-4">
+      <div className="max-w-[1440px] mx-auto flex gap-4 items-start">
         {/* Left Submenu Navigation */}
         <SettingsSubnav activeId="organizations" />
 
         {/* Main Content Area */}
-        <div className="flex-1 min-w-0 space-y-6">
+        <div className="flex-1 min-w-0 space-y-2.5">
           {/* Header */}
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             <h1
-              className="text-3xl font-bold text-[#222222] tracking-tight"
+              className="text-xl sm:text-2xl font-bold text-[#222222] tracking-tight"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               Organizations
             </h1>
-            <p className="text-sm text-[#64748b] font-normal leading-relaxed">
+            <p className="text-xs text-[#64748b] font-normal leading-tight">
               Manage your organization hierarchy and system settings with precision
             </p>
           </div>
 
           {/* 3 Stat Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 3 Stat Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
             {/* Total Credits */}
-            <div className="bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center justify-between transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+            <div className="bg-white/80 backdrop-blur-xl rounded-xl border border-white/80 shadow-2xs p-3 flex items-center justify-between transition-all">
               <div>
-                <p className="text-xs font-semibold text-[#64748b] tracking-wide">
+                <p className="text-[11px] font-semibold text-[#64748b] tracking-wide">
                   Total Credits
                 </p>
                 <p
-                  className="text-3xl font-bold text-[#222222] mt-1 tracking-tight"
+                  className="text-xl font-bold text-[#222222] mt-0.5 tracking-tight"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   {totalCreditsSum}
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-blue-50/80 border border-blue-100 flex items-center justify-center text-[#1456f0] shadow-2xs">
-                <Coins className="w-6 h-6" />
+              <div className="w-8 h-8 rounded-lg bg-blue-50/80 border border-blue-100 flex items-center justify-center text-[#1456f0]">
+                <Coins className="w-4 h-4" />
               </div>
             </div>
 
             {/* Assigned Credits */}
-            <div className="bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center justify-between transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+            <div className="bg-white/80 backdrop-blur-xl rounded-xl border border-white/80 shadow-2xs p-3 flex items-center justify-between transition-all">
               <div>
-                <p className="text-xs font-semibold text-[#64748b] tracking-wide">
+                <p className="text-[11px] font-semibold text-[#64748b] tracking-wide">
                   Assigned Credits
                 </p>
                 <p
-                  className="text-3xl font-bold text-[#222222] mt-1 tracking-tight"
+                  className="text-xl font-bold text-[#222222] mt-0.5 tracking-tight"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   {assignedCreditsSum}
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-amber-50/80 border border-amber-100 flex items-center justify-center text-[#f59e0b] shadow-2xs">
-                <Coins className="w-6 h-6" />
+              <div className="w-8 h-8 rounded-lg bg-amber-50/80 border border-amber-100 flex items-center justify-center text-[#f59e0b]">
+                <Coins className="w-4 h-4" />
               </div>
             </div>
 
             {/* Credits Left */}
-            <div className="bg-white/80 backdrop-blur-xl rounded-[24px] border border-white/80 shadow-[0_2px_16px_rgba(0,0,0,0.02)] p-5 flex items-center justify-between transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+            <div className="bg-white/80 backdrop-blur-xl rounded-xl border border-white/80 shadow-2xs p-3 flex items-center justify-between transition-all">
               <div>
-                <p className="text-xs font-semibold text-[#64748b] tracking-wide">
+                <p className="text-[11px] font-semibold text-[#64748b] tracking-wide">
                   Credits Left
                 </p>
                 <p
-                  className="text-3xl font-bold text-[#222222] mt-1 tracking-tight"
+                  className="text-xl font-bold text-[#222222] mt-0.5 tracking-tight"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   {creditsLeftSum}
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50/80 border border-emerald-100 flex items-center justify-center text-[#10b981] shadow-2xs">
-                <Coins className="w-6 h-6" />
+              <div className="w-8 h-8 rounded-lg bg-emerald-50/80 border border-emerald-100 flex items-center justify-center text-[#10b981]">
+                <Coins className="w-4 h-4" />
               </div>
             </div>
           </div>
 
           {/* Search & Actions Toolbar */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
-            <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-0.5">
+            <div className="flex items-center gap-2.5 w-full sm:w-auto">
               <button
                 type="button"
-                className="px-4 py-2 rounded-full text-xs font-semibold bg-blue-50 text-[#1456f0] border border-blue-200/60 shadow-2xs hover:bg-blue-100/60 transition-all cursor-pointer"
+                className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-[#1456f0] border border-blue-200/60 shadow-2xs hover:bg-blue-100/60 transition-all cursor-pointer"
               >
                 All Organizations
               </button>
 
-              <div className="relative flex-1 sm:w-64">
-                <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <div className="relative flex-1 sm:w-60">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Search..."
@@ -377,36 +378,36 @@ export default function Organizations() {
                     setSearchQuery(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="w-full pl-9 pr-4 py-1.5 text-xs bg-white/80 border border-slate-200/80 rounded-full text-[#222222] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0] transition-all"
+                  className="w-full pl-8 pr-3 py-1 text-xs bg-white/80 border border-slate-200/80 rounded-full text-[#222222] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0] transition-all"
                 />
               </div>
             </div>
 
-            <div className="flex items-center gap-4 self-end sm:self-auto">
+            <div className="flex items-center gap-3 self-end sm:self-auto">
               <span className="text-xs font-medium text-[#64748b]">
-                {filteredOrgs.length} {filteredOrgs.length === 1 ? "organization" : "organizations"}
+                {filteredOrgs.length} {filteredOrgs.length === 1 ? "org" : "orgs"}
               </span>
 
               {/* Circular Dark Plus Button */}
               <button
                 type="button"
                 onClick={() => setShowAddModal(true)}
-                className="w-9 h-9 rounded-full bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white flex items-center justify-center shadow-sm hover:shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                className="w-7 h-7 rounded-full bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white flex items-center justify-center shadow-sm hover:shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer"
                 title="Add Organization"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
 
           {/* Table Container */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-[20px] border border-slate-200/80 shadow-2xs overflow-hidden">
+          <div className="bg-white/80 backdrop-blur-xl rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 {/* Dark Table Header */}
                 <thead>
-                  <tr className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white text-left">
-                    <th className="w-10 px-4 py-3.5 text-center">
+                  <tr className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white text-left" style={{ height: "30px" }}>
+                    <th className="w-8 px-3 py-1 text-center">
                       <input
                         type="checkbox"
                         checked={
@@ -417,58 +418,58 @@ export default function Organizations() {
                         className="w-3.5 h-3.5 rounded border-slate-400 accent-[#1456f0] cursor-pointer"
                       />
                     </th>
-                    <th className="w-8 px-2 py-3.5 text-center">
+                    <th className="w-7 px-1 py-1 text-center">
                       <SettingsIcon className="w-3.5 h-3.5 text-slate-400 hover:text-white transition-colors cursor-pointer mx-auto" />
                     </th>
                     <th
-                      className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
+                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
                       ORGANIZATION NAME
                     </th>
                     <th
-                      className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
+                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
                       EMAIL
                     </th>
                     <th
-                      className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
+                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
                       INDUSTRY
                     </th>
                     <th
-                      className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
+                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
                       LOCATION
                     </th>
                     <th
-                      className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
+                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
                       PREFERRED TIME
                     </th>
                     <th
-                      className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
+                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
                       STATUS
                     </th>
                     <th
-                      className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
+                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
                       USERS
                     </th>
                     <th
-                      className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
+                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
                       CREATED ON
                     </th>
-                    <th className="w-12 px-3 py-3.5 text-right"></th>
+                    <th className="w-10 px-2 py-1 text-right"></th>
                   </tr>
                 </thead>
 
@@ -481,13 +482,13 @@ export default function Organizations() {
                         <tr
                           key={org.id}
                           onClick={() => handleRowClick(org)}
-                          className={`hover:bg-slate-50/80 transition-colors cursor-pointer group ${
+                          className={`h-[30px] hover:bg-slate-50/80 transition-colors cursor-pointer group ${
                             isSelected ? "bg-blue-50/30" : ""
                           }`}
                         >
                           {/* Checkbox */}
                           <td
-                            className="px-4 py-3 text-center"
+                            className="px-3 py-1 text-center"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleSelectOne(org.id);
@@ -502,54 +503,54 @@ export default function Organizations() {
                           </td>
 
                           {/* Grip Handle */}
-                          <td className="px-2 py-3 text-center text-slate-300 group-hover:text-slate-400 transition-colors">
+                          <td className="px-1 py-1 text-center text-slate-300 group-hover:text-slate-400 transition-colors">
                             <GripVertical className="w-3.5 h-3.5 mx-auto opacity-60" />
                           </td>
 
                           {/* Organization Name + Flag */}
-                          <td className="px-4 py-3 font-semibold text-[#222222] whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              {org.flag && <span className="text-base">{org.flag}</span>}
+                          <td className="px-3 py-1 font-semibold text-[#222222] whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              {org.flag && <span className="text-sm">{org.flag}</span>}
                               <span>{org.name}</span>
                             </div>
                           </td>
 
                           {/* Email */}
-                          <td className="px-4 py-3 text-[#45515e] whitespace-nowrap">
+                          <td className="px-3 py-1 text-[#45515e] whitespace-nowrap">
                             {org.email}
                           </td>
 
                           {/* Industry */}
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <div className="flex flex-col">
+                          <td className="px-3 py-1 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
                               <span className="font-semibold text-[#222222]">{org.industry}</span>
                               {org.industryCategory && (
-                                <span className="text-[11px] text-[#64748b]">{org.industryCategory}</span>
+                                <span className="text-[10px] text-[#64748b]">({org.industryCategory})</span>
                               )}
                             </div>
                           </td>
 
                           {/* Location */}
-                          <td className="px-4 py-3 text-[#45515e] whitespace-nowrap">
+                          <td className="px-3 py-1 text-[#45515e] whitespace-nowrap">
                             {org.location || (org.locations && org.locations.length > 0 ? org.locations.join(", ") : "—")}
                           </td>
 
                           {/* Preferred Time */}
-                          <td className="px-4 py-3 text-[#45515e] whitespace-nowrap">
+                          <td className="px-3 py-1 text-[#45515e] whitespace-nowrap">
                             {org.preferredTime}
                           </td>
 
                           {/* Status */}
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="px-3 py-1 whitespace-nowrap">
                             <span
-                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                                 org.status === "Active"
                                   ? "bg-emerald-50 text-[#10b981] border border-emerald-200/60"
                                   : "bg-slate-100 text-slate-500 border border-slate-200"
                               }`}
                             >
                               <span
-                                className={`w-1.5 h-1.5 rounded-full ${
+                                className={`w-1 h-1 rounded-full ${
                                   org.status === "Active" ? "bg-[#10b981]" : "bg-slate-400"
                                 }`}
                               />
@@ -558,17 +559,17 @@ export default function Organizations() {
                           </td>
 
                           {/* Users */}
-                          <td className="px-4 py-3 text-[#45515e] whitespace-nowrap">
-                            {org.users} {org.users === 1 ? "Users" : "Users"}
+                          <td className="px-3 py-1 text-[#45515e] whitespace-nowrap">
+                            {org.users} Users
                           </td>
 
                           {/* Created On */}
-                          <td className="px-4 py-3 text-[#64748b] whitespace-nowrap">
+                          <td className="px-3 py-1 text-[#64748b] whitespace-nowrap text-[11px]">
                             {org.createdDate}
                           </td>
 
                           {/* Row Action / Chevron */}
-                          <td className="px-3 py-3 text-right">
+                          <td className="px-2 py-1 text-right">
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 type="button"
@@ -577,7 +578,7 @@ export default function Organizations() {
                                   setEditingOrg(org);
                                   setShowEditModal(true);
                                 }}
-                                className="p-1.5 text-slate-400 hover:text-[#1456f0] hover:bg-blue-50 rounded-lg transition-colors"
+                                className="p-1 text-slate-400 hover:text-[#1456f0] hover:bg-blue-50 rounded transition-colors"
                                 title="Edit"
                               >
                                 <Edit className="w-3.5 h-3.5" />
@@ -589,12 +590,12 @@ export default function Organizations() {
                                   setDeletingOrg(org);
                                   setShowDeleteModal(true);
                                 }}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
                                 title="Delete"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
-                              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition-colors ml-1" />
+                              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors ml-0.5" />
                             </div>
                           </td>
                         </tr>
@@ -602,7 +603,7 @@ export default function Organizations() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={10} className="px-6 py-12 text-center text-slate-400">
+                      <td colSpan={10} className="px-4 py-8 text-center text-xs text-slate-400">
                         No organizations found matching your search.
                       </td>
                     </tr>
@@ -612,9 +613,9 @@ export default function Organizations() {
             </div>
 
             {/* Pagination Footer Bar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 border-t border-slate-100 bg-white/40 text-xs text-[#64748b]">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-1.5 border-t border-slate-100 bg-white/40 text-xs text-[#64748b]">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
                   <span>Rows per page</span>
                   <select
                     value={rowsPerPage}
@@ -622,11 +623,9 @@ export default function Organizations() {
                       setRowsPerPage(Number(e.target.value));
                       setCurrentPage(1);
                     }}
-                    className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs text-[#222222] font-semibold focus:outline-none focus:ring-1 focus:ring-[#1456f0]"
+                    className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-xs text-[#222222] font-semibold focus:outline-none"
                   >
-                    <option value={10}>10</option>
-                    <option value={15}>15</option>
-                    <option value={25}>25</option>
+                    <option value={20}>20</option>
                     <option value={50}>50</option>
                   </select>
                 </div>

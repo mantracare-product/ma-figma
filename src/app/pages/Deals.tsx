@@ -755,7 +755,7 @@ export default function Deals() {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const totalRecords = 5380; // Mock total for demonstration
 
   // Team members and stages for filters
@@ -1272,7 +1272,7 @@ export default function Deals() {
   const totalPages = Math.ceil(totalRecords / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
   const endIndex = Math.min(startIndex + rowsPerPage, totalRecords);
-  const paginatedLogs = filteredLogs.slice(0, rowsPerPage); // Show only first page of filtered results
+  const paginatedLogs = filteredLogs.slice(startIndex, endIndex);
 
   // Check if all rows on current page are selected
   const currentPageLogIds = paginatedLogs.map((l) => l.id);
@@ -1450,12 +1450,12 @@ export default function Deals() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
           title="Process"
           subtitle="View and manage process pipeline"
           badge={
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               Pipeline
             </span>
           }
@@ -1465,16 +1465,16 @@ export default function Deals() {
 
         {/* Active Client Filter Banner */}
         {activeClientFilter && (
-          <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Filter className="w-4 h-4 text-primary" />
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-2.5 px-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 bg-primary/10 rounded-lg flex items-center justify-center">
+                <Filter className="w-3.5 h-3.5 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-medium text-foreground">
+                <p className="text-xs font-medium text-foreground">
                   Showing deals for <span className="font-semibold">{activeClientFilter}</span>
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[10px] text-muted-foreground">
                   Click the button to view all deals
                 </p>
               </div>
@@ -1483,30 +1483,109 @@ export default function Deals() {
               variant="outline"
               size="sm"
               onClick={handleClearClientFilter}
-              className="flex items-center gap-2"
+              className="flex items-center gap-1.5 text-xs py-1"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
               Clear Filter
             </Button>
           </div>
         )}
 
-        {/* Action Bar */}
-        <div className="bg-card rounded-xl p-4 border border-border shadow-sm">
-          <div className="flex items-center gap-4">
-            {/* Search Bar */}
-            <div className="flex-1 relative">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search deals..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => setShowSearchModal(true)}
-                  className="w-full pl-9 pr-4 py-2 bg-input-background border border-input rounded-lg text-sm"
-                />
-              </div>
+        {/* Unified Search & Control Bar (Matching Reference Layout) */}
+        <div className="bg-white rounded-xl p-2 px-3 border border-border shadow-xs flex items-center justify-between gap-3">
+          {/* Left: Process Dropdown + Search Icon + Tag Capsule + Search Input */}
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            {/* Process Filter Dropdown */}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              >
+                <span className="truncate max-w-[130px]">{selectedProcessFilter ? selectedProcessFilter : "Appointments"}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              </button>
+
+              {/* Processes Dropdown Menu */}
+              {showProcessesDropdown && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowProcessesDropdown(false)}
+                  />
+                  <div className="absolute top-full left-0 mt-1.5 w-56 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                    <button
+                      onClick={() => {
+                        setSelectedProcessFilter(null);
+                        setShowProcessesDropdown(false);
+                      }}
+                      className={`w-full text-left px-3.5 py-1.5 text-xs transition-colors ${!selectedProcessFilter ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
+                        }`}
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      All Processes
+                    </button>
+                    {[
+                      'Appointments',
+                      'Patient Intake',
+                      'Follow-up Calls',
+                      'Insurance Verification',
+                      'Appointment Scheduling',
+                      'Payment Reminder'
+                    ].map((process) => (
+                      <button
+                        key={process}
+                        onClick={() => {
+                          setSelectedProcessFilter(process);
+                          setShowProcessesDropdown(false);
+                        }}
+                        className={`w-full text-left px-3.5 py-1.5 text-xs transition-colors ${selectedProcessFilter === process ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
+                          }`}
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        {process}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Search Icon */}
+            <Search className="w-4 h-4 text-blue-500 shrink-0" />
+
+            {/* Active Tag Capsule */}
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 border border-blue-200/60 text-xs font-medium shrink-0 whitespace-nowrap"
+              style={{ fontFamily: 'Outfit, sans-serif' }}
+            >
+              <span>{selectedProcessFilter ? `All in ${selectedProcessFilter}` : "All in Appointments"}</span>
+              {selectedProcessFilter && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedProcessFilter(null);
+                  }}
+                  className="hover:text-blue-800 ml-0.5 cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Search Input with Advanced Search Modal */}
+            <div className="flex-1 relative min-w-[120px]">
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setShowSearchModal(true)}
+                className="w-full bg-transparent border-0 text-xs text-gray-800 placeholder-gray-400 focus:outline-none"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              />
 
               {/* Advanced Search Dropdown Panel */}
               {showSearchModal && (
@@ -1893,140 +1972,43 @@ export default function Deals() {
                 </>
               )}
             </div>
-
-            {/* Import Button */}
-            <Tooltip text="Import">
-              <Button variant="outline" onClick={() => setShowImportModal(true)}>
-                <Upload className="w-4 h-4" />
-              </Button>
-            </Tooltip>
-
-            {/* Export Button */}
-            <Tooltip text="Export">
-              <Button variant="outline" onClick={handleExport} loading={isExporting}>
-                <Download className="w-4 h-4" />
-              </Button>
-            </Tooltip>
           </div>
-        </div>
 
-        {/* Toolbar Panel with View Tabs and Processes Dropdown */}
-        <div className="bg-white border-b" style={{ height: '42px', borderBottomWidth: '0.5px', borderColor: '#E5E7EB' }}>
-          <div className="flex items-center h-full px-4 gap-6">
-            {/* List Tab */}
-            <button
-              onClick={() => setViewMode("list")}
-              className="h-full px-3 text-sm font-medium transition-colors relative"
-              style={{
-                color: viewMode === "list" ? '#1a56db' : '#6B7280',
-                fontSize: '13px',
-                fontWeight: 500
-              }}
-            >
-              List
-              {viewMode === "list" && (
-                <div
-                  className="absolute bottom-0 left-0 right-0"
-                  style={{
-                    height: '2px',
-                    backgroundColor: '#1a56db'
-                  }}
-                />
-              )}
-            </button>
-
-            {/* Kanban Tab */}
-            <button
-              onClick={() => setViewMode("kanban")}
-              className="h-full px-3 text-sm font-medium transition-colors relative"
-              style={{
-                color: viewMode === "kanban" ? '#1a56db' : '#6B7280',
-                fontSize: '13px',
-                fontWeight: 500
-              }}
-            >
-              Kanban
-              {viewMode === "kanban" && (
-                <div
-                  className="absolute bottom-0 left-0 right-0"
-                  style={{
-                    height: '2px',
-                    backgroundColor: '#1a56db'
-                  }}
-                />
-              )}
-            </button>
-
-            {/* Processes Dropdown */}
-            <div className="relative">
+          {/* Right: List / Kanban Switch + Gear Icon */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* List / Kanban Pill Toggle Switch */}
+            <div className="flex items-center p-0.5 bg-gray-100 rounded-lg border border-gray-200/70 shrink-0">
               <button
-                onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-white border transition-colors rounded-lg"
-                style={{
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  color: '#374151',
-                  borderColor: '#D1D5DB'
-                }}
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={`px-3 py-1 rounded-md text-xs transition-all cursor-pointer ${viewMode === "list"
+                  ? "bg-white text-blue-600 shadow-2xs font-semibold"
+                  : "text-gray-500 hover:text-gray-800 font-medium"
+                  }`}
+                style={{ fontFamily: 'Outfit, sans-serif' }}
               >
-                {selectedProcessFilter ? selectedProcessFilter : "Process"}
-                <ChevronDown className="w-4 h-4" />
+                List
               </button>
-
-              {/* Processes Dropdown Menu */}
-              {showProcessesDropdown && (
-                <>
-                  {/* Backdrop */}
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowProcessesDropdown(false)}
-                  />
-
-                  {/* Dropdown Panel */}
-                  <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-border rounded-lg shadow-xl z-50 py-2">
-                    <button
-                      onClick={() => {
-                        setSelectedProcessFilter(null);
-                        setShowProcessesDropdown(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 text-sm rounded transition-colors ${!selectedProcessFilter ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'
-                        }`}
-                    >
-                      All
-                    </button>
-                    {[
-                      'Patient Intake',
-                      'Follow-up Calls',
-                      'Insurance Verification',
-                      'Appointment Scheduling',
-                      'Payment Reminder'
-                    ].map((process) => (
-                      <button
-                        key={process}
-                        onClick={() => {
-                          setSelectedProcessFilter(process);
-                          setShowProcessesDropdown(false);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm rounded transition-colors ${selectedProcessFilter === process ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'
-                          }`}
-                      >
-                        {process}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={() => setViewMode("kanban")}
+                className={`px-3 py-1 rounded-md text-xs transition-all cursor-pointer ${viewMode === "kanban"
+                  ? "bg-white text-blue-600 shadow-2xs font-semibold"
+                  : "text-gray-500 hover:text-gray-800 font-medium"
+                  }`}
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              >
+                Kanban
+              </button>
             </div>
 
-            {/* Settings Icon Button */}
+            {/* Gear Settings Icon */}
             <Link
               to="/process"
-              className="ml-auto p-2 transition-colors rounded-lg hover:bg-muted/50"
-              style={{ color: '#6B7280' }}
-              onMouseEnter={(e) => e.currentTarget.style.color = '#1a56db'}
-              onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
+              className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors shrink-0"
+              title="Process Configuration"
             >
-              <SettingsIcon className="w-5 h-5" />
+              <SettingsIcon className="w-4 h-4" />
             </Link>
           </div>
         </div>
@@ -2163,7 +2145,7 @@ export default function Deals() {
 
         {/* List View */}
         {viewMode === "list" && (
-          <div className="bg-card border border-border shadow-sm overflow-hidden relative" style={{ borderRadius: '0px' }}>
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
             <div
               ref={tableScrollRef}
               className="overflow-x-auto scrollbar-hide"
@@ -2176,10 +2158,10 @@ export default function Deals() {
                 }
               }}
             >
-              <table className="w-full" style={{ minWidth: '1200px' }}>
+              <table className="w-full min-w-[1200px]">
                 <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
                   <tr>
-                    <th className="px-4 py-2.5 w-10">
+                    <th className="px-3 py-1.5 w-10">
                       <input
                         type="checkbox"
                         checked={allSelected}
@@ -2187,18 +2169,18 @@ export default function Deals() {
                           if (el) el.indeterminate = someSelected;
                         }}
                         onChange={handleSelectAll}
-                        className="w-4 h-4 cursor-pointer"
+                        className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB]"
                       />
                     </th>
                     {/* Settings icon column */}
-                    <th className="px-2 py-2.5 text-center relative" style={{ width: '32px' }}>
+                    <th className="px-2 py-1.5 text-center relative" style={{ width: '32px' }}>
                       <div className="relative inline-block">
                         <button
                           onClick={() => setShowColumnToggle(!showColumnToggle)}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
+                          className="inline-flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-white/10"
                           aria-label="Customize Columns"
                         >
-                          <SettingsIcon className="w-4 h-4 text-[#E5E7EB] hover:text-white transition-colors" />
+                          <SettingsIcon className="w-3.5 h-3.5 text-[#E5E7EB] hover:text-white transition-colors" />
                         </button>
                         {showColumnToggle && (
                           <div className="absolute left-0 top-full mt-2 w-56 bg-card border border-border rounded-xl shadow-lg p-4 z-50">
@@ -2227,48 +2209,48 @@ export default function Deals() {
                         )}
                       </div>
                     </th>
-                    {visibleColumns.client && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Client</th>}
-                    {visibleColumns.process && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Process</th>}
+                    {visibleColumns.client && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Client</th>}
+                    {visibleColumns.process && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Process</th>}
                     {visibleColumns.currentStage && (
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>
+                      <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>
                         <div className="flex items-center justify-center gap-1">
                           Stage
                           <InfoTooltip text="Each block is one stage. Click a block to move this client to that stage." />
                         </div>
                       </th>
                     )}
-                    {visibleColumns.status && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>}
-                    {visibleColumns.date && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Created</th>}
-                    {visibleColumns.activity && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Activity</th>}
-                    {visibleColumns.responsible && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Responsible</th>}
-                    {visibleColumns.alert && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Alert</th>}
+                    {visibleColumns.status && <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>}
+                    {visibleColumns.date && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Created</th>}
+                    {visibleColumns.activity && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider min-w-[240px]" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Activity</th>}
+                    {visibleColumns.responsible && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Responsible</th>}
+                    {visibleColumns.alert && <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Alert</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {paginatedLogs.map((log) => (
                     <tr
                       key={log.id}
-                      className={`transition-colors ${selectedRows.has(log.id)
+                      className={`transition-colors h-[30px] ${selectedRows.has(log.id)
                         ? "bg-[#E8F0FE]"
                         : "hover:bg-[#F1F5F9]"
                         }`}
                     >
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-1">
                         <input
                           type="checkbox"
                           checked={selectedRows.has(log.id)}
                           onChange={() => handleSelectRow(log.id)}
-                          className="w-4 h-4 cursor-pointer"
+                          className="w-3.5 h-3.5 cursor-pointer"
                         />
                       </td>
                       {/* Three-dot menu cell */}
-                      <td className="px-2 py-2.5 relative" style={{ width: '32px' }}>
+                      <td className="px-2 py-1 relative" style={{ width: '32px' }}>
                         <button
                           onClick={(e) => { e.stopPropagation(); setOpenRowMenuId(openRowMenuId === log.id ? null : log.id); }}
-                          className="inline-flex items-center justify-center w-7 h-7 rounded transition-colors hover:bg-gray-100"
+                          className="inline-flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-gray-100"
                           style={{ color: '#94A3B8' }}
                         >
-                          <MoreVertical className="w-4 h-4" />
+                          <MoreVertical className="w-3.5 h-3.5" />
                         </button>
                         {openRowMenuId === log.id && (
                           <>
@@ -2279,31 +2261,31 @@ export default function Deals() {
                             >
                               <button
                                 onClick={() => { setOpenRowMenuId(null); setSelectedLogForView(log); setViewDrawerTab("general"); setHistoryFilter(""); setShowViewDrawer(true); }}
-                                className="w-full flex items-center gap-2.5 px-3 text-sm text-gray-700 transition-colors hover:bg-[#F0F4FF]"
-                                style={{ height: '36px', fontSize: '14px' }}
+                                className="w-full flex items-center gap-2.5 px-3 text-xs text-gray-700 transition-colors hover:bg-[#F0F4FF]"
+                                style={{ height: '32px', fontSize: '13px' }}
                               >
-                                <Eye className="w-4 h-4" /> View
+                                <Eye className="w-3.5 h-3.5" /> View
                               </button>
                               <button
                                 onClick={() => { setOpenRowMenuId(null); toast.info("Edit coming soon"); }}
-                                className="w-full flex items-center gap-2.5 px-3 text-sm text-gray-700 transition-colors hover:bg-[#F0F4FF]"
-                                style={{ height: '36px', fontSize: '14px' }}
+                                className="w-full flex items-center gap-2.5 px-3 text-xs text-gray-700 transition-colors hover:bg-[#F0F4FF]"
+                                style={{ height: '32px', fontSize: '13px' }}
                               >
-                                <Pencil className="w-4 h-4" /> Edit
+                                <Pencil className="w-3.5 h-3.5" /> Edit
                               </button>
                               <button
                                 onClick={() => { setOpenRowMenuId(null); toast.error("Delete coming soon"); }}
                                 className="w-full flex items-center gap-2.5 px-3 transition-colors hover:bg-[#F0F4FF]"
-                                style={{ height: '36px', fontSize: '14px', color: '#D32F2F' }}
+                                style={{ height: '32px', fontSize: '13px', color: '#D32F2F' }}
                               >
-                                <Trash2 className="w-4 h-4" /> Delete
+                                <Trash2 className="w-3.5 h-3.5" /> Delete
                               </button>
                             </div>
                           </>
                         )}
                       </td>
                       {visibleColumns.client && (
-                        <td className="px-4 py-2.5 font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                        <td className="px-3 py-1 font-medium text-xs" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                           <span
                             onClick={(e) => {
                               e.stopPropagation();
@@ -2318,12 +2300,12 @@ export default function Deals() {
                         </td>
                       )}
                       {visibleColumns.process && (
-                        <td className="px-4 py-2.5 text-sm" style={{ fontFamily: 'DM Sans, sans-serif', color: '#64748B' }}>
+                        <td className="px-3 py-1 text-xs" style={{ fontFamily: 'DM Sans, sans-serif', color: '#64748B' }}>
                           {log.process}
                         </td>
                       )}
                       {visibleColumns.currentStage && (
-                        <td className="px-4 py-2.5 relative">
+                        <td className="px-3 py-1 relative">
                           {(() => {
                             const stages = getStagesListForProcess(log.process, log.currentStage);
                             const activeIdx = getStageIndexForProcess(log.process, log.currentStage);
@@ -2424,8 +2406,8 @@ export default function Deals() {
                         </td>
                       )}
                       {visibleColumns.status && (
-                        <td className="px-4 py-2.5 text-center">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${log.status === "Completed"
+                        <td className="px-3 py-1 text-center">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${log.status === "Completed"
                             ? "bg-success-bg text-success"
                             : log.status === "Pending"
                               ? "bg-warning/10 text-warning"
@@ -2435,28 +2417,29 @@ export default function Deals() {
                           </span>
                         </td>
                       )}
-                      {visibleColumns.date && <td className="px-4 py-2.5 text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.date}</td>}
+                      {visibleColumns.date && <td className="px-3 py-1 text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.date}</td>}
                       {visibleColumns.activity && (
-                        <td className="px-4 py-2.5">
-                          <div className="flex flex-col gap-0.5">
-                            <div className="text-xs" style={{ color: log.status === "Pending" ? '#DC2626' : '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                        <td className="px-3 py-1 min-w-[240px]">
+                          <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                            <span style={{ color: log.status === "Pending" ? '#DC2626' : '#64748B', fontFamily: 'Outfit, sans-serif' }}>
                               {log.status === "Pending" ? "Scheduled call" : "Last contact"} - {new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            </div>
-                            <div className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                            </span>
+                            <span className="text-slate-300">•</span>
+                            <span className="truncate max-w-[140px]" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
                               {log.status === "Pending" ? "Follow up needed" : log.currentStage}
-                            </div>
+                            </span>
                           </div>
                         </td>
                       )}
                       {visibleColumns.responsible && (
-                        <td className="px-4 py-2.5">
+                        <td className="px-3 py-1">
                           <span className="text-xs" style={{ color: '#1F2937', fontFamily: 'Outfit, sans-serif' }}>
                             {getClientObj(log.clientId, log.client)?.responsible || 'Unassigned'}
                           </span>
                         </td>
                       )}
                       {visibleColumns.alert && (
-                        <td className="px-4 py-2.5 text-center whitespace-nowrap">
+                        <td className="px-3 py-1 text-center whitespace-nowrap">
                           {(() => {
                             const clientObj = getClientObj(log.clientId, log.client);
                             const currentValues = {
@@ -2531,9 +2514,9 @@ export default function Deals() {
                       onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
                       className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
                     >
-                      <option value={15}>15</option>
-                      <option value={25}>25</option>
+                      <option value={20}>20</option>
                       <option value={50}>50</option>
+                      <option value={100}>100</option>
                     </select>
                   </div>
                   <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>

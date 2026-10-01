@@ -52,6 +52,16 @@ export interface CallTriggerSettings {
   transferReason?: string;
 }
 
+export interface ProcessTransitionTarget {
+  id?: string;
+  targetProcessId: string;
+  targetProcessName: string;
+  targetStageId?: string;
+  targetStageName: string;
+  autoMove?: boolean;
+  condition?: string;
+}
+
 export interface Stage {
   id: string;
   name: string;
@@ -65,6 +75,9 @@ export interface Stage {
   channelSources?: StageChannelSource[];
   enableCalling?: boolean;
   callTriggerSettings?: CallTriggerSettings;
+  isFinal?: boolean;
+  isFinalStage?: boolean;
+  nextProcessTransitions?: ProcessTransitionTarget[];
 }
 
 export interface ScopingRule {
@@ -241,7 +254,25 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     stages: [
       { id: "1-1", name: "Initial Contact", description: "First call to patient for basic information gathering", status: "active", color: "#22D3EE" },
       { id: "1-2", name: "Insurance Verify", description: "Verify patient insurance details and coverage", status: "active", color: "#22D3EE" },
-      { id: "1-3", name: "Schedule Appointment", description: "Schedule the patient's first appointment", status: "active", color: "#EC4899" },
+      {
+        id: "1-3",
+        name: "Schedule Appointment",
+        description: "Schedule the patient's first appointment",
+        status: "active",
+        color: "#EC4899",
+        isFinalStage: true,
+        nextProcessTransitions: [
+          {
+            id: "trans-1",
+            targetProcessId: "2",
+            targetProcessName: "Follow-up Calls",
+            targetStageId: "2-1",
+            targetStageName: "Post-Visit Check",
+            autoMove: true,
+            condition: "On appointment confirmed",
+          },
+        ],
+      },
     ],
   },
   {

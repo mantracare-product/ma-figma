@@ -797,44 +797,44 @@ export default function Payments() {
   const renderTransactionsPage = () => (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Invoices Section */}
-      <div className="bg-card rounded-xl p-6 border border-border">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-card rounded-xl p-3 border border-border shadow-2xs">
+        <div className="flex items-center justify-between mb-2">
           <div>
-            <h3 className="text-lg font-semibold">Transaction History</h3>
-            <p className="text-sm text-muted-foreground mt-1">View all invoices and payment records</p>
+            <h3 className="text-sm font-semibold">Transaction History</h3>
+            <p className="text-xs text-muted-foreground">View all invoices and payment records</p>
           </div>
-          <Button variant="outline" size="sm">
-            <Download className="w-4 h-4" />
+          <Button variant="outline" size="sm" className="h-7 text-xs">
+            <Download className="w-3.5 h-3.5" />
             Export All
           </Button>
         </div>
-        <div className="overflow-hidden rounded-xl border border-border">
+        <div className="overflow-hidden rounded-lg border border-border">
           <table className="w-full">
-            <thead className="bg-muted/30 border-b border-border">
-              <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Date</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Invoice ID</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Description</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Status</th>
-                <th className="text-right px-4 py-3 text-sm font-medium text-muted-foreground">Amount</th>
-                <th className="text-right px-4 py-3 text-sm font-medium text-muted-foreground">Download</th>
+            <thead className="bg-muted/40 border-b border-border">
+              <tr className="h-7">
+                <th className="text-left px-3 py-1 text-xs font-semibold text-muted-foreground">Date</th>
+                <th className="text-left px-3 py-1 text-xs font-semibold text-muted-foreground">Invoice ID</th>
+                <th className="text-left px-3 py-1 text-xs font-semibold text-muted-foreground">Description</th>
+                <th className="text-left px-3 py-1 text-xs font-semibold text-muted-foreground">Status</th>
+                <th className="text-right px-3 py-1 text-xs font-semibold text-muted-foreground">Amount</th>
+                <th className="text-right px-3 py-1 text-xs font-semibold text-muted-foreground">Download</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border">
               {invoices.map((invoice) => (
-                <tr key={invoice.id} className="border-b border-border hover:bg-muted/10">
-                  <td className="px-4 py-3 text-sm">{invoice.date}</td>
-                  <td className="px-4 py-3 text-sm font-medium">{invoice.id}</td>
-                  <td className="px-4 py-3 text-sm">Professional Plan - Annual</td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-secondary/10 text-secondary">
+                <tr key={invoice.id} className="h-[30px] hover:bg-muted/60 transition-colors">
+                  <td className="px-3 py-1 text-xs">{invoice.date}</td>
+                  <td className="px-3 py-1 text-xs font-medium">{invoice.id}</td>
+                  <td className="px-3 py-1 text-xs">Professional Plan - Annual</td>
+                  <td className="px-3 py-1 text-xs">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary/10 text-secondary leading-tight">
                       {invoice.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-right font-medium">${invoice.amount}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-3 py-1 text-xs text-right font-medium">${invoice.amount}</td>
+                  <td className="px-3 py-1 text-right">
                     <button className="text-primary hover:text-primary/80">
-                      <Download className="w-4 h-4" />
+                      <Download className="w-3.5 h-3.5" />
                     </button>
                   </td>
                 </tr>
@@ -847,14 +847,14 @@ export default function Payments() {
   );
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-4 space-y-2.5">
       {/* Header with Back Button */}
-      <div className="mb-6">
+      <div className="mb-2">
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-1.5"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-3.5 h-3.5" />
           Back
         </button>
         <PageHeader
@@ -864,7 +864,7 @@ export default function Payments() {
       </div>
 
       {/* Main Layout with Sidebar */}
-      <div className="flex gap-6">
+      <div className="flex gap-4">
         {/* Sidebar Navigation */}
         <div className="w-56 flex-shrink-0">
           <div className="bg-card rounded-xl border border-border p-2 sticky top-6">

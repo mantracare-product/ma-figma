@@ -72,7 +72,7 @@ import {
   formatTimestamp,
 } from "../../../lib/activityEngine";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../../lib/processFieldValidation";
-import { updateProcessCallLogFields, getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../../lib/processLogsStore";
+import { updateProcessCallLogFields, updateProcessCallLogStage, getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../../lib/processLogsStore";
 import RequiredFieldsModal from "./RequiredFieldsModal";
 
 export interface ProcessDocument {
@@ -617,6 +617,56 @@ export default function ProcessDetailDrawer({
   const effectiveStageIdx = matchedIdx >= 0 ? matchedIdx + 1 : stageIdx;
   const currentStageName = log?.currentStage || activeStageList[effectiveStageIdx - 1] || "";
 
+  const currentStageObj = useMemo(() => {
+    if (!matchedProc || !matchedProc.stages) return null;
+    return (
+      matchedProc.stages.find(
+        (s) => s.name.toLowerCase() === currentStageName.toLowerCase() || s.id === currentStageName
+      ) || matchedProc.stages[effectiveStageIdx - 1] || null
+    );
+  }, [matchedProc, currentStageName, effectiveStageIdx]);
+
+  const isCurrentStageFinal = Boolean(
+    currentStageObj?.isFinalStage ||
+    currentStageObj?.isFinal ||
+    (matchedProc && matchedProc.stages && effectiveStageIdx === matchedProc.stages.length)
+  );
+
+  const currentStageTransitions = useMemo(() => {
+    if (!currentStageObj) return [];
+    return currentStageObj.nextProcessTransitions || [];
+  }, [currentStageObj]);
+
+  const allProcessTransitions = useMemo(() => {
+    if (!matchedProc || !matchedProc.stages) return [];
+    return matchedProc.stages.flatMap((s) =>
+      (s.nextProcessTransitions || []).map((t) => ({
+        ...t,
+        sourceStageName: s.name,
+      }))
+    );
+  }, [matchedProc]);
+
+  const handleExecuteHandoff = (targetProcessName: string, targetStageName: string) => {
+    if (!log || !clientId) return;
+    updateProcessCallLogStage(clientId, targetProcessName, targetStageName);
+
+    appendActivity({
+      clientId,
+      processId: targetProcessName,
+      processName: targetProcessName,
+      type: "process_entry",
+      createdBy: "system",
+      details: {
+        primary: `Transferred across partition to ${targetProcessName}`,
+        secondary: `Stage: ${targetStageName} · Handed off from ${log.process} (${currentStageName})`,
+      },
+    } as any);
+
+    toast.success(`Contact transferred to "${targetProcessName}: ${targetStageName}" ✓`);
+    onClose();
+  };
+
   const allRegistrySections = useMemo(() => {
     return getSectionsForOrg("process", activeOrganization, currentProcessId);
   }, [getSectionsForOrg, activeOrganization, currentProcessId]);
@@ -943,27 +993,106 @@ export default function ProcessDetailDrawer({
                 const idx = i + 1;
                 const isCompleted = idx < effectiveStageIdx;
                 const isActive = idx === effectiveStageIdx;
+                const isFinal = Boolean(
+                  matchedProc?.stages?.[i]?.isFinalStage ||
+                  matchedProc?.stages?.[i]?.isFinal ||
+                  i === activeStageList.length - 1
+                );
 
                 return (
                   <button
                     key={label}
                     onClick={() => handleStageClick(idx)}
                     className={`flex-1 min-w-[130px] max-w-[200px] h-9 px-3 flex items-center justify-center text-center gap-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer shadow-2xs ${isActive
-                        ? "bg-blue-600 text-white shadow-blue-500/20"
+                        ? isFinal
+                          ? "bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-pink-500/20"
+                          : "bg-blue-600 text-white shadow-blue-500/20"
                         : isCompleted
                           ? "bg-slate-900 text-slate-100 hover:bg-slate-800"
                           : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300"
                       }`}
                     style={{ fontFamily: "Outfit, sans-serif" }}
-                    title={`Stage ${idx}: ${label}`}
+                    title={`Stage ${idx}: ${label}${isFinal ? " (Final Stage)" : ""}`}
                   >
                     {isCompleted && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                    {isFinal && <span className="text-[10px]">🏁</span>}
                     <span className="truncate">{label}</span>
                   </button>
                 );
               })}
+
+              {/* Partition Divider */}
+              <div className="flex items-center gap-1 px-2.5 py-1 flex-shrink-0 border-l-2 border-dashed border-slate-300 bg-slate-100/90 rounded-r-md select-none">
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-500">PARTITION →</span>
+              </div>
+
+              {/* Connected Other Process Stages */}
+              {allProcessTransitions.length > 0 ? (
+                allProcessTransitions.map((t, tIdx) => (
+                  <button
+                    key={tIdx}
+                    onClick={() => handleExecuteHandoff(t.targetProcessName, t.targetStageName)}
+                    className="flex-shrink-0 h-9 px-3.5 flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer border border-purple-400/40"
+                    title={`Transfer contact across partition to ${t.targetProcessName}: ${t.targetStageName}`}
+                  >
+                    <span className="text-purple-200">🔀</span>
+                    <span className="text-purple-100">{t.targetProcessName}:</span>
+                    <span className="text-amber-300 underline font-extrabold">{t.targetStageName}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="text-[11px] text-slate-400 italic px-2 flex-shrink-0">
+                  (Configure transitions in Process tab)
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Final Stage Handoff Alert Banner */}
+          {isCurrentStageFinal && (
+            <div className="flex-shrink-0 px-7 py-2.5 bg-gradient-to-r from-pink-50 via-purple-50 to-indigo-50 border-b border-purple-200/80 flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🏁</span>
+                <div>
+                  <div className="text-xs font-bold text-slate-800">
+                    Lead is at Final Stage ({currentStageName})
+                  </div>
+                  <div className="text-[11px] text-slate-600">
+                    Select a target stage from other processes across the partition to complete the handoff:
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {currentStageTransitions.length > 0 ? (
+                  currentStageTransitions.map((t, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleExecuteHandoff(t.targetProcessName, t.targetStageName)}
+                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-lg shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <span>🚀 Move to</span>
+                      <span className="text-amber-300">{t.targetProcessName}</span>
+                      <span>({t.targetStageName})</span>
+                    </button>
+                  ))
+                ) : (
+                  <button
+                    onClick={() => {
+                      const otherProc = storedProcesses.find(p => p.name !== log?.process);
+                      if (otherProc) {
+                        handleExecuteHandoff(otherProc.name, otherProc.stages[0]?.name || "Initial Contact");
+                      } else {
+                        toast.info("Open the Process tab to configure other processes and stages");
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <span>🚀 Advance to Next Process</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* 4. Tabs Bar (Overview, History, Documents) */}
           <div className="flex-shrink-0 bg-white px-7 flex border-b border-slate-200 gap-8">

@@ -689,12 +689,12 @@ export default function Services() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-2.5">
         <PageHeader
           title="Product / Services"
           subtitle="Define what you offer, how long it takes, and who is qualified to deliver it"
           badge={
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               Catalog
             </span>
           }
@@ -703,66 +703,66 @@ export default function Services() {
         </PageHeader>
 
         {/* Toolbar */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="relative max-w-sm w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="relative max-w-xs w-full">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input
               type="text"
               placeholder="Search product/services..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all shadow-xs"
+              className="w-full pl-8 pr-3 py-1 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100 transition-all shadow-xs"
               style={{ fontFamily: "DM Sans, sans-serif" }}
             />
           </div>
           <button
             onClick={() => { resetForm(); setShowAddDrawer(true); }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-xl text-sm font-semibold transition-colors shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs cursor-pointer"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
-            <Plus className="w-4 h-4" /> Add Service
+            <Plus className="w-3.5 h-3.5" /> Add Service
           </button>
         </div>
 
         {/* Improved Table View with Glassmorphism */}
         {filteredServices.length > 0 ? (
-          <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/80 shadow-2xs overflow-hidden">
+          <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-white/80 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                  <tr>
+                  <tr style={{ height: "30px" }}>
                     {/* Checkbox Column */}
-                    <th className="py-3 px-4 w-10 text-center">
+                    <th className="py-1 px-3 w-8 text-center">
                       <input
                         type="checkbox"
                         checked={selectedServiceIds.length === filteredServices.length && filteredServices.length > 0}
                         onChange={toggleSelectAll}
-                        className="w-4 h-4 rounded border-slate-400 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        className="w-3.5 h-3.5 rounded border-slate-400 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
                     </th>
 
                     {/* Column Configuration Gear Button Column */}
-                    <th className="py-3 px-2 text-center relative" style={{ width: "32px" }}>
+                    <th className="py-1 px-1 text-center relative" style={{ width: "28px" }}>
                       <div className="relative inline-block">
                         <button
                           type="button"
                           onClick={() => setShowColumnSettings((v) => !v)}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
+                          className="inline-flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-white/10"
                           title="Configure Visible Columns"
                         >
-                          <Settings className="w-4 h-4 text-slate-200 hover:text-white transition-colors" />
+                          <Settings className="w-3.5 h-3.5 text-slate-200 hover:text-white transition-colors" />
                         </button>
 
                         {/* Visible Columns Popover */}
                         {showColumnSettings && (
                           <>
                             <div className="fixed inset-0 z-40" onClick={() => setShowColumnSettings(false)} />
-                            <div className="absolute left-0 top-full mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 p-2 text-left" style={{ fontFamily: "Outfit, sans-serif" }}>
-                              <div className="text-[11px] font-bold text-slate-500 uppercase px-2 py-1 mb-1 border-b border-slate-100">
+                            <div className="absolute left-0 top-full mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-2xl z-50 p-2 text-left" style={{ fontFamily: "Outfit, sans-serif" }}>
+                              <div className="text-[10px] font-bold text-slate-500 uppercase px-2 py-1 mb-1 border-b border-slate-100">
                                 Visible Columns
                               </div>
                               <div className="space-y-1 text-xs text-slate-700">
-                                <label className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={visibleColumns.cptCode}
@@ -771,7 +771,7 @@ export default function Services() {
                                   />
                                   <span>CPT / Service Code</span>
                                 </label>
-                                <label className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={visibleColumns.category}
@@ -780,7 +780,7 @@ export default function Services() {
                                   />
                                   <span>Category</span>
                                 </label>
-                                <label className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={visibleColumns.duration}
@@ -789,7 +789,7 @@ export default function Services() {
                                   />
                                   <span>Duration</span>
                                 </label>
-                                <label className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={visibleColumns.price}
@@ -798,7 +798,7 @@ export default function Services() {
                                   />
                                   <span>Price</span>
                                 </label>
-                                <label className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={visibleColumns.assignedStaff}
@@ -807,7 +807,7 @@ export default function Services() {
                                   />
                                   <span>Responsible</span>
                                 </label>
-                                <label className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={visibleColumns.created}
@@ -816,7 +816,7 @@ export default function Services() {
                                   />
                                   <span>Created</span>
                                 </label>
-                                <label className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={visibleColumns.activity}
@@ -825,7 +825,7 @@ export default function Services() {
                                   />
                                   <span>Activity</span>
                                 </label>
-                                <label className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={visibleColumns.status}
@@ -841,47 +841,47 @@ export default function Services() {
                       </div>
                     </th>
 
-                    {/* Standard Headers without ACTIONS column header on the right */}
-                    <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {/* Standard Headers */}
+                    <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                       Product / Service
                     </th>
                     {visibleColumns.cptCode && (
-                      <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                         CPT / Code
                       </th>
                     )}
                     {visibleColumns.category && (
-                      <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                         Category
                       </th>
                     )}
                     {visibleColumns.duration && (
-                      <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                         Duration
                       </th>
                     )}
                     {visibleColumns.price && (
-                      <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                         Price
                       </th>
                     )}
                     {visibleColumns.assignedStaff && (
-                      <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                         Responsible
                       </th>
                     )}
                     {visibleColumns.created && (
-                      <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                         Created
                       </th>
                     )}
                     {visibleColumns.activity && (
-                      <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                         Activity
                       </th>
                     )}
                     {visibleColumns.status && (
-                      <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                         Status
                       </th>
                     )}
@@ -895,28 +895,28 @@ export default function Services() {
                     const isSelected = selectedServiceIds.includes(service.id);
 
                     return (
-                      <tr key={service.id} className={`hover:bg-gray-50/80 transition-colors group ${isSelected ? "bg-blue-50/40" : ""}`}>
+                      <tr key={service.id} className={`h-[30px] hover:bg-gray-50/80 transition-colors group ${isSelected ? "bg-blue-50/40" : ""}`}>
                         {/* Checkbox */}
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-1 px-3 text-center">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => toggleSelectRow(service.id)}
-                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                           />
                         </td>
 
                         {/* Hamburger Action Menu Column directly under the Gear button */}
-                        <td className="py-3 px-2 text-center relative" style={{ width: "32px" }}>
+                        <td className="py-1 px-1 text-center relative" style={{ width: "28px" }}>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setOpenMenuId(openMenuId === service.id ? null : service.id);
                             }}
-                            className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-gray-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                            className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-gray-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
                             title="Actions"
                           >
-                            <MoreVertical className="w-4 h-4" />
+                            <MoreVertical className="w-3.5 h-3.5" />
                           </button>
 
                           {/* Row Actions Menu Popover */}
@@ -924,18 +924,18 @@ export default function Services() {
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
                               <div
-                                className="absolute left-full top-0 ml-1 z-50 bg-white border border-gray-200 rounded-xl shadow-xl py-1.5 min-w-[165px] text-left animate-in fade-in-50 zoom-in-95 duration-100"
+                                className="absolute left-full top-0 ml-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-[150px] text-left"
                                 style={{ fontFamily: "Outfit, sans-serif" }}
                               >
                                 <button
                                   onClick={() => openEdit(service)}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
                                 >
                                   <Edit2 className="w-3.5 h-3.5 text-slate-400" /> Edit
                                 </button>
                                 <button
                                   onClick={() => handleToggleActive(service.id)}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
                                 >
                                   {service.isActive ? (
                                     <>
@@ -947,10 +947,10 @@ export default function Services() {
                                     </>
                                   )}
                                 </button>
-                                <div className="border-t border-slate-100 my-1" />
+                                <div className="border-t border-slate-100 my-0.5" />
                                 <button
                                   onClick={() => handleDelete(service.id, service.name)}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" /> Delete
                                 </button>
@@ -960,34 +960,31 @@ export default function Services() {
                         </td>
 
                         {/* Service Icon, Name & Description */}
-                        <td className="py-3.5 px-4 min-w-[220px]">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-blue-50/80 border border-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600">
-                              <Briefcase className="w-4 h-4" />
+                        <td className="py-1 px-3 min-w-[200px]">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded bg-blue-50/80 border border-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600">
+                              <Briefcase className="w-3 h-3" />
                             </div>
                             <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-sm font-bold text-slate-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                              <div className="flex items-center gap-1.5">
+                                <h4 className="text-xs font-bold text-slate-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
                                   {service.name}
                                 </h4>
                                 {service.cptCode && !visibleColumns.cptCode && (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80 shrink-0">
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80 shrink-0">
                                     CPT {service.cptCode}
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs text-slate-500 line-clamp-1 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                {service.description || "No description provided"}
-                              </p>
                             </div>
                           </div>
                         </td>
 
                         {/* CPT / Service Code */}
                         {visibleColumns.cptCode && (
-                          <td className="py-3.5 px-4 whitespace-nowrap">
+                          <td className="py-1 px-3 whitespace-nowrap">
                             {service.cptCode ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80 shadow-2xs">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80">
                                 {service.cptCode}
                               </span>
                             ) : (
@@ -996,18 +993,18 @@ export default function Services() {
                           </td>
                         )}
 
-                        {/* Category (Clean text without heavy capsule container) */}
+                        {/* Category */}
                         {visibleColumns.category && (
-                          <td className="py-3.5 px-4 whitespace-nowrap">
+                          <td className="py-1 px-3 whitespace-nowrap">
                             <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
                               {service.category || "General"}
                             </span>
                           </td>
                         )}
 
-                        {/* Duration (Clean text) */}
+                        {/* Duration */}
                         {visibleColumns.duration && (
-                          <td className="py-3.5 px-4 whitespace-nowrap">
+                          <td className="py-1 px-3 whitespace-nowrap">
                             <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
                               {service.duration} min
                             </span>
@@ -1016,29 +1013,29 @@ export default function Services() {
 
                         {/* Price & Tax */}
                         {visibleColumns.price && (
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
+                          <td className="py-1 px-3 whitespace-nowrap">
+                            <div className="flex items-center gap-1">
                               <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
                                 {getCurrencySymbol(service.currency)} {service.price}
                               </span>
                               {Boolean(service.tax && service.tax > 0) && (
-                                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                  +{service.tax}% tax
+                                <span className="text-[9px] font-semibold text-slate-500 bg-slate-100 px-1 py-0.2 rounded" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  +{service.tax}%
                                 </span>
                               )}
                             </div>
                           </td>
                         )}
 
-                        {/* Responsible / Assigned Staff (Showing Full Employee Names as Chips matching user's screenshot 2) */}
+                        {/* Responsible / Assigned Staff */}
                         {visibleColumns.assignedStaff && (
-                          <td className="py-3.5 px-4 whitespace-nowrap">
+                          <td className="py-1 px-3 whitespace-nowrap">
                             {assignedEmps.length > 0 ? (
-                              <div className="flex flex-wrap gap-1.5 items-center">
+                              <div className="flex flex-wrap gap-1 items-center">
                                 {assignedEmps.map((emp) => (
                                   <span
                                     key={emp.id}
-                                    className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/80"
+                                    className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/80"
                                     style={{ fontFamily: "Outfit, sans-serif" }}
                                   >
                                     {emp.name}
@@ -1055,32 +1052,32 @@ export default function Services() {
 
                         {/* Created Date */}
                         {visibleColumns.created && (
-                          <td className="py-3.5 px-4 whitespace-nowrap">
+                          <td className="py-1 px-3 whitespace-nowrap">
                             <span className="text-xs text-slate-600 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                              {service.createdAt || "2024-04-12 10:00"}
+                              {service.createdAt || "2024-04-12"}
                             </span>
                           </td>
                         )}
 
                         {/* Activity */}
                         {visibleColumns.activity && (
-                          <td className="py-3.5 px-4 whitespace-nowrap">
+                          <td className="py-1 px-3 whitespace-nowrap">
                             <span className="text-xs text-slate-500 font-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
-                              {service.activity || "Last updated Apr 12"}
+                              {service.activity || "Apr 12"}
                             </span>
                           </td>
                         )}
 
-                        {/* Status (Clean text badge without capsule container) */}
+                        {/* Status */}
                         {visibleColumns.status && (
-                          <td className="py-3.5 px-4 whitespace-nowrap">
+                          <td className="py-1 px-3 whitespace-nowrap">
                             <span
-                              className={`inline-flex items-center gap-1.5 text-xs font-bold ${
+                              className={`inline-flex items-center gap-1 text-xs font-bold ${
                                 service.isActive ? "text-emerald-600" : "text-slate-400"
                               }`}
                               style={{ fontFamily: "Outfit, sans-serif" }}
                             >
-                              <span className={`w-2 h-2 rounded-full ${service.isActive ? "bg-emerald-500" : "bg-slate-300"}`} />
+                              <span className={`w-1.5 h-1.5 rounded-full ${service.isActive ? "bg-emerald-500" : "bg-slate-300"}`} />
                               {service.isActive ? "Active" : "Inactive"}
                             </span>
                           </td>

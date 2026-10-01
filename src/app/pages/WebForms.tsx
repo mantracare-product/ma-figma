@@ -328,16 +328,16 @@ function SubmissionsTab({ submissions, forms, onViewSubmission }: {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-border shadow-2xs overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-border bg-gray-50">
-              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Name</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Email</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Form</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Date submitted</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
-              <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wide"
+            <tr className="border-b border-border bg-gray-50" style={{ height: "30px" }}>
+              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Name</th>
+              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Email</th>
+              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Form</th>
+              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Date submitted</th>
+              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
+              <th className="text-right px-3 py-1 text-[11px] font-semibold uppercase tracking-wide"
                 style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
                 Actions
               </th>
@@ -347,42 +347,41 @@ function SubmissionsTab({ submissions, forms, onViewSubmission }: {
             {filteredSubs.map((sub, i) => (
               <tr
                 key={sub.id}
-                className={`transition-colors hover:bg-gray-50/60 ${sub.status === "sent" ? "bg-gray-50/60 grayscale-[30%]" : ""
+                className={`h-[30px] transition-colors hover:bg-gray-50/60 ${sub.status === "sent" ? "bg-gray-50/60 grayscale-[30%]" : ""
                   } ${i < filteredSubs.length - 1 ? "border-b border-border" : ""}`}
               >
-                <td className="px-5 py-3.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium" style={{ color: sub.status === "sent" ? "#94A3B8" : "#020817" }}>{sub.name}</span>
+                <td className="px-3 py-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-medium" style={{ color: sub.status === "sent" ? "#94A3B8" : "#020817" }}>{sub.name}</span>
                     {!sub.clientId && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-xs font-medium text-amber-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="6" cy="6" r="5" /><path d="M6 4v3M6 8.5v.5" /></svg>
-                        No client linked
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full bg-amber-50 border border-amber-200 text-[10px] font-medium text-amber-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        No client
                       </span>
                     )}
                   </div>
                 </td>
 
-                <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: sub.status === "sent" ? "#94A3B8" : "#64748B" }}>
+                <td className="px-3 py-1 text-xs" style={{ fontFamily: "Outfit, sans-serif", color: sub.status === "sent" ? "#94A3B8" : "#64748B" }}>
                   {sub.email}
                 </td>
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                <td className="px-3 py-1">
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 text-[11px] font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
                       {formName(sub.formId)}
                     </span>
                   </div>
                 </td>
 
-                <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                <td className="px-3 py-1 text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
                   {sub.date}
                 </td>
-                <td className="px-5 py-3.5">
+                <td className="px-3 py-1">
                   <SubStatusBadge status={sub.status} />
                 </td>
-                <td className="px-5 py-3.5 text-right">
+                <td className="px-3 py-1 text-right">
                   <button
                     onClick={() => onViewSubmission(sub)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-gray-50 transition-colors"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded border border-border hover:bg-gray-50 transition-colors"
                     style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
                   >
                     View
@@ -1460,58 +1459,58 @@ export default function WebForms() {
 
   return (
     <div className="h-full overflow-auto">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div className="max-w-7xl mx-auto p-3 sm:p-4 space-y-2.5">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+            <h1 className="text-xl sm:text-2xl font-bold mb-0.5" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
               Web Forms
             </h1>
-            <p className="text-base" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+            <p className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
               Collect leads from your website and turn every submission into a client automatically
             </p>
           </div>
-          <div className="flex items-center gap-3 shrink-0 mt-1">
+          <div className="flex items-center gap-2 shrink-0">
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Web Forms Works" />
             <Button
               variant="primary"
               onClick={() => navigate("/web-forms/new")}
-              className="flex items-center gap-2 bg-black hover:bg-black/90 text-white px-4 py-2.5 rounded-lg text-sm font-semibold"
+              className="flex items-center gap-1.5 bg-black hover:bg-black/90 text-white px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={{ fontFamily: "DM Sans, sans-serif" }}
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
               New form
             </Button>
           </div>
         </div>
 
         {/* Stats Cards — thin capsule style */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-white border border-border shadow-sm rounded-2xl px-5 py-2.5 flex items-center gap-4">
-            <span className="text-xs font-semibold uppercase tracking-wide shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>SUBMISSIONS — 7D</span>
-            <span className="text-xl font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.submissions7d}</span>
-            <span className="text-xs shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>vs prior 7d: {stats.submissionsPrior7d}</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>SUBMISSIONS 7D</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.submissions7d}</span>
+            <span className="text-[10px] shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>vs prior: {stats.submissionsPrior7d}</span>
           </div>
-          <div className="bg-white border border-border shadow-sm rounded-2xl px-5 py-2.5 flex items-center gap-4">
-            <span className="text-xs font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>ACTIVE FORMS</span>
-            <span className="text-xl font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.activeForms.total}</span>
-            <span className="text-xs shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.activeForms.live} live · {stats.activeForms.draft} draft</span>
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>ACTIVE FORMS</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.activeForms.total}</span>
+            <span className="text-[10px] shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.activeForms.live} live</span>
           </div>
-          <div className="bg-white border border-border shadow-sm rounded-2xl px-5 py-2.5 flex items-center gap-4">
-            <span className="text-xs font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>TOP PERFORMER</span>
-            <span className="text-sm font-bold flex-1 text-center truncate" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.topPerformer.name}</span>
-            <span className="text-xs shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.topPerformer.total} submissions</span>
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>TOP PERFORMER</span>
+            <span className="text-xs font-bold flex-1 text-center truncate" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.topPerformer.name}</span>
+            <span className="text-[10px] shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.topPerformer.total} subs</span>
           </div>
-          <div className="bg-white border border-border shadow-sm rounded-2xl px-5 py-2.5 flex items-center gap-4">
-            <span className="text-xs font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>USAGE</span>
-            <span className="text-xl font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.submissionUsage.current}<span className="text-base font-normal text-muted-foreground">/{stats.submissionUsage.limit}</span></span>
-            <span className="text-xs shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.submissionUsage.status}</span>
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>USAGE</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.submissionUsage.current}<span className="text-xs font-normal text-muted-foreground">/{stats.submissionUsage.limit}</span></span>
+            <span className="text-[10px] shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.submissionUsage.status}</span>
           </div>
         </div>
 
         {/* Top-level Tabs */}
         <div className="border-b border-border">
-          <div className="flex items-center gap-8">
+          <div className="flex items-center gap-6">
             {(["submissions", "forms"] as const).map(tab => (
               <button
                 key={tab}
@@ -1590,36 +1589,36 @@ export default function WebForms() {
                 </div>
 
                 {/* Forms table */}
-                <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/80 shadow-2xs overflow-hidden">
+                <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-white/80 shadow-2xs overflow-hidden">
                   <table className="w-full">
                     <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                      <tr>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <tr style={{ height: "30px" }}>
+                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
                           <button className="flex items-center gap-1 hover:text-blue-300 transition-colors" onClick={() => handleSortCol("name")}>
                             Title {sortCol === "name" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
                           </button>
                         </th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Type</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Status</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Type</th>
+                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Status</th>
+                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
                           <button className="flex items-center gap-1 hover:text-blue-300 transition-colors" onClick={() => handleSortCol("submissions")}>
                             Submissions {sortCol === "submissions" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
                           </button>
                         </th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Created By</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Created By</th>
+                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
                           <button className="flex items-center gap-1 hover:text-blue-300 transition-colors" onClick={() => handleSortCol("lastUpdated")}>
                             Last Updated {sortCol === "lastUpdated" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
                           </button>
                         </th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Enabled</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide text-right" style={{ fontFamily: "Outfit, sans-serif" }}>Actions</th>
+                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Enabled</th>
+                        <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-right" style={{ fontFamily: "Outfit, sans-serif" }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {displayForms.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="px-4 py-12 text-center text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                          <td colSpan={8} className="px-3 py-8 text-center text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
                             No forms found
                           </td>
                         </tr>
@@ -1627,12 +1626,12 @@ export default function WebForms() {
                         <tr
                           key={form.id}
                           onClick={() => handlePreviewClick(form)}
-                          className={`cursor-pointer transition-colors hover:bg-gray-50/60 ${i < displayForms.length - 1 ? "border-b border-border" : ""}`}
+                          className={`h-[30px] cursor-pointer transition-colors hover:bg-gray-50/60 ${i < displayForms.length - 1 ? "border-b border-border" : ""}`}
                         >
                           {/* Name */}
-                          <td className="px-4 py-3.5">
+                          <td className="px-3 py-1">
                             <span
-                              className="text-sm font-medium cursor-pointer hover:underline"
+                              className="text-xs font-medium cursor-pointer hover:underline"
                               style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
                               onClick={e => { e.stopPropagation(); handlePreviewClick(form); }}
                             >
@@ -1640,78 +1639,78 @@ export default function WebForms() {
                             </span>
                           </td>
                           {/* Type */}
-                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                          <td className="px-3 py-1" onClick={e => e.stopPropagation()}>
                             {form.formType === "intake" ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-medium bg-purple-100 text-purple-700" style={{ fontFamily: "Outfit, sans-serif" }}>
                                 Intake
                               </span>
                             ) : form.formType === "meta-ads" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                <svg viewBox="0 0 12 12" className="w-3 h-3" fill="currentColor">
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                <svg viewBox="0 0 12 12" className="w-2.5 h-2.5" fill="currentColor">
                                   <path d="M12 6.073c0-3.315-2.686-6-6-6S0 2.758 0 6.073c0 2.995 2.194 5.477 5.063 5.927V7.77H3.54V6.073h1.523V4.734c0-1.503.896-2.334 2.267-2.334.656 0 1.343.117 1.343.117v1.476h-.756c-.745 0-.977.462-.977.937v1.143h1.664l-.266 1.697H6.94v4.23C9.806 11.55 12 9.068 12 6.073z" />
                                 </svg>
                                 Meta Ads
                               </span>
                             ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-medium bg-gray-100 text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>
                                 Standard
                               </span>
                             )}
                           </td>
                           {/* Status */}
-                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                          <td className="px-3 py-1" onClick={e => e.stopPropagation()}>
                             <StatusBadge status={form.status} />
                           </td>
                           {/* Submissions */}
-                          <td className="px-4 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                          <td className="px-3 py-1 text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
                             {form.submissions}
                           </td>
                           {/* Created By */}
-                          <td className="px-4 py-3.5">
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-gray-200 text-xs flex items-center justify-center font-medium shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                          <td className="px-3 py-1">
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-5 h-5 rounded-full bg-gray-200 text-[10px] flex items-center justify-center font-medium shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
                                 {getInitials(form.createdBy)}
                               </div>
-                              <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>{form.createdBy}</span>
+                              <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>{form.createdBy}</span>
                             </div>
                           </td>
                           {/* Last Updated */}
-                          <td className="px-4 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                          <td className="px-3 py-1 text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
                             {formatFormDate(form.lastUpdated || form.createdAt)}
                           </td>
                           {/* Enabled toggle */}
-                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                          <td className="px-3 py-1" onClick={e => e.stopPropagation()}>
                             <label className="flex items-center cursor-pointer" onClick={e => e.stopPropagation()}>
                               <div className="relative">
                                 <input type="checkbox" checked={form.enabled} onChange={() => handleToggle(form.id)} className="sr-only peer" />
-                                <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-4 after:transition-all peer-checked:bg-primary" />
+                                <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-primary" />
                               </div>
                             </label>
                           </td>
                           {/* Actions */}
-                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                          <td className="px-3 py-1" onClick={e => e.stopPropagation()}>
                             <div className="relative">
                               <button
                                 onClick={e => { e.stopPropagation(); setOpenDropdownId(openDropdownId === form.id ? null : form.id); }}
-                                className="p-1.5 hover:bg-muted/20 rounded-lg transition-colors"
+                                className="p-1 hover:bg-muted/20 rounded transition-colors"
                               >
-                                <MoreVertical className="w-4 h-4" style={{ color: "#64748B" }} />
+                                <MoreVertical className="w-3.5 h-3.5" style={{ color: "#64748B" }} />
                               </button>
                               {openDropdownId === form.id && (
                                 <>
                                   <div className="fixed inset-0 z-10" onClick={() => setOpenDropdownId(null)} />
-                                  <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-border rounded-lg shadow-lg py-1 z-20">
-                                    <button onClick={() => { setOpenDropdownId(null); handleEdit(form); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
-                                      <Edit2 className="w-4 h-4 text-muted-foreground" />Edit
+                                  <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-border rounded-lg shadow-lg py-1 z-20">
+                                    <button onClick={() => { setOpenDropdownId(null); handleEdit(form); }} className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/20 flex items-center gap-2" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                                      <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />Edit
                                     </button>
-                                    <button onClick={() => { setOpenDropdownId(null); setShareTarget({ id: form.id, name: form.name, kind: "form", status: form.status }); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
-                                      <Share2 className="w-4 h-4 text-muted-foreground" />Share
+                                    <button onClick={() => { setOpenDropdownId(null); setShareTarget({ id: form.id, name: form.name, kind: "form", status: form.status }); }} className="w-full px-3 py-1.5 text-left text-xs hover:bg-muted/20 flex items-center gap-2" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                                      <Share2 className="w-3.5 h-3.5 text-muted-foreground" />Share
                                     </button>
-                                    <button onClick={() => { setOpenDropdownId(null); navigate(`/web-forms/test/${form.id}`); }} className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#3B82F6" }}>
-                                      <FlaskConical className="w-4 h-4" style={{ color: "#3B82F6" }} />Test
+                                    <button onClick={() => { setOpenDropdownId(null); navigate(`/web-forms/test/${form.id}`); }} className="w-full px-3 py-1.5 text-left text-xs hover:bg-blue-50 flex items-center gap-2" style={{ fontFamily: "Outfit, sans-serif", color: "#3B82F6" }}>
+                                      <FlaskConical className="w-3.5 h-3.5" style={{ color: "#3B82F6" }} />Test
                                     </button>
-                                    <button onClick={() => handleDelete(form.id)} className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#EF4444" }}>
-                                      <Trash2 className="w-4 h-4" style={{ color: "#EF4444" }} />Delete
+                                    <button onClick={() => handleDelete(form.id)} className="w-full px-3 py-1.5 text-left text-xs hover:bg-red-50 flex items-center gap-2" style={{ fontFamily: "Outfit, sans-serif", color: "#EF4444" }}>
+                                      <Trash2 className="w-3.5 h-3.5" style={{ color: "#EF4444" }} />Delete
                                     </button>
                                   </div>
                                 </>
@@ -2189,17 +2188,17 @@ export default function WebForms() {
                         </button>
                       </div>
                     ) : (
-                      <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+                      <div className="bg-white rounded-xl border border-border shadow-2xs overflow-hidden">
                         <table className="w-full">
                           <thead>
-                            <tr className="border-b border-border bg-gray-50">
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Name</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Submissions</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Created By</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Last Updated</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Enabled</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide"
+                            <tr className="border-b border-border bg-gray-50" style={{ height: "30px" }}>
+                              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Name</th>
+                              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
+                              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Submissions</th>
+                              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Created By</th>
+                              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Last Updated</th>
+                              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Enabled</th>
+                              <th className="text-left px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-right"
                                 style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
                                 Actions
                               </th>
@@ -2212,32 +2211,32 @@ export default function WebForms() {
                                 <tr
                                   key={flow.id}
                                   onClick={() => setDrawerFlow(flow)}
-                                  className={`cursor-pointer transition-colors hover:bg-gray-50/60 ${i < arr.length - 1 ? "border-b border-border" : ""}`}
+                                  className={`h-[30px] cursor-pointer transition-colors hover:bg-gray-50/60 ${i < arr.length - 1 ? "border-b border-border" : ""}`}
                                 >
                                   {/* Name */}
-                                  <td className="px-5 py-3.5">
+                                  <td className="px-3 py-1">
                                     <button
                                       onClick={e => { e.stopPropagation(); setDrawerFlow(flow); }}
-                                      className="text-sm font-medium hover:underline text-left"
+                                      className="text-xs font-medium hover:underline text-left"
                                       style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
                                     >
                                       {flow.name}
                                     </button>
                                   </td>
 
-                                  {/* Status — flows don't have live/draft so show "Active" badge always */}
-                                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+                                  {/* Status */}
+                                  <td className="px-3 py-1" onClick={e => e.stopPropagation()}>
                                     <span
-                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-green-100 text-green-700"
                                       style={{ fontFamily: "Outfit, sans-serif" }}
                                     >
-                                      <span className="w-1.5 h-1.5 rounded-full bg-green-600" />
+                                      <span className="w-1 h-1 rounded-full bg-green-600" />
                                       Active
                                     </span>
                                   </td>
 
-                                  {/* Submissions — sum of all forms in this flow */}
-                                  <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
+                                  {/* Submissions */}
+                                  <td className="px-3 py-1 text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
                                     onClick={e => e.stopPropagation()}>
                                     {flow.steps.reduce((sum, step) => {
                                       const f = forms.find(f => f.id === step.formId);
@@ -2246,28 +2245,28 @@ export default function WebForms() {
                                   </td>
 
                                   {/* Created By */}
-                                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
-                                    <div className="flex items-center gap-2">
+                                  <td className="px-3 py-1" onClick={e => e.stopPropagation()}>
+                                    <div className="flex items-center gap-1.5">
                                       <div
-                                        className="w-6 h-6 rounded-full bg-gray-200 text-xs flex items-center justify-center font-medium shrink-0"
+                                        className="w-5 h-5 rounded-full bg-gray-200 text-[10px] flex items-center justify-center font-medium shrink-0"
                                         style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
                                       >
                                         {getInitials(flow.senderName)}
                                       </div>
-                                      <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                                      <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
                                         {flow.senderName}
                                       </span>
                                     </div>
                                   </td>
 
                                   {/* Last Updated */}
-                                  <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}
+                                  <td className="px-3 py-1 text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}
                                     onClick={e => e.stopPropagation()}>
                                     {flow.createdAt}
                                   </td>
 
                                   {/* Enabled toggle */}
-                                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+                                  <td className="px-3 py-1" onClick={e => e.stopPropagation()}>
                                     <label className="flex items-center cursor-pointer" onClick={e => e.stopPropagation()}>
                                       <div className="relative">
                                         <input
@@ -2282,17 +2281,17 @@ export default function WebForms() {
                                           }}
                                           className="sr-only peer"
                                         />
-                                        <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-4 after:transition-all peer-checked:bg-primary" />
+                                        <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-primary" />
                                       </div>
                                     </label>
                                   </td>
 
                                   {/* Actions dropdown */}
-                                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+                                  <td className="px-3 py-1 text-right" onClick={e => e.stopPropagation()}>
                                     <div className="relative flex justify-end">
                                       <button
                                         onClick={e => { e.stopPropagation(); setFlowDropdownId(flowDropdownId === flow.id ? null : flow.id); }}
-                                        className="p-1.5 hover:bg-muted/20 rounded-lg transition-colors"
+                                        className="p-1 hover:bg-muted/20 rounded transition-colors"
                                       >
                                         <MoreVertical className="w-4 h-4" style={{ color: "#64748B" }} />
                                       </button>

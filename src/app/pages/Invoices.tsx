@@ -10,6 +10,7 @@ import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { toast } from "sonner";
+import { getClientList } from "../../lib/getClientList";
 import {
   Search,
   Settings as SettingsIcon,
@@ -30,6 +31,7 @@ import {
 
 export default function Invoices() {
   const { invoices, updateInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, voidInvoice } = useInvoices();
+  const allClients = getClientList();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [clientFilter, setClientFilter] = useState<string>("all");
@@ -94,7 +96,7 @@ export default function Invoices() {
 
   // Pagination state (matching Deals.tsx)
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
 
 
   // Filter invoices
@@ -214,31 +216,31 @@ export default function Invoices() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
           title="Invoices"
           subtitle="Manage client billing, view automated call-flow invoices, and collect payments"
           badge={
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               Billing Hub
             </span>
           }
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Invoices Works" />
             <button
               onClick={() => {
                 setPaymentModalInvoice(null);
                 setIsRecordPaymentOpen(true);
               }}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer"
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-xs transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <CreditCard className="w-3.5 h-3.5" /> + Record Payment
             </button>
             <button
               onClick={handleCreateInvoice}
-              className="px-4 py-2 bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] text-white rounded-full font-semibold text-xs transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+              className="px-3 py-1.5 bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] text-white rounded-full font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <Plus className="w-3.5 h-3.5 text-blue-400" /> Create Invoice
@@ -248,45 +250,45 @@ export default function Invoices() {
 
 
         {/* View Mode Toggle & Filter Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2">
             {/* View Mode Tabs: List | Kanban */}
-            <div className="inline-flex items-center p-1 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
+            <div className="inline-flex items-center p-0.5 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
               <button
                 onClick={() => setViewMode("list")}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
                   viewMode === "list"
                     ? "bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white shadow-2xs"
                     : "text-[#45515e] hover:text-[#222222]"
                 }`}
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <List className="w-3.5 h-3.5" /> List
+                <List className="w-3 h-3" /> List
               </button>
               <button
                 onClick={() => setViewMode("kanban")}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
                   viewMode === "kanban"
                     ? "bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white shadow-2xs"
                     : "text-[#45515e] hover:text-[#222222]"
                 }`}
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <LayoutGrid className="w-3.5 h-3.5" /> Kanban
+                <LayoutGrid className="w-3 h-3" /> Kanban
               </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {/* Search Bar */}
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <div className="relative w-60">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search invoices..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-8 pr-2.5 py-1 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -294,9 +296,9 @@ export default function Invoices() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white focus:outline-none"
+              className="px-2.5 py-1 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white focus:outline-none"
             >
-              <option value="all">All Statuses (Draft, Sent, Viewed, Partial, Paid, Overdue, Void)</option>
+              <option value="all">All Statuses</option>
               <option value="draft">Draft</option>
               <option value="sent">Sent</option>
               <option value="viewed">Viewed</option>
@@ -304,20 +306,33 @@ export default function Invoices() {
               <option value="paid">Paid</option>
               <option value="overdue">Overdue</option>
               <option value="void">Void</option>
+            </select>
 
+            {/* Client Filter Dropdown */}
+            <select
+              value={clientFilter}
+              onChange={(e) => setClientFilter(e.target.value)}
+              className="px-2.5 py-1 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white focus:outline-none max-w-[140px] truncate"
+            >
+              <option value="all">All Clients</option>
+              {allClients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name}
+                </option>
+              ))}
             </select>
           </div>
         </div>
 
         {/* View Mode: List View (Matching Deals.tsx Table Layout 100%) */}
         {viewMode === "list" && (
-          <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/80 shadow-2xs overflow-hidden">
+          <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-white/80 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                  <tr>
+                  <tr style={{ height: "30px" }}>
                     {/* Checkbox Header */}
-                    <th className="px-4 py-2.5 w-10">
+                    <th className="px-3 py-1 w-8">
                       <input
                         type="checkbox"
                         checked={allSelected}
@@ -325,24 +340,24 @@ export default function Invoices() {
                           if (el) el.indeterminate = someSelected;
                         }}
                         onChange={handleSelectAll}
-                        className="w-4 h-4 cursor-pointer"
+                        className="w-3.5 h-3.5 cursor-pointer"
                       />
                     </th>
 
                     {/* Column Toggle Gear Icon Header */}
-                    <th className="px-2 py-2.5 text-center relative" style={{ width: "32px" }}>
+                    <th className="px-1 py-1 text-center relative" style={{ width: "28px" }}>
                       <div className="relative inline-block">
                         <button
                           onClick={() => setShowColumnToggle(!showColumnToggle)}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
+                          className="inline-flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-white/10"
                           aria-label="Customize Columns"
                         >
-                          <SettingsIcon className="w-4 h-4 text-[#E5E7EB] hover:text-white transition-colors" />
+                          <SettingsIcon className="w-3.5 h-3.5 text-[#E5E7EB] hover:text-white transition-colors" />
                         </button>
                         {showColumnToggle && (
-                          <div className="absolute left-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg p-4 z-50 text-left">
-                            <h3 className="font-semibold mb-3 text-xs uppercase tracking-wider text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>Visible Columns</h3>
-                            <div className="space-y-2">
+                          <div className="absolute left-0 top-full mt-1 w-52 bg-white border border-slate-200 rounded-lg shadow-lg p-3 z-50 text-left">
+                            <h3 className="font-semibold mb-2 text-xs uppercase tracking-wider text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>Visible Columns</h3>
+                            <div className="space-y-1.5">
                               {Object.keys(visibleColumns).map((col) => (
                                 <label key={col} className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
                                   <input
@@ -354,7 +369,7 @@ export default function Invoices() {
                                         [col]: e.target.checked,
                                       })
                                     }
-                                    className="w-4 h-4 text-blue-600 rounded"
+                                    className="w-3.5 h-3.5 text-blue-600 rounded"
                                   />
                                   <span className="capitalize">
                                     {col === "dueDate" ? "Due Date" : col === "lastActivity" ? "Last Activity" : col}
@@ -368,22 +383,22 @@ export default function Invoices() {
                     </th>
 
                     {visibleColumns.client && (
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                      <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
                         CLIENT
                       </th>
                     )}
                     {visibleColumns.amount && (
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                      <th className="px-3 py-1 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
                         AMOUNT
                       </th>
                     )}
                     {visibleColumns.balance && (
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                      <th className="px-3 py-1 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
                         BALANCE
                       </th>
                     )}
                     {visibleColumns.stage && (
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                      <th className="px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
                         <div className="flex items-center justify-center gap-1">
                           STAGE
                           <InfoTooltip text="Each block is one stage (Draft → Sent → Viewed → Paid → Overdue → Void). Click a block to set status." />
@@ -391,27 +406,27 @@ export default function Invoices() {
                       </th>
                     )}
                     {visibleColumns.status && (
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                      <th className="px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
                         STATUS
                       </th>
                     )}
                     {visibleColumns.dueDate && (
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                      <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
                         DUE DATE
                       </th>
                     )}
                     {visibleColumns.created && (
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                      <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
                         CREATED
                       </th>
                     )}
                     {visibleColumns.lastActivity && (
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                      <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
                         LAST ACTIVITY
                       </th>
                     )}
                     {visibleColumns.responsible && (
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                      <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
                         RESPONSIBLE
                       </th>
                     )}
@@ -426,39 +441,39 @@ export default function Invoices() {
                     return (
                       <tr
                         key={inv.id}
-                        className={`transition-colors ${
+                        className={`h-[30px] transition-colors ${
                           selectedRows.has(inv.id) ? "bg-[#E8F0FE]" : "hover:bg-[#F1F5F9]"
                         }`}
                       >
                         {/* Checkbox Cell */}
-                        <td className="px-4 py-2.5">
+                        <td className="px-3 py-1">
                           <input
                             type="checkbox"
                             checked={selectedRows.has(inv.id)}
                             onChange={() => handleSelectRow(inv.id)}
-                            className="w-4 h-4 cursor-pointer"
+                            className="w-3.5 h-3.5 cursor-pointer"
                           />
                         </td>
 
-                        {/* Three-dot Kebab Menu Cell (Matching Deals.tsx line 2134) */}
-                        <td className="px-2 py-2.5 relative" style={{ width: "32px" }}>
+                        {/* Three-dot Kebab Menu Cell */}
+                        <td className="px-1 py-1 relative" style={{ width: "28px" }}>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setOpenRowMenuId(isMenuOpen ? null : inv.id);
                             }}
-                            className="inline-flex items-center justify-center w-7 h-7 rounded transition-colors hover:bg-gray-100"
+                            className="inline-flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-gray-100"
                             style={{ color: "#94A3B8" }}
                           >
-                            <MoreVertical className="w-4 h-4" />
+                            <MoreVertical className="w-3.5 h-3.5" />
                           </button>
 
                           {isMenuOpen && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => setOpenRowMenuId(null)} />
                               <div
-                                className="absolute left-8 top-0 z-50 bg-white rounded-lg overflow-hidden border border-slate-200"
-                                style={{ width: "155px", boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}
+                                className="absolute left-8 top-0 z-50 bg-white rounded-lg overflow-hidden border border-slate-200 shadow-md"
+                                style={{ width: "155px" }}
                               >
                                 {inv.status !== "paid" && inv.status !== "void" && (
                                   <button
@@ -467,44 +482,39 @@ export default function Invoices() {
                                       setPaymentModalInvoice(inv);
                                       setIsRecordPaymentOpen(true);
                                     }}
-                                    className="w-full flex items-center gap-2.5 px-3 text-sm text-emerald-700 font-bold transition-colors hover:bg-emerald-50 border-b border-slate-100"
-                                    style={{ height: "36px", fontSize: "13px" }}
+                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-emerald-700 font-bold transition-colors hover:bg-emerald-50 border-b border-slate-100"
                                   >
-                                    <CreditCard className="w-4 h-4 text-emerald-600" /> Add Payment
+                                    <CreditCard className="w-3.5 h-3.5 text-emerald-600" /> Add Payment
                                   </button>
                                 )}
                                 <button
                                   onClick={() => handleOpenDocument(inv)}
-                                  className="w-full flex items-center gap-2.5 px-3 text-sm text-gray-700 transition-colors hover:bg-[#F0F4FF]"
-                                  style={{ height: "36px", fontSize: "14px" }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 transition-colors hover:bg-[#F0F4FF]"
                                 >
-                                  <Eye className="w-4 h-4" /> View
+                                  <Eye className="w-3.5 h-3.5" /> View
                                 </button>
 
                                 {isEditDisabled ? (
                                   <div
-                                    className="w-full flex items-center gap-2.5 px-3 text-sm text-slate-300 cursor-not-allowed bg-slate-50"
-                                    style={{ height: "36px", fontSize: "14px" }}
+                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-300 cursor-not-allowed bg-slate-50"
                                     title="Paid or Void invoices can't be edited"
                                   >
-                                    <Pencil className="w-4 h-4 text-slate-300" /> Edit
+                                    <Pencil className="w-3.5 h-3.5 text-slate-300" /> Edit
                                   </div>
                                 ) : (
                                   <button
                                     onClick={() => handleEditInvoice(inv)}
-                                    className="w-full flex items-center gap-2.5 px-3 text-sm text-gray-700 transition-colors hover:bg-[#F0F4FF]"
-                                    style={{ height: "36px", fontSize: "14px" }}
+                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 transition-colors hover:bg-[#F0F4FF]"
                                   >
-                                    <Pencil className="w-4 h-4" /> Edit
+                                    <Pencil className="w-3.5 h-3.5" /> Edit
                                   </button>
                                 )}
 
                                 <button
                                   onClick={() => handleDeleteInvoice(inv)}
-                                  className="w-full flex items-center gap-2.5 px-3 transition-colors hover:bg-[#F0F4FF]"
-                                  style={{ height: "36px", fontSize: "14px", color: "#D32F2F" }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-[#F0F4FF] text-rose-600"
                                 >
-                                  <Trash2 className="w-4 h-4" /> Delete
+                                  <Trash2 className="w-3.5 h-3.5" /> Delete
                                 </button>
                               </div>
                             </>
@@ -513,35 +523,35 @@ export default function Invoices() {
 
                         {/* CLIENT Column */}
                         {visibleColumns.client && (
-                          <td className="px-4 py-2.5 font-medium text-sm" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          <td className="px-3 py-1 font-medium text-xs" style={{ fontFamily: "DM Sans, sans-serif" }}>
                             <button
                               onClick={() => handleOpenDetail(inv)}
-                              className="text-left font-bold hover:underline block"
+                              className="text-left font-bold hover:underline inline-block mr-2"
                               style={{ color: "#1A73E8" }}
                             >
                               {inv.clientName}
                             </button>
-                            <span className="text-xs text-slate-400 font-mono block">{inv.id}</span>
+                            <span className="text-[10px] text-slate-400 font-mono inline-block">{inv.id}</span>
                           </td>
                         )}
 
                         {/* AMOUNT Column */}
                         {visibleColumns.amount && (
-                          <td className="px-4 py-2.5 text-right font-bold text-sm text-slate-900 font-mono">
+                          <td className="px-3 py-1 text-right font-bold text-xs text-slate-900 font-mono">
                             ${inv.total.toFixed(2)}
                           </td>
                         )}
 
                         {/* BALANCE Column */}
                         {visibleColumns.balance && (
-                          <td className="px-4 py-2.5 text-right font-bold text-xs text-slate-700 font-mono">
+                          <td className="px-3 py-1 text-right font-bold text-xs text-slate-700 font-mono">
                             ${(inv.status === "paid" || inv.status === "void" ? 0 : Math.max(0, inv.total - (inv.amountPaid || 0))).toFixed(2)}
                           </td>
                         )}
 
                         {/* STAGE Column */}
                         {visibleColumns.stage && (
-                          <td className="px-4 py-2.5 text-center">
+                          <td className="px-3 py-1 text-center">
                             <InvoiceProgressBar
                               status={inv.status}
                               onStatusChange={(newSt) => updateInvoiceStatus(inv.id, newSt)}
@@ -553,35 +563,35 @@ export default function Invoices() {
 
                         {/* STATUS Column */}
                         {visibleColumns.status && (
-                          <td className="px-4 py-2.5 text-center">
+                          <td className="px-3 py-1 text-center">
                             {getStatusBadge(inv.status)}
                           </td>
                         )}
 
                         {/* DUE DATE Column */}
                         {visibleColumns.dueDate && (
-                          <td className="px-4 py-2.5 text-xs font-semibold" style={{ color: inv.status === "overdue" ? "#DC2626" : "#475569", fontFamily: "Outfit, sans-serif" }}>
+                          <td className="px-3 py-1 text-xs font-semibold" style={{ color: inv.status === "overdue" ? "#DC2626" : "#475569", fontFamily: "Outfit, sans-serif" }}>
                             {inv.dueDate}
                           </td>
                         )}
 
                         {/* CREATED Column */}
                         {visibleColumns.created && (
-                          <td className="px-4 py-2.5 text-xs" style={{ color: "#64748B", fontFamily: "Outfit, sans-serif" }}>
+                          <td className="px-3 py-1 text-[11px]" style={{ color: "#64748B", fontFamily: "Outfit, sans-serif" }}>
                             {inv.createdAt.replace("T", " ").substring(0, 16)}
                           </td>
                         )}
 
                         {/* LAST ACTIVITY Column */}
                         {visibleColumns.lastActivity && (
-                          <td className="px-4 py-2.5 text-xs font-medium" style={{ color: inv.status === "overdue" ? "#DC2626" : "#475569", fontFamily: "Outfit, sans-serif" }}>
+                          <td className="px-3 py-1 text-xs font-medium" style={{ color: inv.status === "overdue" ? "#DC2626" : "#475569", fontFamily: "Outfit, sans-serif" }}>
                             {getInvoiceActivityText(inv)}
                           </td>
                         )}
 
                         {/* RESPONSIBLE Column */}
                         {visibleColumns.responsible && (
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-1">
                             <span className="text-xs font-medium" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
                               {inv.createdBy === "system" ? "Automated Flow" : inv.createdBy}
                             </span>
@@ -594,19 +604,19 @@ export default function Invoices() {
               </table>
 
               {filteredInvoices.length === 0 && (
-                <div className="text-center py-16">
-                  <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm font-semibold text-slate-700">No invoices found</p>
-                  <p className="text-xs text-slate-400 mt-1">Try selecting a different status or client filter</p>
+                <div className="text-center py-10">
+                  <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs font-semibold text-slate-700">No invoices found</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Try selecting a different status or client filter</p>
                 </div>
               )}
             </div>
 
-            {/* Pagination Controls (Matching Deals.tsx lines 2280-2346) */}
-            <div className="border-t border-border px-4 py-3">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
+            {/* Pagination Controls */}
+            <div className="border-t border-border px-3 py-1.5">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <span className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>Rows per page:</span>
                     <select
                       value={rowsPerPage}
@@ -614,11 +624,11 @@ export default function Invoices() {
                         setRowsPerPage(Number(e.target.value));
                         setCurrentPage(1);
                       }}
-                      className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs"
+                      className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-xs"
                     >
-                      <option value={15}>15</option>
-                      <option value={25}>25</option>
+                      <option value={20}>20</option>
                       <option value={50}>50</option>
+                      <option value={100}>100</option>
                     </select>
                   </div>
                   <span className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
