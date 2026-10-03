@@ -86,11 +86,11 @@ export function Modal({ isOpen, onClose, title, headerAction, children, footer, 
   // Standard modal behavior for other sizes
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-8 px-4 pb-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className={`bg-card rounded-xl shadow-lg ${maxWidthClasses[maxWidth]} w-full mb-8`}
+        className={`bg-card rounded-xl shadow-lg ${maxWidthClasses[maxWidth]} w-full my-auto`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-6 border-b border-border gap-4">

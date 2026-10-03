@@ -248,74 +248,65 @@ interface DraggableStageProps {
 }
 
 const DraggableStage = ({ stage, index, totalStages = 1, moveStage, onRemove, onEdit }: DraggableStageProps) => {
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [isLocalDragging, setIsLocalDragging] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const isFinal = totalStages > 0 && index === totalStages - 1;
 
   const [{ isDragging }, drag] = useDrag({
     type: "STAGE",
-    item: { index },
+    item: () => ({ index }),
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
   });
 
-  const [, drop] = useDrop({
+  const [{ isOver }, drop] = useDrop({
     accept: "STAGE",
-    hover: (item: { index: number }) => {
-      if (item.index !== index) {
-        moveStage(item.index, index);
-        item.index = index;
-      }
+    hover(item: { index: number }, monitor) {
+      if (!ref.current) return;
+      const dragIndex = item.index;
+      const hoverIndex = index;
+      if (dragIndex === hoverIndex) return;
+
+      const hoverBoundingRect = ref.current.getBoundingClientRect();
+      const hoverMiddleX = (hoverBoundingRect.right - hoverBoundingRect.left) / 2;
+      const clientOffset = monitor.getClientOffset();
+      if (!clientOffset) return;
+      const hoverClientX = clientOffset.x - hoverBoundingRect.left;
+
+      if (dragIndex < hoverIndex && hoverClientX < hoverMiddleX) return;
+      if (dragIndex > hoverIndex && hoverClientX > hoverMiddleX) return;
+
+      moveStage(dragIndex, hoverIndex);
+      item.index = hoverIndex;
     },
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+    }),
   });
 
+  drag(drop(ref));
+
   return (
-    <div
-      className="relative flex-shrink-0 group"
-      draggable={true}
-      onDragStart={(e) => {
-        setIsLocalDragging(true);
-        e.dataTransfer.setData("text/plain", String(index));
-        e.dataTransfer.effectAllowed = "move";
-      }}
-      onDragEnd={() => {
-        setIsLocalDragging(false);
-        setIsDragOver(false);
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        if (!isDragOver) setIsDragOver(true);
-      }}
-      onDragLeave={() => setIsDragOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setIsDragOver(false);
-        const fromIdx = parseInt(e.dataTransfer.getData("text/plain"), 10);
-        if (!isNaN(fromIdx) && fromIdx !== index) {
-          moveStage(fromIdx, index);
-        }
-      }}
-    >
+    <div className="relative flex-shrink-0 group">
       <div
-        ref={(node) => { drag(drop(node)); }}
+        ref={ref}
         className={`relative flex items-center gap-2 px-4 py-3 cursor-grab active:cursor-grabbing transition-all shadow-md hover:shadow-lg select-none ${
-          isDragOver ? "ring-2 ring-white scale-105" : ""
+          isOver ? "ring-2 ring-white scale-105" : ""
         }`}
         style={{
-          backgroundColor: stage.color || (stage.isFinalStage || stage.isFinal ? "#EC4899" : "#22D3EE"),
-          opacity: isDragging || isLocalDragging ? 0.4 : 1,
+          backgroundColor: stage.color || (isFinal ? "#EC4899" : "#22D3EE"),
+          opacity: isDragging ? 0.35 : 1,
           minWidth: "170px",
           clipPath: "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)",
         }}
         onDoubleClick={() => onEdit(stage)}
-        title={stage.isFinalStage || stage.isFinal ? "Final Stage (Completion Point) - Double click to edit" : "Drag to reorder stage, or click edit"}
+        title={isFinal ? "Final Stage (Completion Point) - Double click to edit" : "Drag to reorder stage, or click edit"}
       >
         <GripVertical className="w-3.5 h-3.5 text-white/70 group-hover:text-white shrink-0" />
         <span className="text-sm font-semibold text-white pr-1.5 flex-1 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
           {stage.name}
         </span>
-        {(stage.isFinalStage || stage.isFinal) && (
+        {isFinal && (
           <span className="text-[10px] font-bold bg-black/35 text-white px-1.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs whitespace-nowrap">
             🏁 Final
           </span>
@@ -332,6 +323,107 @@ const DraggableStage = ({ stage, index, totalStages = 1, moveStage, onRemove, on
           <Edit className="w-3.5 h-3.5" />
         </button>
       </div>
+    </div>
+  );
+};
+
+// Draggable Stage Component for Sidebar Cards
+interface SidebarDraggableStageProps {
+  processId: string;
+  stage: Stage;
+  index: number;
+  totalStages?: number;
+  isSelected: boolean;
+  onSelect: () => void;
+  onMoveStage: (processId: string, dragIndex: number, hoverIndex: number) => void;
+}
+
+const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
+  processId,
+  stage,
+  index,
+  totalStages = 1,
+  isSelected,
+  onSelect,
+  onMoveStage,
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const isFinal = totalStages > 0 && index === totalStages - 1;
+
+  const [{ isDragging }, drag] = useDrag({
+    type: "SIDEBAR_STAGE",
+    item: (): { index: number; processId: string } => ({
+      index,
+      processId,
+    }),
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  });
+
+  const [{ isOver }, drop] = useDrop({
+    accept: "SIDEBAR_STAGE",
+    hover(item: { index: number; processId: string }, monitor) {
+      if (!ref.current) return;
+      const dragIndex = item.index;
+      const hoverIndex = index;
+
+      if (dragIndex === hoverIndex || item.processId !== processId) {
+        return;
+      }
+
+      const hoverBoundingRect = ref.current.getBoundingClientRect();
+      const hoverMiddleY = (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2;
+      const clientOffset = monitor.getClientOffset();
+      if (!clientOffset) return;
+      const hoverClientY = clientOffset.y - hoverBoundingRect.top;
+
+      if (dragIndex < hoverIndex && hoverClientY < hoverMiddleY) {
+        return;
+      }
+      if (dragIndex > hoverIndex && hoverClientY > hoverMiddleY) {
+        return;
+      }
+
+      onMoveStage(processId, dragIndex, hoverIndex);
+      item.index = hoverIndex;
+    },
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+    }),
+  });
+
+  drag(drop(ref));
+
+  return (
+    <div
+      ref={ref}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect();
+      }}
+      className={`group/stage w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all cursor-grab active:cursor-grabbing select-none ${
+        isOver
+          ? "bg-blue-100 ring-2 ring-blue-400 scale-[1.02]"
+          : isSelected
+          ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200 shadow-xs"
+          : "text-gray-700 hover:bg-gray-50 border border-transparent"
+      } ${isDragging ? "opacity-30 scale-95" : ""}`}
+      title="Drag to reorder stage or click to view details"
+    >
+      <GripVertical className="w-3.5 h-3.5 text-gray-400 group-hover/stage:text-gray-600 transition-colors shrink-0 cursor-grab" />
+      <span
+        className="w-2 h-2 rounded-full flex-shrink-0"
+        style={{ backgroundColor: stage.color || (isFinal ? "#EC4899" : "#22D3EE") }}
+      />
+      <span className="flex-1 truncate font-medium">
+        {stage.name}
+      </span>
+      {isFinal && (
+        <span className="text-[10px] font-bold bg-pink-50 text-pink-600 border border-pink-200 px-1.5 py-0.5 rounded-full shrink-0">
+          Final
+        </span>
+      )}
     </div>
   );
 };
@@ -1967,12 +2059,10 @@ export default function Process() {
     );
   };
 
-  const moveStage = (dragIndex: number, hoverIndex: number) => {
-    if (!selectedProcess) return;
-
-    setProcesses(
-      processes.map((p) => {
-        if (p.id === selectedProcess) {
+  const moveStageForProcess = (processId: string, dragIndex: number, hoverIndex: number) => {
+    setProcesses((prevProcesses) =>
+      prevProcesses.map((p) => {
+        if (p.id === processId) {
           const newStages = [...p.stages];
           const [draggedStage] = newStages.splice(dragIndex, 1);
           newStages.splice(hoverIndex, 0, draggedStage);
@@ -1981,6 +2071,11 @@ export default function Process() {
         return p;
       })
     );
+  };
+
+  const moveStage = (dragIndex: number, hoverIndex: number) => {
+    if (!selectedProcess) return;
+    moveStageForProcess(selectedProcess, dragIndex, hoverIndex);
   };
 
   const handleRemoveStage = (stageId: string) => {
@@ -2036,8 +2131,12 @@ export default function Process() {
     toast.success("Stage updated successfully");
   };
 
-  const handleOpenTransitionModal = (stageId: string) => {
-    setTransitionSourceStageId(stageId);
+  const handleOpenTransitionModal = (stageId?: string) => {
+    const finalStage = selectedProcessData?.stages && selectedProcessData.stages.length > 0
+      ? selectedProcessData.stages[selectedProcessData.stages.length - 1]
+      : undefined;
+    const sourceId = stageId || finalStage?.id || null;
+    setTransitionSourceStageId(sourceId);
     const otherProc = processes.find((p) => p.id !== selectedProcess);
     if (otherProc) {
       setHandoffTargetProcessId(otherProc.id);
@@ -2051,7 +2150,12 @@ export default function Process() {
   };
 
   const handleSaveQuickTransition = () => {
-    if (!selectedProcess || !transitionSourceStageId) {
+    const finalStage = selectedProcessData?.stages && selectedProcessData.stages.length > 0
+      ? selectedProcessData.stages[selectedProcessData.stages.length - 1]
+      : undefined;
+    const sourceStageId = transitionSourceStageId || finalStage?.id;
+
+    if (!selectedProcess || !sourceStageId) {
       toast.error("Please select a valid stage");
       return;
     }
@@ -2387,36 +2491,27 @@ export default function Process() {
                             No stages yet
                           </div>
                         ) : (
-                          process.stages.map((stage) => {
+                          process.stages.map((stage, sIdx) => {
                             const isStageSelected =
                               selectedProcess === process.id &&
                               expandedStage === stage.id &&
                               viewMode === "stage";
 
                             return (
-                              <button
+                              <SidebarDraggableStage
                                 key={stage.id}
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
+                                processId={process.id}
+                                stage={stage}
+                                index={sIdx}
+                                totalStages={process.stages.length}
+                                isSelected={isStageSelected}
+                                onSelect={() => {
                                   setSelectedProcess(process.id);
                                   setExpandedStage(stage.id);
                                   setViewMode("stage");
                                 }}
-                                className={`w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-                                  isStageSelected
-                                    ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200"
-                                    : "text-gray-700 hover:bg-gray-50 border border-transparent"
-                                }`}
-                              >
-                                <span
-                                  className="w-2 h-2 rounded-full flex-shrink-0"
-                                  style={{ backgroundColor: stage.color || "#22D3EE" }}
-                                />
-                                <span className="flex-1 truncate font-medium">
-                                  {stage.name}
-                                </span>
-                              </button>
+                                onMoveStage={moveStageForProcess}
+                              />
                             );
                           })
                         )}
@@ -2567,6 +2662,7 @@ export default function Process() {
                             key={stage.id}
                             stage={stage}
                             index={index}
+                            totalStages={selectedProcessData.stages.length}
                             moveStage={moveStage}
                             onRemove={handleRemoveStage}
                             onEdit={handleEditStage}
@@ -2590,6 +2686,7 @@ export default function Process() {
 
                         {/* Other Stages (Handoff Target Stages from Other Processes) */}
                         {(() => {
+                          const finalStage = selectedProcessData.stages[selectedProcessData.stages.length - 1];
                           const stagesWithTransitions = selectedProcessData.stages.filter(
                             (s) => s.nextProcessTransitions && s.nextProcessTransitions.length > 0
                           );
@@ -2597,62 +2694,79 @@ export default function Process() {
                             (s.nextProcessTransitions || []).map((t, idx) => ({
                               ...t,
                               sourceStageId: s.id,
-                              sourceStageName: s.name,
+                              sourceStageName: finalStage ? finalStage.name : s.name,
                               transitionIndex: idx,
                             }))
                           );
 
                           return (
-                            <>
-                              {allTransitions.map((trans, tIdx) => (
-                                <div
-                                  key={`trans-${tIdx}-${trans.targetProcessId}-${trans.targetStageName}`}
-                                  className="relative flex-shrink-0 group flex items-center gap-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl px-4 py-2.5 shadow-md hover:shadow-lg transition-all border border-purple-400/40"
-                                  style={{
-                                    minWidth: "210px",
-                                    clipPath: "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)",
-                                  }}
-                                >
-                                  <div className="flex flex-col flex-1 min-w-0 pr-1">
-                                    <div className="flex items-center gap-1 text-[9px] text-purple-200 font-bold uppercase tracking-wider">
-                                      <span>From: {trans.sourceStageName}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 font-bold text-xs text-white truncate">
-                                      <span className="text-purple-200">🔀</span>
-                                      <span className="text-purple-100 truncate">{trans.targetProcessName || "Process"}:</span>
-                                      <span className="text-amber-300 underline underline-offset-2 truncate font-extrabold">{trans.targetStageName}</span>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-1 pr-2 opacity-90 group-hover:opacity-100">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const srcStage = selectedProcessData.stages.find((s) => s.id === trans.sourceStageId);
-                                        if (srcStage) handleEditStage(srcStage);
+                              <>
+                                {allTransitions.map((trans, tIdx) => {
+                                  const targetProc = processes.find(
+                                    (p) => p.id === trans.targetProcessId || p.name === trans.targetProcessName
+                                  );
+                                  const targetStageIdx = targetProc?.stages.findIndex(
+                                    (s) => s.id === trans.targetStageId || s.name === trans.targetStageName
+                                  ) ?? -1;
+                                  const targetStageObj = targetStageIdx !== -1 && targetProc ? targetProc.stages[targetStageIdx] : undefined;
+                                  const isTargetFinal = targetProc && targetStageIdx !== -1 && targetStageIdx === targetProc.stages.length - 1;
+                                  const assignedStageColor = targetStageObj?.color || (isTargetFinal ? "#EC4899" : "#22D3EE");
+
+                                  return (
+                                    <div
+                                      key={`trans-${tIdx}-${trans.targetProcessId}-${trans.targetStageName}`}
+                                      className="relative flex-shrink-0 group flex items-center gap-2.5 text-white rounded-xl px-4 py-2.5 shadow-md hover:shadow-lg transition-all border border-white/20 select-none"
+                                      style={{
+                                        backgroundColor: assignedStageColor,
+                                        minWidth: "210px",
+                                        clipPath: "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)",
                                       }}
-                                      className="p-1 hover:bg-white/20 rounded transition-colors text-white"
-                                      title="Edit Stage / Transitions"
                                     >
-                                      <Edit className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveTransitionFromStage(trans.sourceStageId, trans.transitionIndex)}
-                                      className="p-1 hover:bg-red-500/30 rounded transition-colors text-purple-200 hover:text-red-200"
-                                      title="Remove transition"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
+                                      <div className="flex flex-col flex-1 min-w-0 pr-1">
+                                        <div className="flex items-center gap-1 text-[9px] text-white/80 font-bold uppercase tracking-wider">
+                                          <span>From: {trans.sourceStageName}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 font-bold text-xs text-white truncate">
+                                          <span className="text-white/80">🔀</span>
+                                          <span className="text-white/90 truncate font-semibold">{trans.targetProcessName || "Process"}:</span>
+                                          <span className="text-white underline underline-offset-2 truncate font-extrabold">{trans.targetStageName}</span>
+                                          {isTargetFinal && (
+                                            <span className="ml-1 text-[9px] bg-black/25 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider whitespace-nowrap">
+                                              Final
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1 pr-2 opacity-90 group-hover:opacity-100">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const srcStage = selectedProcessData.stages.find((s) => s.id === trans.sourceStageId);
+                                            if (srcStage) handleEditStage(srcStage);
+                                          }}
+                                          className="p-1 hover:bg-black/20 rounded transition-colors text-white"
+                                          title="Edit Stage"
+                                        >
+                                          <Edit className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveTransitionFromStage(trans.sourceStageId, trans.transitionIndex)}
+                                          className="p-1 hover:bg-red-500/50 rounded transition-colors text-white hover:text-red-100"
+                                          title="Remove transition"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
 
                               {/* Button to connect / add next process stage transition */}
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const finalStage = selectedProcessData.stages.find((s) => s.isFinalStage || s.isFinal) ||
-                                    selectedProcessData.stages[selectedProcessData.stages.length - 1];
+                                  const finalStage = selectedProcessData.stages[selectedProcessData.stages.length - 1];
                                   if (finalStage) {
                                     handleOpenTransitionModal(finalStage.id);
                                   } else {
@@ -6455,181 +6569,6 @@ export default function Process() {
               </div>
             </div>
 
-            {/* Final Stage Toggle */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                      Mark as Final Stage
-                    </span>
-                    <span className="text-[11px] bg-pink-100 text-pink-700 font-bold px-2 py-0.5 rounded-full">
-                      🏁 Completion Point
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                    When a lead reaches this stage, the process completes and transitions to other processes.
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    checked={Boolean(editingStage?.isFinalStage)}
-                    onChange={(e) => {
-                      if (!editingStage) return;
-                      setEditingStage({
-                        ...editingStage,
-                        isFinalStage: e.target.checked,
-                      });
-                    }}
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
-                </label>
-              </div>
-
-              {/* Next Process Handoff / Transitions Configuration */}
-              {editingStage?.isFinalStage && (
-                <div className="mt-3 pt-3 border-t border-slate-200 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Handoff to Stages in Other Processes
-                    </span>
-                  </div>
-
-                  {/* Existing transitions list */}
-                  {editingStage.nextProcessTransitions && editingStage.nextProcessTransitions.length > 0 ? (
-                    <div className="space-y-2">
-                      {editingStage.nextProcessTransitions.map((t, tIdx) => (
-                        <div
-                          key={tIdx}
-                          className="flex items-center justify-between bg-white p-2.5 rounded-lg border border-purple-200 text-xs shadow-2xs"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-purple-600 font-bold">🔀</span>
-                            <span className="font-semibold text-slate-800">{t.targetProcessName}</span>
-                            <span className="text-slate-400">→</span>
-                            <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                              {t.targetStageName}
-                            </span>
-                            {t.autoMove && (
-                              <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.2 rounded font-medium">
-                                Auto-move
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = (editingStage.nextProcessTransitions || []).filter((_, i) => i !== tIdx);
-                              setEditingStage({ ...editingStage, nextProcessTransitions: updated });
-                            }}
-                            className="text-slate-400 hover:text-red-500 p-1"
-                            title="Remove Transition"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400 italic">No transitions linked yet. Add one below:</p>
-                  )}
-
-                  {/* Add transition form */}
-                  <div className="bg-purple-50/60 p-3 rounded-lg border border-purple-200/80 space-y-2.5">
-                    <div className="text-xs font-semibold text-purple-900">Add Transition Target:</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[11px] text-slate-600 mb-1 font-medium">Target Process</label>
-                        <select
-                          className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md"
-                          value={handoffTargetProcessId || (processes.find((p) => p.id !== selectedProcess)?.id || "")}
-                          onChange={(e) => {
-                            setHandoffTargetProcessId(e.target.value);
-                            const p = processes.find((proc) => proc.id === e.target.value);
-                            if (p && p.stages.length > 0) {
-                              setHandoffTargetStageName(p.stages[0].name);
-                            }
-                          }}
-                        >
-                          {processes
-                            .filter((p) => p.id !== selectedProcess)
-                            .map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-slate-600 mb-1 font-medium">Target Stage</label>
-                        <select
-                          className="w-full text-xs p-1.5 bg-white border border-slate-300 rounded-md"
-                          value={handoffTargetStageName}
-                          onChange={(e) => setHandoffTargetStageName(e.target.value)}
-                        >
-                          {(
-                            processes.find(
-                              (p) => p.id === (handoffTargetProcessId || processes.find((pr) => pr.id !== selectedProcess)?.id)
-                            )?.stages || []
-                          ).map((s) => (
-                            <option key={s.id} value={s.name}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between pt-1">
-                      <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={handoffAutoMove}
-                          onChange={(e) => setHandoffAutoMove(e.target.checked)}
-                          className="rounded text-purple-600"
-                        />
-                        <span>Auto-move client on reaching stage</span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const targetProcId = handoffTargetProcessId || processes.find((p) => p.id !== selectedProcess)?.id;
-                          if (!targetProcId) {
-                            toast.error("No other processes available to link");
-                            return;
-                          }
-                          const targetProc = processes.find((p) => p.id === targetProcId);
-                          if (!targetProc) return;
-                          const chosenStageName = handoffTargetStageName || targetProc.stages[0]?.name || "Initial Contact";
-                          const chosenStage = targetProc.stages.find((s) => s.name === chosenStageName) || targetProc.stages[0];
-
-                          const newT: ProcessTransitionTarget = {
-                            id: `trans-${Date.now()}`,
-                            targetProcessId: targetProc.id,
-                            targetProcessName: targetProc.name,
-                            targetStageId: chosenStage?.id,
-                            targetStageName: chosenStageName,
-                            autoMove: handoffAutoMove,
-                          };
-
-                          setEditingStage({
-                            ...editingStage,
-                            nextProcessTransitions: [...(editingStage.nextProcessTransitions || []), newT],
-                          });
-                          toast.success(`Added transition to ${targetProc.name}: ${chosenStageName}`);
-                        }}
-                        className="px-2.5 py-1 bg-purple-600 text-white rounded text-xs font-semibold hover:bg-purple-700 transition-colors flex items-center gap-1 cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Link Stage</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
             <div className="flex items-center justify-between pt-4">
               <Button
                 variant="outline"
@@ -6676,21 +6615,6 @@ export default function Process() {
             <p className="text-sm text-slate-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
               Define where leads should move when they complete this stage. This connects this process to other workflows in your workspace.
             </p>
-
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-slate-700">Source Final Stage</label>
-              <select
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
-                value={transitionSourceStageId || ""}
-                onChange={(e) => setTransitionSourceStageId(e.target.value)}
-              >
-                {selectedProcessData?.stages.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} {s.isFinalStage || s.isFinal ? "(Final Stage)" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>

@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { InfoTooltip } from "../help/InfoTooltip";
 
 interface PageHeaderProps {
   title: string;
@@ -33,21 +34,17 @@ export default function PageHeader({
 
   const content = (
     <div className="flex items-center justify-between w-full gap-3 min-w-0">
-      {/* Page Heading & Subtext */}
-      <div className="flex items-baseline gap-2 min-w-0 overflow-hidden">
+      {/* Page Heading & Subtext Tooltip */}
+      <div className="flex items-center gap-1.5 min-w-0">
         <h1
           className="text-sm sm:text-[15px] font-bold text-gray-900 tracking-tight shrink-0 whitespace-nowrap"
           style={{ fontFamily: "Outfit, sans-serif" }}
+          title={subtitle}
         >
           {title}
         </h1>
         {subtitle && (
-          <p
-            className="text-[11px] sm:text-xs text-gray-500 font-normal truncate hidden md:inline max-w-xl"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            {subtitle}
-          </p>
+          <InfoTooltip text={subtitle} placement="bottom" size="sm" />
         )}
       </div>
 
@@ -61,3 +58,4 @@ export default function PageHeader({
 
   return createPortal(content, container);
 }
+
