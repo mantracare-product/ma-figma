@@ -313,147 +313,248 @@ const INITIAL_INVOICES: ClientInvoice[] = [
 
 
 // ─── Record-level mock rows used by the custom report engine ─────────────────
+const daysOfWeekList = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const getRelativeMockDate = (daysAgo: number, timeStr = "10:00") => {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  const dateStr = d.toISOString().split("T")[0];
+  const dayOfWeek = daysOfWeekList[d.getDay()];
+  return { date: dateStr, created: dateStr, dayOfWeek, time: timeStr };
+};
+
+const createMockCalls = () => {
+  const rawCalls = [
+    { id: "CALL-101", client: "Sarah Jenkins", clientId: "c-1", service: "Patient Intake", duration: 105, durationFormatted: "1m 45s", durationBucket: "1–2 Mins", status: "Completed", sentiment: "Positive", cost: 0.25, responsible: "John Smith", type: "Outbound", daysAgo: 0, time: "10:15", isWorking: true },
+    { id: "CALL-102", client: "Michael Chang", clientId: "c-2", service: "Appointment Scheduling", duration: 75, durationFormatted: "1m 15s", durationBucket: "1–2 Mins", status: "Completed", sentiment: "Neutral", cost: 0.18, responsible: "Sarah Johnson", type: "Outbound", daysAgo: 0, time: "14:20", isWorking: true },
+    { id: "CALL-103", client: "Elena Rostova", clientId: "c-3", service: "Insurance Verification", duration: 318, durationFormatted: "5m 18s", durationBucket: "5+ Mins", status: "Completed", sentiment: "Positive", cost: 0.58, responsible: "John Smith", type: "Inbound", daysAgo: 0, time: "19:40", isWorking: false },
+    { id: "CALL-104", client: "David Miller", clientId: "c-5", service: "Follow-up Calls", duration: 110, durationFormatted: "1m 50s", durationBucket: "1–2 Mins", status: "Handoff", sentiment: "Negative", cost: 0.22, responsible: "Lisa Anderson", type: "Inbound", daysAgo: 1, time: "08:15", isWorking: false },
+    { id: "CALL-105", client: "Priya Nair", clientId: "c-4", service: "Billing Support", duration: 224, durationFormatted: "3m 44s", durationBucket: "2–5 Mins", status: "Completed", sentiment: "Positive", cost: 0.41, responsible: "Sarah Johnson", type: "Outbound", daysAgo: 1, time: "11:30", isWorking: true },
+    { id: "CALL-106", client: "Emma Brown", clientId: "c-2", service: "Patient Intake", duration: 95, durationFormatted: "1m 35s", durationBucket: "1–2 Mins", status: "Failed", sentiment: "Neutral", cost: 0.14, responsible: "Michael Chen", type: "Outbound", daysAgo: 2, time: "15:45", isWorking: true },
+    { id: "CALL-107", client: "Oliver Davis", clientId: "c-3", service: "Appointment Scheduling", duration: 280, durationFormatted: "4m 40s", durationBucket: "2–5 Mins", status: "Completed", sentiment: "Positive", cost: 0.52, responsible: "Emily Davis", type: "Inbound", daysAgo: 2, time: "20:10", isWorking: false },
+    { id: "CALL-108", client: "James Wilson", clientId: "c-1", service: "Follow-up Calls", duration: 80, durationFormatted: "1m 20s", durationBucket: "1–2 Mins", status: "Completed", sentiment: "Neutral", cost: 0.20, responsible: "Lisa Anderson", type: "Outbound", daysAgo: 3, time: "09:40", isWorking: true },
+    { id: "CALL-109", client: "Sarah Johnson", clientId: "CL-001", service: "Patient Intake", duration: 45, durationFormatted: "0m 45s", durationBucket: "< 1 Min", status: "Failed", sentiment: "Neutral", cost: 0.08, responsible: "John Smith", type: "Outbound", daysAgo: 3, time: "18:45", isWorking: false },
+    { id: "CALL-110", client: "Rahul Patel", clientId: "CL-014", service: "Follow-up Calls", duration: 115, durationFormatted: "1m 55s", durationBucket: "1–2 Mins", status: "Completed", sentiment: "Positive", cost: 0.26, responsible: "Michael Chen", type: "Inbound", daysAgo: 4, time: "13:10", isWorking: false },
+    { id: "CALL-111", client: "Fatima Hassan", clientId: "CL-024", service: "Billing Support", duration: 190, durationFormatted: "3m 10s", durationBucket: "2–5 Mins", status: "Completed", sentiment: "Positive", cost: 0.35, responsible: "Sarah Johnson", type: "Outbound", daysAgo: 4, time: "16:20", isWorking: true },
+    { id: "CALL-112", client: "Vikram Singh", clientId: "CL-016", service: "Appointment Scheduling", duration: 65, durationFormatted: "1m 05s", durationBucket: "1–2 Mins", status: "Completed", sentiment: "Positive", cost: 0.15, responsible: "Lisa Anderson", type: "Outbound", daysAgo: 5, time: "10:30", isWorking: true },
+    { id: "CALL-113", client: "Kavya Iyer", clientId: "CL-019", service: "Insurance Verification", duration: 340, durationFormatted: "5m 40s", durationBucket: "5+ Mins", status: "Completed", sentiment: "Neutral", cost: 0.62, responsible: "Emily Davis", type: "Inbound", daysAgo: 5, time: "11:50", isWorking: true },
+    { id: "CALL-114", client: "Deepika Nair", clientId: "CL-021", service: "Appointment Scheduling", duration: 118, durationFormatted: "1m 58s", durationBucket: "1–2 Mins", status: "Completed", sentiment: "Positive", cost: 0.24, responsible: "Sarah Johnson", type: "Outbound", daysAgo: 6, time: "15:20", isWorking: true },
+    { id: "CALL-115", client: "Ahmed Al-Mansoori", clientId: "CL-023", service: "Patient Intake", duration: 210, durationFormatted: "3m 30s", durationBucket: "2–5 Mins", status: "Completed", sentiment: "Positive", cost: 0.38, responsible: "John Smith", type: "Inbound", daysAgo: 6, time: "21:30", isWorking: false },
+    { id: "CALL-116", client: "Charlotte Evans", clientId: "CL-029", service: "Insurance Verification", duration: 90, durationFormatted: "1m 30s", durationBucket: "1–2 Mins", status: "Completed", sentiment: "Neutral", cost: 0.19, responsible: "Emily Davis", type: "Outbound", daysAgo: 8, time: "12:15", isWorking: true },
+    { id: "CALL-117", client: "Youssef Said", clientId: "CL-027", service: "Follow-up Calls", duration: 38, durationFormatted: "0m 38s", durationBucket: "< 1 Min", status: "Failed", sentiment: "Neutral", cost: 0.07, responsible: "Michael Chen", type: "Outbound", daysAgo: 10, time: "07:50", isWorking: false },
+    { id: "CALL-118", client: "Rohan Kumar", clientId: "CL-020", service: "Patient Intake", duration: 102, durationFormatted: "1m 42s", durationBucket: "1–2 Mins", status: "Completed", sentiment: "Positive", cost: 0.22, responsible: "Lisa Anderson", type: "Inbound", daysAgo: 14, time: "14:10", isWorking: true },
+    { id: "CALL-119", client: "Jennifer White", clientId: "CL-011", service: "Billing Support", duration: 275, durationFormatted: "4m 35s", durationBucket: "2–5 Mins", status: "Completed", sentiment: "Positive", cost: 0.51, responsible: "Sarah Johnson", type: "Outbound", daysAgo: 18, time: "16:40", isWorking: true },
+    { id: "CALL-120", client: "James Taylor", clientId: "CL-008", service: "Patient Intake", duration: 72, durationFormatted: "1m 12s", durationBucket: "1–2 Mins", status: "Completed", sentiment: "Neutral", cost: 0.16, responsible: "John Smith", type: "Outbound", daysAgo: 24, time: "17:15", isWorking: true },
+  ];
+
+  return rawCalls.map((c) => {
+    const meta = getRelativeMockDate(c.daysAgo, c.time);
+    const shiftLabel = c.isWorking ? "Working Hours (9AM–6PM)" : "After Working Hours";
+    return {
+      ...c,
+      date: meta.date,
+      created: meta.date,
+      dayOfWeek: meta.dayOfWeek,
+      shift: shiftLabel,
+      timeOfDay: shiftLabel,
+    };
+  });
+};
+
+const createMockAppointments = () => {
+  const rawAppts = [
+    { id: "appt-1", service: "Initial Consultation", client: "James Wilson", provider: "John Smith", duration: 60, status: "Completed", daysAgo: 0, time: "09:00" },
+    { id: "appt-2", service: "Follow-up Visit", client: "Emma Brown", provider: "Sarah Johnson", duration: 30, status: "Scheduled", daysAgo: 0, time: "10:30" },
+    { id: "appt-3", service: "Dental Cleaning", client: "Oliver Davis", provider: "Dr. Robert Martinez", duration: 45, status: "Completed", daysAgo: 1, time: "14:00" },
+    { id: "appt-4", service: "X-Ray Imaging", client: "Priya Nair", provider: "Dr. Robert Martinez", duration: 20, status: "Cancelled", daysAgo: 1, time: "11:00" },
+    { id: "appt-5", service: "Initial Consultation", client: "Sarah Jenkins", provider: "John Smith", duration: 60, status: "Completed", daysAgo: 2, time: "13:30" },
+    { id: "appt-6", service: "Physiotherapy Session", client: "David Miller", provider: "Sarah Johnson", duration: 45, status: "No-show", daysAgo: 2, time: "15:00" },
+    { id: "appt-7", service: "Blood Test & Lab Panel", client: "Michael Chang", provider: "Dr. Robert Martinez", duration: 30, status: "Completed", daysAgo: 3, time: "09:15" },
+    { id: "appt-8", service: "Dental Cleaning", client: "Elena Rostova", provider: "Dr. Robert Martinez", duration: 45, status: "Completed", daysAgo: 3, time: "11:30" },
+    { id: "appt-9", service: "Follow-up Visit", client: "James Wilson", provider: "John Smith", duration: 30, status: "Scheduled", daysAgo: 4, time: "14:00" },
+    { id: "appt-10", service: "Initial Consultation", client: "Charlotte Evans", provider: "Sarah Johnson", duration: 60, status: "Completed", daysAgo: 4, time: "16:00" },
+    { id: "appt-11", service: "X-Ray Imaging", client: "James Wilson", provider: "Dr. Robert Martinez", duration: 20, status: "Completed", daysAgo: 5, time: "10:00" },
+    { id: "appt-12", service: "Physiotherapy Session", client: "Sarah Jenkins", provider: "Sarah Johnson", duration: 45, status: "Scheduled", daysAgo: 5, time: "11:30" },
+    { id: "appt-13", service: "Follow-up Visit", client: "Michael Chang", provider: "John Smith", duration: 30, status: "Completed", daysAgo: 6, time: "14:30" },
+    { id: "appt-14", service: "Initial Consultation", client: "Priya Sharma", provider: "Dr. Robert Martinez", duration: 60, status: "Completed", daysAgo: 7, time: "09:30" },
+    { id: "appt-15", service: "Dental Cleaning", client: "Sarah Jenkins", provider: "Dr. Robert Martinez", duration: 45, status: "Scheduled", daysAgo: 8, time: "11:00" },
+    { id: "appt-16", service: "Blood Test & Lab Panel", client: "James Wilson", provider: "Sarah Johnson", duration: 30, status: "Completed", daysAgo: 10, time: "15:00" },
+    { id: "appt-17", service: "Initial Consultation", client: "Vikram Singh", provider: "John Smith", duration: 60, status: "Scheduled", daysAgo: 12, time: "10:00" },
+    { id: "appt-18", service: "Follow-up Visit", client: "David Miller", provider: "Sarah Johnson", duration: 30, status: "Scheduled", daysAgo: 14, time: "11:45" },
+    { id: "appt-19", service: "Dental Cleaning", client: "Michael Chang", provider: "Dr. Robert Martinez", duration: 45, status: "Completed", daysAgo: 18, time: "14:15" },
+  ];
+
+  return rawAppts.map((a) => {
+    const meta = getRelativeMockDate(a.daysAgo, a.time);
+    return {
+      ...a,
+      date: meta.date,
+      created: meta.date,
+      dayOfWeek: meta.dayOfWeek,
+    };
+  });
+};
+
 const MOCK_REPORT_ROWS: Record<string, Record<string, any>[]> = {
-  calls: [
-    { id: "call-101", client: "Sarah Jenkins", service: "Patient Intake", duration: 252, status: "Completed", sentiment: "Positive", cost: 0.45, created: "2026-08-12", responsible: "John Smith" },
-    { id: "call-102", client: "Michael Chang", service: "Appointment Scheduling", duration: 150, status: "Completed", sentiment: "Neutral", cost: 0.28, created: "2026-08-11", responsible: "Sarah Johnson" },
-    { id: "call-103", client: "Elena Rostova", service: "Insurance Verification", duration: 318, status: "Completed", sentiment: "Positive", cost: 0.58, created: "2026-08-11", responsible: "John Smith" },
-    { id: "call-104", client: "David Miller", service: "Follow-up Calls", duration: 105, status: "Handoff", sentiment: "Negative", cost: 0.20, created: "2026-08-10", responsible: "Lisa Anderson" },
-    { id: "call-105", client: "Priya Nair", service: "Billing Support", duration: 224, status: "Completed", sentiment: "Positive", cost: 0.41, created: "2026-08-09", responsible: "Sarah Johnson" },
-    { id: "call-106", client: "Emma Brown", service: "Patient Intake", duration: 96, status: "Failed", sentiment: "Neutral", cost: 0.14, created: "2026-08-08", responsible: "Michael Chen" },
-    { id: "call-107", client: "Oliver Davis", service: "Appointment Scheduling", duration: 281, status: "Completed", sentiment: "Positive", cost: 0.52, created: "2026-08-07", responsible: "Emily Davis" },
-    { id: "call-108", client: "James Wilson", service: "Follow-up Calls", duration: 133, status: "Completed", sentiment: "Neutral", cost: 0.24, created: "2026-08-06", responsible: "Lisa Anderson" },
-  ],
-  appointments: [
-    { id: "appt-1", service: "Initial Consultation", client: "James Wilson", provider: "John Smith", date: "2026-08-12", status: "Scheduled", created: "2026-08-05" },
-    { id: "appt-2", service: "Follow-up Visit", client: "Emma Brown", provider: "Sarah Johnson", date: "2026-08-11", status: "Scheduled", created: "2026-08-04" },
-    { id: "appt-3", service: "Dental Cleaning", client: "Oliver Davis", provider: "Dr. Robert Martinez", date: "2026-08-10", status: "Completed", created: "2026-08-01" },
-    { id: "appt-4", service: "X-Ray Imaging", client: "Priya Nair", provider: "Dr. Robert Martinez", date: "2026-08-09", status: "Cancelled", created: "2026-07-30" },
-    { id: "appt-5", service: "Physiotherapy Session", client: "David Miller", provider: "Sarah Johnson", date: "2026-08-08", status: "No-show", created: "2026-07-28" },
-    { id: "appt-6", service: "Initial Consultation", client: "Michael Chang", provider: "John Smith", date: "2026-08-07", status: "Completed", created: "2026-07-27" },
-    { id: "appt-7", service: "Blood Test & Lab Panel", client: "Sarah Jenkins", provider: "Dr. Robert Martinez", date: "2026-08-06", status: "Completed", created: "2026-07-25" },
-    { id: "appt-8", service: "Follow-up Visit", client: "Elena Rostova", provider: "Sarah Johnson", date: "2026-08-05", status: "Scheduled", created: "2026-07-24" },
-  ],
+  calls: createMockCalls(),
+  appointments: createMockAppointments(),
   clients: [
-    { client: "Sarah Jenkins", stage: "Schedule Appointment", process: "Patient Intake", value: 162, status: "Active", responsible: "John Smith", created: "2026-06-01", lastContact: "2026-08-12" },
-    { client: "Michael Chang", stage: "Insurance Verification", process: "Patient Intake", value: 81, status: "Active", responsible: "Sarah Johnson", created: "2026-06-10", lastContact: "2026-08-11" },
-    { client: "Elena Rostova", stage: "Initial Contact", process: "Follow-up Calls", value: 108, status: "Active", responsible: "John Smith", created: "2026-07-02", lastContact: "2026-08-10" },
-    { client: "David Miller", stage: "Confirmed", process: "Appointment Scheduling", value: 216, status: "Active", responsible: "Lisa Anderson", created: "2026-06-20", lastContact: "2026-08-09" },
-    { client: "Priya Nair", stage: "Insurance Verification", process: "Billing Support", value: 194.4, status: "Active", responsible: "Emily Davis", created: "2026-05-15", lastContact: "2026-08-08" },
-    { client: "Emma Brown", stage: "Initial Contact", process: "Patient Intake", value: 0, status: "Inactive", responsible: "Michael Chen", created: "2026-07-18", lastContact: "2026-07-28" },
-    { client: "Oliver Davis", stage: "Document Check", process: "Insurance Verification", value: 0, status: "Pending", responsible: "Sarah Johnson", created: "2026-06-25", lastContact: "2026-08-07" },
-    { client: "James Wilson", stage: "Scheduled", process: "Appointment Scheduling", value: 162, status: "Active", responsible: "John Smith", created: "2026-05-01", lastContact: "2026-08-12" },
+    { client: "James Wilson", clientId: "c-1", stage: "Scheduled", process: "Appointment Scheduling", value: 480, appointmentsCount: 4, callsCount: 3, status: "Active", responsible: "John Smith", created: getRelativeMockDate(45).date, lastContact: getRelativeMockDate(1).date, hospitalLocation: "New York Main Clinic", doctor: "Dr. Robert Martinez", bitrix_id: "BX-9021" },
+    { client: "Sarah Jenkins", clientId: "c-1b", stage: "Schedule Appointment", process: "Patient Intake", value: 360, appointmentsCount: 3, callsCount: 4, status: "Active", responsible: "John Smith", created: getRelativeMockDate(30).date, lastContact: getRelativeMockDate(1).date, hospitalLocation: "Downtown Branch", doctor: "Dr. Robert Martinez", bitrix_id: "BX-9022" },
+    { client: "Michael Chang", clientId: "c-2", stage: "Insurance Verification", process: "Patient Intake", value: 310, appointmentsCount: 3, callsCount: 2, status: "Active", responsible: "Sarah Johnson", created: getRelativeMockDate(25).date, lastContact: getRelativeMockDate(2).date, hospitalLocation: "New York Main Clinic", doctor: "Dr. Sarah Lee", bitrix_id: "BX-9023" },
+    { client: "David Miller", clientId: "c-5", stage: "Confirmed", process: "Appointment Scheduling", value: 216, appointmentsCount: 2, callsCount: 3, status: "Active", responsible: "Lisa Anderson", created: getRelativeMockDate(20).date, lastContact: getRelativeMockDate(3).date, hospitalLocation: "Westside Specialty Center", doctor: "Dr. Robert Martinez", bitrix_id: "BX-9024" },
+    { client: "Elena Rostova", clientId: "c-3", stage: "Initial Contact", process: "Follow-up Calls", value: 180, appointmentsCount: 1, callsCount: 2, status: "Active", responsible: "John Smith", created: getRelativeMockDate(15).date, lastContact: getRelativeMockDate(3).date, hospitalLocation: "Downtown Branch", doctor: "Dr. Sarah Lee", bitrix_id: "BX-9025" },
+    { client: "Oliver Davis", clientId: "c-3b", stage: "Document Check", process: "Insurance Verification", value: 125, appointmentsCount: 1, callsCount: 2, status: "Pending", responsible: "Sarah Johnson", created: getRelativeMockDate(12).date, lastContact: getRelativeMockDate(4).date, hospitalLocation: "New York Main Clinic", doctor: "Dr. Robert Martinez", bitrix_id: "BX-9026" },
+    { client: "Priya Nair", clientId: "c-4", stage: "Insurance Verification", process: "Billing Support", value: 194, appointmentsCount: 1, callsCount: 1, status: "Active", responsible: "Emily Davis", created: getRelativeMockDate(10).date, lastContact: getRelativeMockDate(5).date, hospitalLocation: "East Coast Regional", doctor: "Dr. Sarah Lee", bitrix_id: "BX-9027" },
+    { client: "Emma Brown", clientId: "c-2b", stage: "Initial Contact", process: "Patient Intake", value: 75, appointmentsCount: 1, callsCount: 2, status: "Inactive", responsible: "Michael Chen", created: getRelativeMockDate(8).date, lastContact: getRelativeMockDate(6).date, hospitalLocation: "Westside Specialty Center", doctor: "Dr. Sarah Lee", bitrix_id: "BX-9028" },
+    { client: "Charlotte Evans", clientId: "CL-029", stage: "Approval", process: "Insurance Verification", value: 150, appointmentsCount: 1, callsCount: 1, status: "Active", responsible: "Robert Wilson", created: getRelativeMockDate(5).date, lastContact: getRelativeMockDate(2).date, hospitalLocation: "Downtown Branch", doctor: "Dr. Robert Martinez", bitrix_id: "BX-9029" },
+    { client: "Vikram Singh", clientId: "CL-016", stage: "Slot Selection", process: "Appointment Scheduling", value: 150, appointmentsCount: 1, callsCount: 2, status: "Active", responsible: "John Smith", created: getRelativeMockDate(3).date, lastContact: getRelativeMockDate(1).date, hospitalLocation: "New York Main Clinic", doctor: "Dr. Robert Martinez", bitrix_id: "BX-9030" },
   ],
   team: [
     { member: "John Smith", role: "Senior Agent", calls: 48, appts: 12, rating: 4.9, status: "Active", created: "2025-01-15", responsible: "Admin" },
     { member: "Sarah Johnson", role: "Agent", calls: 42, appts: 9, rating: 4.8, status: "Active", created: "2025-03-02", responsible: "Admin" },
-    { member: "Dr. Robert Martinez", role: "Practitioner", calls: 18, appts: 6, rating: 5.0, status: "Active", created: "2024-11-10", responsible: "Admin" },
+    { member: "Dr. Robert Martinez", role: "Practitioner", calls: 18, appts: 14, rating: 5.0, status: "Active", created: "2024-11-10", responsible: "Admin" },
     { member: "Lisa Anderson", role: "Agent", calls: 36, appts: 5, rating: 4.7, status: "Active", created: "2025-06-20", responsible: "Admin" },
     { member: "Michael Chen", role: "Agent", calls: 30, appts: 4, rating: 4.6, status: "On Leave", created: "2025-09-01", responsible: "Admin" },
     { member: "Emily Davis", role: "Coordinator", calls: 22, appts: 7, rating: 4.8, status: "Active", created: "2025-02-14", responsible: "Admin" },
   ],
   messaging: [
-    { id: "msg-1", client: "Sarah Jenkins", channel: "WhatsApp", status: "Delivered", messages: 6, botContained: "Yes", created: "2026-08-12", responsible: "AI Bot" },
-    { id: "msg-2", client: "Michael Chang", channel: "WhatsApp", status: "Read", messages: 4, botContained: "Yes", created: "2026-08-11", responsible: "AI Bot" },
-    { id: "msg-3", client: "Elena Rostova", channel: "SMS", status: "Delivered", messages: 2, botContained: "No", created: "2026-08-10", responsible: "Agent Desk" },
-    { id: "msg-4", client: "David Miller", channel: "Email", status: "Failed", messages: 1, botContained: "No", created: "2026-08-09", responsible: "Agent Desk" },
-    { id: "msg-5", client: "Priya Nair", channel: "WhatsApp", status: "Read", messages: 8, botContained: "Yes", created: "2026-08-08", responsible: "AI Bot" },
-    { id: "msg-6", client: "James Wilson", channel: "WhatsApp", status: "Delivered", messages: 3, botContained: "Yes", created: "2026-08-07", responsible: "AI Bot" },
-    { id: "msg-7", client: "Oliver Davis", channel: "SMS", status: "Delivered", messages: 2, botContained: "No", created: "2026-08-06", responsible: "Agent Desk" },
-    { id: "msg-8", client: "Emma Brown", channel: "WhatsApp", status: "Read", messages: 5, botContained: "Yes", created: "2026-08-05", responsible: "AI Bot" },
+    { id: "msg-1", client: "Sarah Jenkins", channel: "WhatsApp", status: "Delivered", messages: 6, botContained: "Yes", created: getRelativeMockDate(1).date, responsible: "AI Bot" },
+    { id: "msg-2", client: "Michael Chang", channel: "WhatsApp", status: "Read", messages: 4, botContained: "Yes", created: getRelativeMockDate(2).date, responsible: "AI Bot" },
+    { id: "msg-3", client: "Elena Rostova", channel: "SMS", status: "Delivered", messages: 2, botContained: "No", created: getRelativeMockDate(3).date, responsible: "Agent Desk" },
+    { id: "msg-4", client: "David Miller", channel: "Email", status: "Failed", messages: 1, botContained: "No", created: getRelativeMockDate(4).date, responsible: "Agent Desk" },
+    { id: "msg-5", client: "Priya Nair", channel: "WhatsApp", status: "Read", messages: 8, botContained: "Yes", created: getRelativeMockDate(5).date, responsible: "AI Bot" },
+    { id: "msg-6", client: "James Wilson", channel: "WhatsApp", status: "Delivered", messages: 3, botContained: "Yes", created: getRelativeMockDate(6).date, responsible: "AI Bot" },
   ],
   processes: [
-    { id: "PR-001", client: "James Wilson", process: "Patient Intake", stage: "Schedule Appointment", status: "Pending", created: "2026-07-20", lastActivity: "2026-08-10", responsible: "John Smith", timeInStage: 2.4 },
-    { id: "PR-002", client: "Emma Brown", process: "Patient Intake", stage: "Initial Contact", status: "Failed", created: "2026-07-18", lastActivity: "2026-07-30", responsible: "Sarah Johnson", timeInStage: 4.1 },
-    { id: "PR-003", client: "Oliver Davis", process: "Insurance Verification", stage: "Document Check", status: "Pending", created: "2026-07-25", lastActivity: "2026-08-07", responsible: "Michael Chen", timeInStage: 6.3 },
-    { id: "PR-004", client: "Priya Nair", process: "Billing Support", stage: "Issue Resolution", status: "Completed", created: "2026-06-15", lastActivity: "2026-08-08", responsible: "Emily Davis", timeInStage: 0 },
-    { id: "PR-005", client: "Sarah Jenkins", process: "Appointment Scheduling", stage: "Slot Selection", status: "Completed", created: "2026-06-01", lastActivity: "2026-08-05", responsible: "John Smith", timeInStage: 0 },
-    { id: "PR-006", client: "Michael Chang", process: "Patient Intake", stage: "Insurance Verify", status: "Pending", created: "2026-07-10", lastActivity: "2026-08-11", responsible: "Sarah Johnson", timeInStage: 1.8 },
-    { id: "PR-007", client: "Elena Rostova", process: "Follow-up Calls", stage: "Post-Visit Check", status: "Completed", created: "2026-05-20", lastActivity: "2026-08-02", responsible: "Lisa Anderson", timeInStage: 0 },
-    { id: "PR-008", client: "David Miller", process: "Patient Intake", stage: "Schedule Appointment", status: "Pending", created: "2026-06-20", lastActivity: "2026-08-09", responsible: "Michael Chen", timeInStage: 3.6 },
-    { id: "PR-009", client: "James Wilson", process: "Follow-up Calls", stage: "Medication Reminder", status: "Completed", created: "2026-06-28", lastActivity: "2026-07-25", responsible: "Emily Davis", timeInStage: 0 },
-    { id: "PR-010", client: "Emma Brown", process: "Appointment Scheduling", stage: "Confirmation", status: "Failed", created: "2026-07-22", lastActivity: "2026-08-01", responsible: "Sarah Johnson", timeInStage: 5.2 },
+    { id: "PR-001", client: "James Wilson", process: "Patient Intake", stage: "Schedule Appointment", status: "Pending", created: getRelativeMockDate(15).date, lastActivity: getRelativeMockDate(1).date, responsible: "John Smith", timeInStage: 2.4 },
+    { id: "PR-002", client: "Emma Brown", process: "Patient Intake", stage: "Initial Contact", status: "Failed", created: getRelativeMockDate(14).date, lastActivity: getRelativeMockDate(2).date, responsible: "Sarah Johnson", timeInStage: 4.1 },
+    { id: "PR-003", client: "Oliver Davis", process: "Insurance Verification", stage: "Document Check", status: "Pending", created: getRelativeMockDate(12).date, lastActivity: getRelativeMockDate(3).date, responsible: "Michael Chen", timeInStage: 6.3 },
+    { id: "PR-004", client: "Priya Nair", process: "Billing Support", stage: "Issue Resolution", status: "Completed", created: getRelativeMockDate(10).date, lastActivity: getRelativeMockDate(2).date, responsible: "Emily Davis", timeInStage: 0.8 },
+    { id: "PR-005", client: "Sarah Jenkins", process: "Appointment Scheduling", stage: "Slot Selection", status: "Completed", created: getRelativeMockDate(8).date, lastActivity: getRelativeMockDate(1).date, responsible: "John Smith", timeInStage: 1.2 },
+    { id: "PR-006", client: "Michael Chang", process: "Patient Intake", stage: "Insurance Verify", status: "Pending", created: getRelativeMockDate(7).date, lastActivity: getRelativeMockDate(1).date, responsible: "Sarah Johnson", timeInStage: 1.8 },
+    { id: "PR-007", client: "Elena Rostova", process: "Follow-up Calls", stage: "Post-Visit Check", status: "Completed", created: getRelativeMockDate(6).date, lastActivity: getRelativeMockDate(2).date, responsible: "Lisa Anderson", timeInStage: 2.1 },
+    { id: "PR-008", client: "David Miller", process: "Patient Intake", stage: "Schedule Appointment", status: "Pending", created: getRelativeMockDate(5).date, lastActivity: getRelativeMockDate(1).date, responsible: "Michael Chen", timeInStage: 3.6 },
+    { id: "PR-009", client: "James Taylor", process: "Follow-up Calls", stage: "Medication Reminder", status: "Completed", created: getRelativeMockDate(4).date, lastActivity: getRelativeMockDate(3).date, responsible: "Emily Davis", timeInStage: 1.5 },
+    { id: "PR-010", client: "Fatima Hassan", process: "Appointment Scheduling", stage: "Confirmation", status: "Failed", created: getRelativeMockDate(4).date, lastActivity: getRelativeMockDate(2).date, responsible: "Sarah Johnson", timeInStage: 5.2 },
+    { id: "PR-011", client: "Charlotte Evans", process: "Insurance Verification", stage: "Approval", status: "Completed", created: getRelativeMockDate(3).date, lastActivity: getRelativeMockDate(1).date, responsible: "Robert Wilson", timeInStage: 2.9 },
+    { id: "PR-012", client: "Rahul Patel", process: "Follow-up Calls", stage: "Follow-up", status: "Pending", created: getRelativeMockDate(2).date, lastActivity: getRelativeMockDate(1).date, responsible: "Jessica Brown", timeInStage: 3.2 },
+    { id: "PR-013", client: "Vikram Singh", process: "Appointment Scheduling", stage: "Slot Selection", status: "Pending", created: getRelativeMockDate(2).date, lastActivity: getRelativeMockDate(1).date, responsible: "Amanda Taylor", timeInStage: 2.7 },
+    { id: "PR-014", client: "Kavya Iyer", process: "Patient Intake", stage: "Document Check", status: "Pending", created: getRelativeMockDate(1).date, lastActivity: getRelativeMockDate(0).date, responsible: "Michael Chen", timeInStage: 1.9 },
   ],
 };
 
 const INITIAL_REPORTS: ReportDefinition[] = [
   {
+    id: "rep-calls-shift",
+    name: "Calls: Working Hours vs After Hours",
+    type: "custom",
+    dataSource: "calls",
+    lastRun: "2026-08-12 10:15 AM",
+    description: "Volume of calls handled during clinic business hours (9AM–6PM) vs after-hours shifts",
+    selectedFields: ["id", "client", "type", "status", "shift", "duration", "sentiment", "responsible"],
+    viewType: "table_chart",
+    chartType: "bar",
+    groupBy: "shift",
+    yAxisMode: "count",
+    xAxisLabel: "Clinic Shift",
+    yAxisLabel: "Call Volume",
+    metric: { aggregation: "count", label: "Call Volume" },
+    showChart: true,
+  },
+  {
+    id: "rep-calls-1-2min",
+    name: "Weekly Volume of 1–2 Min Calls",
+    type: "custom",
+    dataSource: "calls",
+    lastRun: "2026-08-12 11:30 AM",
+    description: "Weekly count of short 1–2 minute calls (60 to 120 seconds) plotted across days of the week",
+    selectedFields: ["id", "client", "date", "dayOfWeek", "duration", "durationFormatted", "status", "responsible"],
+    reportingPeriod: { type: "all" },
+    filterConditions: {
+      matchType: "AND",
+      conditions: [{ id: "f-dur", field: "duration", operator: "between", value: "60, 120", logic: "AND" }],
+    },
+    viewType: "table_chart",
+    chartType: "bar",
+    groupBy: "dayOfWeek",
+    yAxisMode: "count",
+    xAxisLabel: "Day of Week",
+    yAxisLabel: "Call Volume (1–2 Min)",
+    metric: { aggregation: "count", label: "Call Count" },
+    showChart: true,
+  },
+  {
+    id: "rep-appts-service-day",
+    name: "Appointments: Service vs Day",
+    type: "custom",
+    dataSource: "appointments",
+    lastRun: "2026-08-12 09:00 AM",
+    description: "Distribution of appointment types and clinical services scheduled across days of the week",
+    selectedFields: ["id", "client", "service", "provider", "dayOfWeek", "time", "duration", "status"],
+    viewType: "table_chart",
+    chartType: "stacked_bar",
+    groupBy: "dayOfWeek",
+    breakdownBy: "service",
+    yAxisMode: "count",
+    xAxisLabel: "Day of Week",
+    yAxisLabel: "Appointments Count",
+    metric: { aggregation: "count", label: "Appointments" },
+    showChart: true,
+  },
+  {
+    id: "rep-process-clients",
+    name: "Processes: Clients by Process",
+    type: "custom",
+    dataSource: "processes",
+    lastRun: "2026-08-12 02:45 PM",
+    description: "Number of active clients and pipeline deals currently managed within each operational process",
+    selectedFields: ["id", "client", "process", "stage", "status", "timeInStage", "responsible"],
+    viewType: "table_chart",
+    chartType: "bar",
+    groupBy: "process",
+    yAxisMode: "count",
+    xAxisLabel: "Process Name",
+    yAxisLabel: "Active Clients",
+    metric: { aggregation: "count", label: "Clients Count" },
+    showChart: true,
+  },
+  {
+    id: "rep-client-appts",
+    name: "Clients vs Number of Appointments",
+    type: "custom",
+    dataSource: "clients",
+    lastRun: "2026-08-12 04:15 PM",
+    description: "Direct X vs Y analysis plotting individual clients against their total scheduled appointments",
+    selectedFields: ["client", "appointmentsCount", "callsCount", "process", "stage", "status", "doctor"],
+    viewType: "table_chart",
+    chartType: "bar",
+    groupBy: "client",
+    yAxisMode: "field",
+    xAxisLabel: "Client / Patient",
+    yAxisLabel: "Total Appointments",
+    metric: { aggregation: "sum", field: "appointmentsCount", label: "Total Appointments" },
+    showChart: true,
+  },
+  {
     id: "rep-1",
     name: "Revenue & Invoicing Overview",
-    type: "template",
+    type: "custom",
     dataSource: "revenue",
     lastRun: "2026-08-12 10:15 AM",
     description: "Total invoiced, collected revenue, outstanding balances & breakdown by service",
     templateKey: "revenue_invoicing",
     viewType: "table_chart",
     chartType: "bar",
-  },
-  {
-    id: "rep-2",
-    name: "Call Performance Metrics",
-    type: "template",
-    dataSource: "calls",
-    lastRun: "2026-08-11 04:30 PM",
-    description: "Volume, average duration, call costs & sentiment distribution",
-    templateKey: "call_performance",
-    viewType: "table_chart",
-    chartType: "bar",
-  },
-  {
-    id: "rep-3",
-    name: "Appointments & Bookings",
-    type: "template",
-    dataSource: "appointments",
-    lastRun: "2026-08-10 09:00 AM",
-    description: "Booked, completed, cancelled, and no-shows by service and staff",
-    templateKey: "appointments_bookings",
-    viewType: "table_chart",
-    chartType: "pie",
-  },
-  {
-    id: "rep-4",
-    name: "Client Conversion Funnel",
-    type: "template",
-    dataSource: "clients",
-    lastRun: "2026-08-09 02:00 PM",
-    description: "Stage-by-stage client progress and conversion rates across active processes",
-    templateKey: "client_funnel",
-    viewType: "table_chart",
-    chartType: "bar",
-  },
-  {
-    id: "rep-5",
-    name: "Team Performance Report",
-    type: "template",
-    dataSource: "team",
-    lastRun: "2026-08-08 05:45 PM",
-    description: "Calls handled, appointments booked, and conversion rates per team member",
-    templateKey: "team_performance",
-    viewType: "table",
-  },
-  {
-    id: "rep-6",
-    name: "Messaging & Chat Volume",
-    type: "template",
-    dataSource: "messaging",
-    lastRun: "2026-08-07 11:20 AM",
-    description: "Message volume, bot containment rate, and human takeover frequency",
-    templateKey: "messaging_chat",
-    viewType: "table_chart",
-    chartType: "line",
-  },
-  {
-    id: "rep-7",
-    name: "Processes & Deal Stage Tracking",
-    type: "template",
-    dataSource: "processes",
-    lastRun: "2026-08-14 09:30 AM",
-    description: "Deal and process records, stage transitions, time in stage and assignments",
-    templateKey: "process_tracking",
-    viewType: "table_chart",
-    chartType: "bar",
+    groupBy: "service",
+    yAxisMode: "field",
+    xAxisLabel: "Service",
+    yAxisLabel: "Total Revenue ($)",
+    metric: { aggregation: "sum", field: "total", label: "Total Revenue ($)" },
+    showChart: true,
   },
 ];
+
+
 
 const InvoiceContext = createContext<InvoiceContextType | undefined>(undefined);
 
@@ -545,7 +646,7 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
 
   const [reports, setReports] = useState<ReportDefinition[]>(() => {
-    const saved = localStorage.getItem("mantra_reports_v1");
+    const saved = localStorage.getItem("mantra_reports_v3");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -571,7 +672,7 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [fieldRules]);
 
   useEffect(() => {
-    localStorage.setItem("mantra_reports_v1", JSON.stringify(reports));
+    localStorage.setItem("mantra_reports_v3", JSON.stringify(reports));
   }, [reports]);
 
   const getClientCredit = (clientId: string): number => {
@@ -1178,12 +1279,38 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           id: i.id,
           client: i.clientName,
           amount: i.total,
+          total: i.total,
           status: i.status,
           dueDate: i.dueDate,
           created: i.createdAt.split("T")[0],
+          date: i.createdAt.split("T")[0],
           service: i.lineItems.map((l) => l.description).join(", ") || "General Service",
           paymentMode: i.paymentMode || "",
         }));
+    }
+
+    if (dataSource === "calls") {
+      return (MOCK_REPORT_ROWS.calls || []).map((row) => {
+        const isWorking =
+          row.shift?.toLowerCase().includes("working") ||
+          row.timeOfDay?.toLowerCase().includes("working") ||
+          (row.time >= "09:00" && row.time <= "18:00");
+        const shiftLabel = isWorking ? "Working Hours (9AM–6PM)" : "After Working Hours";
+        return {
+          ...row,
+          shift: row.shift || shiftLabel,
+          timeOfDay: row.timeOfDay || shiftLabel,
+          durationBucket:
+            row.durationBucket ||
+            (row.duration < 60
+              ? "< 1 Min"
+              : row.duration <= 120
+              ? "1–2 Mins"
+              : row.duration <= 300
+              ? "2–5 Mins"
+              : "5+ Mins"),
+        };
+      });
     }
 
     if (dataSource === "clients") {

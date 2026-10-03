@@ -88,6 +88,36 @@ export interface MockService {
 
 export type ReportDataSource = "calls" | "appointments" | "revenue" | "clients" | "team" | "messaging" | "processes";
 
+export interface ReportBucketCase {
+  id: string;
+  operator: "between" | "equals" | "gt" | "lt" | "contains";
+  val1: string | number;
+  val2?: string | number;
+  label: string;
+}
+
+export interface ReportBucketRule {
+  id: string;
+  name: string; // Dimension name, e.g. "Call Timing"
+  targetField: string; // Field to evaluate, e.g. "time", "duration"
+  cases: ReportBucketCase[];
+  elseLabel: string; // Default label if no case matches, e.g. "After Hours"
+}
+
+export interface ReportMetric {
+  field?: string;
+  aggregation: "count" | "sum" | "avg" | "min" | "max" | "distinct";
+  label?: string;
+}
+
+export interface ReportFilterCondition {
+  id: string;
+  field: string;
+  operator: "equals" | "contains" | "gt" | "lt" | "between";
+  value: string;
+  logic?: "AND" | "OR";
+}
+
 export interface ReportDefinition {
   id: string;
   name: string;
@@ -95,12 +125,14 @@ export interface ReportDefinition {
   dataSource: ReportDataSource;
   lastRun: string;
   description?: string;
-  templateKey?: string; // e.g. "call_performance", "appointments_bookings", "revenue_invoicing", "client_funnel", "team_performance", "messaging_chat"
+  templateKey?: string; // e.g. "calls_working_hours", "weekly_1_2_min_calls", "appts_service_vs_day", "process_clients_distribution", "client_appts_count"
   selectedFields?: string[];
   fieldCalculations?: Record<string, "sum" | "avg" | "count" | "min" | "max">;
   reportingPeriod?: {
-    type: "this_month" | "last_month" | "this_week" | "custom";
+    type: "all" | "today" | "yesterday" | "this_week" | "last_7_days" | "this_month" | "last_month" | "last_30" | "last_90" | "custom";
     customDays?: number;
+    startDate?: string;
+    endDate?: string;
   };
   calculatedColumns?: Array<{
     id: string;
@@ -114,17 +146,21 @@ export interface ReportDefinition {
   };
   filterConditions?: {
     matchType?: "AND" | "OR";
-    conditions: Array<{
-      id: string;
-      field: string;
-      operator: "equals" | "contains" | "gt" | "lt";
-      value: string;
-      logic?: "AND" | "OR";
-    }>;
+    conditions: ReportFilterCondition[];
   };
   showChart?: boolean;
   sharedWith?: string[];
   filters?: Record<string, any>;
   viewType?: "table" | "table_chart";
-  chartType?: "bar" | "line" | "pie";
+  chartType?: "bar" | "stacked_bar" | "horizontal_bar" | "line" | "area" | "pie" | "donut" | "table_only";
+  groupBy?: string; // Primary dimension (X-Axis or Pie segments)
+  timeGrouping?: "none" | "day" | "dayOfWeek" | "week" | "month" | "hour";
+  breakdownBy?: string; // Secondary dimension for grouped / stacked series
+  metric?: ReportMetric;
+  bucketRules?: ReportBucketRule[];
+  activeBucketRuleId?: string;
+  xAxisLabel?: string;
+  yAxisLabel?: string;
+  yAxisMode?: "count" | "field";
 }
+

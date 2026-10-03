@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Modal } from "../ui/Modal";
-import { ReportDefinition } from "../../types/invoiceTypes";
+import { ReportDefinition, ReportFilterCondition } from "../../types/invoiceTypes";
 import { useInvoices } from "../../context/InvoiceContext";
 import { toast } from "sonner";
 import {
@@ -30,12 +30,21 @@ import {
   Bar,
   LineChart,
   Line,
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
   Legend,
 } from "recharts";
+import {
+  aggregateChartData,
+  getFieldLabel,
+  getRowGroupKey,
+  CHART_PALETTE,
+} from "../../../lib/reportEngine";
 
 interface ReportViewerModalProps {
   isOpen: boolean;
@@ -66,15 +75,7 @@ export default function ReportViewerModal({
   // Active filter state (initialized from report)
   const [activeDateRange, setActiveDateRange] = useState("all");
   const [activeMatchType, setActiveMatchType] = useState<"AND" | "OR">("AND");
-  const [activeConditions, setActiveConditions] = useState<
-    Array<{
-      id: string;
-      field: string;
-      operator: "equals" | "contains" | "gt" | "lt";
-      value: string;
-      logic?: "AND" | "OR";
-    }>
-  >([]);
+  const [activeConditions, setActiveConditions] = useState<ReportFilterCondition[]>([]);
 
   // Sync state whenever report changes
   React.useEffect(() => {
@@ -159,6 +160,18 @@ export default function ReportViewerModal({
             return numRow < numCond;
           }
           return strRowVal < strCondVal;
+        }
+        if (cond.operator === "between") {
+          const parts = String(cond.value).split(",").map((s) => s.trim());
+          const minStr = parts[0] ?? "";
+          const maxStr = parts[1] ?? "";
+          const numRow = parseFloat(String(rowVal).replace(/[^0-9.-]+/g, ""));
+          const numMin = parseFloat(minStr);
+          const numMax = parseFloat(maxStr);
+          if (!isNaN(numRow) && !isNaN(numMin) && !isNaN(numMax)) {
+            return numRow >= numMin && numRow <= numMax;
+          }
+          return strRowVal >= minStr.toLowerCase() && strRowVal <= maxStr.toLowerCase();
         }
         return true;
       };
@@ -268,66 +281,44 @@ export default function ReportViewerModal({
     });
   }, [filteredRows, report?.fieldCalculations]);
 
-  // 5. Dynamic chart data aggregation
-  const dynamicChartData = useMemo(() => {
-    if (!report || filteredRows.length === 0) return { chart: [], distribution: [] };
+  // Drill-down filtering state when user clicks on a chart bar/slice
+  const [drillDownCategory, setDrillDownCategory] = useState<string | null>(null);
 
-    // Grouping by a primary category (status, process, service, member, channel, or created date)
-    const groupKey =
-      report.dataSource === "revenue"
-        ? "status"
-        : report.dataSource === "processes"
-        ? "process"
-        : report.dataSource === "calls"
-        ? "service"
-        : report.dataSource === "appointments"
-        ? "service"
-        : report.dataSource === "clients"
-        ? "stage"
-        : report.dataSource === "team"
-        ? "member"
-        : "channel";
+  // 5. Dynamic chart data aggregation using reportEngine
+  const chartAggregation = useMemo(() => {
+    if (!report || filteredRows.length === 0) {
+      return {
+        chartData: [],
+        seriesKeys: ["value"],
+        totalRecords: 0,
+        primaryMetricTotal: 0,
+        topCategory: "None",
+        summaryLabel: "0 records",
+        xAxisLabel: "Category",
+        yAxisLabel: "Count",
+      };
+    }
 
-    const counts: Record<string, number> = {};
-    const numericTotals: Record<string, number> = {};
-
-    filteredRows.forEach((r) => {
-      const g = String(r[groupKey] || "Other");
-      counts[g] = (counts[g] || 0) + 1;
-
-      const numVal =
-        typeof r.amount === "number"
-          ? r.amount
-          : typeof r.duration === "number"
-          ? r.duration
-          : typeof r.timeInStage === "number"
-          ? r.timeInStage
-          : typeof r.value === "number"
-          ? r.value
-          : typeof r.calls === "number"
-          ? r.calls
-          : typeof r.messages === "number"
-          ? r.messages
-          : 1;
-
-      numericTotals[g] = (numericTotals[g] || 0) + numVal;
+    return aggregateChartData(filteredRows, {
+      groupBy: report.groupBy,
+      timeGrouping: report.timeGrouping,
+      breakdownBy: report.breakdownBy,
+      metric: report.metric,
+      bucketRules: report.bucketRules,
+      xAxisLabel: report.xAxisLabel,
+      yAxisLabel: report.yAxisLabel,
     });
-
-    const chart = Object.keys(counts).map((key) => ({
-      name: key,
-      count: counts[key],
-      total: Math.round(numericTotals[key] * 10) / 10,
-    }));
-
-    const maxVal = Math.max(...Object.values(numericTotals), 1);
-    const distribution = Object.keys(numericTotals).map((name) => ({
-      name,
-      value: numericTotals[name],
-      percentage: Math.round((numericTotals[name] / maxVal) * 100),
-    }));
-
-    return { chart, distribution };
   }, [filteredRows, report]);
+
+  // Display rows filtered by interactive chart drilldown if active
+  const displayRows = useMemo(() => {
+    if (!drillDownCategory || !report) return sortedRows;
+    const groupField = report.groupBy || "status";
+    return sortedRows.filter((r) => {
+      const g = getRowGroupKey(r, groupField, report.timeGrouping, report.bucketRules);
+      return g === drillDownCategory;
+    });
+  }, [sortedRows, drillDownCategory, report]);
 
   if (!report) return null;
 
@@ -340,7 +331,7 @@ export default function ReportViewerModal({
       : [];
 
   const handleExportCSV = () => {
-    if (sortedRows.length === 0) {
+    if (displayRows.length === 0) {
       toast.error("No data available to export");
       return;
     }
@@ -348,7 +339,7 @@ export default function ReportViewerModal({
     const headers = columnsToDisplay;
     const csvRows = [
       headers.join(","),
-      ...sortedRows.map((row) =>
+      ...displayRows.map((row) =>
         headers.map((h) => `"${String(row[h] ?? "").replace(/"/g, '""')}"`).join(",")
       ),
     ];
@@ -356,8 +347,9 @@ export default function ReportViewerModal({
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
+    const suffix = drillDownCategory ? `_${drillDownCategory.toLowerCase().replace(/\s+/g, "_")}` : "";
     link.href = url;
-    link.setAttribute("download", `${report.name.toLowerCase().replace(/\s+/g, "_")}_export.csv`);
+    link.setAttribute("download", `${report.name.toLowerCase().replace(/\s+/g, "_")}${suffix}_export.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -534,50 +526,120 @@ export default function ReportViewerModal({
           )}
 
           {/* Visual Performance Chart (if showChart !== false) */}
-          {report.showChart !== false && dynamicChartData.chart.length > 0 && (
+          {report.showChart !== false && chartAggregation.chartData.length > 0 && (
             <div className="p-5 bg-white border border-slate-200 rounded-2xl space-y-4 shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-blue-600" />
                   <span className="text-sm font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Visual Distribution ({report.chartType === "line" ? "Line Trend" : report.chartType === "pie" ? "Category Breakdown" : "Bar Comparison"})
+                    Visual Graph Summary ({chartAggregation.chartData.length} categories · {chartAggregation.totalRecords} records)
                   </span>
                 </div>
-                <span className="text-xs text-slate-400 font-medium">Computed live from active filtered dataset</span>
+
+                {/* Graph Axis & Series Keys Bar */}
+                <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
+                  <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-md font-bold">
+                    X: {chartAggregation.xAxisLabel}
+                  </span>
+                  <span className="text-slate-300">vs</span>
+                  <span className="px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md font-bold">
+                    Y: {chartAggregation.yAxisLabel}
+                  </span>
+                  {report.breakdownBy && report.breakdownBy !== "none" && (
+                    <span className="px-2 py-0.5 bg-purple-50 border border-purple-200 text-purple-700 rounded-md font-bold">
+                      Series: {getFieldLabel(report.breakdownBy)}
+                    </span>
+                  )}
+                  {drillDownCategory && (
+                    <button
+                      type="button"
+                      onClick={() => setDrillDownCategory(null)}
+                      className="px-2 py-0.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-md font-bold hover:bg-rose-100 cursor-pointer flex items-center gap-1"
+                    >
+                      Filtered: "{drillDownCategory}" ×
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-12 gap-6 items-center">
-                <div className={report.chartType === "pie" ? "col-span-12" : "col-span-12"}>
-                  <div className="h-60 w-full">
+                <div className="col-span-12">
+                  <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       {report.chartType === "line" ? (
-                        <LineChart data={dynamicChartData.chart} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                          <XAxis dataKey="name" stroke="#64748B" fontSize={11} tickLine={false} />
-                          <YAxis stroke="#64748B" fontSize={11} tickLine={false} />
+                        <LineChart data={chartAggregation.chartData} margin={{ top: 10, right: 30, left: 10, bottom: 25 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                          <XAxis
+                            dataKey="name"
+                            stroke="#64748B"
+                            fontSize={11}
+                            label={{ value: chartAggregation.xAxisLabel, position: "insideBottom", offset: -15, fill: "#334155", fontSize: 11, fontWeight: 700 }}
+                          />
+                          <YAxis
+                            stroke="#64748B"
+                            fontSize={11}
+                            label={{ value: chartAggregation.yAxisLabel, angle: -90, position: "insideLeft", offset: -2, fill: "#334155", fontSize: 11, fontWeight: 700 }}
+                          />
                           <Tooltip contentStyle={CUSTOM_TOOLTIP_STYLE} />
-                          <Line type="monotone" dataKey="total" name="Total" stroke="#3B82F6" strokeWidth={3} dot={{ r: 4, fill: "#3B82F6" }} />
-                          <Line type="monotone" dataKey="count" name="Count" stroke="#10B981" strokeWidth={2} dot={{ r: 3, fill: "#10B981" }} />
-                          <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "10px" }} />
+                          <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: "11px", fontWeight: 600 }} />
+                          {chartAggregation.seriesKeys.map((k, i) => (
+                            <Line
+                              key={k}
+                              type="monotone"
+                              dataKey={k}
+                              name={k === "value" ? chartAggregation.yAxisLabel : k}
+                              stroke={CHART_PALETTE[i % CHART_PALETTE.length]}
+                              strokeWidth={2.5}
+                              dot={{ r: 4 }}
+                            />
+                          ))}
                         </LineChart>
                       ) : report.chartType === "pie" ? (
-                        <BarChart data={dynamicChartData.chart} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                          <XAxis dataKey="name" stroke="#64748B" fontSize={11} tickLine={false} />
-                          <YAxis stroke="#64748B" fontSize={11} tickLine={false} />
+                        <RechartsPieChart>
                           <Tooltip contentStyle={CUSTOM_TOOLTIP_STYLE} />
-                          <Bar dataKey="count" name="Record Count" fill="#8B5CF6" radius={[6, 6, 0, 0]} maxBarSize={45} />
-                          <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "10px" }} />
-                        </BarChart>
+                          <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "11px", fontWeight: 600 }} />
+                          <Pie
+                            data={chartAggregation.chartData}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={85}
+                            onClick={(entry) => setDrillDownCategory(entry.name)}
+                          >
+                            {chartAggregation.chartData.map((_, i) => (
+                              <Cell key={i} fill={CHART_PALETTE[i % CHART_PALETTE.length]} cursor="pointer" />
+                            ))}
+                          </Pie>
+                        </RechartsPieChart>
                       ) : (
-                        <BarChart data={dynamicChartData.chart} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                          <XAxis dataKey="name" stroke="#64748B" fontSize={11} tickLine={false} />
-                          <YAxis stroke="#64748B" fontSize={11} tickLine={false} />
+                        <BarChart data={chartAggregation.chartData} margin={{ top: 10, right: 30, left: 10, bottom: 25 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                          <XAxis
+                            dataKey="name"
+                            stroke="#64748B"
+                            fontSize={11}
+                            label={{ value: chartAggregation.xAxisLabel, position: "insideBottom", offset: -15, fill: "#334155", fontSize: 11, fontWeight: 700 }}
+                          />
+                          <YAxis
+                            stroke="#64748B"
+                            fontSize={11}
+                            label={{ value: chartAggregation.yAxisLabel, angle: -90, position: "insideLeft", offset: -2, fill: "#334155", fontSize: 11, fontWeight: 700 }}
+                          />
                           <Tooltip contentStyle={CUSTOM_TOOLTIP_STYLE} />
-                          <Bar dataKey="total" name="Metric Total" fill="#3B82F6" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                          <Bar dataKey="count" name="Record Count" fill="#10B981" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                          <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "10px" }} />
+                          <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: "11px", fontWeight: 600 }} />
+                          {chartAggregation.seriesKeys.map((k, i) => (
+                            <Bar
+                              key={k}
+                              dataKey={k}
+                              name={k === "value" ? chartAggregation.yAxisLabel : k}
+                              stackId={report.chartType === "stacked_bar" ? "stack" : undefined}
+                              fill={CHART_PALETTE[i % CHART_PALETTE.length]}
+                              radius={report.chartType === "stacked_bar" ? undefined : [4, 4, 0, 0]}
+                              onClick={(entry) => setDrillDownCategory(entry.name)}
+                              cursor="pointer"
+                            />
+                          ))}
                         </BarChart>
                       )}
                     </ResponsiveContainer>
@@ -590,9 +652,23 @@ export default function ReportViewerModal({
           {/* Detailed Data Table */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <TableIcon className="w-4 h-4 text-slate-500" /> Data Records ({sortedRows.length} rows)
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <TableIcon className="w-4 h-4 text-slate-500" /> Data Records ({displayRows.length} rows)
+                </span>
+                {drillDownCategory && (
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-md text-[11px] font-bold flex items-center gap-1">
+                    Filtered by {chartAggregation.xAxisLabel}: "{drillDownCategory}"
+                    <button
+                      type="button"
+                      onClick={() => setDrillDownCategory(null)}
+                      className="hover:text-blue-900 cursor-pointer font-extrabold"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+              </div>
               {report.sortBy?.field && (
                 <span className="text-[11px] text-slate-500 font-medium">
                   Sorted by <strong>{report.sortBy.field}</strong> ({report.sortBy.direction.toUpperCase()})
@@ -601,13 +677,27 @@ export default function ReportViewerModal({
             </div>
 
             <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs">
-              {sortedRows.length === 0 ? (
-                <div className="p-8 text-center space-y-2">
+              {displayRows.length === 0 ? (
+                <div className="p-8 text-center space-y-3">
                   <AlertCircle className="w-8 h-8 text-slate-300 mx-auto" />
                   <p className="text-xs font-bold text-slate-700">No records match the configured filter criteria</p>
                   <p className="text-[11px] text-slate-400">
-                    Try adjusting the filter conditions or period in the Filters panel.
+                    Active Timeframe: <strong className="text-slate-600">{activeDateRange}</strong> • Active Conditions: <strong className="text-slate-600">{activeConditions.length} rule(s)</strong>
                   </p>
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveDateRange("all");
+                        setActiveConditions([]);
+                        setDrillDownCategory(null);
+                        toast.success("Filters reset to show all records");
+                      }}
+                      className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Show All {rawRows.length} Records
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <table className="w-full text-left border-collapse text-xs">
@@ -621,7 +711,7 @@ export default function ReportViewerModal({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-                    {sortedRows.map((row, idx) => (
+                    {displayRows.map((row, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
                         {columnsToDisplay.map((colKey) => {
                           const val = row[colKey];
@@ -646,6 +736,56 @@ export default function ReportViewerModal({
                       </tr>
                     ))}
                   </tbody>
+                  {report.fieldCalculations && Object.keys(report.fieldCalculations).length > 0 && (
+                    <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300 text-slate-800 text-[11px] sticky bottom-0 z-10 shadow-xs">
+                      <tr>
+                        {columnsToDisplay.map((colKey, colIdx) => {
+                          const func = report.fieldCalculations?.[colKey];
+                          if (!func) {
+                            return (
+                              <td key={colKey} className="py-2.5 px-4 text-slate-400 font-normal">
+                                {colIdx === 0 ? "Totals / Summary" : "—"}
+                              </td>
+                            );
+                          }
+                          const values = displayRows.map((r) => r[colKey]).filter((v) => v !== undefined && v !== null);
+                          const numVals = values
+                            .map((v) => (typeof v === "number" ? v : parseFloat(String(v).replace(/[^0-9.-]+/g, ""))))
+                            .filter((n) => !isNaN(n));
+
+                          let label = "";
+                          if (func === "sum" && numVals.length > 0) {
+                            const sum = numVals.reduce((a, b) => a + b, 0);
+                            label = colKey === "amount" || colKey === "cost" || colKey === "value"
+                              ? `$${sum.toFixed(2)}`
+                              : `${Math.round(sum * 10) / 10}`;
+                          } else if (func === "avg" && numVals.length > 0) {
+                            const avg = numVals.reduce((a, b) => a + b, 0) / numVals.length;
+                            label = colKey === "amount" || colKey === "cost" || colKey === "value"
+                              ? `$${avg.toFixed(2)}`
+                              : `${avg.toFixed(1)}${colKey === "timeInStage" ? " days" : ""}`;
+                          } else if (func === "count") {
+                            label = `${values.length} records`;
+                          } else if (func === "max" && numVals.length > 0) {
+                            label = `Max: ${Math.max(...numVals)}`;
+                          } else if (func === "min" && numVals.length > 0) {
+                            label = `Min: ${Math.min(...numVals)}`;
+                          } else {
+                            label = `${values.length}`;
+                          }
+
+                          return (
+                            <td key={colKey} className="py-2.5 px-4 text-blue-700">
+                              <span className="text-[9px] uppercase tracking-wider text-slate-500 font-bold block">
+                                {func}:
+                              </span>
+                              {label}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               )}
             </div>
@@ -818,6 +958,7 @@ export default function ReportViewerModal({
                       >
                         <option value="equals">equals</option>
                         <option value="contains">contains</option>
+                        <option value="between">is between</option>
                         <option value="gt">gt (&gt;)</option>
                         <option value="lt">lt (&lt;)</option>
                       </select>
