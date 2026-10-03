@@ -921,14 +921,6 @@ export default function MyAIReceptionist() {
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* Left Column */}
                         <div>
-                          {/* Info Message */}
-                          <div className="flex items-start gap-3 p-4 mb-4 bg-blue-50 rounded-lg border border-blue-200">
-                            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                              Choose the voice your AI Receptionist will use when answering the phone.
-                            </p>
-                          </div>
-
                           {/* Selected Voice */}
                           <div className="mb-6">
                             <h3 className="font-semibold text-sm mb-3" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>

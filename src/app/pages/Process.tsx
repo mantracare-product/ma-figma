@@ -22,7 +22,7 @@ import { InfoTooltip } from "../components/help/InfoTooltip";
 import { useDrag, useDrop } from "react-dnd";
 import FlowBuilderTab from "../components/process/FlowBuilderTab";
 import { WorkflowStep } from "../types/workflow";
-import VariablePickerButton, { FETCH_FIELD_SOURCES, FIELDS_BY_SOURCE_MAP } from "../components/process/VariablePickerButton";
+import { SelectFieldsModal } from "../components/help/FieldManager";
 import StepParametersFields from "../components/process/StepParametersFields";
 import StepDetailDrawer from "../components/process/StepDetailDrawer";
 import { assignNumberToStage } from "../../lib/useStageNumberRouting";
@@ -42,6 +42,7 @@ import {
   isProcessMatchingOrg,
   ProcessTransitionTarget,
 } from "../../lib/useProcessStore";
+import { getStoredVoices, VoiceConfigItem, VOICE_STORE_EVENT } from "../../lib/useVoiceStore";
 
 interface AISettings {
   platform: string;
@@ -720,12 +721,28 @@ export default function Process() {
 
 
   const [viewMode, setViewMode] = useState<"process" | "stage" | null>(null); // Track what we're viewing
-  const [activeTab, setActiveTab] = useState<string>("basic");
+  const [activeTab, setActiveTab] = useState<string>("general");
   const [expandedProcesses, setExpandedProcesses] = useState<string[]>(["1"]); // Expand Patient Intake by default
   const [selectedAIModel, setSelectedAIModel] = useState("Gemini 2.5 Flash");
   const [aiModelExpanded, setAiModelExpanded] = useState(false);
   const [stageVoiceSpeed, setStageVoiceSpeed] = useState<number>(1.0);
-  const [stageVoice, setStageVoice] = useState<string>("Ava");
+  const [stageVoice, setStageVoice] = useState<string>("Nova");
+  const [configuredVoices, setConfiguredVoices] = useState<VoiceConfigItem[]>(getStoredVoices);
+
+  useEffect(() => {
+    const handleVoiceUpdate = () => setConfiguredVoices(getStoredVoices());
+    window.addEventListener(VOICE_STORE_EVENT, handleVoiceUpdate);
+    window.addEventListener("storage", handleVoiceUpdate);
+    return () => {
+      window.removeEventListener(VOICE_STORE_EVENT, handleVoiceUpdate);
+      window.removeEventListener("storage", handleVoiceUpdate);
+    };
+  }, []);
+
+  const activeConfiguredVoices = useMemo(() => {
+    const active = configuredVoices.filter((v) => v.status !== false);
+    return active.length > 0 ? active : configuredVoices;
+  }, [configuredVoices]);
 
   // Advanced tab section states
   // Retry Rules state
@@ -927,6 +944,19 @@ export default function Process() {
     setSecondaryLanguages(stg.secondaryLanguages ?? []);
     setWorkflowSteps(stg.workflowSteps ?? []);
     setEnableCalling(stg.enableCalling ?? true);
+
+    const stgAI = stg.aiSettings || proc?.aiSettings || {
+      platform: "Gemini 2.5 Flash",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    };
+    setSelectedAIModel(stgAI.platform || "Gemini 2.5 Flash");
+    setStageVoiceSpeed(stgAI.voiceSpeed ?? 1.0);
+    setStageVoice(stgAI.voice || "Ava");
+    setStageTone(stgAI.tone || "Professional");
+    setStageStyle(stgAI.style || "Balanced");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProcess, expandedStage, viewMode]);
 
@@ -1604,8 +1634,9 @@ export default function Process() {
   const webhookUrlRef = useRef<HTMLInputElement>(null);
   const apiEndpointRef = useRef<HTMLInputElement>(null);
   const apiAuthRef = useRef<HTMLInputElement>(null);
-  const fetchAvailSummaryRef = useRef<HTMLTextAreaElement>(null);
-  const webhookJsonBodyRef = useRef<HTMLTextAreaElement>(null);
+  const callerPitchRef = useRef<HTMLTextAreaElement>(null);
+  const greetingIntroRef = useRef<HTMLTextAreaElement>(null);
+  const objectiveTextRef = useRef<HTMLTextAreaElement>(null);
 
   const webhookIntDropdownRef = useRef<HTMLDivElement>(null);
   const webhookActionDropdownRef = useRef<HTMLDivElement>(null);
@@ -1619,11 +1650,67 @@ export default function Process() {
   const [tcCallDurationMinutes, setTcCallDurationMinutes] = useState<number>(5);
   const [tcHangupWindowMinutes, setTcHangupWindowMinutes] = useState<number>(1);
 
-  // CHANGE 2: Caller Pitch accordion and mode state
+  // Caller Pitch accordion and mode state
   const [callerPitchExpanded, setCallerPitchExpanded] = useState(true);
   const [callerPitchMode, setCallerPitchMode] = useState<"single" | "comprehensive">("single");
   const [enableCalling, setEnableCalling] = useState<boolean>(true);
   const [showCallTriggerDrawer, setShowCallTriggerDrawer] = useState(false);
+  const [pitchFieldPickerTarget, setPitchFieldPickerTarget] = useState<"callerPitch" | "greetingIntro" | "objective" | null>(null);
+
+  const handleInsertPitchFields = (keys: string[]) => {
+    if (!pitchFieldPickerTarget || keys.length === 0) {
+      setPitchFieldPickerTarget(null);
+      return;
+    }
+    const tokenStr = keys.map((k) => `{{${k}}}`).join(" ");
+
+    if (pitchFieldPickerTarget === "callerPitch") {
+      const el = callerPitchRef.current;
+      if (el) {
+        const start = el.selectionStart ?? callerPitch.length;
+        const end = el.selectionEnd ?? callerPitch.length;
+        const next = callerPitch.slice(0, start) + tokenStr + callerPitch.slice(end);
+        setCallerPitch(next);
+        setTimeout(() => {
+          el.focus();
+          el.setSelectionRange(start + tokenStr.length, start + tokenStr.length);
+        }, 0);
+      } else {
+        setCallerPitch((prev) => (prev ? `${prev} ${tokenStr}` : tokenStr));
+      }
+    } else if (pitchFieldPickerTarget === "greetingIntro") {
+      const el = greetingIntroRef.current;
+      if (el) {
+        const start = el.selectionStart ?? greetingIntroMessage.length;
+        const end = el.selectionEnd ?? greetingIntroMessage.length;
+        const next = greetingIntroMessage.slice(0, start) + tokenStr + greetingIntroMessage.slice(end);
+        setGreetingIntroMessage(next);
+        setTimeout(() => {
+          el.focus();
+          el.setSelectionRange(start + tokenStr.length, start + tokenStr.length);
+        }, 0);
+      } else {
+        setGreetingIntroMessage((prev) => (prev ? `${prev} ${tokenStr}` : tokenStr));
+      }
+    } else if (pitchFieldPickerTarget === "objective") {
+      const el = objectiveTextRef.current;
+      if (el) {
+        const start = el.selectionStart ?? objectiveText.length;
+        const end = el.selectionEnd ?? objectiveText.length;
+        const next = objectiveText.slice(0, start) + tokenStr + objectiveText.slice(end);
+        setObjectiveText(next);
+        setTimeout(() => {
+          el.focus();
+          el.setSelectionRange(start + tokenStr.length, start + tokenStr.length);
+        }, 0);
+      } else {
+        setObjectiveText((prev) => (prev ? `${prev} ${tokenStr}` : tokenStr));
+      }
+    }
+
+    setPitchFieldPickerTarget(null);
+    toast.success(`Inserted ${keys.length} field${keys.length > 1 ? "s" : ""}`);
+  };
 
   // When to move accordion state
   const [whenToMoveExpanded, setWhenToMoveExpanded] = useState(false);
@@ -3761,16 +3848,18 @@ export default function Process() {
                       {/* Stage Tabs */}
                       <div className="flex gap-2 mt-4">
                         {[
-                          { id: "basic", label: "Basic" },
+                          { id: "general", label: "General" },
+                          { id: "ai-agent", label: "AI Agent" },
                           { id: "automation", label: "Automation" },
                           { id: "flowbuilder", label: "Flow Builder" },
                         ].map((tab) => (
                           <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === tab.id
-                              ? "bg-primary text-primary-foreground"
-                              : "text-muted-foreground hover:bg-muted"
+                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                              (activeTab === tab.id || (tab.id === "general" && activeTab === "basic"))
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:bg-muted"
                               }`}
                           >
                             {tab.label}
@@ -3781,8 +3870,8 @@ export default function Process() {
 
                     {/* Stage Content */}
                     <div className="flex-1 overflow-y-auto p-6">
-                      {/* Basic Tab */}
-                      {activeTab === "basic" && (
+                      {/* General Tab */}
+                      {(activeTab === "general" || activeTab === "basic") && (
                         <div className="space-y-6">
                           {/* Stage Configuration Section */}
                           <div className="space-y-4">
@@ -4085,462 +4174,6 @@ export default function Process() {
                               )}
                             </div>
 
-                            {/* Caller Pitch - Hide completely when Type is "Transfer to Human" or "No Call Activity" */}
-                            {stageType !== "Transfer to Human" && stageType !== "No Call Activity" && (
-                              <div className="rounded-lg border border-border overflow-hidden">
-                                {/* Collapsible Header */}
-                                <button
-                                  onClick={() => setCallerPitchExpanded(!callerPitchExpanded)}
-                                  className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-                                >
-                                  <div className="flex flex-col items-start gap-1">
-                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Caller Pitch
-                                    </span>
-                                    <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                      Script or instruction used when initiating outbound calls.
-                                    </span>
-                                  </div>
-                                  <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${callerPitchExpanded ? "rotate-180" : ""}`} />
-                                </button>
-
-                                {/* Expanded Content */}
-                                {callerPitchExpanded && (
-                                  <div className="p-6 border-t border-border">
-                                    {/* Mode Toggle */}
-                                    <div className="flex items-center gap-3 mb-6">
-                                      <div className="flex gap-2 bg-muted/30 p-1 rounded-lg w-fit">
-                                        <button
-                                          onClick={() => setCallerPitchMode("single")}
-                                          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${callerPitchMode === "single"
-                                            ? "bg-primary text-white"
-                                            : "text-gray-600 hover:text-gray-900"
-                                            }`}
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          Single Prompt
-                                        </button>
-                                        <button
-                                          onClick={() => setCallerPitchMode("comprehensive")}
-                                          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${callerPitchMode === "comprehensive"
-                                            ? "bg-primary text-white"
-                                            : "text-gray-600 hover:text-gray-900"
-                                            }`}
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          Comprehensive
-                                        </button>
-                                      </div>
-                                      {callerPitchMode === "single" ? (
-                                        <InfoTooltip text="Single Prompt lets you write the entire outbound script as one open text box, with a Generate with AI shortcut — the fastest option for a simple stage." />
-                                      ) : (
-                                        <InfoTooltip text="Comprehensive mode lets you set a separate greeting, objective, business info, and languages instead of one combined script." />
-                                      )}
-                                    </div>
-
-                                    {/* Single Prompt Mode */}
-                                    {callerPitchMode === "single" && (
-                                      <div>
-                                        <textarea
-                                          value={callerPitch}
-                                          onChange={(e) => setCallerPitch(e.target.value)}
-                                          className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
-                                          style={{ fontFamily: 'Outfit, sans-serif', minHeight: '120px' }}
-                                        />
-                                        <div className="flex items-center justify-end mt-2">
-                                          <button
-                                            onClick={() => {
-                                              toast.success("AI generation coming soon!");
-                                            }}
-                                            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                                          >
-                                            <Zap className="w-4 h-4" />
-                                            Generate with AI
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Comprehensive Mode */}
-                                    {callerPitchMode === "comprehensive" && (
-                                      <div className="space-y-3">
-                                        {/* A. Greeting / Intro Message */}
-                                        <div className="rounded-lg border border-border overflow-hidden">
-                                          <button
-                                            onClick={() => setGreetingIntroExpanded(!greetingIntroExpanded)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-muted/20 transition-colors"
-                                          >
-                                            <div className="flex flex-col items-start gap-0.5">
-                                              <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Greeting / Intro Message
-                                              </span>
-                                              {!greetingIntroExpanded && greetingIntroMessage && (
-                                                <span className="text-xs truncate max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                  {greetingIntroMessage.slice(0, 80)}...
-                                                </span>
-                                              )}
-                                              {!greetingIntroExpanded && !greetingIntroMessage && (
-                                                <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                                  Not configured
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${greetingIntroExpanded ? "rotate-180" : ""}`} />
-                                          </button>
-
-                                          {greetingIntroExpanded && (
-                                            <div className="p-4 border-t border-border">
-                                              <textarea
-                                                value={greetingIntroMessage}
-                                                onChange={(e) => setGreetingIntroMessage(e.target.value)}
-                                                placeholder="Hi, this is Alex. Who do I have the pleasure of speaking with today?"
-                                                className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
-                                                style={{ fontFamily: 'Outfit, sans-serif', minHeight: '100px' }}
-                                              />
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* B. Objective */}
-                                        <div className="rounded-lg border border-border overflow-hidden">
-                                          <button
-                                            onClick={() => setObjectiveExpanded(!objectiveExpanded)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-muted/20 transition-colors"
-                                          >
-                                            <div className="flex flex-col items-start gap-0.5">
-                                              <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Objective
-                                              </span>
-                                              {!objectiveExpanded && objectiveText && (
-                                                <span className="text-xs truncate max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                  {objectiveText.slice(0, 80)}...
-                                                </span>
-                                              )}
-                                              {!objectiveExpanded && !objectiveText && (
-                                                <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                                  Not configured
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${objectiveExpanded ? "rotate-180" : ""}`} />
-                                          </button>
-
-                                          {objectiveExpanded && (
-                                            <div className="p-4 border-t border-border">
-                                              <textarea
-                                                value={objectiveText}
-                                                onChange={(e) => setObjectiveText(e.target.value)}
-                                                placeholder="You are an AI assistant. Your role is to answer general inquiries, schedule appointments, and provide information about our services."
-                                                className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
-                                                style={{ fontFamily: 'Outfit, sans-serif', minHeight: '100px' }}
-                                              />
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* C. Business Information */}
-                                        <div className="rounded-lg border border-border overflow-hidden">
-                                          <button
-                                            onClick={() => setBusinessInfoExpanded(!businessInfoExpanded)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-muted/20 transition-colors"
-                                          >
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Business Information
-                                              </span>
-                                              {!businessInfoExpanded && businessInfoItems.length > 0 && (
-                                                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-200 text-gray-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                  {businessInfoItems.length} {businessInfoItems.length === 1 ? 'item' : 'items'}
-                                                </span>
-                                              )}
-                                              {!businessInfoExpanded && businessInfoItems.length === 0 && (
-                                                <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                                  No data added
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${businessInfoExpanded ? "rotate-180" : ""}`} />
-                                          </button>
-
-                                          {businessInfoExpanded && (
-                                            <div className="p-4 border-t border-border space-y-3">
-                                              <p className="text-sm mb-3" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                Add business information that the AI should know while speaking with callers.
-                                              </p>
-
-                                              {/* Existing Business Info Items */}
-                                              {businessInfoItems.map((item) => (
-                                                <div key={item.id} className="p-3 border border-border rounded-lg bg-muted/20">
-                                                  <div className="flex items-start justify-between mb-2">
-                                                    <div className="flex items-center gap-2">
-                                                      <span className="text-sm font-bold" style={{ color: '#111827', fontFamily: 'DM Sans, sans-serif' }}>
-                                                        {item.title}
-                                                      </span>
-                                                      {item.active && (
-                                                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                          Active
-                                                        </span>
-                                                      )}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                      <button
-                                                        onClick={() => {
-                                                          setEditingBusinessInfoId(item.id);
-                                                          setBusinessInfoFormData({
-                                                            title: item.title,
-                                                            information: item.information,
-                                                            active: item.active
-                                                          });
-                                                          setShowBusinessInfoForm(true);
-                                                        }}
-                                                        className="text-blue-600 hover:text-blue-700"
-                                                      >
-                                                        <Edit className="w-4 h-4" />
-                                                      </button>
-                                                      <button
-                                                        onClick={() => {
-                                                          setBusinessInfoItems(businessInfoItems.filter(i => i.id !== item.id));
-                                                          toast.success("Information deleted");
-                                                        }}
-                                                        className="text-red-600 hover:text-red-700"
-                                                      >
-                                                        <Trash2 className="w-4 h-4" />
-                                                      </button>
-                                                    </div>
-                                                  </div>
-                                                  <p className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                                                    {item.information}
-                                                  </p>
-                                                </div>
-                                              ))}
-
-                                              {/* Inline Add/Edit Form */}
-                                              {showBusinessInfoForm && (
-                                                <div className="p-4 border border-primary/30 rounded-lg bg-blue-50/30 space-y-3">
-                                                  <div>
-                                                    <label className="block text-xs font-medium mb-1" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                                      Title
-                                                    </label>
-                                                    <input
-                                                      type="text"
-                                                      value={businessInfoFormData.title}
-                                                      onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, title: e.target.value })}
-                                                      placeholder="Example: Clinic Timings"
-                                                      className="w-full p-2 bg-white border border-input rounded-lg text-sm"
-                                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                    />
-                                                  </div>
-                                                  <div>
-                                                    <label className="block text-xs font-medium mb-1" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                                      Information
-                                                    </label>
-                                                    <textarea
-                                                      value={businessInfoFormData.information}
-                                                      onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, information: e.target.value })}
-                                                      placeholder="Example: Our clinic is open Monday to Saturday from 9 AM to 7 PM."
-                                                      className="w-full p-2 bg-white border border-input rounded-lg resize-none text-sm"
-                                                      style={{ fontFamily: 'Outfit, sans-serif', minHeight: '80px' }}
-                                                    />
-                                                  </div>
-                                                  <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                      <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                        Active
-                                                      </label>
-                                                      <label className="relative inline-flex items-center cursor-pointer">
-                                                        <input
-                                                          type="checkbox"
-                                                          className="sr-only peer"
-                                                          checked={businessInfoFormData.active}
-                                                          onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, active: e.target.checked })}
-                                                        />
-                                                        <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                                                      </label>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                      <button
-                                                        onClick={() => {
-                                                          setShowBusinessInfoForm(false);
-                                                          setEditingBusinessInfoId(null);
-                                                          setBusinessInfoFormData({ title: "", information: "", active: true });
-                                                        }}
-                                                        className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                      >
-                                                        Cancel
-                                                      </button>
-                                                      <button
-                                                        onClick={() => {
-                                                          if (businessInfoFormData.title && businessInfoFormData.information) {
-                                                            if (editingBusinessInfoId !== null) {
-                                                              // Edit existing
-                                                              setBusinessInfoItems(businessInfoItems.map(item =>
-                                                                item.id === editingBusinessInfoId
-                                                                  ? { ...item, ...businessInfoFormData }
-                                                                  : item
-                                                              ));
-                                                              toast.success("Information updated");
-                                                            } else {
-                                                              // Add new
-                                                              setBusinessInfoItems([...businessInfoItems, {
-                                                                id: Date.now(),
-                                                                ...businessInfoFormData
-                                                              }]);
-                                                              toast.success("Information added");
-                                                            }
-                                                            setShowBusinessInfoForm(false);
-                                                            setEditingBusinessInfoId(null);
-                                                            setBusinessInfoFormData({ title: "", information: "", active: true });
-                                                          }
-                                                        }}
-                                                        className="px-4 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary-hover"
-                                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                      >
-                                                        Done
-                                                      </button>
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                              )}
-
-                                              {/* Add Information Button */}
-                                              {!showBusinessInfoForm && (
-                                                <button
-                                                  onClick={() => setShowBusinessInfoForm(true)}
-                                                  className="w-full px-4 py-2 border border-dashed border-gray-400 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium"
-                                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                >
-                                                  <Plus className="w-4 h-4" />
-                                                  Add Information
-                                                </button>
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* D. Languages */}
-                                        <div className="rounded-lg border border-border overflow-hidden">
-                                          <button
-                                            type="button"
-                                            onClick={() => setLanguagesExpanded(!languagesExpanded)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-muted/20 transition-colors"
-                                          >
-                                            <div className="flex flex-col items-start gap-0.5">
-                                              <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Languages
-                                              </span>
-                                              {!languagesExpanded && (primaryLanguage || secondaryLanguages.length > 0) && (
-                                                <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                  {primaryLanguage && `Primary: ${primaryLanguage}`}
-                                                  {primaryLanguage && secondaryLanguages.length > 0 && ' · '}
-                                                  {secondaryLanguages.length > 0 && `Secondary: ${secondaryLanguages.join(', ')}`}
-                                                </span>
-                                              )}
-                                              {!languagesExpanded && !primaryLanguage && secondaryLanguages.length === 0 && (
-                                                <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                                  Not configured
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${languagesExpanded ? "rotate-180" : ""}`} />
-                                          </button>
-
-                                          {languagesExpanded && (
-                                            <div className="p-4 border-t border-border space-y-4">
-                                              {/* Primary Language */}
-                                              <div>
-                                                <div className="flex items-center gap-2 mb-2">
-                                                  <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Primary Language *
-                                                  </label>
-                                                  <Tooltip text="The default language your AI Receptionist will speak on all calls for this stage.">
-                                                    <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                                                  </Tooltip>
-                                                </div>
-                                                <Select value={primaryLanguage} onValueChange={setPrimaryLanguage}>
-                                                  <SelectTrigger className="w-full">
-                                                    <SelectValue placeholder="Select primary language" />
-                                                  </SelectTrigger>
-                                                  <SelectContent>
-                                                    <SelectItem value="English">English</SelectItem>
-                                                    <SelectItem value="Spanish">Spanish</SelectItem>
-                                                    <SelectItem value="French">French</SelectItem>
-                                                    <SelectItem value="German">German</SelectItem>
-                                                    <SelectItem value="Italian">Italian</SelectItem>
-                                                    <SelectItem value="Portuguese">Portuguese</SelectItem>
-                                                    <SelectItem value="Chinese">Chinese</SelectItem>
-                                                    <SelectItem value="Japanese">Japanese</SelectItem>
-                                                    <SelectItem value="Korean">Korean</SelectItem>
-                                                    <SelectItem value="Arabic">Arabic</SelectItem>
-                                                  </SelectContent>
-                                                </Select>
-                                              </div>
-
-                                              {/* Secondary Languages (multi-add) */}
-                                              <div>
-                                                <div className="flex items-center gap-2 mb-2">
-                                                  <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Secondary Languages
-                                                  </label>
-                                                  <Tooltip text="Fallback language(s) the AI can switch to if the caller requests it or if their language differs from the primary. You can add multiple.">
-                                                    <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                                                  </Tooltip>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                  <Select value={secondaryLanguageDraft} onValueChange={setSecondaryLanguageDraft}>
-                                                    <SelectTrigger className="flex-1">
-                                                      <SelectValue placeholder="Select a fallback language (optional)" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                      {["English", "Spanish", "French", "German", "Italian", "Portuguese", "Chinese", "Japanese", "Korean", "Arabic"]
-                                                        .filter(lang => lang !== primaryLanguage && !secondaryLanguages.includes(lang))
-                                                        .map(lang => (
-                                                          <SelectItem key={lang} value={lang}>{lang}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                  </Select>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      if (secondaryLanguageDraft) {
-                                                        setSecondaryLanguages([...secondaryLanguages, secondaryLanguageDraft]);
-                                                        setSecondaryLanguageDraft("");
-                                                      }
-                                                    }}
-                                                    disabled={!secondaryLanguageDraft}
-                                                    className="w-9 h-9 flex items-center justify-center rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                                                  >
-                                                    <Plus className="w-4 h-4 text-white" />
-                                                  </button>
-                                                </div>
-                                                {secondaryLanguages.length > 0 && (
-                                                  <div className="flex flex-wrap gap-2 mt-2">
-                                                    {secondaryLanguages.map((lang) => (
-                                                      <span key={lang} className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">
-                                                        {lang}
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => setSecondaryLanguages(secondaryLanguages.filter(l => l !== lang))}
-                                                          className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
-                                                        >
-                                                          <X className="w-3 h-3" />
-                                                        </button>
-                                                      </span>
-                                                    ))}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
                             {/* Call Action - Hidden when Action is Handle By Human (Transfer to Human) or No Action (No Call Activity) */}
                             {stageType !== "Transfer to Human" && stageType !== "No Call Activity" && (
                               <div className="space-y-3 pt-2">
@@ -4614,6 +4247,737 @@ export default function Process() {
 
 
 
+                        </div>
+                      )}
+
+                      {/* AI Agent Tab */}
+                      {activeTab === "ai-agent" && (
+                        <div className="space-y-6">
+                          {/* 1. AI Model Settings Section */}
+                          <div className="space-y-3">
+                            <div>
+                              <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                AI Model Settings
+                              </h3>
+                              <p className="text-xs text-gray-500 mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Fine-tune the technical execution of the AI agent's voice and intelligence.
+                              </p>
+                            </div>
+
+                            <div className="rounded-2xl border border-gray-200/80 bg-white p-6 md:p-7 shadow-xs space-y-6">
+                              {/* Row 1: AI Model & Speech Speed */}
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                                {/* AI Model */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-blue-500 font-mono font-bold text-sm leading-none">&gt;_</span>
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      AI Model
+                                    </span>
+                                    <Tooltip text="Select the underlying LLM that powers the conversational logic.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <div className="relative">
+                                    <select
+                                      value={selectedAIModel}
+                                      onChange={(e) => {
+                                        setSelectedAIModel(e.target.value);
+                                        toast.success(`AI Model updated to ${e.target.value}`);
+                                      }}
+                                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-10 cursor-pointer shadow-2xs"
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      <option value="Deepseek V4 Flash">Deepseek V4 Flash</option>
+                                      <option value="Gemini 2.5 Flash">Gemini 2.5 Flash</option>
+                                      <option value="GPT-4o">GPT-4o</option>
+                                      <option value="GPT-4o Mini">GPT-4o Mini</option>
+                                      <option value="Claude 3.5 Sonnet">Claude 3.5 Sonnet</option>
+                                      <option value="Gemini 1.5 Pro">Gemini 1.5 Pro</option>
+                                      <option value="Llama 3.3 70B">Llama 3.3 70B</option>
+                                    </select>
+                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                  </div>
+                                </div>
+
+                                {/* Speech Speed */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5">
+                                      <Volume2 className="w-4 h-4 text-amber-500" />
+                                      <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                        Speech Speed
+                                      </span>
+                                      <Tooltip text="Adjust how fast the AI speaks to ensure a natural conversational rhythm. Speech speed significantly affects naturalness — 1.0x (Natural) is highly recommended.">
+                                        <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                      </Tooltip>
+                                    </div>
+                                    <span className="text-xs font-semibold text-gray-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      {stageVoiceSpeed.toFixed(1)}x
+                                    </span>
+                                  </div>
+                                  <div className="space-y-2 pt-1">
+                                    <input
+                                      type="range"
+                                      min="0.5"
+                                      max="1.5"
+                                      step="0.1"
+                                      value={stageVoiceSpeed}
+                                      onChange={(e) => setStageVoiceSpeed(parseFloat(e.target.value))}
+                                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                    />
+                                    <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 tracking-wider">
+                                      <span>SLOW</span>
+                                      <span>NATURAL</span>
+                                      <span>FAST</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Row 2: Voice Engine, Tone, Style in same row */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100 items-start">
+                                {/* Voice Engine */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <Mic className="w-4 h-4 text-emerald-500" />
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      Voice Engine
+                                    </span>
+                                    <Tooltip text="Choose the vocal personality that best represents your brand's tone.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="relative flex-1">
+                                      <select
+                                        value={stageVoice}
+                                        onChange={(e) => {
+                                          if (e.target.value === "__settings_redirect__") {
+                                            navigate('/settings?tab=voice-config');
+                                            return;
+                                          }
+                                          setStageVoice(e.target.value);
+                                          toast.success(`Voice updated to ${e.target.value}`);
+                                        }}
+                                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-7 cursor-pointer shadow-2xs"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      >
+                                        <optgroup label="Default Voices">
+                                          {activeConfiguredVoices.map((v) => (
+                                            <option key={v.name} value={v.name}>
+                                              {v.name} ({v.country}, {v.gender})
+                                            </option>
+                                          ))}
+                                        </optgroup>
+                                        <optgroup label="Manage">
+                                          <option value="__settings_redirect__">
+                                            ⚙ Choose another voice in Settings →
+                                          </option>
+                                        </optgroup>
+                                      </select>
+                                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        toast.success(`Playing preview for ${stageVoice || activeConfiguredVoices[0]?.name || "Nova"}...`);
+                                        if ("speechSynthesis" in window) {
+                                          window.speechSynthesis.cancel();
+                                          const utterance = new SpeechSynthesisUtterance("Hello! This is how your AI voice sounds.");
+                                          utterance.rate = stageVoiceSpeed;
+                                          window.speechSynthesis.speak(utterance);
+                                        }
+                                      }}
+                                      className="flex items-center gap-1.5 px-3.5 py-2.5 border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/40 rounded-xl text-sm font-semibold text-gray-800 transition-all cursor-pointer shadow-2xs group flex-shrink-0"
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      <Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
+                                      <span className="group-hover:text-emerald-700 text-xs">Test</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Tone */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      Tone
+                                    </span>
+                                    <Tooltip text="Set the emotional tone used by the AI assistant.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <div className="relative">
+                                    <select
+                                      value={stageTone}
+                                      onChange={(e) => {
+                                        setStageTone(e.target.value);
+                                        toast.success(`Tone updated to ${e.target.value}`);
+                                      }}
+                                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-8 cursor-pointer shadow-2xs"
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      <option value="Professional">Professional</option>
+                                      <option value="Friendly">Friendly</option>
+                                      <option value="Empathetic">Empathetic</option>
+                                      <option value="Casual">Casual</option>
+                                      <option value="Persuasive">Persuasive</option>
+                                      <option value="Authoritative">Authoritative</option>
+                                    </select>
+                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                  </div>
+                                </div>
+
+                                {/* Style */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      Style
+                                    </span>
+                                    <Tooltip text="Select conversational phrasing style (concise vs detailed).">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <div className="relative">
+                                    <select
+                                      value={stageStyle}
+                                      onChange={(e) => {
+                                        setStageStyle(e.target.value);
+                                        toast.success(`Style updated to ${e.target.value}`);
+                                      }}
+                                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-8 cursor-pointer shadow-2xs"
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      <option value="Balanced">Balanced</option>
+                                      <option value="Concise">Concise</option>
+                                      <option value="Detailed">Detailed</option>
+                                      <option value="Warm">Warm</option>
+                                      <option value="Expressive">Expressive</option>
+                                    </select>
+                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 2. Caller Pitch Card */}
+                          <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-xs">
+                            {/* Collapsible Header */}
+                            <button
+                              type="button"
+                              onClick={() => setCallerPitchExpanded(!callerPitchExpanded)}
+                              className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50/70 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 text-emerald-600">
+                                  <Sparkles className="w-5 h-5" />
+                                </div>
+                                <div className="flex flex-col items-start text-left">
+                                  <span className="text-base font-semibold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                    Caller Pitch
+                                  </span>
+                                  <span className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Script or instructions used by the AI agent when conversing on calls in this stage.
+                                  </span>
+                                </div>
+                              </div>
+                              <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${callerPitchExpanded ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {/* Expanded Content */}
+                            {callerPitchExpanded && (
+                              <div className="p-6 border-t border-gray-100 space-y-6">
+                                {/* Mode Toggle */}
+                                <div className="flex items-center gap-3">
+                                  <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl w-fit">
+                                    <button
+                                      type="button"
+                                      onClick={() => setCallerPitchMode("single")}
+                                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${callerPitchMode === "single"
+                                        ? "bg-primary text-white shadow-xs"
+                                        : "text-gray-600 hover:text-gray-900"
+                                        }`}
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      Single Prompt
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setCallerPitchMode("comprehensive")}
+                                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${callerPitchMode === "comprehensive"
+                                        ? "bg-primary text-white shadow-xs"
+                                        : "text-gray-600 hover:text-gray-900"
+                                        }`}
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      Comprehensive
+                                    </button>
+                                  </div>
+                                  {callerPitchMode === "single" ? (
+                                    <InfoTooltip text="Single Prompt lets you write the entire outbound script as one open text box, with a Generate with AI shortcut — the fastest option for a simple stage." />
+                                  ) : (
+                                    <InfoTooltip text="Comprehensive mode lets you set a separate greeting, objective, business info, and languages instead of one combined script." />
+                                  )}
+                                </div>
+
+                                {/* Single Prompt Mode */}
+                                {callerPitchMode === "single" && (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <label className="text-xs font-bold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                        Pitch Script / Prompt
+                                      </label>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPitchFieldPickerTarget("callerPitch")}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors cursor-pointer"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        Select Field
+                                      </button>
+                                    </div>
+
+                                    <textarea
+                                      ref={callerPitchRef}
+                                      value={callerPitch}
+                                      onChange={(e) => setCallerPitch(e.target.value)}
+                                      className="w-full p-4 bg-gray-50/50 border border-input rounded-xl resize-none text-sm text-gray-900 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors leading-relaxed"
+                                      style={{ fontFamily: 'Outfit, sans-serif', minHeight: '140px' }}
+                                      placeholder="Write your caller script or instructions here... Use Select Field in the top right to insert dynamic variables."
+                                    />
+                                    <div className="flex items-center justify-end">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          toast.success("AI is generating optimized caller pitch...");
+                                          setCallerPitch("Hi {{name}}, this is your dedicated assistant from {{organization.name}}. I'm reaching out to follow up on your recent inquiry and help answer any questions you might have about our services. Do you have a quick moment to speak?");
+                                        }}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      >
+                                        <Zap className="w-4 h-4 text-amber-500" />
+                                        Generate with AI
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Comprehensive Mode */}
+                                {callerPitchMode === "comprehensive" && (
+                                  <div className="space-y-4">
+                                    {/* A. Greeting / Intro Message */}
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setGreetingIntroExpanded(!greetingIntroExpanded)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                                      >
+                                        <div className="flex flex-col items-start gap-0.5">
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Greeting / Intro Message
+                                          </span>
+                                          {!greetingIntroExpanded && greetingIntroMessage && (
+                                            <span className="text-xs truncate max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                              {greetingIntroMessage.slice(0, 80)}...
+                                            </span>
+                                          )}
+                                          {!greetingIntroExpanded && !greetingIntroMessage && (
+                                            <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                                              Not configured
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${greetingIntroExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+
+                                      {greetingIntroExpanded && (
+                                        <div className="p-4 border-t border-border space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                              Greeting Text
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setPitchFieldPickerTarget("greetingIntro")}
+                                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors cursor-pointer"
+                                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                                            >
+                                              <Plus className="w-3.5 h-3.5" />
+                                              Select Field
+                                            </button>
+                                          </div>
+                                          <textarea
+                                            ref={greetingIntroRef}
+                                            value={greetingIntroMessage}
+                                            onChange={(e) => setGreetingIntroMessage(e.target.value)}
+                                            placeholder="Hi, this is Alex from {{organization.name}}. Who do I have the pleasure of speaking with today?"
+                                            className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
+                                            style={{ fontFamily: 'Outfit, sans-serif', minHeight: '100px' }}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* B. Objective */}
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setObjectiveExpanded(!objectiveExpanded)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                                      >
+                                        <div className="flex flex-col items-start gap-0.5">
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Objective
+                                          </span>
+                                          {!objectiveExpanded && objectiveText && (
+                                            <span className="text-xs truncate max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                              {objectiveText.slice(0, 80)}...
+                                            </span>
+                                          )}
+                                          {!objectiveExpanded && !objectiveText && (
+                                            <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                                              Not configured
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${objectiveExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+
+                                      {objectiveExpanded && (
+                                        <div className="p-4 border-t border-border space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                              Objective Instructions
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setPitchFieldPickerTarget("objective")}
+                                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors cursor-pointer"
+                                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                                            >
+                                              <Plus className="w-3.5 h-3.5" />
+                                              Select Field
+                                            </button>
+                                          </div>
+                                          <textarea
+                                            ref={objectiveTextRef}
+                                            value={objectiveText}
+                                            onChange={(e) => setObjectiveText(e.target.value)}
+                                            placeholder="You are an AI assistant for {{organization.name}}. Your role is to answer general inquiries, schedule appointments, and provide information about our services."
+                                            className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
+                                            style={{ fontFamily: 'Outfit, sans-serif', minHeight: '100px' }}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* C. Business Information */}
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setBusinessInfoExpanded(!businessInfoExpanded)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Business Information
+                                          </span>
+                                          {!businessInfoExpanded && businessInfoItems.length > 0 && (
+                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-200 text-gray-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                              {businessInfoItems.length} {businessInfoItems.length === 1 ? 'item' : 'items'}
+                                            </span>
+                                          )}
+                                          {!businessInfoExpanded && businessInfoItems.length === 0 && (
+                                            <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                                              No data added
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${businessInfoExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+
+                                      {businessInfoExpanded && (
+                                        <div className="p-4 border-t border-border space-y-3">
+                                          <p className="text-sm mb-3" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                            Add business information that the AI should know while speaking with callers.
+                                          </p>
+
+                                          {/* Existing Business Info Items */}
+                                          {businessInfoItems.map((item) => (
+                                            <div key={item.id} className="p-3 border border-border rounded-lg bg-muted/20">
+                                              <div className="flex items-start justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-sm font-bold" style={{ color: '#111827', fontFamily: 'DM Sans, sans-serif' }}>
+                                                    {item.title}
+                                                  </span>
+                                                  {item.active && (
+                                                    <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                      Active
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setEditingBusinessInfoId(item.id);
+                                                      setBusinessInfoFormData({
+                                                        title: item.title,
+                                                        information: item.information,
+                                                        active: item.active
+                                                      });
+                                                      setShowBusinessInfoForm(true);
+                                                    }}
+                                                    className="text-blue-600 hover:text-blue-700"
+                                                  >
+                                                    <Edit className="w-4 h-4" />
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setBusinessInfoItems(businessInfoItems.filter(i => i.id !== item.id));
+                                                      toast.success("Information deleted");
+                                                    }}
+                                                    className="text-red-600 hover:text-red-700"
+                                                  >
+                                                    <Trash2 className="w-4 h-4" />
+                                                  </button>
+                                                </div>
+                                              </div>
+                                              <p className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                                                {item.information}
+                                              </p>
+                                            </div>
+                                          ))}
+
+                                          {/* Inline Add/Edit Form */}
+                                          {showBusinessInfoForm && (
+                                            <div className="p-4 border border-primary/30 rounded-lg bg-blue-50/30 space-y-3">
+                                              <div>
+                                                <label className="block text-xs font-medium mb-1" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                                  Title
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={businessInfoFormData.title}
+                                                  onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, title: e.target.value })}
+                                                  placeholder="Example: Clinic Timings"
+                                                  className="w-full p-2 bg-white border border-input rounded-lg text-sm"
+                                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                />
+                                              </div>
+                                              <div>
+                                                <label className="block text-xs font-medium mb-1" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                                  Information
+                                                </label>
+                                                <textarea
+                                                  value={businessInfoFormData.information}
+                                                  onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, information: e.target.value })}
+                                                  placeholder="Example: Our clinic is open Monday to Saturday from 9 AM to 7 PM."
+                                                  className="w-full p-2 bg-white border border-input rounded-lg resize-none text-sm"
+                                                  style={{ fontFamily: 'Outfit, sans-serif', minHeight: '80px' }}
+                                                />
+                                              </div>
+                                              <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                  <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                    Active
+                                                  </label>
+                                                  <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      className="sr-only peer"
+                                                      checked={businessInfoFormData.active}
+                                                      onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, active: e.target.checked })}
+                                                    />
+                                                    <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                                                  </label>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setShowBusinessInfoForm(false);
+                                                      setEditingBusinessInfoId(null);
+                                                      setBusinessInfoFormData({ title: "", information: "", active: true });
+                                                    }}
+                                                    className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                                                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                  >
+                                                    Cancel
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      if (businessInfoFormData.title && businessInfoFormData.information) {
+                                                        if (editingBusinessInfoId !== null) {
+                                                          setBusinessInfoItems(businessInfoItems.map(item =>
+                                                            item.id === editingBusinessInfoId
+                                                              ? { ...item, ...businessInfoFormData }
+                                                              : item
+                                                          ));
+                                                          toast.success("Information updated");
+                                                        } else {
+                                                          setBusinessInfoItems([...businessInfoItems, {
+                                                            id: Date.now(),
+                                                            ...businessInfoFormData
+                                                          }]);
+                                                          toast.success("Information added");
+                                                        }
+                                                        setShowBusinessInfoForm(false);
+                                                        setEditingBusinessInfoId(null);
+                                                        setBusinessInfoFormData({ title: "", information: "", active: true });
+                                                      }
+                                                    }}
+                                                    className="px-4 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary-hover"
+                                                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                  >
+                                                    Done
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Add Information Button */}
+                                          {!showBusinessInfoForm && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setShowBusinessInfoForm(true)}
+                                              className="w-full px-4 py-2 border border-dashed border-gray-400 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium"
+                                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                                            >
+                                              <Plus className="w-4 h-4" />
+                                              Add Information
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* D. Languages */}
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setLanguagesExpanded(!languagesExpanded)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                                      >
+                                        <div className="flex flex-col items-start gap-0.5">
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Languages
+                                          </span>
+                                          {!languagesExpanded && (primaryLanguage || secondaryLanguages.length > 0) && (
+                                            <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                              {primaryLanguage && `Primary: ${primaryLanguage}`}
+                                              {primaryLanguage && secondaryLanguages.length > 0 && ' · '}
+                                              {secondaryLanguages.length > 0 && `Secondary: ${secondaryLanguages.join(', ')}`}
+                                            </span>
+                                          )}
+                                          {!languagesExpanded && !primaryLanguage && secondaryLanguages.length === 0 && (
+                                            <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                                              Not configured
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${languagesExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+
+                                      {languagesExpanded && (
+                                        <div className="p-4 border-t border-border space-y-4">
+                                          {/* Primary Language */}
+                                          <div>
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                Primary Language *
+                                              </label>
+                                              <Tooltip text="The default language your AI Receptionist will speak on all calls for this stage.">
+                                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                                              </Tooltip>
+                                            </div>
+                                            <Select value={primaryLanguage} onValueChange={setPrimaryLanguage}>
+                                              <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="Select primary language" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="English">English</SelectItem>
+                                                <SelectItem value="Spanish">Spanish</SelectItem>
+                                                <SelectItem value="French">French</SelectItem>
+                                                <SelectItem value="German">German</SelectItem>
+                                                <SelectItem value="Italian">Italian</SelectItem>
+                                                <SelectItem value="Portuguese">Portuguese</SelectItem>
+                                                <SelectItem value="Chinese">Chinese</SelectItem>
+                                                <SelectItem value="Japanese">Japanese</SelectItem>
+                                                <SelectItem value="Korean">Korean</SelectItem>
+                                                <SelectItem value="Arabic">Arabic</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+
+                                          {/* Secondary Languages */}
+                                          <div>
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                Secondary Languages
+                                              </label>
+                                              <Tooltip text="Fallback language(s) the AI can switch to if the caller requests it or if their language differs from the primary. You can add multiple.">
+                                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                                              </Tooltip>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <Select value={secondaryLanguageDraft} onValueChange={setSecondaryLanguageDraft}>
+                                                <SelectTrigger className="flex-1">
+                                                  <SelectValue placeholder="Select a fallback language (optional)" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  {["English", "Spanish", "French", "German", "Italian", "Portuguese", "Chinese", "Japanese", "Korean", "Arabic"]
+                                                    .filter(lang => lang !== primaryLanguage && !secondaryLanguages.includes(lang))
+                                                    .map(lang => (
+                                                      <SelectItem key={lang} value={lang}>{lang}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                              </Select>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  if (secondaryLanguageDraft) {
+                                                    setSecondaryLanguages([...secondaryLanguages, secondaryLanguageDraft]);
+                                                    setSecondaryLanguageDraft("");
+                                                  }
+                                                }}
+                                                disabled={!secondaryLanguageDraft}
+                                                className="w-9 h-9 flex items-center justify-center rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                                              >
+                                                <Plus className="w-4 h-4 text-white" />
+                                              </button>
+                                            </div>
+                                            {secondaryLanguages.length > 0 && (
+                                              <div className="flex flex-wrap gap-2 mt-2">
+                                                {secondaryLanguages.map((lang) => (
+                                                  <span key={lang} className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">
+                                                    {lang}
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setSecondaryLanguages(secondaryLanguages.filter(l => l !== lang))}
+                                                      className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
+                                                    >
+                                                      <X className="w-3 h-3" />
+                                                    </button>
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
 
@@ -6196,6 +6560,13 @@ export default function Process() {
                                               primaryLanguage,
                                               secondaryLanguages,
                                               enableCalling,
+                                              aiSettings: {
+                                                platform: selectedAIModel,
+                                                voiceSpeed: stageVoiceSpeed,
+                                                voice: stageVoice,
+                                                tone: stageTone,
+                                                style: stageStyle,
+                                              },
                                             }
                                       ),
                                     }
@@ -6490,6 +6861,18 @@ export default function Process() {
           ]}
           guideUrl="/guide/process-settings"
         />
+
+        {/* Pitch / Stage Prompt Select Fields Modal */}
+        {pitchFieldPickerTarget && (
+          <SelectFieldsModal
+            initiallySelected={[]}
+            activeProcessId={selectedProcess || undefined}
+            activeProcessName={selectedProcessData?.name}
+            processStages={selectedProcessData?.stages?.map((s) => ({ id: s.id, name: s.name, color: s.color }))}
+            onClose={() => setPitchFieldPickerTarget(null)}
+            onApply={handleInsertPitchFields}
+          />
+        )}
 
         {/* How to Receive Call — inline guide link in stage modal */}
         <Modal
