@@ -63,10 +63,8 @@ export default function AdminLayout() {
       <AdminSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Scrollable Main Administrative Content View — always full-width */}
-      <main className="flex-1 overflow-y-auto px-4 py-3 sm:px-6 sm:py-4">
-        <div className="max-w-7xl mx-auto">
-          <Outlet />
-        </div>
+      <main className="flex-1 overflow-y-auto relative min-w-0 bg-[#fafafa]">
+        <Outlet />
       </main>
     </div>
   );

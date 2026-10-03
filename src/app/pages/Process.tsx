@@ -2241,7 +2241,7 @@ export default function Process() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
           title="Process Settings"
           subtitle="Design how your AI receptionist behaves at every step, from greeting to hand-off"
@@ -2291,107 +2291,136 @@ export default function Process() {
 
         <div className="flex gap-6 min-h-[calc(100vh-270px)]">
           {/* Left Panel - Process List */}
-          <div className="w-80 bg-white rounded-2xl border border-gray-200 shadow-sm p-4 h-[calc(100vh-270px)] overflow-y-auto flex-shrink-0">
-            <div className="space-y-1.5">
-              {filteredProcesses.length === 0 ? (
-                <div className="p-4 text-center rounded-xl bg-gray-50 border border-dashed border-gray-200">
-                  <p className="text-xs text-gray-500 font-medium">
-                    {searchQuery ? "No processes match your search" : "No processes configured for your organization scope"}
-                  </p>
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="mt-2 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
-                    >
-                      Clear Search
-                    </button>
-                  )}
-                </div>
-              ) : (
-                filteredProcesses.map((process, index) => {
+          <div className="w-80 bg-[#F4F6F8] rounded-2xl border border-gray-200/80 p-3 h-[calc(100vh-270px)] overflow-y-auto flex-shrink-0 space-y-3">
+            {filteredProcesses.length === 0 ? (
+              <div className="p-4 text-center rounded-xl bg-white border border-dashed border-gray-200">
+                <p className="text-xs text-gray-500 font-medium">
+                  {searchQuery ? "No processes match your search" : "No processes configured for your organization scope"}
+                </p>
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="mt-2 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    Clear Search
+                  </button>
+                )}
+              </div>
+            ) : (
+              filteredProcesses.map((process) => {
                 const isExpanded = expandedProcesses.includes(process.id);
-                const isProcessSelected = selectedProcess === process.id && viewMode === "process";
-                const isProcessActive = selectedProcess === process.id; // Highlight if process or any of its stages is active
+                const isProcessSelected = selectedProcess === process.id;
 
                 return (
-                  <div key={process.id} className={index > 0 ? "pt-1.5" : ""}>
-                    {/* Process Row */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedProcesses((prev) =>
-                            prev.includes(process.id)
-                              ? prev.filter((id) => id !== process.id)
-                              : [...prev, process.id]
-                          );
-                        }}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <ChevronRight className={`w-4 h-4 text-gray-600 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""
-                          }`} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedProcess(process.id);
-                          setExpandedStage(null);
-                          setViewMode("process");
-                          if (!isExpanded) {
-                            setExpandedProcesses((prev) => [...prev, process.id]);
-                          }
-                        }}
-                        className={`flex-1 flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isProcessSelected
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                          : isProcessActive
-                            ? "bg-blue-50 text-blue-700 border border-blue-200"
-                            : "hover:bg-gray-50 border border-transparent"
-                          }`}
-                      >
-                        <span className="flex-1 text-left font-semibold text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>{process.name}</span>
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${isProcessSelected
-                          ? "bg-white/20 text-white"
-                          : isProcessActive
-                            ? "bg-blue-200 text-blue-700"
-                            : "bg-gray-100 text-gray-600"
-                          }`}>
-                          {process.stages.length}
+                  <div
+                    key={process.id}
+                    onClick={() => {
+                      setSelectedProcess(process.id);
+                      setExpandedStage(null);
+                      setViewMode("process");
+                      if (!isExpanded) {
+                        setExpandedProcesses((prev) => [...prev, process.id]);
+                      }
+                    }}
+                    className={`bg-white rounded-2xl p-4 border transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-md cursor-pointer ${
+                      isProcessSelected && viewMode === "process"
+                        ? "border-blue-400 ring-2 ring-blue-500/20 shadow-md"
+                        : isProcessSelected
+                        ? "border-blue-200 bg-blue-50/20 shadow-sm"
+                        : "border-gray-200/80 hover:border-gray-300"
+                    }`}
+                  >
+                    {/* Process Header Row */}
+                    <div className="flex items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedProcesses((prev) =>
+                              prev.includes(process.id)
+                                ? prev.filter((id) => id !== process.id)
+                                : [...prev, process.id]
+                            );
+                          }}
+                          className="p-1 -ml-1 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-colors shrink-0 cursor-pointer"
+                          aria-label="Toggle stages"
+                        >
+                          <ChevronRight
+                            className={`w-4 h-4 transition-transform duration-200 ${
+                              isExpanded ? "rotate-90" : ""
+                            }`}
+                          />
+                        </button>
+                        <span
+                          className="font-bold text-sm text-gray-900 truncate"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {process.name}
                         </span>
-                      </button>
+                      </div>
+
+                      {/* Blue Circular Badge with Drop Shadow */}
+                      <div className="w-6 h-6 rounded-full bg-[#3B82F6] text-white text-[11px] font-bold flex items-center justify-center shadow-[0_3px_8px_rgba(59,130,246,0.45)] shrink-0">
+                        {process.stages.length}
+                      </div>
                     </div>
+
+                    {/* Process Description */}
+                    {process.description && (
+                      <p
+                        className="text-xs text-gray-500 font-normal leading-relaxed line-clamp-2 mt-2 pl-6"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {process.description}
+                      </p>
+                    )}
 
                     {/* Stages (when expanded) */}
                     {isExpanded && (
-                      <div className="ml-10 mt-2 space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="mt-3 pt-3 border-t border-gray-100 pl-6 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
                         {process.stages.length === 0 ? (
-                          <div className="px-4 py-3 text-sm italic text-gray-400 bg-gray-50 rounded-lg" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                          <div
+                            className="px-3 py-2 text-xs italic text-gray-400 bg-gray-50 rounded-lg"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
                             No stages yet
                           </div>
                         ) : (
-                          process.stages.map((stage, index) => {
-                            const isStageSelected = selectedProcess === process.id && expandedStage === stage.id && viewMode === "stage";
+                          process.stages.map((stage) => {
+                            const isStageSelected =
+                              selectedProcess === process.id &&
+                              expandedStage === stage.id &&
+                              viewMode === "stage";
 
                             return (
                               <button
                                 key={stage.id}
-                                onClick={() => {
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setSelectedProcess(process.id);
                                   setExpandedStage(stage.id);
                                   setViewMode("stage");
                                 }}
-                                className={`w-full flex items-center gap-2.5 text-left px-4 py-2.5 rounded-lg text-sm transition-all ${isStageSelected
-                                  ? "bg-purple-50 text-purple-700 font-medium border border-purple-200"
-                                  : "text-gray-700 hover:bg-gray-100 border border-transparent"
-                                  }`}
+                                className={`w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-xl text-xs transition-all cursor-pointer ${
+                                  isStageSelected
+                                    ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200"
+                                    : "text-gray-700 hover:bg-gray-50 border border-transparent"
+                                }`}
                               >
                                 <span
                                   className="w-2 h-2 rounded-full flex-shrink-0"
-                                  style={{ backgroundColor: stage.color || '#22D3EE' }}
+                                  style={{ backgroundColor: stage.color || "#22D3EE" }}
                                 />
-                                <span className="flex-1 font-medium">{stage.name}</span>
+                                <span className="flex-1 truncate font-medium">
+                                  {stage.name}
+                                </span>
                               </button>
                             );
                           })
                         )}
+
                         <button
                           type="button"
                           onClick={(e) => {
@@ -2399,18 +2428,18 @@ export default function Process() {
                             setSelectedProcess(process.id);
                             setShowAddStageModal(true);
                           }}
-                          className="w-full flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50/80 transition-colors border border-dashed border-blue-200 hover:border-blue-300 mt-1 cursor-pointer"
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                          className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold text-blue-600 hover:bg-blue-50/80 transition-colors border border-dashed border-blue-200 hover:border-blue-300 mt-2 cursor-pointer"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Add Stage</span>
+                          <span>Add New Stage</span>
                         </button>
                       </div>
                     )}
                   </div>
                 );
-              }))}
-            </div>
+              })
+            )}
           </div>
 
           {/* Right Panel - Process or Stage Settings */}
@@ -2529,10 +2558,6 @@ export default function Process() {
                             {selectedProcessData.stages.length} Stages
                           </span>
                         </div>
-                        <div className="text-xs text-slate-500 flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
-                          <span className="inline-block w-2 h-2 rounded-full bg-pink-500"></span>
-                          <span className="font-medium">Final Stage connects across Partition to other process stages</span>
-                        </div>
                       </div>
 
                       <div className="flex items-center gap-3 overflow-x-auto overflow-y-hidden pb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
@@ -2555,15 +2580,12 @@ export default function Process() {
                           <Plus className="w-5 h-5 text-white" />
                         </button>
 
-                        {/* Visual Partition Divider */}
-                        <div className="flex items-center gap-2 px-3.5 py-2.5 flex-shrink-0 border-l-2 border-dashed border-slate-300 bg-slate-100/80 rounded-r-xl my-1 select-none">
-                          <div className="flex flex-col items-start">
-                            <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400">PARTITION</span>
-                            <span className="text-xs font-bold text-slate-700 whitespace-nowrap flex items-center gap-1">
-                              <span>Next Process Handoff</span>
-                              <span className="text-slate-400 font-normal">→</span>
-                            </span>
-                          </div>
+                        {/* Visual Handoff Divider */}
+                        <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0 border-l-2 border-dashed border-slate-300 bg-slate-100/80 rounded-r-xl my-1 select-none">
+                          <span className="text-xs font-bold text-slate-700 whitespace-nowrap flex items-center gap-1">
+                            <span>Next Process Handoff</span>
+                            <span className="text-slate-400 font-normal">→</span>
+                          </span>
                         </div>
 
                         {/* Other Stages (Handoff Target Stages from Other Processes) */}
@@ -2638,7 +2660,7 @@ export default function Process() {
                                   }
                                 }}
                                 className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-dashed border-purple-300 transition-all text-xs font-semibold flex-shrink-0 shadow-2xs hover:shadow-xs cursor-pointer"
-                                title="Connect a stage from another process across the partition"
+                                title="Connect a stage from another process"
                               >
                                 <Plus className="w-4 h-4 text-purple-600" />
                                 <span>Connect Next Stage</span>
@@ -6446,7 +6468,7 @@ export default function Process() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                    When a lead reaches this stage, the process completes and transitions across the partition to other processes.
+                    When a lead reaches this stage, the process completes and transitions to other processes.
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
@@ -6471,7 +6493,7 @@ export default function Process() {
                 <div className="mt-3 pt-3 border-t border-slate-200 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Handoff to Stages in Other Processes (Partition)
+                      Handoff to Stages in Other Processes
                     </span>
                   </div>
 
@@ -6648,11 +6670,11 @@ export default function Process() {
             setShowTransitionModal(false);
             setTransitionSourceStageId(null);
           }}
-          title="Connect Next Process Stage (Partition Handoff)"
+          title="Connect Next Process Stage"
         >
           <div className="space-y-4">
             <p className="text-sm text-slate-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-              Define where leads should move when they complete this stage. This connects this process to other workflows in your workspace across the partition.
+              Define where leads should move when they complete this stage. This connects this process to other workflows in your workspace.
             </p>
 
             <div>

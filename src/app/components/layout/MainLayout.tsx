@@ -1,8 +1,8 @@
 import React from "react";
 import { Outlet, Link } from "react-router";
 import Sidebar from "./Sidebar";
-import { Menu } from "lucide-react";
 import logo from "../../../imports/ma_logo.png";
+import symbolLogo from "../../../imports/Ma-symbol-mark.png";
 import AIScribeFloatingWidget from "../scribe/AIScribeFloatingWidget";
 import { useSidebar } from "../../context/SidebarContext";
 
@@ -15,35 +15,37 @@ export default function MainLayout() {
       <header className="h-12 bg-white border-b border-gray-200/90 flex items-center shrink-0 z-40 select-none">
         {/* Left Brand / Nav Toggle Area (Aligned with Sidebar) */}
         <div
-          className={`h-full flex items-center px-4 shrink-0 transition-[width] duration-300 ease-in-out border-r border-gray-200/90 ${
+          className={`h-full flex items-center shrink-0 transition-[width] duration-300 ease-in-out border-r border-gray-200/90 ${
             collapsed
-              ? "w-[68px] min-w-[68px] max-w-[68px] justify-center"
-              : "w-64 min-w-[256px] max-w-[256px] justify-between"
+              ? "w-[68px] min-w-[68px] max-w-[68px] justify-center px-2"
+              : "w-64 min-w-[256px] max-w-[256px] justify-between px-4"
           }`}
         >
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Hamburger Menu Toggle (Expands / Collapses Sidebar) */}
+          {collapsed ? (
+            /* Collapsed State: Ma-symbol-mark.png (Clickable to expand sidebar) */
             <button
               type="button"
-              onClick={() => setCollapsed((v) => !v)}
-              className="p-1.5 -ml-1 text-gray-700 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer shrink-0"
-              aria-label="Toggle sidebar"
-              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              onClick={() => setCollapsed(false)}
+              className="p-1 rounded-xl hover:bg-gray-100 transition-all cursor-pointer flex items-center justify-center group"
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
             >
-              <Menu className="w-4.5 h-4.5 text-gray-800" />
+              <img
+                src={symbolLogo}
+                alt="MantraAssist"
+                className="h-7 w-7 object-contain transition-transform group-hover:scale-105"
+              />
             </button>
-
-            {/* MantraAssist Brand Logo */}
-            {!collapsed && (
-              <Link to="/" className="flex items-center shrink-0">
-                <img
-                  src={logo}
-                  alt="MantraAssist"
-                  className="h-6 w-auto max-w-[140px] object-contain"
-                />
-              </Link>
-            )}
-          </div>
+          ) : (
+            /* Expanded State: Full ma_logo.png cleanly positioned */
+            <Link to="/" className="flex items-center shrink-0">
+              <img
+                src={logo}
+                alt="MantraAssist"
+                className="h-6 w-auto max-w-[140px] object-contain"
+              />
+            </Link>
+          )}
         </div>
 
         {/* Top Bar Page Header Slot */}
