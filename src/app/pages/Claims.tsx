@@ -164,10 +164,10 @@ export default function Claims() {
         />
 
         {/* Filter and Search Bar — Unified Top Toolbar */}
-        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs space-y-2.5">
-          {/* Tabs row */}
-          <div className="flex items-center justify-between flex-wrap gap-2 border-b border-border/60 pb-2">
-            <div className="flex items-center gap-1 flex-wrap">
+        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            {/* Tabs row in search bar */}
+            <div className="inline-flex bg-gray-100 p-0.5 rounded-lg border border-border shrink-0">
               {[
                 { id: "all", label: "All Claims", count: claims.length },
                 { id: "ready", label: "Ready to Submit", count: stats.readyCount },
@@ -182,10 +182,10 @@ export default function Claims() {
                     setSelectedStatusTab(tab.id);
                     setCurrentPage(1);
                   }}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
                     selectedStatusTab === tab.id
                       ? "bg-[#1E293B] text-white shadow-xs"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
@@ -201,31 +201,8 @@ export default function Claims() {
               ))}
             </div>
 
-            {/* Payer Filter dropdown */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>Filter Payer:</span>
-              <select
-                value={selectedPayerFilter}
-                onChange={(e) => {
-                  setSelectedPayerFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="h-[32px] text-xs px-2 py-0.5 border border-input rounded-lg bg-input-background text-foreground focus:outline-none cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="all">All Payers</option>
-                {uniquePayers.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Search row with Action Button */}
-          <div className="flex items-center gap-2 flex-wrap justify-between">
-            <div className="relative flex-1 min-w-[240px]">
+            {/* Search input */}
+            <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
               <input
                 type="text"
@@ -240,6 +217,25 @@ export default function Claims() {
               />
             </div>
 
+            {/* Payer Filter dropdown */}
+            <select
+              value={selectedPayerFilter}
+              onChange={(e) => {
+                setSelectedPayerFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="h-[36px] text-xs px-2.5 border border-input rounded-lg bg-input-background text-foreground focus:outline-none cursor-pointer"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <option value="all">All Payers</option>
+              {uniquePayers.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+
+            {/* Action button */}
             <button
               type="button"
               onClick={() => {

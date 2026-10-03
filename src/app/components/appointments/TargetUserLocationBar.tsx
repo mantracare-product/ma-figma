@@ -10,6 +10,8 @@ export interface TargetUserLocationBarProps {
   onSelectUser: (userId: string | number) => void;
   selectedLocationId: string;
   onSelectLocation: (locationId: string) => void;
+  activeTab?: "slots" | "days-off";
+  onTabChange?: (tab: "slots" | "days-off") => void;
   className?: string;
 }
 
@@ -18,6 +20,8 @@ export default function TargetUserLocationBar({
   onSelectUser,
   selectedLocationId,
   onSelectLocation,
+  activeTab = "slots",
+  onTabChange,
   className = "",
 }: TargetUserLocationBarProps) {
   const { activeOrganization } = useOrganization();
@@ -198,6 +202,36 @@ export default function TargetUserLocationBar({
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
+        {/* Subtabs: Manage Slots | Days Off */}
+        {onTabChange && (
+          <div className="inline-flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => onTabChange("slots")}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                activeTab === "slots"
+                  ? "bg-[#181e25] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+              }`}
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Manage Slots
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange("days-off")}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                activeTab === "days-off"
+                  ? "bg-[#181e25] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+              }`}
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Days Off
+            </button>
+          </div>
+        )}
+
         {/* Target User / Doctor Dropdown */}
         <TargetUserDropdown
           selectedUserId={selectedUserId}

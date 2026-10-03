@@ -709,42 +709,15 @@ export default function TeamAvailabilityTab({
 
   return (
     <div className="space-y-6">
-      {/* 1. Target User & Location Bar (Below Availability Tab) */}
+      {/* 1. Target User & Location Bar with integrated Manage Slots & Days Off */}
       <TargetUserLocationBar
         selectedUserId={effectiveUserId}
         onSelectUser={handleUserSelect}
         selectedLocationId={effectiveLocationId}
         onSelectLocation={handleLocationSelect}
+        activeTab={effectiveActiveTab}
+        onTabChange={(t) => (onTabChange ? onTabChange(t) : setInternalActiveTab(t))}
       />
-
-      {/* 2. Subtabs below Target User: Manage Slots | Days Off */}
-      <div className="inline-flex items-center p-1 bg-slate-100/90 rounded-full border border-slate-200/80 shadow-2xs">
-        <button
-          type="button"
-          onClick={() => (onTabChange ? onTabChange("slots") : setInternalActiveTab("slots"))}
-          className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all cursor-pointer ${
-            effectiveActiveTab === "slots"
-              ? "bg-[#181e25] text-white shadow-xs"
-              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-          }`}
-          style={{ fontFamily: "DM Sans, sans-serif" }}
-        >
-          Manage Slots
-        </button>
-
-        <button
-          type="button"
-          onClick={() => (onTabChange ? onTabChange("days-off") : setInternalActiveTab("days-off"))}
-          className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all cursor-pointer ${
-            effectiveActiveTab === "days-off"
-              ? "bg-[#181e25] text-white shadow-xs"
-              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-          }`}
-          style={{ fontFamily: "DM Sans, sans-serif" }}
-        >
-          Days Off
-        </button>
-      </div>
 
       {/* ==================================================================== */}
       {/* TAB 1: MANAGE SLOTS                                                  */}
@@ -762,12 +735,12 @@ export default function TeamAvailabilityTab({
               return (
                 <div
                   key={key}
-                  className={`flex flex-col md:flex-row md:items-center p-3.5 sm:px-4 gap-4 transition-colors ${
+                  className={`flex flex-col lg:flex-row lg:items-center p-3.5 sm:px-4 gap-4 transition-colors ${
                     hasSlots ? "bg-white hover:bg-slate-50/40" : "bg-slate-50/30 hover:bg-slate-50/60"
                   }`}
                 >
                   {/* Left Column: Day Checkbox, Day Label & Location Operating Hours */}
-                  <div className="w-48 shrink-0">
+                  <div className="w-44 shrink-0">
                     <div className="flex items-center gap-2.5">
                       <input
                         type="checkbox"
@@ -802,44 +775,68 @@ export default function TeamAvailabilityTab({
                     </div>
                   </div>
 
-                  {/* Middle Column: In front of the day, show slots */}
+                  {/* Middle Column: In front of the day, show slots (2 in a row allowed) */}
                   <div className="flex-1 min-w-0">
                     {!hasSlots ? (
                       <span className="text-xs font-medium text-slate-400 italic">
                         Unavailable
                       </span>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
                         {day.slots.map((slot, slotIdx) => (
                           <div
                             key={slotIdx}
-                            className="flex items-center gap-2 flex-wrap sm:flex-nowrap"
+                            className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50/70 border border-slate-200/70 shadow-2xs"
                           >
-                            {/* Start Time Clock Picker (Simple 2-column dropdown) */}
-                            <ClockTimePicker
-                              value={slot.start}
-                              onChange={(newTime) => handleUpdateSlot(key, slotIdx, "start", newTime)}
-                            />
+                            {/* Start Time with Subtext */}
+                            <div className="flex flex-col gap-1">
+                              <span
+                                className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-0.5"
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              >
+                                Start Time
+                              </span>
+                              <ClockTimePicker
+                                value={slot.start}
+                                onChange={(newTime) => handleUpdateSlot(key, slotIdx, "start", newTime)}
+                              />
+                            </div>
 
-                            <span className="text-xs text-slate-400 font-medium">–</span>
+                            <span className="text-xs text-slate-400 font-medium mt-4">–</span>
 
-                            {/* End Time Clock Picker (Simple 2-column dropdown) */}
-                            <ClockTimePicker
-                              value={slot.end}
-                              onChange={(newTime) => handleUpdateSlot(key, slotIdx, "end", newTime)}
-                            />
+                            {/* End Time with Subtext */}
+                            <div className="flex flex-col gap-1">
+                              <span
+                                className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-0.5"
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              >
+                                End Time
+                              </span>
+                              <ClockTimePicker
+                                value={slot.end}
+                                onChange={(newTime) => handleUpdateSlot(key, slotIdx, "end", newTime)}
+                              />
+                            </div>
 
-                            {/* Slot Duration with Simple Custom Minute */}
-                            <SlotDurationPicker
-                              value={slot.durationMinutes}
-                              onChange={(newDuration) => handleUpdateSlot(key, slotIdx, "durationMinutes", newDuration)}
-                            />
+                            {/* Slot Duration with Subtext */}
+                            <div className="flex flex-col gap-1">
+                              <span
+                                className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-0.5"
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              >
+                                Slot Duration
+                              </span>
+                              <SlotDurationPicker
+                                value={slot.durationMinutes}
+                                onChange={(newDuration) => handleUpdateSlot(key, slotIdx, "durationMinutes", newDuration)}
+                              />
+                            </div>
 
                             {/* Remove Slot */}
                             <button
                               type="button"
                               onClick={() => handleRemoveSlot(key, slotIdx)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                              className="mt-4 p-1.5 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer rounded-lg hover:bg-rose-50"
                               title="Remove slot"
                             >
                               <Trash2 className="w-4 h-4" />

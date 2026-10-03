@@ -268,10 +268,12 @@ function SubStatusBadge({ status }: { status?: string }) {
 }
 
 // Submissions Tab
-function SubmissionsTab({ submissions, forms, onViewSubmission }: {
+function SubmissionsTab({ submissions, forms, onViewSubmission, mainTab, setMainTab }: {
   submissions: Submission[];
   forms: Form[];
   onViewSubmission: (sub: Submission) => void;
+  mainTab: "submissions" | "forms";
+  setMainTab: (tab: "submissions" | "forms") => void;
 }) {
   const [selectedSub, setSelectedSub] = useState<Submission | null>(null);
   const [subSearch, setSubSearch] = useState("");
@@ -301,6 +303,24 @@ function SubmissionsTab({ submissions, forms, onViewSubmission }: {
       {/* Unified Action / Filter Toolbar */}
       <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
+          {/* Main Tab Switcher in search bar */}
+          <div className="inline-flex bg-gray-100 p-0.5 rounded-lg border border-border shrink-0">
+            {(["submissions", "forms"] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setMainTab(tab)}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all capitalize ${
+                  mainTab === tab
+                    ? "bg-[#1E293B] text-white shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
           <div className="relative flex-1 min-w-[220px]">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <input
@@ -1594,58 +1614,59 @@ export default function WebForms() {
           </div>
         </div>
 
-        {/* Top-level Tabs */}
-        <div className="border-b border-border">
-          <div className="flex items-center gap-6">
-            {(["submissions", "forms"] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setMainTab(tab)}
-                className={`pb-3 px-1 text-sm font-medium transition-colors relative capitalize ${mainTab === tab ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {tab}
-                {mainTab === tab && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t" />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Tab Content */}
         {mainTab === "submissions" && (
           <SubmissionsTab
             submissions={submissions}
             forms={forms}
             onViewSubmission={sub => setViewingClient({ clientId: sub.clientId, formId: sub.formId, submissionDate: sub.date })}
+            mainTab={mainTab}
+            setMainTab={setMainTab}
           />
         )}
 
         {mainTab === "forms" && (
           <>
-            {/* Secondary sub-tab row */}
-            <div className="inline-flex border border-border rounded-lg overflow-hidden mb-2">
-              {(["forms", "flows"] as const).map(sub => (
-                <button
-                  key={sub}
-                  onClick={() => setFormsSubTab(sub)}
-                  className={`px-4 py-2 text-xs font-medium transition-colors ${formsSubTab === sub ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
-                    }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  {sub === "forms" ? "All Forms" : "Intake Flows"}
-                </button>
-              ))}
-            </div>
-
             {/* ── Forms sub-tab ── */}
             {formsSubTab === "forms" && (
               <div className="space-y-4">
                 {/* Unified Filter bar */}
                 <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
+                    {/* Main Tab Switcher in search bar */}
+                    <div className="inline-flex bg-gray-100 p-0.5 rounded-lg border border-border shrink-0">
+                      {(["submissions", "forms"] as const).map(tab => (
+                        <button
+                          key={tab}
+                          onClick={() => setMainTab(tab)}
+                          className={`px-3 py-1 text-xs font-semibold rounded-md transition-all capitalize ${
+                            mainTab === tab
+                              ? "bg-[#1E293B] text-white shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {tab}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Secondary sub-tab row */}
+                    <div className="inline-flex border border-border rounded-lg overflow-hidden shrink-0">
+                      {(["forms", "flows"] as const).map(sub => (
+                        <button
+                          key={sub}
+                          onClick={() => setFormsSubTab(sub)}
+                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                            formsSubTab === sub ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
+                          }`}
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {sub === "forms" ? "All Forms" : "Intake Flows"}
+                        </button>
+                      ))}
+                    </div>
+
                     <div className="relative flex-1 min-w-[200px]">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                       <input
@@ -1663,8 +1684,9 @@ export default function WebForms() {
                         <button
                           key={t}
                           onClick={() => setTypeFilter(t)}
-                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${typeFilter === t ? "bg-[#1E293B] text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
-                            }`}
+                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                            typeFilter === t ? "bg-[#1E293B] text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
+                          }`}
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
                           {t === "all" ? "All Types" : t === "standard" ? "Standard" : t === "intake" ? "Intake" : "Meta Ads"}
@@ -2232,27 +2254,64 @@ export default function WebForms() {
                 ) : (
                   /* ── Flows list view ── */
                   <div className="space-y-4">
-                    {/* Sub-header */}
-                    <div className="flex items-center gap-3">
-                      <div className="relative flex-1 min-w-[200px]">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <input
-                          type="text"
-                          placeholder="Search intake flows…"
-                          value={flowSearch}
-                          onChange={e => setFlowSearch(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    {/* Unified Filter bar for Intake flows */}
+                    <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        {/* Main Tab Switcher in search bar */}
+                        <div className="inline-flex bg-gray-100 p-0.5 rounded-lg border border-border shrink-0">
+                          {(["submissions", "forms"] as const).map(tab => (
+                            <button
+                              key={tab}
+                              onClick={() => setMainTab(tab)}
+                              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all capitalize ${
+                                mainTab === tab
+                                  ? "bg-[#1E293B] text-white shadow-xs"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              {tab}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Secondary sub-tab row (All Forms / Intake Flows) */}
+                        <div className="inline-flex border border-border rounded-lg overflow-hidden shrink-0">
+                          {(["forms", "flows"] as const).map(sub => (
+                            <button
+                              key={sub}
+                              onClick={() => setFormsSubTab(sub)}
+                              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                                formsSubTab === sub ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
+                              }`}
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              {sub === "forms" ? "All Forms" : "Intake Flows"}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="relative flex-1 min-w-[200px]">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                          <input
+                            type="text"
+                            placeholder="Search intake flows…"
+                            value={flowSearch}
+                            onChange={e => setFlowSearch(e.target.value)}
+                            className="w-full h-[36px] bg-input-background border border-input rounded-lg pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          />
+                        </div>
+
+                        <button
+                          onClick={() => setCreateFlowOpen(true)}
+                          className="flex items-center gap-1.5 bg-[#1E293B] hover:bg-black text-white rounded-lg px-3.5 h-[36px] text-xs font-semibold transition-colors shrink-0"
                           style={{ fontFamily: "Outfit, sans-serif" }}
-                        />
+                        >
+                          <Plus className="w-4 h-4" />
+                          Create intake flow
+                        </button>
                       </div>
-                      <button
-                        onClick={() => setCreateFlowOpen(true)}
-                        className="flex items-center gap-2 bg-black text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-black/90 transition-colors shrink-0"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      >
-                        <Plus className="w-4 h-4" />
-                        Create intake flow
-                      </button>
                     </div>
 
                     {/* Flows table or empty state */}

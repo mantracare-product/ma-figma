@@ -16,6 +16,7 @@ import {
   Settings as SettingsIcon,
   Plus,
   CreditCard,
+  Wallet,
   List,
   LayoutGrid,
   MoreVertical,
@@ -27,11 +28,25 @@ import {
   ChevronRight,
   ChevronsRight,
   FileText,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 
 export default function Invoices() {
   const { invoices, updateInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, voidInvoice } = useInvoices();
   const allClients = getClientList();
+
+  // Metrics calculations
+  const totalInvoiced = invoices.reduce((sum, i) => sum + i.total, 0);
+  const outstandingAmount = invoices
+    .filter((i) => ["sent", "viewed", "partial", "overdue"].includes(i.status))
+    .reduce((sum, i) => sum + (i.total - (i.amountPaid || 0)), 0);
+  const paidThisMonth = invoices
+    .filter((i) => i.status === "paid" || (i.amountPaid && i.amountPaid > 0))
+    .reduce((sum, i) => sum + (i.amountPaid || (i.status === "paid" ? i.total : 0)), 0);
+  const overdueCount = invoices.filter((i) => i.status === "overdue").length;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [clientFilter, setClientFilter] = useState<string>("all");
@@ -45,12 +60,12 @@ export default function Invoices() {
   // Column visibility state (including explicit Amount & Due Date columns)
   const [showColumnToggle, setShowColumnToggle] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState({
+    invoiceId: true,
     client: true,
     type: true,
     amount: true,
     balance: true,
     stage: true,
-    status: true,
     dueDate: true,
     created: true,
     lastActivity: true,
@@ -223,30 +238,37 @@ export default function Invoices() {
         >
           <div className="flex items-center gap-2">
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Invoices Works" />
-            <button
-              onClick={() => {
-                setPaymentModalInvoice(null);
-                setIsRecordPaymentOpen(true);
-              }}
-              className="px-3.5 h-[36px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <CreditCard className="w-3.5 h-3.5" /> + Record Payment
-            </button>
-            <button
-              onClick={handleCreateInvoice}
-              className="px-3.5 h-[36px] bg-[#1E293B] hover:bg-black text-white rounded-lg font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <Plus className="w-3.5 h-3.5 text-blue-400" /> Create Invoice
-            </button>
           </div>
         </PageHeader>
+
+        {/* Stats Cards — thin capsule style matching WebForms */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>TOTAL INVOICED</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>${totalInvoiced.toFixed(2)}</span>
+            <span className="text-[10px] shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{invoices.length} inv</span>
+          </div>
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>OUTSTANDING</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>${outstandingAmount.toFixed(2)}</span>
+            <span className="text-[10px] shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{invoices.filter(i => ["sent", "viewed", "partial", "overdue"].includes(i.status)).length} due</span>
+          </div>
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>PAID THIS MONTH</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>${paidThisMonth.toFixed(2)}</span>
+            <span className="text-[10px] shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{invoices.filter(i => i.status === "paid").length} paid</span>
+          </div>
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>OVERDUE COUNT</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: overdueCount > 0 ? "#E11D48" : "#020817" }}>{overdueCount}</span>
+            <span className="text-[10px] shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{overdueCount > 0 ? "Needs action" : "All clear"}</span>
+          </div>
+        </div>
 
         {/* View Mode Toggle & Filter Bar — Unified Toolbar */}
         <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {/* View Mode Tabs: List | Kanban */}
               <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border rounded-lg shadow-2xs">
                 <button
@@ -276,7 +298,7 @@ export default function Invoices() {
 
             <div className="flex flex-wrap items-center gap-2 flex-1 justify-end">
               {/* Search Bar */}
-              <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
@@ -319,6 +341,28 @@ export default function Invoices() {
                   </option>
                 ))}
               </select>
+
+              {/* Action buttons inside search bar with Design System colors */}
+              <button
+                onClick={() => {
+                  setPaymentModalInvoice(null);
+                  setIsRecordPaymentOpen(true);
+                }}
+                className="px-3.5 h-[36px] bg-white hover:bg-gray-50 text-slate-700 border border-border rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-2xs shrink-0 cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+                title="Record Payment"
+              >
+                <Wallet className="w-3.5 h-3.5 text-slate-600" />
+                <span>Record Payment</span>
+              </button>
+              <button
+                onClick={handleCreateInvoice}
+                className="px-3.5 h-[36px] bg-[#1E293B] hover:bg-black text-white rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create Invoice</span>
+              </button>
             </div>
           </div>
         </div>
@@ -371,7 +415,7 @@ export default function Invoices() {
                                     className="w-3.5 h-3.5 text-blue-600 rounded"
                                   />
                                   <span className="capitalize">
-                                    {col === "dueDate" ? "Due Date" : col === "lastActivity" ? "Last Activity" : col}
+                                    {col === "invoiceId" ? "Invoice ID" : col === "dueDate" ? "Due Date" : col === "lastActivity" ? "Last Activity" : col}
                                   </span>
                                 </label>
                               ))}
@@ -380,6 +424,13 @@ export default function Invoices() {
                         )}
                       </div>
                     </th>
+
+                    {/* INVOICE ID Column (First Data Column) */}
+                    {visibleColumns.invoiceId && (
+                      <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                        INVOICE ID
+                      </th>
+                    )}
 
                     {visibleColumns.client && (
                       <th className="px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
@@ -402,11 +453,6 @@ export default function Invoices() {
                           STAGE
                           <InfoTooltip text="Each block is one stage (Draft → Sent → Viewed → Paid → Overdue → Void). Click a block to set status." />
                         </div>
-                      </th>
-                    )}
-                    {visibleColumns.status && (
-                      <th className="px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                        STATUS
                       </th>
                     )}
                     {visibleColumns.dueDate && (
@@ -520,17 +566,28 @@ export default function Invoices() {
                           )}
                         </td>
 
+                        {/* INVOICE ID Column */}
+                        {visibleColumns.invoiceId && (
+                          <td className="px-3 py-1 text-xs font-mono font-bold text-slate-700">
+                            <button
+                              onClick={() => handleOpenDetail(inv)}
+                              className="hover:underline hover:text-blue-600 transition-colors text-left font-mono"
+                            >
+                              {inv.id}
+                            </button>
+                          </td>
+                        )}
+
                         {/* CLIENT Column */}
                         {visibleColumns.client && (
                           <td className="px-3 py-1 font-medium text-xs" style={{ fontFamily: "DM Sans, sans-serif" }}>
                             <button
                               onClick={() => handleOpenDetail(inv)}
-                              className="text-left font-bold hover:underline inline-block mr-2"
+                              className="text-left font-bold hover:underline"
                               style={{ color: "#1A73E8" }}
                             >
                               {inv.clientName}
                             </button>
-                            <span className="text-[10px] text-slate-400 font-mono inline-block">{inv.id}</span>
                           </td>
                         )}
 
@@ -557,13 +614,6 @@ export default function Invoices() {
                               interactive={true}
                               logId={inv.id}
                             />
-                          </td>
-                        )}
-
-                        {/* STATUS Column */}
-                        {visibleColumns.status && (
-                          <td className="px-3 py-1 text-center">
-                            {getStatusBadge(inv.status)}
                           </td>
                         )}
 
