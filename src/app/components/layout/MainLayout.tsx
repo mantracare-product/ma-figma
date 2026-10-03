@@ -5,9 +5,12 @@ import logo from "../../../imports/ma_logo.png";
 import symbolLogo from "../../../imports/Ma-symbol-mark.png";
 import AIScribeFloatingWidget from "../scribe/AIScribeFloatingWidget";
 import { useSidebar } from "../../context/SidebarContext";
+import { useSidebarMenu } from "../../context/SidebarMenuContext";
 
 export default function MainLayout() {
   const { collapsed, setCollapsed } = useSidebar();
+  const { isConfiguring } = useSidebarMenu();
+  const isCollapsed = collapsed && !isConfiguring;
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-[#fafafa] font-sans antialiased text-[#222222]">
@@ -16,12 +19,12 @@ export default function MainLayout() {
         {/* Left Brand / Nav Toggle Area (Aligned with Sidebar) */}
         <div
           className={`h-full flex items-center shrink-0 transition-[width] duration-300 ease-in-out border-r border-gray-200/90 ${
-            collapsed
+            isCollapsed
               ? "w-[68px] min-w-[68px] max-w-[68px] justify-center px-2"
               : "w-64 min-w-[256px] max-w-[256px] justify-between px-4"
           }`}
         >
-          {collapsed ? (
+          {isCollapsed ? (
             /* Collapsed State: Ma-symbol-mark.png (Clickable to expand sidebar) */
             <button
               type="button"

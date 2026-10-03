@@ -739,7 +739,8 @@ export default function Settings() {
     } else if (rawTab === "voices" || rawTab === "voice-config") {
       setActiveTab("voice-config");
     } else if (rawTab === "numbers") {
-      setActiveTab("numbers");
+      setActiveTab("integrations");
+      setIntegrationTab("telephony");
     } else if (rawTab === "sections-fields" || rawTab === "custom-fields" || rawTab === "layout") {
       setActiveTab("custom-fields");
     } else if (rawTab === "integrations") {
@@ -3386,12 +3387,601 @@ export default function Settings() {
     return "mixed";
   };
 
+  const getSettingsPageTitle = () => {
+    switch (activeTab) {
+      case "organization":
+        return "Organization";
+      case "users":
+        return "Team";
+      case "billing":
+      case "plans":
+      case "payments":
+      case "credit-usage":
+        return "Billing";
+      case "voice-config":
+        return "AI Voices / Models";
+      case "numbers":
+        return "Numbers";
+      case "custom-fields":
+        return "Sections / Fields";
+      case "integrations":
+        return "Integrations";
+      case "audit-logs":
+        return "Audit Logs";
+      case "security":
+        return "Security";
+      default:
+        return "Organization";
+    }
+  };
+
+  const getSettingsPageSubtitle = () => {
+    switch (activeTab) {
+      case "organization":
+        return "Manage organization details, profile, timezone, and business settings";
+      case "users":
+        return "Manage team members, roles, access permissions, and invites";
+      case "billing":
+      case "plans":
+      case "payments":
+      case "credit-usage":
+        return "Manage subscription plan, invoices, payment methods, and credit balance";
+      case "voice-config":
+        return "Configure AI receptionist voice, language models, and speech parameters";
+      case "numbers":
+        return "Manage virtual phone numbers, routing, and telephony configurations";
+      case "custom-fields":
+        return "Manage layout, custom fields, and client profile schema";
+      case "integrations":
+        return "Connect your CRM, calendar, electronic health record, and external tools";
+      case "audit-logs":
+        return "View detailed activity and security audit trail across your organization";
+      case "security":
+        return "Configure security, authentication policies, and spam call protection";
+      default:
+        return "Configure system integrations, billing plans, notification channels, and preferences";
+    }
+  };
+
+  const renderPhoneNumbersSection = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold" style={TEXT_STYLES.heading}>Phone Numbers</h2>
+          <p className="text-sm mt-1" style={TEXT_STYLES.subtext}>Manage country routing and phone numbers</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={resetNumbersColumnOrder}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 cursor-pointer"
+            title="Reset column order to default"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Reset columns
+          </button>
+          <Button variant="primary" onClick={() => setShowBuyNumberModal(true)}>
+            <Plus className="w-4 h-4" />
+            Add Number
+          </Button>
+        </div>
+      </div>
+
+      {/* Horizontally Scrollable Table with Arrow Buttons */}
+      <div className="relative">
+        {/* Scroll Right Button - Semicircle (2 rows height, centered) */}
+        {showNumbersScrollIndicator && (
+          <button
+            className="absolute right-0 flex items-center justify-center z-10 transition-all cursor-pointer"
+            style={{
+              top: '50%',
+              transform: 'translateY(-50%)',
+              height: '112px',
+              width: '40px',
+              backgroundColor: 'rgba(255, 255, 255, 0.5)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              borderTopLeftRadius: '9999px',
+              borderBottomLeftRadius: '9999px',
+              borderTopRightRadius: '0',
+              borderBottomRightRadius: '0',
+              opacity: 1
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+              e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) {
+                (icon as SVGElement).style.transform = 'scale(1.1)';
+              }
+              handleNumbersScrollRightMouseEnter();
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+              e.currentTarget.style.boxShadow = '';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) {
+                (icon as SVGElement).style.transform = 'scale(1)';
+              }
+              handleNumbersScrollMouseLeave();
+            }}
+          >
+            <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
+          </button>
+        )}
+
+        {/* Scroll Left Button - Semicircle (2 rows height, centered) */}
+        {showNumbersScrollLeftIndicator && (
+          <button
+            className="absolute left-0 flex items-center justify-center z-10 transition-all cursor-pointer"
+            style={{
+              top: '50%',
+              transform: 'translateY(-50%)',
+              height: '112px',
+              width: '40px',
+              backgroundColor: 'rgba(255, 255, 255, 0.5)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              borderTopLeftRadius: '0',
+              borderBottomLeftRadius: '0',
+              borderTopRightRadius: '9999px',
+              borderBottomRightRadius: '9999px',
+              opacity: 1
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+              e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) {
+                (icon as SVGElement).style.transform = 'scale(1.1)';
+              }
+              handleNumbersScrollLeftMouseEnter();
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+              e.currentTarget.style.boxShadow = '';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) {
+                (icon as SVGElement).style.transform = 'scale(1)';
+              }
+              handleNumbersScrollMouseLeave();
+            }}
+          >
+            <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
+          </button>
+        )}
+
+        <div
+          ref={numbersTableRef}
+          className="bg-white rounded-xl border border-border scrollbar-hide"
+          style={{
+            overflowX: "auto",
+            overflowY: "visible",
+            scrollBehavior: "smooth"
+          }}
+          onScroll={(e) => {
+            const { scrollWidth, clientWidth, scrollLeft } = e.currentTarget;
+            const canScrollRight = scrollLeft < (scrollWidth - clientWidth - 10);
+            const canScrollLeft = scrollLeft > 10;
+            setShowNumbersScrollIndicator(canScrollRight);
+            setShowNumbersScrollLeftIndicator(canScrollLeft);
+          }}
+        >
+          <div style={{ minWidth: "1320px" }}>
+            <table className="w-full">
+              <thead className="bg-muted/30 border-b border-border">
+                <tr>
+                  <th style={{ width: "50px" }} className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                    <SettingsIcon className="w-4 h-4 text-muted-foreground" />
+                  </th>
+                  {numbersColumnOrder.map((columnKey, index) => (
+                    <DraggableNumbersColumnHeader
+                      key={columnKey}
+                      columnKey={columnKey}
+                      index={index}
+                      label={numbersColumnConfig[columnKey].label}
+                      width={numbersColumnConfig[columnKey].width}
+                      moveColumn={moveNumbersColumn}
+                    />
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {countryRoutings.map((routing) => {
+                  const isEditing = editingRowId === routing.id;
+                  const displayData = isEditing ? editingRowData! : routing;
+
+                  const renderCell = (columnKey: string) => {
+                    switch (columnKey) {
+                      case 'phoneNumber':
+                        return (
+                          <td key={columnKey} className="px-3 py-3 text-xs font-medium whitespace-nowrap">
+                            <span className={isEditing ? "text-muted-foreground" : ""}>
+                              {routing.phoneNumber}
+                            </span>
+                          </td>
+                        );
+
+                      case 'country':
+                        return (
+                          <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                            {routing.country}
+                          </td>
+                        );
+
+                      case 'priority':
+                        return (
+                          <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                            {isEditing ? (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() =>
+                                    setEditingRowData({
+                                      ...editingRowData!,
+                                      priority: Math.max(0, editingRowData!.priority - 1),
+                                    })
+                                  }
+                                  className="p-0.5 hover:bg-muted rounded transition-colors"
+                                  title="Decrease priority"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                                <input
+                                  type="number"
+                                  value={displayData.priority}
+                                  onChange={(e) =>
+                                    setEditingRowData({
+                                      ...editingRowData!,
+                                      priority: Math.max(0, parseInt(e.target.value) || 0),
+                                    })
+                                  }
+                                  className="w-16 px-2 py-1 text-xs text-center border border-input rounded bg-input-background"
+                                  min="0"
+                                />
+                                <button
+                                  onClick={() =>
+                                    setEditingRowData({
+                                      ...editingRowData!,
+                                      priority: editingRowData!.priority + 1,
+                                    })
+                                  }
+                                  className="p-0.5 hover:bg-muted rounded transition-colors"
+                                  title="Increase priority"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              routing.priority
+                            )}
+                          </td>
+                        );
+
+                      case 'countriesServed':
+                        return (
+                          <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground">
+                            {isEditing ? (
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowEditCountriesDropdown(!showEditCountriesDropdown)}
+                                  className="w-full px-2 py-1 text-xs border border-input rounded bg-input-background text-left flex items-center justify-between"
+                                >
+                                  <span className="truncate">
+                                    {displayData.countriesServed.length > 0
+                                      ? displayData.countriesServed.join(', ')
+                                      : "Select countries"}
+                                  </span>
+                                  <ChevronDown className="w-3 h-3 flex-shrink-0" />
+                                </button>
+                                {showEditCountriesDropdown && (
+                                  <>
+                                    <div
+                                      className="fixed inset-0 z-10"
+                                      onClick={() => setShowEditCountriesDropdown(false)}
+                                    />
+                                    <div className="absolute top-full left-0 mt-1 w-full min-w-[200px] bg-white border border-border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
+                                      {allCountriesList.map((country) => (
+                                        <label
+                                          key={country}
+                                          className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={displayData.countriesServed.includes(country)}
+                                            onChange={(e) => {
+                                              let newCountries;
+                                              if (country === "All") {
+                                                newCountries = e.target.checked ? ["All"] : [];
+                                              } else {
+                                                newCountries = e.target.checked
+                                                  ? [...displayData.countriesServed.filter(c => c !== "All"), country]
+                                                  : displayData.countriesServed.filter((c) => c !== country);
+                                              }
+                                              setEditingRowData({
+                                                ...editingRowData!,
+                                                countriesServed: newCountries,
+                                              });
+                                            }}
+                                            className="w-3.5 h-3.5"
+                                          />
+                                          <span>{country}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="truncate">{routing.countriesServed.join(', ')}</span>
+                            )}
+                          </td>
+                        );
+
+                      case 'process':
+                        return (
+                          <td key={columnKey} className="px-3 py-3">
+                            {isEditing ? (
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowEditProcessDropdown(!showEditProcessDropdown)}
+                                  className="w-full px-2 py-1 text-xs border border-input rounded bg-input-background text-left flex items-center justify-between"
+                                >
+                                  <span className="truncate">
+                                    {displayData.processes.length > 0
+                                      ? `${displayData.processes.length} selected`
+                                      : "Select processes"}
+                                  </span>
+                                  <ChevronDown className="w-3 h-3 flex-shrink-0" />
+                                </button>
+                                {showEditProcessDropdown && (
+                                  <>
+                                    <div
+                                      className="fixed inset-0 z-10"
+                                      onClick={() => setShowEditProcessDropdown(false)}
+                                    />
+                                    <div className="absolute top-full left-0 mt-1 w-full min-w-[200px] bg-white border border-border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
+                                      {availableProcesses.map((process) => (
+                                        <label
+                                          key={process.id}
+                                          className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={displayData.processes.includes(process.label)}
+                                            onChange={(e) => {
+                                              const newProcesses = e.target.checked
+                                                ? [...displayData.processes, process.label]
+                                                : displayData.processes.filter((p) => p !== process.label);
+                                              setEditingRowData({
+                                                ...editingRowData!,
+                                                processes: newProcesses,
+                                              });
+                                            }}
+                                            className="w-3.5 h-3.5"
+                                          />
+                                          <span>{process.label}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {routing.processes.length > 0 ? (
+                                  routing.processes.map((process) => (
+                                    <span
+                                      key={process}
+                                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary whitespace-nowrap"
+                                    >
+                                      {process}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">No processes</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        );
+
+                      case 'provider':
+                        return (
+                          <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                            {routing.provider}
+                          </td>
+                        );
+
+                      case 'inboundOutbound':
+                        return (
+                          <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                            {isEditing ? (
+                              <select
+                                value={displayData.inboundOutbound}
+                                onChange={(e) =>
+                                  setEditingRowData({
+                                    ...editingRowData!,
+                                    inboundOutbound: e.target.value as "Inbound" | "Outbound" | "Both",
+                                  })
+                                }
+                                className="w-full px-2 py-1 text-xs border border-input rounded bg-input-background"
+                              >
+                                <option value="Inbound">Inbound</option>
+                                <option value="Outbound">Outbound</option>
+                                <option value="Both">Both</option>
+                              </select>
+                            ) : (
+                              routing.inboundOutbound
+                            )}
+                          </td>
+                        );
+
+                      case 'status':
+                        return (
+                          <td key={columnKey} className="px-3 py-3">
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={displayData.status}
+                                onChange={() => {
+                                  if (isEditing) {
+                                    setEditingRowData({ ...editingRowData!, status: !editingRowData!.status });
+                                  } else {
+                                    setCountryRoutings((prev) =>
+                                      prev.map((r) => (r.id === routing.id ? { ...r, status: !r.status } : r))
+                                    );
+                                  }
+                                }}
+                              />
+                              <div className="w-9 h-5 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                            </label>
+                          </td>
+                        );
+
+                      case 'verified':
+                        return (
+                          <td key={columnKey} className="px-3 py-3">
+                            {routing.country === "United States" ? (
+                              <div className="flex items-center justify-start">
+                                <div
+                                  className="inline-flex items-center justify-center"
+                                  style={{
+                                    backgroundColor: "#22C55E",
+                                    color: "#FFFFFF",
+                                    width: "24px",
+                                    height: "24px",
+                                    borderRadius: "50%",
+                                  }}
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        );
+
+                      default:
+                        return null;
+                    }
+                  };
+
+                  return (
+                    <tr key={routing.id} className="border-b border-border hover:bg-muted/10 transition-colors">
+                      {/* 3-Dot Menu */}
+                      <td className="px-3 py-3">
+                        <div className="relative">
+                          <button
+                            onClick={() => setOpenActionsMenuId(openActionsMenuId === routing.id ? null : routing.id)}
+                            className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-all"
+                            title="Actions"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                          {openActionsMenuId === routing.id && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-10"
+                                onClick={() => setOpenActionsMenuId(null)}
+                              />
+                              <div className="absolute left-0 top-full mt-1 w-40 bg-white border border-border rounded-lg shadow-lg z-20 py-1">
+                                {routing.country === "United States" ? (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedVerifyNumber(routing);
+                                      setShowVerifyNumberModal(true);
+                                      setOpenActionsMenuId(null);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center gap-2"
+                                  >
+                                    <ShieldCheck className="w-3.5 h-3.5" />
+                                    Verify
+                                  </button>
+                                ) : (
+                                  <Tooltip text="Verification only available for US numbers">
+                                    <button
+                                      disabled
+                                      className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 opacity-50 cursor-not-allowed"
+                                    >
+                                      <ShieldCheck className="w-3.5 h-3.5" />
+                                      Verify
+                                    </button>
+                                  </Tooltip>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    setEditingRowId(routing.id);
+                                    setEditingRowData({ ...routing });
+                                    setShowEditProcessDropdown(false);
+                                    setOpenActionsMenuId(null);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center gap-2"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    handleDeleteRouting(routing.id);
+                                    setOpenActionsMenuId(null);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-destructive/10 text-destructive transition-colors flex items-center gap-2"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Delete
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Dynamic Columns based on numbersColumnOrder */}
+                      {numbersColumnOrder.map((columnKey) => renderCell(columnKey))}
+
+                      {/* Save/Cancel buttons for edit mode */}
+                      {isEditing && (
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={handleSaveEditedRow}
+                              className="p-1.5 text-white bg-primary hover:bg-primary/90 rounded-lg transition-all"
+                              title="Save changes"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={handleCancelEdit}
+                              className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all"
+                              title="Cancel"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#fafafa]">
       <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
         <PageHeader
-          title="Settings"
-          subtitle="Configure system integrations, billing plans, notification channels, and team preferences"
+          title={getSettingsPageTitle()}
+          subtitle={getSettingsPageSubtitle()}
           badge={
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               System Admin
@@ -3402,32 +3992,6 @@ export default function Settings() {
         </PageHeader>
 
         <div className="w-full min-w-0 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 lg:p-8" style={{ overflowX: "hidden" }}>
-          {/* Breadcrumb Navigation */}
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-6 pb-3 border-b border-slate-100">
-            <span className="text-slate-400">Settings</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-[#181e25] font-bold">
-              {activeTab === "organization"
-                ? "Organization"
-                : activeTab === "users"
-                ? "Team"
-                : activeTab === "billing" || ["plans", "payments", "credit-usage"].includes(activeTab)
-                ? `Billing / ${billingSubTab === "plans" ? "Plans" : billingSubTab === "payments" ? "Payments" : "Credit Usage"}`
-                : activeTab === "voice-config"
-                ? "AI Voices / Models"
-                : activeTab === "numbers"
-                ? "Numbers"
-                : activeTab === "custom-fields"
-                ? "Sections / Fields"
-                : activeTab === "integrations"
-                ? "Integrations"
-                : activeTab === "audit-logs"
-                ? "Audit Logs"
-                : activeTab === "security"
-                ? "Security"
-                : "Organization"}
-            </span>
-          </div>
             {/* Organization Tab */}
             {activeTab === "organization" && (
               <div className="space-y-6">
@@ -5714,541 +6278,7 @@ export default function Settings() {
                 </div>
             )}
 
-            {/* Numbers Tab */}
-            {activeTab === "numbers" && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold" style={TEXT_STYLES.heading}>Phone Numbers</h2>
-                    <p className="text-sm mt-1" style={TEXT_STYLES.subtext}>Manage country routing and phone numbers</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={resetNumbersColumnOrder}
-                      className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                      title="Reset column order to default"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Reset columns
-                    </button>
-                    <Button variant="primary" onClick={() => setShowBuyNumberModal(true)}>
-                      <Plus className="w-4 h-4" />
-                      Add Number
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Horizontally Scrollable Table with Arrow Buttons */}
-                <div className="relative">
-                  {/* Scroll Right Button - Semicircle (2 rows height, centered) */}
-                  {showNumbersScrollIndicator && (
-                    <button
-                      className="absolute right-0 flex items-center justify-center z-10 transition-all"
-                      style={{
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        height: '112px',
-                        width: '40px',
-                        backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                        backdropFilter: 'blur(8px)',
-                        WebkitBackdropFilter: 'blur(8px)',
-                        borderTopLeftRadius: '9999px',
-                        borderBottomLeftRadius: '9999px',
-                        borderTopRightRadius: '0',
-                        borderBottomRightRadius: '0',
-                        opacity: 1
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
-                        e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                        const icon = e.currentTarget.querySelector('svg');
-                        if (icon) {
-                          (icon as SVGElement).style.transform = 'scale(1.1)';
-                        }
-                        handleNumbersScrollRightMouseEnter();
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-                        e.currentTarget.style.boxShadow = '';
-                        const icon = e.currentTarget.querySelector('svg');
-                        if (icon) {
-                          (icon as SVGElement).style.transform = 'scale(1)';
-                        }
-                        handleNumbersScrollMouseLeave();
-                      }}
-                    >
-                      <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
-                    </button>
-                  )}
-
-                  {/* Scroll Left Button - Semicircle (2 rows height, centered) */}
-                  {showNumbersScrollLeftIndicator && (
-                    <button
-                      className="absolute left-0 flex items-center justify-center z-10 transition-all"
-                      style={{
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        height: '112px',
-                        width: '40px',
-                        backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                        backdropFilter: 'blur(8px)',
-                        WebkitBackdropFilter: 'blur(8px)',
-                        borderTopLeftRadius: '0',
-                        borderBottomLeftRadius: '0',
-                        borderTopRightRadius: '9999px',
-                        borderBottomRightRadius: '9999px',
-                        opacity: 1
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
-                        e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                        const icon = e.currentTarget.querySelector('svg');
-                        if (icon) {
-                          (icon as SVGElement).style.transform = 'scale(1.1)';
-                        }
-                        handleNumbersScrollLeftMouseEnter();
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-                        e.currentTarget.style.boxShadow = '';
-                        const icon = e.currentTarget.querySelector('svg');
-                        if (icon) {
-                          (icon as SVGElement).style.transform = 'scale(1)';
-                        }
-                        handleNumbersScrollMouseLeave();
-                      }}
-                    >
-                      <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
-                    </button>
-                  )}
-
-                  <div
-                    ref={numbersTableRef}
-                    className="bg-white rounded-xl border border-border scrollbar-hide"
-                    style={{
-                      overflowX: "auto",
-                      overflowY: "visible",
-                      scrollBehavior: "smooth"
-                    }}
-                    onScroll={(e) => {
-                      const { scrollWidth, clientWidth, scrollLeft } = e.currentTarget;
-                      const canScrollRight = scrollLeft < (scrollWidth - clientWidth - 10);
-                      const canScrollLeft = scrollLeft > 10;
-                      setShowNumbersScrollIndicator(canScrollRight);
-                      setShowNumbersScrollLeftIndicator(canScrollLeft);
-                    }}
-                  >
-                    <div style={{ minWidth: "1320px" }}>
-                        <table className="w-full">
-                          <thead className="bg-muted/30 border-b border-border">
-                            <tr>
-                              <th style={{ width: "50px" }} className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">
-                                <SettingsIcon className="w-4 h-4 text-muted-foreground" />
-                              </th>
-                              {numbersColumnOrder.map((columnKey, index) => (
-                                <DraggableNumbersColumnHeader
-                                  key={columnKey}
-                                  columnKey={columnKey}
-                                  index={index}
-                                  label={numbersColumnConfig[columnKey].label}
-                                  width={numbersColumnConfig[columnKey].width}
-                                  moveColumn={moveNumbersColumn}
-                                />
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {countryRoutings.map((routing) => {
-                              const isEditing = editingRowId === routing.id;
-                              const displayData = isEditing ? editingRowData! : routing;
-
-                              const renderCell = (columnKey: string) => {
-                                switch (columnKey) {
-                                  case 'phoneNumber':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3 text-xs font-medium whitespace-nowrap">
-                                        <span className={isEditing ? "text-muted-foreground" : ""}>
-                                          {routing.phoneNumber}
-                                        </span>
-                                      </td>
-                                    );
-
-                                  case 'country':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                                        {routing.country}
-                                      </td>
-                                    );
-
-                                  case 'priority':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                                        {isEditing ? (
-                                          <div className="flex items-center gap-1">
-                                            <button
-                                              onClick={() =>
-                                                setEditingRowData({
-                                                  ...editingRowData!,
-                                                  priority: Math.max(0, editingRowData!.priority - 1),
-                                                })
-                                              }
-                                              className="p-0.5 hover:bg-muted rounded transition-colors"
-                                              title="Decrease priority"
-                                            >
-                                              <Minus className="w-3 h-3" />
-                                            </button>
-                                            <input
-                                              type="number"
-                                              value={displayData.priority}
-                                              onChange={(e) =>
-                                                setEditingRowData({
-                                                  ...editingRowData!,
-                                                  priority: Math.max(0, parseInt(e.target.value) || 0),
-                                                })
-                                              }
-                                              className="w-16 px-2 py-1 text-xs text-center border border-input rounded bg-input-background"
-                                              min="0"
-                                            />
-                                            <button
-                                              onClick={() =>
-                                                setEditingRowData({
-                                                  ...editingRowData!,
-                                                  priority: editingRowData!.priority + 1,
-                                                })
-                                              }
-                                              className="p-0.5 hover:bg-muted rounded transition-colors"
-                                              title="Increase priority"
-                                            >
-                                              <Plus className="w-3 h-3" />
-                                            </button>
-                                          </div>
-                                        ) : (
-                                          routing.priority
-                                        )}
-                                      </td>
-                                    );
-
-                                  case 'countriesServed':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground">
-                                        {isEditing ? (
-                                          <div className="relative">
-                                            <button
-                                              type="button"
-                                              onClick={() => setShowEditCountriesDropdown(!showEditCountriesDropdown)}
-                                              className="w-full px-2 py-1 text-xs border border-input rounded bg-input-background text-left flex items-center justify-between"
-                                            >
-                                              <span className="truncate">
-                                                {displayData.countriesServed.length > 0
-                                                  ? displayData.countriesServed.join(', ')
-                                                  : "Select countries"}
-                                              </span>
-                                              <ChevronDown className="w-3 h-3 flex-shrink-0" />
-                                            </button>
-                                            {showEditCountriesDropdown && (
-                                              <>
-                                                <div
-                                                  className="fixed inset-0 z-10"
-                                                  onClick={() => setShowEditCountriesDropdown(false)}
-                                                />
-                                                <div className="absolute top-full left-0 mt-1 w-full min-w-[200px] bg-white border border-border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
-                                                  {allCountriesList.map((country) => (
-                                                    <label
-                                                      key={country}
-                                                      className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
-                                                    >
-                                                      <input
-                                                        type="checkbox"
-                                                        checked={displayData.countriesServed.includes(country)}
-                                                        onChange={(e) => {
-                                                          let newCountries;
-                                                          if (country === "All") {
-                                                            newCountries = e.target.checked ? ["All"] : [];
-                                                          } else {
-                                                            newCountries = e.target.checked
-                                                              ? [...displayData.countriesServed.filter(c => c !== "All"), country]
-                                                              : displayData.countriesServed.filter((c) => c !== country);
-                                                          }
-                                                          setEditingRowData({
-                                                            ...editingRowData!,
-                                                            countriesServed: newCountries,
-                                                          });
-                                                        }}
-                                                        className="w-3.5 h-3.5"
-                                                      />
-                                                      <span>{country}</span>
-                                                    </label>
-                                                  ))}
-                                                </div>
-                                              </>
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <span className="truncate">{routing.countriesServed.join(', ')}</span>
-                                        )}
-                                      </td>
-                                    );
-
-                                  case 'process':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3">
-                                        {isEditing ? (
-                                          <div className="relative">
-                                            <button
-                                              type="button"
-                                              onClick={() => setShowEditProcessDropdown(!showEditProcessDropdown)}
-                                              className="w-full px-2 py-1 text-xs border border-input rounded bg-input-background text-left flex items-center justify-between"
-                                            >
-                                              <span className="truncate">
-                                                {displayData.processes.length > 0
-                                                  ? `${displayData.processes.length} selected`
-                                                  : "Select processes"}
-                                              </span>
-                                              <ChevronDown className="w-3 h-3 flex-shrink-0" />
-                                            </button>
-                                            {showEditProcessDropdown && (
-                                              <>
-                                                <div
-                                                  className="fixed inset-0 z-10"
-                                                  onClick={() => setShowEditProcessDropdown(false)}
-                                                />
-                                                <div className="absolute top-full left-0 mt-1 w-full min-w-[200px] bg-white border border-border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
-                                                  {availableProcesses.map((process) => (
-                                                    <label
-                                                      key={process.id}
-                                                      className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
-                                                    >
-                                                      <input
-                                                        type="checkbox"
-                                                        checked={displayData.processes.includes(process.label)}
-                                                        onChange={(e) => {
-                                                          const newProcesses = e.target.checked
-                                                            ? [...displayData.processes, process.label]
-                                                            : displayData.processes.filter((p) => p !== process.label);
-                                                          setEditingRowData({
-                                                            ...editingRowData!,
-                                                            processes: newProcesses,
-                                                          });
-                                                        }}
-                                                        className="w-3.5 h-3.5"
-                                                      />
-                                                      <span>{process.label}</span>
-                                                    </label>
-                                                  ))}
-                                                </div>
-                                              </>
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <div className="flex flex-wrap gap-1">
-                                            {routing.processes.length > 0 ? (
-                                              routing.processes.map((process) => (
-                                                <span
-                                                  key={process}
-                                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary whitespace-nowrap"
-                                                >
-                                                  {process}
-                                                </span>
-                                              ))
-                                            ) : (
-                                              <span className="text-[10px] text-muted-foreground">No processes</span>
-                                            )}
-                                          </div>
-                                        )}
-                                      </td>
-                                    );
-
-                                  case 'provider':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                                        {routing.provider}
-                                      </td>
-                                    );
-
-                                  case 'inboundOutbound':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                                        {isEditing ? (
-                                          <select
-                                            value={displayData.inboundOutbound}
-                                            onChange={(e) =>
-                                              setEditingRowData({
-                                                ...editingRowData!,
-                                                inboundOutbound: e.target.value as "Inbound" | "Outbound" | "Both",
-                                              })
-                                            }
-                                            className="w-full px-2 py-1 text-xs border border-input rounded bg-input-background"
-                                          >
-                                            <option value="Inbound">Inbound</option>
-                                            <option value="Outbound">Outbound</option>
-                                            <option value="Both">Both</option>
-                                          </select>
-                                        ) : (
-                                          routing.inboundOutbound
-                                        )}
-                                      </td>
-                                    );
-
-                                  case 'status':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3">
-                                        <label className="relative inline-flex items-center cursor-pointer">
-                                          <input
-                                            type="checkbox"
-                                            className="sr-only peer"
-                                            checked={displayData.status}
-                                            onChange={() => {
-                                              if (isEditing) {
-                                                setEditingRowData({ ...editingRowData!, status: !editingRowData!.status });
-                                              } else {
-                                                setCountryRoutings((prev) =>
-                                                  prev.map((r) => (r.id === routing.id ? { ...r, status: !r.status } : r))
-                                                );
-                                              }
-                                            }}
-                                          />
-                                          <div className="w-9 h-5 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-                                        </label>
-                                      </td>
-                                    );
-
-                                  case 'verified':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3">
-                                        {routing.country === "United States" ? (
-                                          <div className="flex items-center justify-start">
-                                            <div
-                                              className="inline-flex items-center justify-center"
-                                              style={{
-                                                backgroundColor: "#22C55E",
-                                                color: "#FFFFFF",
-                                                width: "24px",
-                                                height: "24px",
-                                                borderRadius: "50%",
-                                              }}
-                                            >
-                                              <Check className="w-3.5 h-3.5" />
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <span className="text-xs text-muted-foreground">—</span>
-                                        )}
-                                      </td>
-                                    );
-
-                                  default:
-                                    return null;
-                                }
-                              };
-
-                              return (
-                                <tr key={routing.id} className="border-b border-border hover:bg-muted/10 transition-colors">
-                                  {/* 3-Dot Menu */}
-                                  <td className="px-3 py-3">
-                                    <div className="relative">
-                                      <button
-                                        onClick={() => setOpenActionsMenuId(openActionsMenuId === routing.id ? null : routing.id)}
-                                        className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-all"
-                                        title="Actions"
-                                      >
-                                        <MoreVertical className="w-4 h-4" />
-                                      </button>
-                                      {openActionsMenuId === routing.id && (
-                                        <>
-                                          <div
-                                            className="fixed inset-0 z-10"
-                                            onClick={() => setOpenActionsMenuId(null)}
-                                          />
-                                          <div className="absolute left-0 top-full mt-1 w-40 bg-white border border-border rounded-lg shadow-lg z-20 py-1">
-                                            {routing.country === "United States" ? (
-                                              <button
-                                                onClick={() => {
-                                                  setSelectedVerifyNumber(routing);
-                                                  setShowVerifyNumberModal(true);
-                                                  setOpenActionsMenuId(null);
-                                                }}
-                                                className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center gap-2"
-                                              >
-                                                <ShieldCheck className="w-3.5 h-3.5" />
-                                                Verify
-                                              </button>
-                                            ) : (
-                                              <Tooltip text="Verification only available for US numbers">
-                                                <button
-                                                  disabled
-                                                  className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 opacity-50 cursor-not-allowed"
-                                                >
-                                                  <ShieldCheck className="w-3.5 h-3.5" />
-                                                  Verify
-                                                </button>
-                                              </Tooltip>
-                                            )}
-                                            <button
-                                              onClick={() => {
-                                                setEditingRowId(routing.id);
-                                                setEditingRowData({ ...routing });
-                                                setShowEditProcessDropdown(false);
-                                                setOpenActionsMenuId(null);
-                                              }}
-                                              className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center gap-2"
-                                            >
-                                              <Edit className="w-3.5 h-3.5" />
-                                              Edit
-                                            </button>
-                                            <button
-                                              onClick={() => {
-                                                handleDeleteRouting(routing.id);
-                                                setOpenActionsMenuId(null);
-                                              }}
-                                              className="w-full text-left px-3 py-2 text-xs hover:bg-destructive/10 text-destructive transition-colors flex items-center gap-2"
-                                            >
-                                              <Trash2 className="w-3.5 h-3.5" />
-                                              Delete
-                                            </button>
-                                          </div>
-                                        </>
-                                      )}
-                                    </div>
-                                  </td>
-
-                                  {/* Dynamic Columns based on numbersColumnOrder */}
-                                  {numbersColumnOrder.map((columnKey) => renderCell(columnKey))}
-
-                                  {/* Save/Cancel buttons for edit mode */}
-                                  {isEditing && (
-                                    <td className="px-3 py-3">
-                                      <div className="flex items-center gap-1">
-                                        <button
-                                          onClick={handleSaveEditedRow}
-                                          className="p-1.5 text-white bg-primary hover:bg-primary/90 rounded-lg transition-all"
-                                          title="Save changes"
-                                        >
-                                          <Check className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          onClick={handleCancelEdit}
-                                          className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all"
-                                          title="Cancel"
-                                        >
-                                          <X className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    </td>
-                                  )}
-
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                  </div>
-                </div>
-
-              </div>
-            )}
+            {/* Numbers tab has been integrated into Integrations > Telephony */}
 
             {/* Layout Tab (Custom Fields & Custom Sections) */}
             {(activeTab === "custom-fields" || activeTab === "layout") && (
@@ -6751,11 +6781,6 @@ export default function Settings() {
             {/* Security Tab */}
             {activeTab === "security" && (
               <div className="space-y-6">
-                <PageHeader
-                  title="Security"
-                  subtitle="Configure security and spam protection settings."
-                />
-
                 {/* Robo Call Detection Section */}
                 <div className="bg-white rounded-xl border border-border overflow-hidden">
                   <div
@@ -7089,7 +7114,10 @@ export default function Settings() {
 
                 {/* Integration Cards */}
                 {integrationTab === "telephony" ? (
-                  <TelephonyIntegrationPanel />
+                  <div className="space-y-6">
+                    <TelephonyIntegrationPanel />
+                    {renderPhoneNumbersSection()}
+                  </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {integrations

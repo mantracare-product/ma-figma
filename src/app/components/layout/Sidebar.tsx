@@ -44,10 +44,18 @@ import {
   Link as LinkIcon,
   ScrollText,
   Lock,
+  Star,
+  Eye,
+  EyeOff,
+  RotateCcw,
+  GripVertical,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { useSidebar } from "../../context/SidebarContext";
+import { useSidebarMenu } from "../../context/SidebarMenuContext";
+import { getSidebarIcon } from "./ConfigureMenuModal";
 import { toast } from "sonner";
 
 interface NavItem {
@@ -56,6 +64,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   path: string;
   badge?: string;
+  isFeatured?: boolean;
 }
 
 interface NavSection {
@@ -251,10 +260,12 @@ function CollapsedUserMenu({
   user,
   onSignOut,
   onNavigate,
+  onOpenConfigure,
 }: {
   user: any;
   onSignOut: () => void;
   onNavigate: (path: string) => void;
+  onOpenConfigure: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [coords, setCoords] = useState({ bottom: 0, left: 0 });
@@ -345,7 +356,7 @@ function CollapsedUserMenu({
               type="button"
               onClick={() => {
                 setIsOpen(false);
-                toast.info("Configure menu");
+                onOpenConfigure();
               }}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-700 hover:text-gray-900 hover:bg-gray-100 transition-colors cursor-pointer"
             >
@@ -379,18 +390,94 @@ export default function Sidebar() {
   const { user, logout } = useAuth();
   const { organizations, activeOrganization, setActiveOrganization } = useOrganization();
   const { collapsed, setCollapsed } = useSidebar();
+  const {
+    config,
+    defaultStartPage,
+    setDefaultStartPage,
+    isConfiguring,
+    setIsConfiguring,
+    toggleItemVisibility,
+    toggleItemFeatured,
+    reorderSectionItems,
+    moveItem,
+    resetToDefault,
+  } = useSidebarMenu();
+
+  const [draggedItem, setDraggedItem] = useState<{ sectionId: string; index: number } | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<{ sectionId: string; index: number } | null>(null);
+
+  const [openGearItem, setOpenGearItem] = useState<{
+    sectionId: string;
+    item: { id: string; label: string; path: string; visible: boolean; iconName?: string };
+    coords: { top: number; left: number };
+  } | null>(null);
+  const gearMenuRef = useRef<HTMLDivElement>(null);
 
   const [showOrgDropdown, setShowOrgDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const orgMenuRef = useRef<HTMLDivElement>(null);
 
-  // Accordion state for expanded sidebar
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    workspace: true,
-    automation: false,
-    billing: false,
-    settings: false,
+  const startConfiguring = () => {
+    setCollapsed(false);
+    setIsConfiguring(true);
+  };
+
+  // Dynamic sections mapped from config
+  const sections = React.useMemo(() => {
+    return config.sections
+      .map((sec) => ({
+        id: sec.id,
+        title: sec.title,
+        items: sec.items
+          .filter((item) => item.visible)
+          .map((item) => ({
+            id: item.id,
+            label: item.label,
+            icon: getSidebarIcon(item.iconName),
+            path: item.path,
+            badge: item.badge,
+            isFeatured: item.isFeatured,
+          })),
+      }))
+      .filter((sec) => sec.items.length > 0);
+  }, [config]);
+
+  // Collapsed mode items: all items marked visible AND featured or set as default start page across all sections
+  const collapsedItems = React.useMemo(() => {
+    const list: Array<NavItem & { isFeatured?: boolean }> = [];
+    const seenIds = new Set<string>();
+
+    config.sections.forEach((sec) => {
+      sec.items.forEach((item) => {
+        const isDefault =
+          config.defaultStartPage &&
+          (config.defaultStartPage === item.path ||
+            (config.defaultStartPage === "/" && item.id === "overview"));
+        if (item.visible && (item.isFeatured || isDefault) && !seenIds.has(item.id)) {
+          seenIds.add(item.id);
+          list.push({
+            id: item.id,
+            label: item.label,
+            icon: getSidebarIcon(item.iconName),
+            path: item.path,
+            badge: item.badge,
+            isFeatured: item.isFeatured,
+          });
+        }
+      });
+    });
+
+    return list;
+  }, [config]);
+
+  // Accordion state for expanded sidebar initialized with section defaults
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    config.sections.forEach((s) => {
+      init[s.id] = s.defaultExpanded;
+    });
+    return init;
   });
 
   const toggleSection = (secId: string) => {
@@ -414,6 +501,9 @@ export default function Sidebar() {
       }
       if (orgMenuRef.current && !orgMenuRef.current.contains(e.target as Node)) {
         setShowOrgDropdown(false);
+      }
+      if (gearMenuRef.current && !gearMenuRef.current.contains(e.target as Node)) {
+        setOpenGearItem(null);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -457,12 +547,6 @@ export default function Sidebar() {
         (currentPath === "/settings" && currentSearch.includes("tab=voice-config"))
       );
     }
-    if (itemId === "settings-numbers") {
-      return (
-        currentPath.startsWith("/settings/numbers") ||
-        (currentPath === "/settings" && currentSearch.includes("tab=numbers"))
-      );
-    }
     if (itemId === "settings-sections") {
       return (
         currentPath.startsWith("/settings/sections") ||
@@ -473,7 +557,9 @@ export default function Sidebar() {
     if (itemId === "settings-integrations") {
       return (
         currentPath.startsWith("/settings/integrations") ||
-        (currentPath === "/settings" && currentSearch.includes("tab=integrations"))
+        currentPath.startsWith("/settings/numbers") ||
+        (currentPath === "/settings" &&
+          (currentSearch.includes("tab=integrations") || currentSearch.includes("tab=numbers")))
       );
     }
     if (itemId === "settings-audit") {
@@ -499,56 +585,6 @@ export default function Sidebar() {
     return currentPath.startsWith(itemPath);
   };
 
-  const sections: NavSection[] = [
-    {
-      id: "workspace",
-      title: "WORKSPACE",
-      items: [
-        { id: "overview", label: "Overview", icon: LayoutDashboard, path: "/" },
-        { id: "clients", label: "Clients", icon: Users, path: "/clients" },
-        { id: "call-logs", label: "Call Logs", icon: Phone, path: "/call-logs" },
-        { id: "chats", label: "Chats", icon: MessageCircle, path: "/chats" },
-        { id: "processes", label: "Process", icon: RefreshCw, path: "/deals" },
-        { id: "appointments", label: "Appointments", icon: Calendar, path: "/appointments" },
-        { id: "scribe", label: "AI Scribe", icon: Stethoscope, path: "/scribe" },
-      ],
-    },
-    {
-      id: "automation",
-      title: "AUTOMATIONS",
-      items: [
-        { id: "workflows", label: "Workflows", icon: SlidersHorizontal, path: "/process" },
-        { id: "knowledge-base", label: "Knowledge Base", icon: Database, path: "/knowledge-base" },
-        { id: "web-forms", label: "Webforms", icon: FileText, path: "/web-forms" },
-      ],
-    },
-    {
-      id: "billing",
-      title: "BILLING & INSIGHTS",
-      items: [
-        { id: "product-services", label: "Product & Services", icon: Package, path: "/services" },
-        { id: "invoices", label: "Invoice", icon: Receipt, path: "/invoices" },
-        { id: "insurance-claims", label: "Insurance & Claims", icon: ShieldCheck, path: "/claims" },
-        { id: "reports", label: "Reports", icon: BarChart3, path: "/reports" },
-      ],
-    },
-    {
-      id: "settings",
-      title: "SETTINGS",
-      items: [
-        { id: "settings-org", label: "Organization", icon: Building2, path: "/settings/organization" },
-        { id: "settings-team", label: "Team", icon: UserCog, path: "/settings/team" },
-        { id: "settings-billing", label: "Billing", icon: CreditCard, path: "/settings/billing" },
-        { id: "settings-voices", label: "AI Voices / Models", icon: Volume2, path: "/settings/voices" },
-        { id: "settings-numbers", label: "Numbers", icon: Hash, path: "/settings/numbers" },
-        { id: "settings-sections", label: "Sections / Fields", icon: Layers, path: "/settings/sections-fields" },
-        { id: "settings-integrations", label: "Integrations", icon: LinkIcon, path: "/settings/integrations" },
-        { id: "settings-audit", label: "Audit Logs", icon: ScrollText, path: "/settings/audit-logs" },
-        { id: "settings-security", label: "Security", icon: Lock, path: "/settings/security" },
-      ],
-    },
-  ];
-
   // Auto-expand section containing current active path
   useEffect(() => {
     sections.forEach((sec) => {
@@ -560,32 +596,34 @@ export default function Sidebar() {
         }));
       }
     });
-  }, [location.pathname, location.search]);
+  }, [location.pathname, location.search, sections]);
 
   return (
     <aside
       className={`h-full bg-white border-r border-gray-200/90 flex flex-col shrink-0 select-none transition-[width] duration-300 ease-in-out z-30 relative ${
-        collapsed ? "w-[68px] min-w-[68px] max-w-[68px]" : "w-64 min-w-[256px] max-w-[256px]"
+        collapsed && !isConfiguring ? "w-[68px] min-w-[68px] max-w-[68px]" : "w-64 min-w-[256px] max-w-[256px]"
       }`}
     >
-      {/* Floating Circular Collapse/Expand Toggle Button on the dividing border */}
-      <button
-        type="button"
-        onClick={() => setCollapsed((v) => !v)}
-        className="absolute -right-2.5 top-[60px] w-5 h-5 rounded-full bg-white border border-gray-200/90 shadow-xs hover:shadow-sm flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-all z-40 cursor-pointer"
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        {collapsed ? (
-          <ChevronRight className="w-3 h-3 text-gray-600" />
-        ) : (
-          <ChevronLeft className="w-3 h-3 text-gray-600" />
-        )}
-      </button>
+      {/* Floating Circular Collapse/Expand Toggle Button on the dividing border (hidden during configure mode) */}
+      {!isConfiguring && (
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          className="absolute -right-2.5 top-[60px] w-5 h-5 rounded-full bg-white border border-gray-200/90 shadow-xs hover:shadow-sm flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-all z-40 cursor-pointer"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? (
+            <ChevronRight className="w-3 h-3 text-gray-600" />
+          ) : (
+            <ChevronLeft className="w-3 h-3 text-gray-600" />
+          )}
+        </button>
+      )}
 
       <div className="h-full w-full flex flex-col justify-between overflow-hidden">
         {/* ── Top Organization Switcher Header ── */}
-        {collapsed ? (
+        {collapsed && !isConfiguring ? (
           <CollapsedOrgSwitcher
             activeOrganization={activeOrganization}
             organizations={organizations}
@@ -662,42 +700,157 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* ── Scrollable Navigation Section Area ── */}
-        {collapsed ? (
-          /* Collapsed Icon-Only Navigation: Only Workspace items + "v" Expand button */
-          <div className="flex-1 overflow-y-auto py-3 px-2 flex flex-col items-center gap-1.5 min-h-0">
-            {sections
-              .filter((sec) => sec.id === "workspace")
-              .map((section) => (
-                <React.Fragment key={section.id}>
-                  {section.items.map((item) => {
-                    const active = isPathActive(item.path, item.id);
-                    const Icon = item.icon;
+        {/* ── Middle Scrollable Body (Configure Mode OR Normal Navigation) ── */}
+        {isConfiguring ? (
+          /* Configuring Body List */
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4 min-h-0">
+            {config.sections.map((section) => (
+              <div key={section.id} className="space-y-1.5">
+                <div className="px-1 text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                  <span>{section.title}</span>
+                </div>
+
+                <div className="space-y-1">
+                  {section.items.map((item, idx) => {
+                    const Icon = getSidebarIcon(item.iconName);
+                    const isDragging = draggedItem?.sectionId === section.id && draggedItem?.index === idx;
+                    const isOver = dragOverItem?.sectionId === section.id && dragOverItem?.index === idx;
+                    const isGearOpen = openGearItem?.item.id === item.id;
 
                     return (
-                      <SidebarPortalTooltip key={item.id} text={item.label} badge={item.badge}>
-                        <Link
-                          to={item.path}
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
-                            active
-                              ? "bg-[#1E293B] text-white shadow-xs"
-                              : "text-[#475569] hover:text-[#0F172A] hover:bg-gray-100"
-                          }`}
-                        >
-                          <Icon className={`w-4.5 h-4.5 shrink-0 ${active ? "text-white" : "text-[#64748B]"}`} />
-                        </Link>
-                      </SidebarPortalTooltip>
+                      <div
+                        key={item.id}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.effectAllowed = "move";
+                          setDraggedItem({ sectionId: section.id, index: idx });
+                        }}
+                        onDragEnd={() => {
+                          setDraggedItem(null);
+                          setDragOverItem(null);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          if (!dragOverItem || dragOverItem.sectionId !== section.id || dragOverItem.index !== idx) {
+                            setDragOverItem({ sectionId: section.id, index: idx });
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverItem?.sectionId === section.id && dragOverItem?.index === idx) {
+                            setDragOverItem(null);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggedItem) {
+                            moveItem(draggedItem.sectionId, section.id, draggedItem.index, idx);
+                            setDraggedItem(null);
+                            setDragOverItem(null);
+                          }
+                        }}
+                        className={`flex items-center justify-between p-1.5 px-2 rounded-xl text-xs transition-all border select-none ${
+                          isDragging
+                            ? "opacity-30 border-blue-400 bg-blue-50/30 scale-98"
+                            : isOver
+                            ? "border-blue-500 bg-blue-50/60 shadow-xs ring-1 ring-blue-500/20"
+                            : item.visible
+                            ? "bg-white border-gray-200 text-gray-800 shadow-2xs hover:border-gray-300"
+                            : "bg-gray-50/70 border-dashed border-gray-200 text-gray-400 opacity-60"
+                        }`}
+                      >
+                        {/* Drag Handle + Icon + Title */}
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <div
+                            className="p-1 -ml-0.5 text-gray-400 hover:text-gray-700 cursor-grab active:cursor-grabbing shrink-0 transition-colors"
+                            title="Drag to reorder"
+                          >
+                            <GripVertical className="w-3.5 h-3.5" />
+                          </div>
+
+                          <div
+                            className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
+                              item.visible ? "bg-blue-50 text-[#1456f0]" : "bg-gray-100 text-gray-400"
+                            }`}
+                          >
+                            <Icon className="w-3.5 h-3.5" />
+                          </div>
+
+                          <span
+                            className={`truncate text-xs font-medium ${
+                              item.visible ? "text-gray-800" : "text-gray-400 line-through"
+                            }`}
+                          >
+                            {item.label}
+                          </span>
+                        </div>
+
+                        {/* Action: Gear Settings Button */}
+                        <div className="flex items-center shrink-0 ml-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              if (isGearOpen) {
+                                setOpenGearItem(null);
+                              } else {
+                                setOpenGearItem({
+                                  sectionId: section.id,
+                                  item,
+                                  coords: {
+                                    top: rect.top,
+                                    left: rect.right + 10,
+                                  },
+                                });
+                              }
+                            }}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                              isGearOpen
+                                ? "bg-gray-200 text-gray-900 shadow-2xs"
+                                : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                            }`}
+                            title="Menu options"
+                          >
+                            <Settings className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
                     );
                   })}
-                </React.Fragment>
-              ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : collapsed ? (
+          /* Collapsed Icon-Only Navigation: Workspace items + Featured items + "v" Expand button */
+          <div className="flex-1 overflow-y-auto py-3 px-2 flex flex-col items-center gap-1.5 min-h-0">
+            {collapsedItems.map((item) => {
+              const active = isPathActive(item.path, item.id);
+              const Icon = item.icon;
+
+              return (
+                <SidebarPortalTooltip key={item.id} text={item.label} badge={item.badge}>
+                  <Link
+                    to={item.path}
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer relative ${
+                      active
+                        ? "bg-[#1E293B] text-white shadow-xs"
+                        : "text-[#475569] hover:text-[#0F172A] hover:bg-gray-100"
+                    }`}
+                  >
+                    <Icon className={`w-4.5 h-4.5 shrink-0 ${active ? "text-white" : "text-[#64748B]"}`} />
+                  </Link>
+                </SidebarPortalTooltip>
+              );
+            })}
 
             {/* "v" Chevron Button to Open Sidebar completely */}
             <SidebarPortalTooltip text="View more">
               <button
                 type="button"
                 onClick={() => setCollapsed(false)}
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-all cursor-pointer group"
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-all cursor-pointer group mt-1"
                 aria-label="View more"
               >
                 <ChevronDown className="w-4.5 h-4.5 transition-transform group-hover:translate-y-0.5" />
@@ -765,12 +918,79 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* ── Fixed/Pinned Bottom Controls with Upward User Dropdown ── */}
-        {collapsed ? (
+        {/* Portaled Gear Action Popover Menu */}
+        {openGearItem &&
+          createPortal(
+            <div
+              ref={gearMenuRef}
+              className="fixed w-52 bg-white/98 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/90 p-1.5 z-[999999] space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-gray-800"
+              style={{
+                top: `${Math.min(openGearItem.coords.top, window.innerHeight - 90)}px`,
+                left: `${Math.min(openGearItem.coords.left, window.innerWidth - 220)}px`,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  toggleItemVisibility(openGearItem.sectionId, openGearItem.item.id);
+                  toast.success(
+                    `${openGearItem.item.label} ${openGearItem.item.visible ? "hidden from menu" : "shown in menu"}`
+                  );
+                  setOpenGearItem(null);
+                }}
+                className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer"
+              >
+                {openGearItem.item.visible ? "Hide menu item" : "Show menu item"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDefaultStartPage(openGearItem.item.path);
+                  toast.success(`${openGearItem.item.label} set as default start page`);
+                  setOpenGearItem(null);
+                }}
+                className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer flex items-center justify-between"
+              >
+                <span>Set as default start page</span>
+                {defaultStartPage === openGearItem.item.path && <Check className="w-3.5 h-3.5 text-[#1456f0]" />}
+              </button>
+            </div>,
+            document.body
+          )}
+
+        {/* ── Fixed/Pinned Bottom Controls (Configure controls OR User Dropdown) ── */}
+        {isConfiguring ? (
+          /* Configuring Sticky Bottom Bar */
+          <div className="p-3 border-t border-gray-200/90 bg-white flex items-center justify-between gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                resetToDefault();
+                toast.success("Sidebar reset to default");
+              }}
+              className="px-3 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsConfiguring(false);
+                toast.success("Sidebar navigation saved");
+              }}
+              className="flex-1 px-4 py-1.5 bg-[#1E293B] hover:bg-black text-white text-xs font-semibold rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Done</span>
+            </button>
+          </div>
+        ) : collapsed ? (
           <CollapsedUserMenu
             user={user}
             onSignOut={handleSignOut}
             onNavigate={(path) => navigate(path)}
+            onOpenConfigure={startConfiguring}
           />
         ) : (
           /* Expanded User Card */
@@ -803,7 +1023,7 @@ export default function Sidebar() {
                   type="button"
                   onClick={() => {
                     setShowUserMenu(false);
-                    toast.info("Configure menu");
+                    startConfiguring();
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-700 hover:text-gray-900 hover:bg-gray-100 transition-colors cursor-pointer"
                 >
