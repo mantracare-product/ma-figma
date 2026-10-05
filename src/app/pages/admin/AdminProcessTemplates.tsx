@@ -76,7 +76,7 @@ export interface Stage {
   isFinal?: boolean;
   isFinalStage?: boolean;
   nextProcessTransitions?: ProcessTransitionTarget[];
-  stagePosition?: "initial" | "final" | null;
+  stagePosition?: "initial" | "intermediate" | "final" | null;
   aiSettings?: AISettings;
   // Persisted stage configuration
   stageType?: string;

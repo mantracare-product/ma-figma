@@ -67,8 +67,12 @@ export interface Stage {
   isInitial?: boolean;
   isFinal?: boolean;
   isFinalStage?: boolean;
+  stagePosition?: "initial" | "intermediate" | "final" | null;
+  intentTrigger?: string; // "interested" | "not_interested" | "call_back" | "needs_info" | "disqualified" | "custom"
+  intentLabel?: string;
+  intentDescription?: string;
+  endPipelineOnReach?: boolean; // System setting to end this pipeline and move to next pipeline
   nextProcessTransitions?: ProcessTransitionTarget[];
-  stagePosition?: "initial" | "final" | null;
   aiSettings?: AISettings;
   // Persisted stage configuration
   stageType?: string;
@@ -1918,6 +1922,51 @@ export default function Process() {
   const [isEditColorGridExpanded, setIsEditColorGridExpanded] = useState(false);
   const [hasInteractedWithColor, setHasInteractedWithColor] = useState(false);
 
+  // Last Stage & Intent Routing Modal States
+  const [showLastStageModal, setShowLastStageModal] = useState(false);
+  const [lastStageForm, setLastStageForm] = useState<{
+    id?: string;
+    name: string;
+    description: string;
+    color: string;
+    intentTrigger: string;
+    intentLabel: string;
+    intentDescription: string;
+    endPipelineOnReach: boolean;
+    targetProcessId: string;
+    targetStageName: string;
+    autoMove: boolean;
+    isEditing?: boolean;
+  }>({
+    name: "Interested",
+    description: "Caller expresses interest and wants to proceed with next steps",
+    color: "#22C55E",
+    intentTrigger: "interested",
+    intentLabel: "Interested",
+    intentDescription: "Caller agrees to proceed or requests consultation",
+    endPipelineOnReach: true,
+    targetProcessId: "",
+    targetStageName: "",
+    autoMove: true,
+    isEditing: false,
+  });
+
+  // Intent Simulation Modal States
+  const [showIntentSimulatorModal, setShowIntentSimulatorModal] = useState(false);
+  const [simSourceStageId, setSimSourceStageId] = useState<string>("");
+  const [simUtterance, setSimUtterance] = useState<string>("Yes, I'd love to schedule a consultation for tomorrow afternoon!");
+  const [simSelectedScenario, setSimSelectedScenario] = useState<string>("interested");
+  const [simIsRunning, setSimIsRunning] = useState<boolean>(false);
+  const [simResolvedData, setSimResolvedData] = useState<{
+    detectedIntent: string;
+    assignedStageName: string;
+    assignedStageColor: string;
+    targetProcessName?: string;
+    targetStageName?: string;
+    endPipeline: boolean;
+    autoMoved: boolean;
+  } | null>(null);
+
   // Template states
   const [processModalTab, setProcessModalTab] = useState<"create" | "template">("create");
   const [stageModalTab, setStageModalTab] = useState<"create" | "template">("create");
@@ -2312,6 +2361,160 @@ export default function Process() {
       )
     );
     toast.success("Transition removed");
+  };
+
+  const handleOpenAddLastStageModal = () => {
+    const otherProc = processes.find((p) => p.id !== selectedProcess) || processes[0];
+    setLastStageForm({
+      name: "Interested",
+      description: "Customer expressed clear interest and wants to proceed",
+      color: "#22C55E",
+      intentTrigger: "interested",
+      intentLabel: "Interested",
+      intentDescription: "Caller expresses interest, agrees to service or confirms next step",
+      endPipelineOnReach: true,
+      targetProcessId: otherProc ? otherProc.id : "",
+      targetStageName: otherProc?.stages[0]?.name || "Post-Visit Check",
+      autoMove: true,
+      isEditing: false,
+    });
+    setShowLastStageModal(true);
+  };
+
+  const handleOpenEditLastStageModal = (stage: Stage) => {
+    const existingTrans = stage.nextProcessTransitions?.[0];
+    const otherProc = processes.find((p) => p.id !== selectedProcess) || processes[0];
+    setLastStageForm({
+      id: stage.id,
+      name: stage.name,
+      description: stage.description || "",
+      color: stage.color || "#22C55E",
+      intentTrigger: stage.intentTrigger || "interested",
+      intentLabel: stage.intentLabel || stage.name,
+      intentDescription: stage.intentDescription || "",
+      endPipelineOnReach: stage.endPipelineOnReach !== false,
+      targetProcessId: existingTrans?.targetProcessId || otherProc?.id || "",
+      targetStageName: existingTrans?.targetStageName || otherProc?.stages[0]?.name || "",
+      autoMove: existingTrans?.autoMove !== false,
+      isEditing: true,
+    });
+    setShowLastStageModal(true);
+  };
+
+  const handleSaveLastStageModal = () => {
+    if (!selectedProcess) return;
+    if (!lastStageForm.name.trim()) {
+      toast.error("Please enter an outcome stage name");
+      return;
+    }
+
+    const targetProc = processes.find((p) => p.id === lastStageForm.targetProcessId);
+    const targetStage = targetProc?.stages.find((s) => s.name === lastStageForm.targetStageName) || targetProc?.stages[0];
+
+    const transitions: ProcessTransitionTarget[] = [];
+    if (lastStageForm.endPipelineOnReach && targetProc) {
+      transitions.push({
+        id: `trans-${Date.now()}`,
+        targetProcessId: targetProc.id,
+        targetProcessName: targetProc.name,
+        targetStageId: targetStage?.id,
+        targetStageName: targetStage?.name || lastStageForm.targetStageName,
+        autoMove: lastStageForm.autoMove,
+        condition: `When intent is ${lastStageForm.intentLabel || lastStageForm.name}`,
+        endCurrentProcess: true,
+      });
+    }
+
+    if (lastStageForm.isEditing && lastStageForm.id) {
+      // Update existing stage
+      setProcesses((prev) =>
+        prev.map((p) =>
+          p.id === selectedProcess
+            ? {
+                ...p,
+                stages: p.stages.map((s) =>
+                  s.id === lastStageForm.id
+                    ? {
+                        ...s,
+                        name: lastStageForm.name.trim(),
+                        description: lastStageForm.description.trim(),
+                        color: lastStageForm.color,
+                        isFinalStage: true,
+                        isFinal: true,
+                        intentTrigger: lastStageForm.intentTrigger,
+                        intentLabel: lastStageForm.intentLabel,
+                        intentDescription: lastStageForm.intentDescription,
+                        endPipelineOnReach: lastStageForm.endPipelineOnReach,
+                        nextProcessTransitions: transitions,
+                      }
+                    : s
+                ),
+              }
+            : p
+        )
+      );
+      toast.success(`Outcome stage "${lastStageForm.name}" updated`);
+    } else {
+      // Add new last stage option
+      const newStageObj: Stage = {
+        id: `${selectedProcess}-outcome-${Date.now()}`,
+        name: lastStageForm.name.trim(),
+        description: lastStageForm.description.trim(),
+        color: lastStageForm.color,
+        status: "active",
+        stageType: "No Call Activity",
+        isFinalStage: true,
+        isFinal: true,
+        intentTrigger: lastStageForm.intentTrigger,
+        intentLabel: lastStageForm.intentLabel,
+        intentDescription: lastStageForm.intentDescription,
+        endPipelineOnReach: lastStageForm.endPipelineOnReach,
+        nextProcessTransitions: transitions,
+        callTriggerSettings: getDefaultCallTriggerSettings(),
+      };
+
+      setProcesses((prev) =>
+        prev.map((p) =>
+          p.id === selectedProcess
+            ? {
+                ...p,
+                stages: [...p.stages, newStageObj],
+              }
+            : p
+        )
+      );
+      toast.success(`Last stage option "${lastStageForm.name}" added`);
+    }
+
+    setShowLastStageModal(false);
+  };
+
+  const handleRunIntentSimulation = () => {
+    if (!selectedProcessData) return;
+    setSimIsRunning(true);
+    setSimResolvedData(null);
+
+    setTimeout(() => {
+      // Find matching stage based on intent trigger or fallback to first final stage
+      const finalStages = selectedProcessData.stages.filter((s) => s.isFinalStage || s.isFinal);
+      let matchedStage = finalStages.find((s) => s.intentTrigger === simSelectedScenario);
+      if (!matchedStage && finalStages.length > 0) {
+        matchedStage = finalStages[0];
+      }
+
+      const trans = matchedStage?.nextProcessTransitions?.[0];
+
+      setSimResolvedData({
+        detectedIntent: simSelectedScenario === "interested" ? "Interested" : simSelectedScenario === "not_interested" ? "Not Interested" : simSelectedScenario === "call_back" ? "Call Back Later" : "Custom Intent",
+        assignedStageName: matchedStage?.name || "Interested",
+        assignedStageColor: matchedStage?.color || "#22C55E",
+        targetProcessName: trans?.targetProcessName,
+        targetStageName: trans?.targetStageName,
+        endPipeline: matchedStage?.endPipelineOnReach !== false,
+        autoMoved: trans?.autoMove !== false,
+      });
+      setSimIsRunning(false);
+    }, 600);
   };
 
   const handleQuickAddStage = () => {
@@ -2731,145 +2934,283 @@ export default function Process() {
 
                 <div className="flex-1 overflow-y-auto">
                   <div className="p-8 space-y-6">
-                    {/* Stage Management */}
-                    <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-                      <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Stages</h3>
-                          <span className="text-xs bg-blue-50 text-blue-700 font-semibold px-2.5 py-0.5 rounded-full border border-blue-200">
-                            {selectedProcessData.stages.length} Stages
-                          </span>
+                    {/* Stage Management & Intent Routing */}
+                    <div className="bg-gradient-to-br from-gray-50 via-white to-blue-50/20 rounded-2xl p-6 border border-gray-200 shadow-sm space-y-4">
+                      {/* Header row with counts and actions */}
+                      <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
+                        <div>
+                          <div className="flex items-center gap-2.5">
+                            <h3 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                              Pipeline Stages &amp; Intent Routing
+                            </h3>
+                            <span className="text-xs bg-blue-50 text-blue-700 font-semibold px-2.5 py-0.5 rounded-full border border-blue-200">
+                              {selectedProcessData.stages.length} Total Stages
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                            Conversation stages evaluate customer intent to select the concluding stage, end the pipeline, and auto-route to the next process.
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const seqStages = selectedProcessData.stages.filter((s) => !s.isFinalStage && !s.isFinal);
+                              const defaultSource = seqStages[seqStages.length - 1]?.id || selectedProcessData.stages[0]?.id || "";
+                              setSimSourceStageId(defaultSource);
+                              setSimSelectedScenario("interested");
+                              setSimUtterance("Yes, I'm very interested in scheduling an appointment for tomorrow!");
+                              setSimResolvedData(null);
+                              setShowIntentSimulatorModal(true);
+                            }}
+                            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs hover:shadow transition-all cursor-pointer"
+                            style={{ fontFamily: 'DM Sans, sans-serif' }}
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Test Intent Routing</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleOpenAddLastStageModal}
+                            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl text-xs font-semibold shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+                            style={{ fontFamily: 'DM Sans, sans-serif' }}
+                          >
+                            <GitBranch className="w-3.5 h-3.5" />
+                            <span>+ Add Last Stage Option</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleQuickAddStage}
+                            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+                            style={{ fontFamily: 'DM Sans, sans-serif' }}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add Sequential Stage</span>
+                          </button>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 overflow-x-auto overflow-y-hidden pb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                        {/* Process's own stages */}
-                        {selectedProcessData.stages.map((stage, index) => (
-                          <DraggableStage
-                            key={stage.id}
-                            stage={stage}
-                            index={index}
-                            totalStages={selectedProcessData.stages.length}
-                            moveStage={moveStage}
-                            onRemove={handleRemoveStage}
-                            onEdit={handleEditStage}
-                          />
-                        ))}
-                        <button
-                          onClick={handleQuickAddStage}
-                          className="flex items-center justify-center w-11 h-11 rounded-full bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 transition-all flex-shrink-0 shadow-md hover:shadow-lg"
-                          title="Add new stage to this process"
-                        >
-                          <Plus className="w-5 h-5 text-white" />
-                        </button>
+                      {/* Main Horizontal Stages Strip */}
+                      {(() => {
+                        const allStages = selectedProcessData.stages;
+                        const hasExplicitFinal = allStages.some((s) => s.isFinalStage || s.isFinal);
+                        const sequentialStages = hasExplicitFinal
+                          ? allStages.filter((s) => !s.isFinalStage && !s.isFinal)
+                          : (allStages.length > 1 ? allStages.slice(0, -1) : allStages);
+                        const finalStageOptions = hasExplicitFinal
+                          ? allStages.filter((s) => s.isFinalStage || s.isFinal)
+                          : (allStages.length > 1 ? allStages.slice(-1) : []);
+                        const lastSeqStage = sequentialStages[sequentialStages.length - 1];
 
-                        {/* Visual Handoff Divider */}
-                        <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0 border-l-2 border-dashed border-slate-300 bg-slate-100/80 rounded-r-xl my-1 select-none">
-                          <span className="text-xs font-bold text-slate-700 whitespace-nowrap flex items-center gap-1">
-                            <span>Next Process Handoff</span>
-                            <span className="text-slate-400 font-normal">→</span>
-                          </span>
-                        </div>
+                        return (
+                          <div className="flex items-center gap-3 overflow-x-auto pb-4 pt-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                            {/* 1. Sequential Pipeline Stages */}
+                            <div className="flex items-center gap-2.5 flex-shrink-0">
+                              {sequentialStages.map((stage, sIdx) => {
+                                const originalIndex = allStages.findIndex((s) => s.id === stage.id);
+                                return (
+                                  <React.Fragment key={stage.id}>
+                                    <div className="flex flex-col gap-1 flex-shrink-0">
+                                      <div className="flex items-center justify-between px-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                        <span>Step #{sIdx + 1}</span>
+                                        {stage.stageType && (
+                                          <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.2 rounded">
+                                            {stage.stageType === "AI Receives Calls" ? "Inbound" : stage.stageType === "AI Makes Calls" ? "Outbound" : "Action"}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <DraggableStage
+                                        stage={stage}
+                                        index={originalIndex >= 0 ? originalIndex : sIdx}
+                                        totalStages={allStages.length}
+                                        moveStage={moveStage}
+                                        onRemove={handleRemoveStage}
+                                        onEdit={handleEditStage}
+                                      />
+                                    </div>
 
-                        {/* Other Stages (Handoff Target Stages from Other Processes) */}
-                        {(() => {
-                          const finalStage = selectedProcessData.stages[selectedProcessData.stages.length - 1];
-                          const stagesWithTransitions = selectedProcessData.stages.filter(
-                            (s) => s.nextProcessTransitions && s.nextProcessTransitions.length > 0
-                          );
-                          const allTransitions = stagesWithTransitions.flatMap((s) =>
-                            (s.nextProcessTransitions || []).map((t, idx) => ({
-                              ...t,
-                              sourceStageId: s.id,
-                              sourceStageName: finalStage ? finalStage.name : s.name,
-                              transitionIndex: idx,
-                            }))
-                          );
+                                    {/* Arrow connector between sequential stages */}
+                                    {sIdx < sequentialStages.length - 1 && (
+                                      <div className="flex items-center justify-center text-gray-400 font-bold px-0.5 select-none pt-4">
+                                        <ChevronRight className="w-4 h-4 text-gray-400" />
+                                      </div>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
 
-                          return (
-                              <>
-                                {allTransitions.map((trans, tIdx) => {
-                                  const targetProc = processes.find(
-                                    (p) => p.id === trans.targetProcessId || p.name === trans.targetProcessName
-                                  );
-                                  const targetStageIdx = targetProc?.stages.findIndex(
-                                    (s) => s.id === trans.targetStageId || s.name === trans.targetStageName
-                                  ) ?? -1;
-                                  const targetStageObj = targetStageIdx !== -1 && targetProc ? targetProc.stages[targetStageIdx] : undefined;
-                                  const isTargetFinal = targetProc && targetStageIdx !== -1 && targetStageIdx === targetProc.stages.length - 1;
-                                  const assignedStageColor = targetStageObj?.color || (isTargetFinal ? "#EC4899" : "#22D3EE");
+                              {/* Quick Add Stage in Sequential Flow */}
+                              <div className="pt-4 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={handleQuickAddStage}
+                                  className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 transition-all shadow-xs hover:shadow cursor-pointer"
+                                  title="Add new sequential stage"
+                                >
+                                  <Plus className="w-4.5 h-4.5" />
+                                </button>
+                              </div>
+                            </div>
 
-                                  return (
-                                    <div
-                                      key={`trans-${tIdx}-${trans.targetProcessId}-${trans.targetStageName}`}
-                                      className="relative flex-shrink-0 group flex items-center gap-2.5 text-white rounded-xl px-4 py-2.5 shadow-md hover:shadow-lg transition-all border border-white/20 select-none"
-                                      style={{
-                                        backgroundColor: assignedStageColor,
-                                        minWidth: "210px",
-                                        clipPath: "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)",
-                                      }}
+                            {/* 2. Visual Intent Decision Fork Divider */}
+                            <div className="flex items-center gap-2 flex-shrink-0 px-2 pt-4">
+                              <div className="flex flex-col items-center justify-center bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-indigo-200/90 rounded-2xl px-4 py-3 shadow-xs min-w-[200px] select-none">
+                                <div className="flex items-center gap-1.5 text-indigo-700 font-bold text-xs uppercase tracking-wider mb-1">
+                                  <GitBranch className="w-3.5 h-3.5 text-indigo-600" />
+                                  <span>Intent Decision Fork</span>
+                                </div>
+                                <span className="text-[11px] text-gray-600 text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                  Evaluates intent from <strong className="text-gray-900 font-bold">"{lastSeqStage ? lastSeqStage.name : 'Previous Stage'}"</strong>
+                                </span>
+                              </div>
+                              <div className="text-indigo-400 font-extrabold text-base select-none">→</div>
+                            </div>
+
+                            {/* 3. Last Stage Options (Intent-Mapped Outcomes) */}
+                            <div className="flex flex-col gap-2 p-3 bg-gradient-to-br from-slate-50 to-purple-50/40 border-2 border-dashed border-purple-200 rounded-2xl flex-shrink-0 min-w-[340px]">
+                              <div className="flex items-center justify-between gap-2 px-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1">
+                                    <span>🎯 Last Stage Options</span>
+                                  </span>
+                                  <span className="text-[10px] bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded-full">
+                                    {finalStageOptions.length} Outcomes
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={handleOpenAddLastStageModal}
+                                  className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Plus className="w-3 h-3" /> Add Outcome
+                                </button>
+                              </div>
+
+                              <div className="flex items-stretch gap-3 overflow-x-auto pb-1">
+                                {finalStageOptions.length === 0 ? (
+                                  <div className="p-4 text-center rounded-xl bg-white border border-dashed border-purple-200 min-w-[240px]">
+                                    <p className="text-xs text-purple-700 font-medium">No last stage outcomes configured</p>
+                                    <button
+                                      type="button"
+                                      onClick={handleOpenAddLastStageModal}
+                                      className="mt-1.5 text-xs font-bold text-purple-600 underline cursor-pointer"
                                     >
-                                      <div className="flex flex-col flex-1 min-w-0 pr-1">
-                                        <div className="flex items-center gap-1 text-[9px] text-white/80 font-bold uppercase tracking-wider">
-                                          <span>From: {trans.sourceStageName}</span>
+                                      + Add Interested / Not Interested
+                                    </button>
+                                  </div>
+                                ) : (
+                                  finalStageOptions.map((fStage) => {
+                                    const transition = fStage.nextProcessTransitions?.[0];
+                                    const intentColorConfig =
+                                      fStage.intentTrigger === "interested"
+                                        ? { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", dot: "bg-emerald-500", label: fStage.intentLabel || "Interested" }
+                                        : fStage.intentTrigger === "not_interested"
+                                        ? { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200", dot: "bg-rose-500", label: fStage.intentLabel || "Not Interested" }
+                                        : fStage.intentTrigger === "call_back"
+                                        ? { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", dot: "bg-amber-500", label: fStage.intentLabel || "Call Back Later" }
+                                        : { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200", dot: "bg-blue-500", label: fStage.intentLabel || fStage.name };
+
+                                    return (
+                                      <div
+                                        key={fStage.id}
+                                        className="flex flex-col justify-between bg-white rounded-xl border border-gray-200/90 p-3 shadow-xs hover:shadow-md transition-all min-w-[240px] max-w-[280px] flex-shrink-0 group"
+                                      >
+                                        {/* Top: Intent Condition Chip */}
+                                        <div className="flex items-center justify-between gap-1.5 mb-2">
+                                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold border ${intentColorConfig.bg} ${intentColorConfig.text} ${intentColorConfig.border}`}>
+                                            <span className={`w-1.5 h-1.5 rounded-full ${intentColorConfig.dot}`} />
+                                            <span>Intent: {intentColorConfig.label}</span>
+                                          </span>
+                                          <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenEditLastStageModal(fStage)}
+                                              className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-900 transition-colors"
+                                              title="Edit Last Stage & Intent"
+                                            >
+                                              <Edit className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemoveStage(fStage.id)}
+                                              className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-600 transition-colors"
+                                              title="Delete Stage"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
                                         </div>
-                                        <div className="flex items-center gap-1.5 font-bold text-xs text-white truncate">
-                                          <span className="text-white/80">🔀</span>
-                                          <span className="text-white/90 truncate font-semibold">{trans.targetProcessName || "Process"}:</span>
-                                          <span className="text-white underline underline-offset-2 truncate font-extrabold">{trans.targetStageName}</span>
-                                          {isTargetFinal && (
-                                            <span className="ml-1 text-[9px] bg-black/25 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider whitespace-nowrap">
-                                              Final
-                                            </span>
+
+                                        {/* Middle: Stage Tag */}
+                                        <div
+                                          className="flex items-center justify-between px-3 py-2 rounded-lg text-white font-bold text-xs shadow-2xs mb-2.5"
+                                          style={{ backgroundColor: fStage.color || "#22C55E" }}
+                                        >
+                                          <span className="truncate pr-1">{fStage.name}</span>
+                                          <span className="text-[10px] bg-black/30 text-white font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                            🏁 Last Stage
+                                          </span>
+                                        </div>
+
+                                        {/* Bottom: Next Pipeline Assignment System Setting */}
+                                        <div className="pt-2 border-t border-gray-100 mt-auto">
+                                          <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1 flex items-center justify-between">
+                                            <span>Next Pipeline Action:</span>
+                                            <span className="text-purple-600 font-semibold lowercase">end &amp; move</span>
+                                          </div>
+                                          {transition ? (
+                                            <div
+                                              onClick={() => handleOpenEditLastStageModal(fStage)}
+                                              className="bg-purple-50/70 hover:bg-purple-100/70 border border-purple-200 rounded-lg p-2 cursor-pointer transition-colors"
+                                              title="Click to change next process routing"
+                                            >
+                                              <div className="flex items-center gap-1.5 font-bold text-xs text-purple-900 truncate">
+                                                <span className="text-purple-600">➡️</span>
+                                                <span className="truncate">{transition.targetProcessName}</span>
+                                              </div>
+                                              <div className="flex items-center justify-between text-[11px] text-purple-700 mt-1">
+                                                <span className="font-medium truncate">Stage: {transition.targetStageName}</span>
+                                                {transition.autoMove && (
+                                                  <span className="text-[9px] bg-purple-200/80 text-purple-800 font-bold px-1.5 py-0.5 rounded">
+                                                    Auto-Move
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenEditLastStageModal(fStage)}
+                                              className="w-full py-1.5 px-2 bg-gray-50 hover:bg-purple-50 text-gray-600 hover:text-purple-700 border border-dashed border-gray-300 hover:border-purple-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+                                            >
+                                              <Plus className="w-3 h-3 text-purple-600" />
+                                              <span>Assign Next Pipeline</span>
+                                            </button>
                                           )}
                                         </div>
                                       </div>
-                                      <div className="flex items-center gap-1 pr-2 opacity-90 group-hover:opacity-100">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const srcStage = selectedProcessData.stages.find((s) => s.id === trans.sourceStageId);
-                                            if (srcStage) handleEditStage(srcStage);
-                                          }}
-                                          className="p-1 hover:bg-black/20 rounded transition-colors text-white"
-                                          title="Edit Stage"
-                                        >
-                                          <Edit className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleRemoveTransitionFromStage(trans.sourceStageId, trans.transitionIndex)}
-                                          className="p-1 hover:bg-red-500/50 rounded transition-colors text-white hover:text-red-100"
-                                          title="Remove transition"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
+                                    );
+                                  })
+                                )}
 
-                              {/* Button to connect / add next process stage transition */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const finalStage = selectedProcessData.stages[selectedProcessData.stages.length - 1];
-                                  if (finalStage) {
-                                    handleOpenTransitionModal(finalStage.id);
-                                  } else {
-                                    toast.error("Please add a stage first");
-                                  }
-                                }}
-                                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-dashed border-purple-300 transition-all text-xs font-semibold flex-shrink-0 shadow-2xs hover:shadow-xs cursor-pointer"
-                                title="Connect a stage from another process"
-                              >
-                                <Plus className="w-4 h-4 text-purple-600" />
-                                <span>Connect Next Stage</span>
-                              </button>
-                            </>
-                          );
-                        })()}
-                      </div>
+                                {/* Add Outcome Card */}
+                                <button
+                                  type="button"
+                                  onClick={handleOpenAddLastStageModal}
+                                  className="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-dashed border-purple-300 bg-white/70 hover:bg-purple-50/80 hover:border-purple-400 text-purple-700 transition-all min-w-[170px] cursor-pointer shadow-2xs group"
+                                >
+                                  <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center mb-1.5 group-hover:scale-110 transition-transform">
+                                    <Plus className="w-4 h-4 text-purple-700" />
+                                  </div>
+                                  <span className="text-xs font-bold text-center">Add Last Stage Option</span>
+                                  <span className="text-[10px] text-gray-500 text-center mt-0.5">Map intent &amp; next pipeline</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Knowledge Base */}
@@ -7071,6 +7412,446 @@ export default function Process() {
                 onClick={handleSaveQuickTransition}
               >
                 Save & Connect Stage
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Configure Last Stage Option & Next Pipeline Routing Modal */}
+        <Modal
+          isOpen={showLastStageModal}
+          onClose={() => setShowLastStageModal(false)}
+          title={lastStageForm.isEditing ? "Edit Concluding Stage & Next Pipeline Routing" : "Add Concluding Stage Option (Intent-Based)"}
+          maxWidth="2xl"
+        >
+          <div className="space-y-5">
+            <p className="text-xs text-gray-500 -mt-1 leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              Define a concluding outcome for this pipeline. When the conversation intent matches, this stage is assigned, this pipeline is ended, and the lead is automatically transferred to the next process.
+            </p>
+
+            {/* 1. Stage Info */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  Stage Name
+                </label>
+                <input
+                  type="text"
+                  value={lastStageForm.name}
+                  onChange={(e) => setLastStageForm({ ...lastStageForm, name: e.target.value })}
+                  placeholder="e.g., Interested, Not Interested, Call Back Later"
+                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold focus:border-blue-500 focus:outline-none transition-colors"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  Stage Color Tag
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 flex items-center gap-1.5 p-1.5 border border-gray-200 rounded-xl bg-gray-50 overflow-x-auto">
+                    {["#22C55E", "#EF4444", "#F59E0B", "#3B82F6", "#8B5CF6", "#EC4899", "#06B6D4"].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setLastStageForm({ ...lastStageForm, color: c })}
+                        className={`w-6 h-6 rounded-full flex-shrink-0 transition-transform hover:scale-110 ${lastStageForm.color === c ? 'ring-2 ring-blue-600 ring-offset-1 scale-105' : ''}`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                  <input
+                    type="color"
+                    value={lastStageForm.color}
+                    onChange={(e) => setLastStageForm({ ...lastStageForm, color: e.target.value })}
+                    className="w-10 h-10 rounded-xl border border-gray-200 cursor-pointer p-0.5"
+                    title="Choose custom color"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Intent Trigger Mapping */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-600" />
+                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    Map Caller Intent
+                  </label>
+                </div>
+                <span className="text-[11px] text-purple-700 font-semibold bg-purple-100/70 px-2 py-0.5 rounded-full">
+                  AI Intent Resolution
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[
+                  { id: "interested", label: "Interested", icon: "🟢", desc: "Caller agrees / wants service" },
+                  { id: "not_interested", label: "Not Interested", icon: "🔴", desc: "Caller declines / not looking" },
+                  { id: "call_back", label: "Call Back Later", icon: "🟡", desc: "Caller is busy / asks to call later" },
+                  { id: "needs_info", label: "Needs More Info", icon: "🔵", desc: "Requests proposal / questions" },
+                  { id: "disqualified", label: "Disqualified", icon: "⚪", desc: "Wrong number / outside criteria" },
+                  { id: "custom", label: "Custom Intent", icon: "🟣", desc: "Custom AI condition rule" },
+                ].map((intent) => {
+                  const isSelected = lastStageForm.intentTrigger === intent.id;
+                  return (
+                    <button
+                      key={intent.id}
+                      type="button"
+                      onClick={() =>
+                        setLastStageForm({
+                          ...lastStageForm,
+                          intentTrigger: intent.id,
+                          intentLabel: intent.label,
+                          name: lastStageForm.isEditing ? lastStageForm.name : intent.label,
+                          color: intent.id === "interested" ? "#22C55E" : intent.id === "not_interested" ? "#EF4444" : intent.id === "call_back" ? "#F59E0B" : lastStageForm.color,
+                        })
+                      }
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? "bg-white border-purple-500 ring-2 ring-purple-500/20 shadow-xs"
+                          : "bg-white/60 border-gray-200 hover:border-gray-300 hover:bg-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-gray-900 mb-0.5">
+                        <span>{intent.icon}</span>
+                        <span>{intent.label}</span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 leading-tight line-clamp-1">{intent.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-gray-600 mb-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  AI Detection Guidance / Condition Prompt (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={lastStageForm.intentDescription}
+                  onChange={(e) => setLastStageForm({ ...lastStageForm, intentDescription: e.target.value })}
+                  placeholder="e.g., Trigger when caller explicitly states they want to book or ask for pricing"
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs focus:border-purple-500 focus:outline-none"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                />
+              </div>
+            </div>
+
+            {/* 3. Next Pipeline Routing (System Setting) */}
+            <div className="bg-purple-50/50 border border-purple-200/80 rounded-2xl p-4 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-purple-700" />
+                  <span className="text-xs font-bold text-purple-950 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    Next Pipeline System Setting
+                  </span>
+                </div>
+                <span className="text-[11px] font-semibold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                  Workflow Handoff
+                </span>
+              </div>
+
+              {/* End pipeline toggle */}
+              <div className="flex items-center justify-between p-3 bg-white border border-purple-100 rounded-xl">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    End Current Pipeline &amp; Move to Next
+                  </span>
+                  <span className="text-[11px] text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    Upon reaching this stage, conclude "{selectedProcessData?.name}" and assign the lead to the chosen destination pipeline.
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={lastStageForm.endPipelineOnReach}
+                    onChange={(e) => setLastStageForm({ ...lastStageForm, endPipelineOnReach: e.target.checked })}
+                  />
+                  <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600" />
+                </label>
+              </div>
+
+              {/* Target Process & Stage selectors */}
+              {lastStageForm.endPipelineOnReach && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                      Destination Process / Pipeline
+                    </label>
+                    <select
+                      value={lastStageForm.targetProcessId || (processes.find((p) => p.id !== selectedProcess)?.id || "")}
+                      onChange={(e) => {
+                        const newProcId = e.target.value;
+                        const targetP = processes.find((p) => p.id === newProcId);
+                        setLastStageForm({
+                          ...lastStageForm,
+                          targetProcessId: newProcId,
+                          targetStageName: targetP?.stages[0]?.name || "",
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-purple-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-none focus:border-purple-500"
+                    >
+                      {processes
+                        .filter((p) => p.id !== selectedProcess)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                      Destination Stage
+                    </label>
+                    <select
+                      value={lastStageForm.targetStageName}
+                      onChange={(e) => setLastStageForm({ ...lastStageForm, targetStageName: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-purple-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-none focus:border-purple-500"
+                    >
+                      {(
+                        processes.find(
+                          (p) => p.id === (lastStageForm.targetProcessId || processes.find((pr) => pr.id !== selectedProcess)?.id)
+                        )?.stages || []
+                      ).map((s) => (
+                        <option key={s.id} value={s.name}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={lastStageForm.autoMove}
+                        onChange={(e) => setLastStageForm({ ...lastStageForm, autoMove: e.target.checked })}
+                        className="rounded text-purple-600"
+                      />
+                      <span className="font-semibold">Automatically enroll contact into destination process immediately</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Live Flow Breadcrumb Preview */}
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">Visual Flow Preview</div>
+              <div className="flex items-center gap-2 text-xs flex-wrap font-medium text-gray-700">
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md font-bold">
+                  {selectedProcessData?.stages.filter((s) => !s.isFinalStage && !s.isFinal).slice(-1)[0]?.name || "Contacted"}
+                </span>
+                <span className="text-purple-600 font-bold">──(Intent: {lastStageForm.intentLabel || "Interested"})──►</span>
+                <span
+                  className="px-2 py-1 text-white rounded-md font-bold shadow-2xs"
+                  style={{ backgroundColor: lastStageForm.color || "#22C55E" }}
+                >
+                  {lastStageForm.name || "Outcome Stage"}
+                </span>
+                {lastStageForm.endPipelineOnReach && (
+                  <>
+                    <span className="text-gray-400 font-bold">──(End Pipeline)──►</span>
+                    <span className="px-2 py-1 bg-purple-100 text-purple-900 rounded-md font-bold flex items-center gap-1">
+                      <span>🚀</span>
+                      <span>{processes.find((p) => p.id === lastStageForm.targetProcessId)?.name || "Next Process"}:</span>
+                      <span className="underline">{lastStageForm.targetStageName || "Stage"}</span>
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
+              <Button
+                variant="outline"
+                onClick={() => setShowLastStageModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                className="bg-purple-600 hover:bg-purple-700 text-white cursor-pointer px-6"
+                onClick={handleSaveLastStageModal}
+              >
+                {lastStageForm.isEditing ? "Save Outcome Stage" : "Add Outcome Stage"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Intent Simulator Modal */}
+        <Modal
+          isOpen={showIntentSimulatorModal}
+          onClose={() => setShowIntentSimulatorModal(false)}
+          title="🧪 Test Intent Resolution & Pipeline Transition"
+          maxWidth="2xl"
+        >
+          <div className="space-y-5">
+            <p className="text-xs text-gray-500 -mt-1 leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              Simulate how customer conversation in a stage is analyzed by AI to map intent, select the appropriate concluding stage, and route the customer to the next pipeline.
+            </p>
+
+            {/* Step 1: Select Source Stage */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  1. Conversation Stage
+                </label>
+                <select
+                  value={simSourceStageId}
+                  onChange={(e) => setSimSourceStageId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-none focus:border-blue-500"
+                >
+                  {(selectedProcessData?.stages || []).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.isFinalStage ? "(Last Stage)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  2. Preset Intent Scenario
+                </label>
+                <select
+                  value={simSelectedScenario}
+                  onChange={(e) => {
+                    const sc = e.target.value;
+                    setSimSelectedScenario(sc);
+                    if (sc === "interested") {
+                      setSimUtterance("Yes, I would love to schedule a consultation for tomorrow afternoon!");
+                    } else if (sc === "not_interested") {
+                      setSimUtterance("No thank you, I am not looking for this service right now. Please remove me.");
+                    } else if (sc === "call_back") {
+                      setSimUtterance("I am driving right now, can you please call me back tomorrow around 3 PM?");
+                    }
+                    setSimResolvedData(null);
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="interested">🟢 Caller is Interested</option>
+                  <option value="not_interested">🔴 Caller is Not Interested</option>
+                  <option value="call_back">🟡 Caller asks for Callback</option>
+                  <option value="custom">🟣 Custom Caller Utterance</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Caller sample utterance */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                Customer Reply / Transcribed Speech
+              </label>
+              <textarea
+                value={simUtterance}
+                onChange={(e) => {
+                  setSimUtterance(e.target.value);
+                  setSimResolvedData(null);
+                }}
+                rows={2}
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:border-indigo-500 transition-colors"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+                placeholder="Type customer reply..."
+              />
+            </div>
+
+            <div className="flex justify-center">
+              <Button
+                variant="primary"
+                onClick={handleRunIntentSimulation}
+                disabled={simIsRunning}
+                className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white px-7 py-2.5 rounded-xl font-bold shadow-sm"
+              >
+                {simIsRunning ? (
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Analyzing Intent...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" /> Run Intent &amp; Routing Simulation
+                  </span>
+                )}
+              </Button>
+            </div>
+
+            {/* Simulation Result Box */}
+            {simResolvedData && (
+              <div className="bg-gradient-to-br from-emerald-50/70 via-white to-purple-50/50 border border-emerald-200 rounded-2xl p-5 space-y-4 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                  <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Simulation Execution Succeeded
+                  </span>
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    Confidence: 98.4%
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Card 1 */}
+                  <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">1. Detected Intent</div>
+                    <div className="flex items-center gap-1.5 text-sm font-bold text-gray-900">
+                      <span>🎯</span>
+                      <span>{simResolvedData.detectedIntent}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-1">Classified from conversation speech</p>
+                  </div>
+
+                  {/* Card 2 */}
+                  <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">2. Assigned Last Stage</div>
+                    <div
+                      className="inline-flex items-center px-2.5 py-1 rounded-lg text-white font-bold text-xs shadow-2xs"
+                      style={{ backgroundColor: simResolvedData.assignedStageColor }}
+                    >
+                      <span>🏁 {simResolvedData.assignedStageName}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-1">Target outcome assigned to lead</p>
+                  </div>
+
+                  {/* Card 3 */}
+                  <div className="bg-white p-3 rounded-xl border border-purple-200 shadow-2xs">
+                    <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-1">3. Next Pipeline Routing</div>
+                    {simResolvedData.targetProcessName ? (
+                      <div>
+                        <div className="text-xs font-bold text-purple-900 truncate">
+                          ➡️ {simResolvedData.targetProcessName}
+                        </div>
+                        <div className="text-[11px] text-purple-700 truncate">
+                          Stage: {simResolvedData.targetStageName}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-500 italic">No next pipeline configured</span>
+                    )}
+                    <p className="text-[10px] text-purple-600 mt-1 font-semibold">
+                      {simResolvedData.endPipeline ? "✓ Current pipeline ended" : ""}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 font-medium">
+                  <strong>Pipeline Execution Log:</strong> Lead in stage <span className="font-bold underline">{selectedProcessData?.stages.find(s => s.id === simSourceStageId)?.name || "Contacted"}</span> was evaluated with intent <span className="font-bold">"{simResolvedData.detectedIntent}"</span>. Concluded current workflow and auto-enrolled lead into <span className="font-bold underline">{simResolvedData.targetProcessName || "Next Process"}</span> at stage <span className="font-bold underline">{simResolvedData.targetStageName || "Stage"}</span>.
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowIntentSimulatorModal(false)}
+              >
+                Close Simulator
               </Button>
             </div>
           </div>

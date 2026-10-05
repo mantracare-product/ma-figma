@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { Drawer } from "./ui/drawer";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
+import { Modal } from "./ui/Modal";
 import {
   Select,
   SelectContent,
@@ -18,7 +19,16 @@ import {
 import { Switch } from "./ui/switch";
 import { toast } from "sonner";
 import MemberLocationScheduleTab from "./settings/MemberLocationScheduleTab";
-import { getStoredTeamMembers } from "../../lib/teamStore";
+import { getStoredTeamMembers, saveStoredTeamMembers, TeamMember } from "../../lib/teamStore";
+import {
+  useFieldRegistry,
+  FieldDefinition,
+  SectionDefinition,
+} from "../context/FieldRegistryContext";
+import { SelectFieldsModal, CreateFieldModal } from "./help/FieldManager";
+import { AdminSectionDrawer } from "../pages/admin/components/AdminSectionDrawer";
+import { AdminFieldDrawer } from "../pages/admin/components/AdminFieldDrawer";
+import { FieldInputRenderer } from "./fields/FieldInputRenderer";
 import {
   User,
   CheckCircle2,
@@ -37,12 +47,36 @@ import {
   Check,
   Search,
   Info,
+  Mail,
+  Phone,
+  Globe,
+  Tag,
+  Sparkles,
+  Layers,
+  GripVertical,
+  Edit2,
+  Edit3,
 } from "lucide-react";
+
+export interface MemberCustomFieldItem {
+  id: string;
+  key: string;
+  label: string;
+  type: string;
+  value: string;
+}
+
+export interface MemberCustomSectionItem {
+  id: string;
+  title: string;
+  description?: string;
+  fields: MemberCustomFieldItem[];
+}
 
 export interface TeamMemberDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  member: {
+  member: (Partial<TeamMember> & {
     id?: string | number;
     name: string;
     email: string;
@@ -51,9 +85,11 @@ export interface TeamMemberDrawerProps {
     department?: string;
     canBookAppointments?: boolean;
     locations?: string[];
-  } | null;
+    [key: string]: any;
+  }) | null;
   zIndex?: number;
   initialTab?: "personal-info" | "calendar" | "availability" | "days-off" | "services";
+  onSave?: (updated?: any) => void;
 }
 
 // ---- Date helpers (used by the Calendar tab) ----
@@ -129,6 +165,7 @@ export function TeamMemberDrawer({
   member,
   zIndex = 9999,
   initialTab = "personal-info",
+  onSave,
 }: TeamMemberDrawerProps) {
   // Tab state
   const [activeTab, setActiveTab] = useState<"personal-info" | "calendar" | "availability" | "days-off" | "services">(initialTab);
@@ -175,23 +212,84 @@ export function TeamMemberDrawer({
     setHasUnsavedChanges(true);
   };
 
-  const [customPersonalFields, setCustomPersonalFields] = useState<Array<{ id: string; label: string; type: string; value: string }>>([]);
-  const [showSelectFieldModal, setShowSelectFieldModal] = useState(false);
-  const [showCreateFieldModal, setShowCreateFieldModal] = useState(false);
-  const [newCustomField, setNewCustomField] = useState({
-    label: "",
-    type: "String",
-    multiple: false,
-    showAlways: true,
-    enableTooltip: false,
-    visibleToSelected: false
+  // Field Registry hooks (linked with Admin Custom Fields)
+  const {
+    getAllFields,
+    getAllSections,
+    addCustomSection,
+    updateCustomSection,
+    deleteCustomSection,
+    updateCustomField,
+  } = useFieldRegistry();
+
+  const allTeamMemberFields = useMemo(() => getAllFields("teamMember"), [getAllFields]);
+  const allTeamMemberSections = useMemo(() => getAllSections("teamMember"), [getAllSections]);
+
+  // Registry-backed custom field values for this team member
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>(() => {
+    return (member as any)?.customFields || {};
   });
-  const [selectFieldSearch, setSelectFieldSearch] = useState("");
-  const [selectedFields, setSelectedFields] = useState<string[]>([]);
-  const [availableFields, setAvailableFields] = useState<string[]>([
-    "Name", "Status", "Email", "Phone", "Location", "Company", "Role", "Company Size", "Process",
-    "Gender", "Date of Birth", "Department", "Language", "Country", "Timezone", "Assigned Service"
-  ]);
+
+  useEffect(() => {
+    if ((member as any)?.customFields) {
+      setCustomFieldValues((member as any).customFields);
+    }
+  }, [member]);
+
+  // Basic Info custom field keys
+  const [basicMemberCustomFieldKeys, setBasicMemberCustomFieldKeys] = useState<string[]>([]);
+
+  // Modals for central Field & Section registry
+  const [fieldModalOpen, setFieldModalOpen] = useState(false);
+  const [createFieldModalOpen, setCreateFieldModalOpen] = useState(false);
+  const [addSectionDrawerOpen, setAddSectionDrawerOpen] = useState(false);
+  const [editingSectionDef, setEditingSectionDef] = useState<SectionDefinition | null>(null);
+  const [editingFieldDef, setEditingFieldDef] = useState<FieldDefinition | null>(null);
+  const [targetSectionIdForField, setTargetSectionIdForField] = useState<string | null>(null);
+
+  const handleOpenAddField = (sectionId: string) => {
+    setTargetSectionIdForField(sectionId);
+    setFieldModalOpen(true);
+  };
+
+  const handleApplySelectedFields = (selectedKeys: string[]) => {
+    if (!targetSectionIdForField) return;
+
+    if (targetSectionIdForField === "sec_basic") {
+      setBasicMemberCustomFieldKeys((prev) => Array.from(new Set([...prev, ...selectedKeys])));
+    } else {
+      const targetSec = allTeamMemberSections.find((s) => s.id === targetSectionIdForField);
+      if (targetSec) {
+        updateCustomSection("teamMember", targetSec.id, {
+          fieldKeys: Array.from(new Set([...(targetSec.fieldKeys || []), ...selectedKeys])),
+        });
+      }
+    }
+    setFieldModalOpen(false);
+    setTargetSectionIdForField(null);
+    setHasUnsavedChanges(true);
+    toast.success("Fields updated");
+  };
+
+  const handleRemoveFieldFromSection = (sectionId: string, fieldKey: string) => {
+    if (sectionId === "sec_basic") {
+      setBasicMemberCustomFieldKeys((prev) => prev.filter((k) => k !== fieldKey));
+    } else {
+      const targetSec = allTeamMemberSections.find((s) => s.id === sectionId);
+      if (targetSec) {
+        updateCustomSection("teamMember", targetSec.id, {
+          fieldKeys: (targetSec.fieldKeys || []).filter((k) => k !== fieldKey),
+        });
+      }
+    }
+    setHasUnsavedChanges(true);
+    toast.success("Field removed");
+  };
+
+  const handleCustomFieldValueChange = (fieldKey: string, value: any) => {
+    setCustomFieldValues((prev) => ({ ...prev, [fieldKey]: value }));
+    setHasUnsavedChanges(true);
+  };
 
   // Department Combobox State
   const [deptList, setDeptList] = useState<string[]>(() => {
@@ -564,269 +662,514 @@ export function TeamMemberDrawer({
               {/* Personal Info Tab */}
               {activeTab === "personal-info" && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Name */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Name</label>
-                      <Input
-                        value={personalInfo.fullName}
-                        onChange={(e) => updatePersonalInfo({ fullName: e.target.value })}
-                        placeholder="Enter name"
-                        className="w-full text-sm"
-                      />
+                  {/* SECTION 1: BASIC INFO */}
+                  <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <GripVertical className="w-3.5 h-3.5 text-slate-300" />
+                        <User className="w-4 h-4 text-[#2563EB]" />
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
+                          BASIC INFO
+                        </h3>
+                      </div>
                     </div>
 
-                    {/* Email */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Email</label>
-                      <Input
-                        type="email"
-                        value={personalInfo.email}
-                        onChange={(e) => updatePersonalInfo({ email: e.target.value })}
-                        className="w-full text-sm"
-                      />
-                    </div>
+                    <div className="flex flex-col gap-3.5">
+                      {/* Full Name */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <GripVertical className="w-3 h-3 text-slate-300" />
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                            FULL NAME
+                          </label>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <input
+                            type="text"
+                            value={personalInfo.fullName}
+                            onChange={(e) => updatePersonalInfo({ fullName: e.target.value })}
+                            placeholder="Enter full name"
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
+                          />
+                          <User className="w-4 h-4 text-slate-400" />
+                        </div>
+                      </div>
 
-                    {/* Phone */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Phone</label>
-                      <Input
-                        type="tel"
-                        value={personalInfo.phone}
-                        onChange={(e) => updatePersonalInfo({ phone: e.target.value })}
-                        className="w-full text-sm"
-                      />
-                    </div>
+                      {/* Email */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <GripVertical className="w-3 h-3 text-slate-300" />
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                            EMAIL
+                          </label>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <input
+                            type="email"
+                            value={personalInfo.email}
+                            onChange={(e) => updatePersonalInfo({ email: e.target.value })}
+                            placeholder="name@healthcare.com"
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
+                          />
+                          <Mail className="w-4 h-4 text-slate-400" />
+                        </div>
+                      </div>
 
-                    {/* Gender */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Gender</label>
-                      <Select value={personalInfo.gender} onValueChange={(value) => updatePersonalInfo({ gender: value })}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Male">Male</SelectItem>
-                          <SelectItem value="Female">Female</SelectItem>
-                          <SelectItem value="Other">Other</SelectItem>
-                          <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                      {/* Phone */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <GripVertical className="w-3 h-3 text-slate-300" />
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                            PHONE
+                          </label>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <input
+                            type="tel"
+                            value={personalInfo.phone}
+                            onChange={(e) => updatePersonalInfo({ phone: e.target.value })}
+                            placeholder="+1 (555) 000-0000"
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
+                          />
+                          <Phone className="w-4 h-4 text-slate-400" />
+                        </div>
+                      </div>
 
-                    {/* Date of Birth */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Date of Birth</label>
-                      <Input
-                        type="date"
-                        value={personalInfo.dateOfBirth}
-                        onChange={(e) => updatePersonalInfo({ dateOfBirth: e.target.value })}
-                        className="w-full text-sm"
-                      />
-                    </div>
+                      {/* Gender */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <GripVertical className="w-3 h-3 text-slate-300" />
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                            GENDER
+                          </label>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <select
+                            value={personalInfo.gender}
+                            onChange={(e) => updatePersonalInfo({ gender: e.target.value })}
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none cursor-pointer appearance-none pr-5"
+                          >
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                            <option value="Prefer not to say">Prefer not to say</option>
+                          </select>
+                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
+                        </div>
+                      </div>
 
-                    {/* Role */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Role</label>
-                      <Select value={personalInfo.role} onValueChange={(value) => updatePersonalInfo({ role: value })}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Admin">Admin</SelectItem>
-                          <SelectItem value="Manager">Manager</SelectItem>
-                          <SelectItem value="Agent">Agent</SelectItem>
-                          <SelectItem value="Supervisor">Supervisor</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                      {/* Date of Birth */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <GripVertical className="w-3 h-3 text-slate-300" />
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                            DATE OF BIRTH
+                          </label>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <input
+                            type="date"
+                            value={personalInfo.dateOfBirth}
+                            onChange={(e) => updatePersonalInfo({ dateOfBirth: e.target.value })}
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none cursor-pointer"
+                          />
+                        </div>
+                      </div>
 
-                    {/* Department (Searchable Combobox) */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Department</label>
-                      <div className="relative">
-                        {/* Trigger Button */}
-                        <button
-                          type="button"
-                          onClick={() => setDeptComboboxOpen((v) => !v)}
-                          className="w-full flex items-center justify-between px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:border-gray-400 focus:outline-none transition-colors cursor-pointer"
-                        >
-                          <span className={personalInfo.department ? "text-gray-900 font-medium" : "text-gray-400"}>
-                            {personalInfo.department || "Select department..."}
-                          </span>
-                          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${deptComboboxOpen ? "rotate-180" : ""}`} />
-                        </button>
+                      {/* Role */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <GripVertical className="w-3 h-3 text-slate-300" />
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                            ROLE
+                          </label>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <select
+                            value={personalInfo.role}
+                            onChange={(e) => updatePersonalInfo({ role: e.target.value })}
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none cursor-pointer appearance-none pr-5"
+                          >
+                            <option value="Admin">Admin</option>
+                            <option value="Manager">Manager</option>
+                            <option value="Agent">Agent</option>
+                            <option value="Supervisor">Supervisor</option>
+                          </select>
+                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
+                        </div>
+                      </div>
 
-                        {/* Searchable Dropdown Popover */}
-                        {deptComboboxOpen && (
-                          <div className="absolute z-50 top-full mt-1.5 left-0 w-full bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150">
-                            {/* Search Input */}
-                            <div className="p-2 border-b border-slate-100 bg-slate-50/50 relative flex items-center">
-                              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-4" />
+                      {/* Department */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <GripVertical className="w-3 h-3 text-slate-300" />
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                            DEPARTMENT
+                          </label>
+                        </div>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setDeptComboboxOpen((v) => !v)}
+                            className="w-full flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus:outline-none transition-all cursor-pointer"
+                          >
+                            <span className={personalInfo.department ? "text-xs font-medium text-[#1E293B]" : "text-xs text-gray-400"}>
+                              {personalInfo.department || "Select department..."}
+                            </span>
+                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${deptComboboxOpen ? "rotate-180" : ""}`} />
+                          </button>
+
+                          {deptComboboxOpen && (
+                            <div className="absolute z-50 top-full mt-1.5 left-0 w-full bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150">
+                              <div className="p-2 border-b border-slate-100 bg-slate-50/50 relative flex items-center">
+                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-4" />
+                                <input
+                                  type="text"
+                                  value={deptSearch}
+                                  onChange={(e) => setDeptSearch(e.target.value)}
+                                  placeholder="Type or search department..."
+                                  className="w-full pl-7 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                                  autoFocus
+                                />
+                              </div>
+                              <div className="max-h-48 overflow-y-auto divide-y divide-slate-50 p-1">
+                                {(() => {
+                                  const filtered = deptList.filter((d) =>
+                                    d.toLowerCase().includes(deptSearch.trim().toLowerCase())
+                                  );
+                                  const exactMatch = deptList.some(
+                                    (d) => d.toLowerCase() === deptSearch.trim().toLowerCase()
+                                  );
+                                  return (
+                                    <>
+                                      {filtered.map((d) => (
+                                        <button
+                                          key={d}
+                                          type="button"
+                                          onClick={() => {
+                                            updatePersonalInfo({ department: d });
+                                            setDeptSearch("");
+                                            setDeptComboboxOpen(false);
+                                          }}
+                                          className={`w-full text-left px-3 py-2 text-xs rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                                            personalInfo.department === d
+                                              ? "bg-indigo-50 text-indigo-900 font-bold"
+                                              : "hover:bg-slate-100 text-slate-700"
+                                          }`}
+                                        >
+                                          <span>{d}</span>
+                                          {personalInfo.department === d && (
+                                            <Check className="w-3.5 h-3.5 text-indigo-600" />
+                                          )}
+                                        </button>
+                                      ))}
+                                      {deptSearch.trim() !== "" && !exactMatch && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCreateAndSelectDept(deptSearch.trim())}
+                                          className="w-full text-left px-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50/70 hover:bg-indigo-100 rounded-lg flex items-center gap-1.5 transition-colors mt-1 cursor-pointer"
+                                        >
+                                          <Plus className="w-3.5 h-3.5" />
+                                          + Add "{deptSearch.trim()}" Department
+                                        </button>
+                                      )}
+                                      {filtered.length === 0 && exactMatch && (
+                                        <div className="px-3 py-3 text-xs text-slate-400 italic text-center">
+                                          No departments found
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Language */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <GripVertical className="w-3 h-3 text-slate-300" />
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                            LANGUAGE
+                          </label>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <select
+                            value={personalInfo.language}
+                            onChange={(e) => updatePersonalInfo({ language: e.target.value })}
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none cursor-pointer appearance-none pr-5"
+                          >
+                            <option value="English">English</option>
+                            <option value="Hindi">Hindi</option>
+                            <option value="Spanish">Spanish</option>
+                            <option value="French">French</option>
+                            <option value="German">German</option>
+                          </select>
+                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      {/* Country */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <GripVertical className="w-3 h-3 text-slate-300" />
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                            COUNTRY
+                          </label>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <select
+                            value={personalInfo.country}
+                            onChange={(e) => updatePersonalInfo({ country: e.target.value })}
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none cursor-pointer appearance-none pr-5"
+                          >
+                            <option value="India">India</option>
+                            <option value="USA">USA</option>
+                            <option value="UK">UK</option>
+                            <option value="Canada">Canada</option>
+                            <option value="Australia">Australia</option>
+                          </select>
+                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      {/* Timezone */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <GripVertical className="w-3 h-3 text-slate-300" />
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                            TIMEZONE
+                          </label>
+                        </div>
+                        <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                          <select
+                            value={personalInfo.timezone}
+                            onChange={(e) => updatePersonalInfo({ timezone: e.target.value })}
+                            className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none cursor-pointer appearance-none pr-5"
+                          >
+                            <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                            <option value="UTC">UTC</option>
+                            <option value="America/New_York">America/New_York (EST)</option>
+                            <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
+                            <option value="Europe/London">Europe/London (GMT)</option>
+                          </select>
+                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      {/* Status */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <GripVertical className="w-3 h-3 text-slate-300" />
+                          <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                            STATUS
+                          </label>
+                        </div>
+                        <div className="flex items-center justify-between rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2">
+                          <span className="text-xs text-gray-700 font-medium">{personalInfo.status ? "Active" : "Inactive"}</span>
+                          <Switch
+                            checked={personalInfo.status}
+                            onCheckedChange={(checked) => updatePersonalInfo({ status: checked })}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Custom Fields added to Basic Info */}
+                      {basicMemberCustomFieldKeys.map((fieldKey) => {
+                        const fieldDef = allTeamMemberFields.find((f) => f.key === fieldKey);
+                        const fieldLabel = fieldDef?.label || fieldKey;
+                        return (
+                          <div key={fieldKey}>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <GripVertical className="w-3 h-3 text-slate-300" />
+                                <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                                  {fieldLabel}
+                                </label>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {fieldDef && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingFieldDef(fieldDef)}
+                                    className="text-[10px] text-slate-400 hover:text-blue-600 p-0.5 rounded cursor-pointer"
+                                    title="Edit field settings"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveFieldFromSection("sec_basic", fieldKey)}
+                                  className="text-[10px] text-slate-300 hover:text-red-500 cursor-pointer"
+                                  title="Remove from section"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
                               <input
                                 type="text"
-                                value={deptSearch}
-                                onChange={(e) => setDeptSearch(e.target.value)}
-                                placeholder="Type or search department..."
-                                className="w-full pl-7 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
-                                autoFocus
+                                value={customFieldValues[fieldKey] ?? ""}
+                                onChange={(e) =>
+                                  handleCustomFieldValueChange(fieldKey, e.target.value)
+                                }
+                                className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
+                                placeholder={`Enter ${fieldLabel.toLowerCase()}...`}
                               />
-                            </div>
-
-                            {/* Filtered Department Options List */}
-                            <div className="max-h-48 overflow-y-auto divide-y divide-slate-50 p-1">
-                              {(() => {
-                                const filtered = deptList.filter((d) =>
-                                  d.toLowerCase().includes(deptSearch.trim().toLowerCase())
-                                );
-                                const exactMatch = deptList.some(
-                                  (d) => d.toLowerCase() === deptSearch.trim().toLowerCase()
-                                );
-
-                                return (
-                                  <>
-                                    {filtered.map((d) => (
-                                      <button
-                                        key={d}
-                                        type="button"
-                                        onClick={() => {
-                                          updatePersonalInfo({ department: d });
-                                          setDeptSearch("");
-                                          setDeptComboboxOpen(false);
-                                        }}
-                                        className={`w-full text-left px-3 py-2 text-xs rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
-                                          personalInfo.department === d
-                                            ? "bg-indigo-50 text-indigo-900 font-bold"
-                                            : "hover:bg-slate-100 text-slate-700"
-                                        }`}
-                                      >
-                                        <span>{d}</span>
-                                        {personalInfo.department === d && (
-                                          <Check className="w-3.5 h-3.5 text-indigo-600" />
-                                        )}
-                                      </button>
-                                    ))}
-
-                                    {/* Add Button if Typed Department does NOT exist */}
-                                    {deptSearch.trim() !== "" && !exactMatch && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCreateAndSelectDept(deptSearch.trim())}
-                                        className="w-full text-left px-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50/70 hover:bg-indigo-100 rounded-lg flex items-center gap-1.5 transition-colors mt-1 cursor-pointer"
-                                      >
-                                        <Plus className="w-3.5 h-3.5" />
-                                        + Add "{deptSearch.trim()}" Department
-                                      </button>
-                                    )}
-
-                                    {filtered.length === 0 && exactMatch && (
-                                      <div className="px-3 py-3 text-xs text-slate-400 italic text-center">
-                                        No departments found
-                                      </div>
-                                    )}
-                                  </>
-                                );
-                              })()}
+                              <Tag className="w-4 h-4 text-slate-400" />
                             </div>
                           </div>
-                        )}
-                      </div>
+                        );
+                      })}
                     </div>
 
-                    {/* Language */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Language</label>
-                      <Select value={personalInfo.language} onValueChange={(value) => updatePersonalInfo({ language: value })}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="English">English</SelectItem>
-                          <SelectItem value="Hindi">Hindi</SelectItem>
-                          <SelectItem value="Spanish">Spanish</SelectItem>
-                          <SelectItem value="French">French</SelectItem>
-                          <SelectItem value="German">German</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Country */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Country</label>
-                      <Select value={personalInfo.country} onValueChange={(value) => updatePersonalInfo({ country: value })}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="India">India</SelectItem>
-                          <SelectItem value="USA">USA</SelectItem>
-                          <SelectItem value="UK">UK</SelectItem>
-                          <SelectItem value="Canada">Canada</SelectItem>
-                          <SelectItem value="Australia">Australia</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Timezone */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Timezone</label>
-                      <Select value={personalInfo.timezone} onValueChange={(value) => updatePersonalInfo({ timezone: value })}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Asia/Kolkata">Asia/Kolkata (IST)</SelectItem>
-                          <SelectItem value="UTC">UTC</SelectItem>
-                          <SelectItem value="America/New_York">America/New_York (EST)</SelectItem>
-                          <SelectItem value="America/Los_Angeles">America/Los_Angeles (PST)</SelectItem>
-                          <SelectItem value="Europe/London">Europe/London (GMT)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Status */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Status</label>
-                      <div className="flex items-center gap-2 h-9">
-                        <Switch
-                          checked={personalInfo.status}
-                          onCheckedChange={(checked) => updatePersonalInfo({ status: checked })}
-                        />
-                        <span className="text-sm text-gray-700">{personalInfo.status ? "Active" : "Inactive"}</span>
-                      </div>
+                    {/* + Add Field inside Basic Info */}
+                    <div className="flex justify-end mt-4 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAddField("sec_basic")}
+                        className="text-xs font-semibold text-[#2563EB] hover:text-blue-700 flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Field
+                      </button>
                     </div>
                   </div>
 
-                  {/* Custom Personal Fields */}
-                  {customPersonalFields.map((field) => (
-                    <div key={field.id} className="grid grid-cols-2 gap-4">
-                      <div className="col-span-1">
-                        <label className="block text-xs font-medium text-gray-700 mb-1.5">{field.label}</label>
-                        <Input
-                          value={field.value}
-                          onChange={(e) => {
-                            setCustomPersonalFields(customPersonalFields.map(f =>
-                              f.id === field.id ? { ...f, value: e.target.value } : f
-                            ));
-                            setHasUnsavedChanges(true);
-                          }}
-                          className="w-full text-sm"
-                        />
-                      </div>
-                    </div>
-                  ))}
+                  {/* DYNAMIC CUSTOM SECTIONS (FROM REGISTRY) */}
+                  {allTeamMemberSections.map((section) => {
+                    const sectionFields = (section.fieldKeys || [])
+                      .map((k) => allTeamMemberFields.find((f) => f.key === k))
+                      .filter(Boolean) as FieldDefinition[];
 
-                  {/* Field action links */}
-                  <div className="pt-6 mt-6 border-t border-gray-200">
-                    <div className="flex items-center gap-4">
-                      <button
-                        onClick={() => setShowSelectFieldModal(true)}
-                        className="text-sm font-medium transition-colors cursor-pointer"
-                        style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif", fontSize: "14px", borderBottom: "1px dashed #4F8EF7", paddingBottom: "2px" }}
+                    return (
+                      <div
+                        key={section.id}
+                        className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs"
                       >
-                        Select field
-                      </button>
-                    </div>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <GripVertical className="w-3.5 h-3.5 text-slate-300" />
+                            <Sparkles className="w-4 h-4 text-[#2563EB]" />
+                            <div>
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
+                                {section.title}
+                              </h3>
+                              {section.description && (
+                                <p className="text-[11px] text-gray-500 font-normal">{section.description}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingSectionDef(section);
+                                setAddSectionDrawerOpen(true);
+                              }}
+                              className="p-1 text-slate-400 hover:text-blue-600 rounded-md transition-colors cursor-pointer"
+                              title="Edit section"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                deleteCustomSection("teamMember", section.id);
+                                setHasUnsavedChanges(true);
+                                toast.success("Section removed");
+                              }}
+                              className="p-1 text-slate-400 hover:text-red-500 rounded-md transition-colors cursor-pointer"
+                              title="Delete section"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {sectionFields.length === 0 ? (
+                          <div className="py-4 text-center border border-dashed border-slate-200 rounded-xl">
+                            <p className="text-xs text-slate-400">No fields in this section yet.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3.5">
+                            {sectionFields.map((field) => (
+                              <div key={field.id || field.key}>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <GripVertical className="w-3 h-3 text-slate-300" />
+                                    <label className="text-[11px] font-bold text-[#475569] uppercase tracking-wider">
+                                      {field.label}
+                                    </label>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingFieldDef(field)}
+                                      className="text-[10px] text-slate-400 hover:text-blue-600 p-0.5 rounded cursor-pointer"
+                                      title="Edit field settings"
+                                    >
+                                      <Edit3 className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveFieldFromSection(section.id, field.key)}
+                                      className="text-[10px] text-slate-300 hover:text-red-500 cursor-pointer"
+                                      title="Remove from section"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="relative flex items-center rounded-xl border border-[#E2E8F0] bg-white px-3.5 py-2 hover:border-[#CBD5E1] focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                                  <input
+                                    type="text"
+                                    value={customFieldValues[field.key] ?? ""}
+                                    onChange={(e) =>
+                                      handleCustomFieldValueChange(field.key, e.target.value)
+                                    }
+                                    className="flex-1 text-xs text-[#1E293B] font-medium bg-transparent border-none outline-none"
+                                    placeholder={`Enter ${field.label.toLowerCase()}...`}
+                                  />
+                                  <Tag className="w-4 h-4 text-slate-400" />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* + Add Field inside section */}
+                        <div className="flex justify-end mt-4 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAddField(section.id)}
+                            className="text-xs font-semibold text-[#2563EB] hover:text-blue-700 flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add Field
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* + Add Section Button at bottom right */}
+                  <div className="flex justify-end pt-2 pb-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingSectionDef(null);
+                        setAddSectionDrawerOpen(true);
+                      }}
+                      className="text-xs font-semibold text-[#2563EB] hover:text-blue-700 flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Section
+                    </button>
                   </div>
                 </div>
               )}
@@ -1223,281 +1566,7 @@ export function TeamMemberDrawer({
               )}
             </div>
 
-            {/* Drawer-scoped modals */}
-            {/* Select Field Modal */}
-            {showSelectFieldModal && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/30">
-                <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
-                  <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900">Select fields</h3>
-                    <button
-                      onClick={() => {
-                        setShowSelectFieldModal(false);
-                        setSelectFieldSearch("");
-                        setSelectedFields([]);
-                      }}
-                      className="text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                  <div className="p-6 space-y-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <Input
-                        value={selectFieldSearch}
-                        onChange={(e) => setSelectFieldSearch(e.target.value)}
-                        placeholder="Find field..."
-                        className="pl-9"
-                      />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-semibold text-gray-700 mb-3">About Team Member</h4>
-                      <div className="grid grid-cols-2 gap-3 max-h-[240px] overflow-y-auto pr-1">
-                        {availableFields
-                          .filter(field => field.toLowerCase().includes(selectFieldSearch.toLowerCase()))
-                          .map((field) => (
-                            <label key={field} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1.5 rounded-md transition-colors">
-                              <input
-                                type="checkbox"
-                                checked={selectedFields.includes(field)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedFields([...selectedFields, field]);
-                                  } else {
-                                    setSelectedFields(selectedFields.filter(f => f !== field));
-                                  }
-                                }}
-                                className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                              />
-                              <span className="text-sm text-gray-700">{field}</span>
-                            </label>
-                          ))}
-                      </div>
-                      <div className="pt-3 mt-3 border-t border-gray-100 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowSelectFieldModal(false);
-                            setShowCreateFieldModal(true);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50/80 rounded-md border border-dashed border-blue-200 transition-colors cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Create Field
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedFields.length === availableFields.length && availableFields.length > 0}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedFields([...availableFields]);
-                            } else {
-                              setSelectedFields([]);
-                            }
-                          }}
-                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">Select all</span>
-                      </label>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setShowSelectFieldModal(false);
-                            setSelectFieldSearch("");
-                            setSelectedFields([]);
-                          }}
-                          className="text-sm"
-                        >
-                          CANCEL
-                        </Button>
-                        <Button
-                          variant="primary"
-                          onClick={() => {
-                            selectedFields.forEach(field => {
-                              if (!customPersonalFields.some(f => f.label === field)) {
-                                setCustomPersonalFields(prev => [...prev, {
-                                  id: Date.now().toString() + field,
-                                  label: field,
-                                  type: "Text",
-                                  value: ""
-                                }]);
-                              }
-                            });
-                            setShowSelectFieldModal(false);
-                            setSelectFieldSearch("");
-                            setSelectedFields([]);
-                            setHasUnsavedChanges(true);
-                            toast.success(`${selectedFields.length} field(s) selected`);
-                          }}
-                          className="text-sm"
-                        >
-                          SELECT
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* Create Field Modal */}
-            {showCreateFieldModal && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/30">
-                <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
-                  <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-900">Create Custom Field</h3>
-                    <button
-                      onClick={() => {
-                        setShowCreateFieldModal(false);
-                        setNewCustomField({
-                          label: "",
-                          type: "String",
-                          multiple: false,
-                          showAlways: true,
-                          enableTooltip: false,
-                          visibleToSelected: false
-                        });
-                      }}
-                      className="text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                  <div className="p-6 space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Field Name</label>
-                      <Input
-                        value={newCustomField.label}
-                        onChange={(e) => setNewCustomField({ ...newCustomField, label: e.target.value })}
-                        placeholder="e.g. Insurance ID"
-                        className="w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Field Type</label>
-                      <Select value={newCustomField.type} onValueChange={(value) => setNewCustomField({ ...newCustomField, type: value })}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="String">String</SelectItem>
-                          <SelectItem value="List">List</SelectItem>
-                          <SelectItem value="Date/Time">Date/Time</SelectItem>
-                          <SelectItem value="Date">Date</SelectItem>
-                          <SelectItem value="Book a Resource">Book a Resource</SelectItem>
-                          <SelectItem value="Address">Address</SelectItem>
-                          <SelectItem value="Link">Link</SelectItem>
-                          <SelectItem value="File">File</SelectItem>
-                          <SelectItem value="Money">Money</SelectItem>
-                          <SelectItem value="Yes/No">Yes/No</SelectItem>
-                          <SelectItem value="Number">Number</SelectItem>
-                          <SelectItem value="WhatsApp Link">WhatsApp Link</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-3">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={newCustomField.multiple}
-                          onChange={(e) => setNewCustomField({ ...newCustomField, multiple: e.target.checked })}
-                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">Multiple</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={newCustomField.showAlways}
-                          onChange={(e) => setNewCustomField({ ...newCustomField, showAlways: e.target.checked })}
-                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700 flex items-center gap-1">
-                          Show always
-                          <Info className="w-3 h-3 text-gray-400" />
-                        </span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={newCustomField.enableTooltip}
-                          onChange={(e) => setNewCustomField({ ...newCustomField, enableTooltip: e.target.checked })}
-                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">Enable field tooltip</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={newCustomField.visibleToSelected}
-                          onChange={(e) => setNewCustomField({ ...newCustomField, visibleToSelected: e.target.checked })}
-                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm text-gray-700">Make this field visible to selected users only</span>
-                      </label>
-                    </div>
-                    <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-200">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setShowCreateFieldModal(false);
-                          setNewCustomField({
-                            label: "",
-                            type: "String",
-                            multiple: false,
-                            showAlways: true,
-                            enableTooltip: false,
-                            visibleToSelected: false
-                          });
-                        }}
-                        className="text-sm"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="primary"
-                        onClick={() => {
-                          if (!newCustomField.label.trim()) {
-                            toast.error("Please enter a field name");
-                            return;
-                          }
-                          const fieldLabel = newCustomField.label.trim();
-                          setCustomPersonalFields(prev => [...prev, {
-                            id: Date.now().toString(),
-                            label: fieldLabel,
-                            type: newCustomField.type,
-                            value: ""
-                          }]);
-                          if (!availableFields.includes(fieldLabel)) {
-                            setAvailableFields(prev => [...prev, fieldLabel]);
-                          }
-                          setShowCreateFieldModal(false);
-                          setNewCustomField({
-                            label: "",
-                            type: "String",
-                            multiple: false,
-                            showAlways: true,
-                            enableTooltip: false,
-                            visibleToSelected: false
-                          });
-                          setHasUnsavedChanges(true);
-                          toast.success("Custom field created");
-                        }}
-                        className="text-sm bg-blue-600 hover:bg-blue-700"
-                      >
-                        Create Field
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Create Event Modal */}
             {showCreateEventModal && (
@@ -1835,6 +1904,40 @@ export function TeamMemberDrawer({
               onClick={() => {
                 setSaveStatus("saved");
                 setHasUnsavedChanges(false);
+                if (member?.id) {
+                  const updatedMemberData = {
+                    ...member,
+                    name: personalInfo.fullName,
+                    email: personalInfo.email,
+                    phone: personalInfo.phone,
+                    role: personalInfo.role,
+                    department: personalInfo.department,
+                    status: personalInfo.status,
+                    customFields: customFieldValues,
+                  };
+                  try {
+                    const all = getStoredTeamMembers();
+                    const next = all.map((m) =>
+                      String(m.id) === String(member.id) ? { ...m, ...updatedMemberData } : m
+                    );
+                    saveStoredTeamMembers(next);
+                  } catch (e) {
+                    console.error("Failed to update team member store:", e);
+                  }
+                  if (onSave) {
+                    onSave(updatedMemberData);
+                  }
+                } else if (onSave) {
+                  onSave({
+                    name: personalInfo.fullName,
+                    email: personalInfo.email,
+                    phone: personalInfo.phone,
+                    role: personalInfo.role,
+                    department: personalInfo.department,
+                    status: personalInfo.status,
+                    customFields: customFieldValues,
+                  });
+                }
                 toast.success("Profile updated successfully");
                 setTimeout(() => setSaveStatus("idle"), 2500);
               }}
@@ -1852,6 +1955,76 @@ export function TeamMemberDrawer({
               )}
             </Button>
           </div>
+        )}
+        {/* ── Select Fields Modal ────────────────────────────────────────────── */}
+        {fieldModalOpen && (
+          <SelectFieldsModal
+            onlyModules={["teamMember"]}
+            initiallySelected={
+              targetSectionIdForField === "sec_basic"
+                ? basicMemberCustomFieldKeys
+                : (allTeamMemberSections.find((s) => s.id === targetSectionIdForField)?.fieldKeys || [])
+            }
+            onOpenCreateModal={() => {
+              setFieldModalOpen(false);
+              setCreateFieldModalOpen(true);
+            }}
+            isAdmin={false}
+            onClose={() => {
+              setFieldModalOpen(false);
+              setTargetSectionIdForField(null);
+            }}
+            onApply={handleApplySelectedFields}
+          />
+        )}
+
+        {/* ── Create Custom Field Modal (Admin linked) ───────────────────────── */}
+        {createFieldModalOpen && (
+          <CreateFieldModal
+            lockModule="teamMember"
+            isAdmin={false}
+            onClose={() => setCreateFieldModalOpen(false)}
+            onCreated={(newField) => {
+              if (targetSectionIdForField) {
+                handleApplySelectedFields([newField.key]);
+              }
+            }}
+          />
+        )}
+
+        {/* ── Add/Edit Section Drawer (Admin linked) ─────────────────────────── */}
+        {addSectionDrawerOpen && (
+          <AdminSectionDrawer
+            section={editingSectionDef}
+            initialModule="teamMember"
+            isAdmin={false}
+            zIndex={10001}
+            onClose={() => {
+              setAddSectionDrawerOpen(false);
+              setEditingSectionDef(null);
+            }}
+            onSaved={(savedSection) => {
+              setAddSectionDrawerOpen(false);
+              setEditingSectionDef(null);
+              setHasUnsavedChanges(true);
+              toast.success(`Section "${savedSection.title}" saved`);
+            }}
+          />
+        )}
+
+        {/* ── Edit Custom Field Drawer (Admin linked) ────────────────────────── */}
+        {editingFieldDef && (
+          <AdminFieldDrawer
+            field={editingFieldDef}
+            initialModule="teamMember"
+            lockModule={true}
+            isAdmin={false}
+            onClose={() => setEditingFieldDef(null)}
+            onSaved={(savedField) => {
+              setEditingFieldDef(null);
+              toast.success(`Field "${savedField.label}" updated`);
+            }}
+          />
         )}
       </Drawer>
     </>

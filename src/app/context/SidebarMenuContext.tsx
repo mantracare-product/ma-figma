@@ -240,14 +240,20 @@ export function SidebarMenuProvider({ children }: { children: React.ReactNode })
   };
 
   const setDefaultStartPage = (path: string) => {
+    const isAlreadyDefault = config.defaultStartPage === path;
+    const newDefault = isAlreadyDefault ? "" : path;
     const updated = {
       ...config,
-      defaultStartPage: path,
+      defaultStartPage: newDefault,
       sections: config.sections.map((sec) => ({
         ...sec,
         items: sec.items.map((item) => {
           if (item.path === path) {
-            return { ...item, visible: true, isFeatured: true };
+            return {
+              ...item,
+              visible: true,
+              isFeatured: isAlreadyDefault ? false : true,
+            };
           }
           return item;
         }),

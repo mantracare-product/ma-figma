@@ -60,6 +60,7 @@ export interface ProcessTransitionTarget {
   targetStageName: string;
   autoMove?: boolean;
   condition?: string;
+  endCurrentProcess?: boolean;
 }
 
 export interface Stage {
@@ -75,8 +76,14 @@ export interface Stage {
   channelSources?: StageChannelSource[];
   enableCalling?: boolean;
   callTriggerSettings?: CallTriggerSettings;
+  isInitial?: boolean;
   isFinal?: boolean;
   isFinalStage?: boolean;
+  stagePosition?: "initial" | "intermediate" | "final" | null;
+  intentTrigger?: string; // "interested" | "not_interested" | "call_back" | "needs_info" | "disqualified" | "custom"
+  intentLabel?: string;
+  intentDescription?: string;
+  endPipelineOnReach?: boolean; // System setting to end this pipeline and move to next pipeline
   nextProcessTransitions?: ProcessTransitionTarget[];
 }
 
@@ -242,7 +249,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
   {
     id: "1",
     name: "Patient Intake",
-    description: "Initial patient onboarding and verification process",
+    description: "Initial patient onboarding, qualification and intent triage workflow",
     assignedToUserId: 1,
     aiSettings: {
       platform: "OpenAI - GPT-4o",
@@ -252,15 +259,19 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
       style: "Balanced",
     },
     stages: [
-      { id: "1-1", name: "Initial Contact", description: "First call to patient for basic information gathering", status: "active", color: "#22D3EE" },
-      { id: "1-2", name: "Insurance Verify", description: "Verify patient insurance details and coverage", status: "active", color: "#22D3EE" },
+      { id: "1-1", name: "Initial Contact", description: "First outreach to contact for basic info gathering", status: "active", color: "#3B82F6" },
+      { id: "1-2", name: "Contacted", description: "Conversation in progress; AI listens to customer needs and determines intent", status: "active", color: "#06B6D4" },
       {
         id: "1-3",
-        name: "Schedule Appointment",
-        description: "Schedule the patient's first appointment",
+        name: "Interested",
+        description: "Customer expressed clear interest and wants to proceed",
         status: "active",
-        color: "#EC4899",
+        color: "#22C55E",
         isFinalStage: true,
+        intentTrigger: "interested",
+        intentLabel: "Interested",
+        intentDescription: "Caller agrees to schedule consultation or requests more info to proceed",
+        endPipelineOnReach: true,
         nextProcessTransitions: [
           {
             id: "trans-1",
@@ -269,7 +280,56 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
             targetStageId: "2-1",
             targetStageName: "Post-Visit Check",
             autoMove: true,
-            condition: "On appointment confirmed",
+            condition: "When intent is Interested",
+            endCurrentProcess: true,
+          },
+        ],
+      },
+      {
+        id: "1-4",
+        name: "Not Interested",
+        description: "Customer declined services or asked not to be contacted again",
+        status: "active",
+        color: "#EF4444",
+        isFinalStage: true,
+        intentTrigger: "not_interested",
+        intentLabel: "Not Interested",
+        intentDescription: "Caller politely declines or indicates no current need",
+        endPipelineOnReach: true,
+        nextProcessTransitions: [
+          {
+            id: "trans-2",
+            targetProcessId: "3",
+            targetProcessName: "Nurture Campaign",
+            targetStageId: "3-1",
+            targetStageName: "30-Day Nurture Drip",
+            autoMove: true,
+            condition: "When intent is Not Interested",
+            endCurrentProcess: true,
+          },
+        ],
+      },
+      {
+        id: "1-5",
+        name: "Call Back Later",
+        description: "Customer is busy or requested a follow-up at a specific date/time",
+        status: "active",
+        color: "#F59E0B",
+        isFinalStage: true,
+        intentTrigger: "call_back",
+        intentLabel: "Call Back Later",
+        intentDescription: "Caller requests follow-up at a convenient time",
+        endPipelineOnReach: true,
+        nextProcessTransitions: [
+          {
+            id: "trans-3",
+            targetProcessId: "2",
+            targetProcessName: "Follow-up Calls",
+            targetStageId: "2-2",
+            targetStageName: "Medication Reminder",
+            autoMove: true,
+            condition: "When intent is Call Back Later",
+            endCurrentProcess: true,
           },
         ],
       },
@@ -278,7 +338,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
   {
     id: "2",
     name: "Follow-up Calls",
-    description: "Post-visit follow-up and medication reminders",
+    description: "Post-visit follow-up, consultation onboarding, and reminders",
     assignedToUserId: 2,
     aiSettings: {
       platform: "Anthropic Claude",
@@ -288,8 +348,36 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
       style: "Balanced",
     },
     stages: [
-      { id: "2-1", name: "Post-Visit Check", description: "Check on patient after their visit", status: "active" },
-      { id: "2-2", name: "Medication Reminder", description: "Remind patient to take their medication", status: "active" },
+      { id: "2-1", name: "Post-Visit Check", description: "Check on patient after their visit or consultation", status: "active", color: "#3B82F6" },
+      { id: "2-2", name: "Medication Reminder", description: "Remind patient to take their medication or confirm next step", status: "active", color: "#8B5CF6" },
+      {
+        id: "2-3",
+        name: "Completed & Discharged",
+        description: "Patient workflow fully completed",
+        status: "active",
+        color: "#10B981",
+        isFinalStage: true,
+        intentTrigger: "interested",
+        intentLabel: "Completed Successfully",
+        endPipelineOnReach: true,
+      },
+    ],
+  },
+  {
+    id: "3",
+    name: "Nurture Campaign",
+    description: "Long-term patient re-engagement and educational newsletter outreach",
+    assignedToUserId: 3,
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Empathetic",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "3-1", name: "30-Day Nurture Drip", description: "Periodic educational check-ins", status: "active", color: "#6366F1" },
+      { id: "3-2", name: "Re-engagement Call", description: "Follow up to see if healthcare needs have changed", status: "active", color: "#EC4899" },
     ],
   },
 ];

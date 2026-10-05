@@ -352,94 +352,103 @@ export function AdminCustomFields() {
     MODULE_TABS.find((m) => m.value === activeModule)?.label ?? activeModule;
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-200">
-      {/* ── Page Title ── */}
-      <div>
-        <h1 className="text-[22px] font-bold text-[#111827] leading-tight">Sections/Fields</h1>
-        <p className="text-xs text-gray-500 mt-0.5">Manage entity schemas and layout sections.</p>
-      </div>
-
-
-      {/* ── Pill toggle + Search (matches client Settings layout) ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="inline-flex items-center gap-0 bg-gray-100 p-1 rounded-lg border border-gray-200">
-          <button type="button" onClick={() => setActiveTab("fields")}
-            className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === "fields" ? "bg-white text-[#111827] shadow-xs font-bold" : "text-gray-500 hover:text-gray-800"
-            }`}>
+    <div className="space-y-4 animate-in fade-in duration-200">
+      {/* ── UNIFIED TOOLBAR: Pill toggle + Entity Dropdown + Search + Action Button ── */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-2.5 px-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        {/* Left: Custom Fields | Custom Sections Toggle */}
+        <div className="inline-flex items-center gap-0 bg-gray-100 p-1 rounded-xl border border-gray-200/80">
+          <button
+            type="button"
+            onClick={() => setActiveTab("fields")}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === "fields"
+                ? "bg-white text-[#111827] shadow-xs font-bold"
+                : "text-gray-500 hover:text-gray-800"
+            }`}
+          >
             Custom Fields
           </button>
-          <button type="button" onClick={() => setActiveTab("sections")}
-            className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === "sections" ? "bg-white text-[#111827] shadow-xs font-bold" : "text-gray-500 hover:text-gray-800"
-            }`}>
+          <button
+            type="button"
+            onClick={() => setActiveTab("sections")}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === "sections"
+                ? "bg-white text-[#111827] shadow-xs font-bold"
+                : "text-gray-500 hover:text-gray-800"
+            }`}
+          >
             Custom Sections
           </button>
         </div>
-        <div className="relative w-64">
-          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input type="text"
-            placeholder={activeTab === "fields" ? "Search fields..." : "Search sections..."}
-            value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-8 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-gray-400" />
-          {searchQuery && (
-            <button type="button" onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              <X className="w-3 h-3" />
-            </button>
-          )}
+
+        {/* Center: Entity Dropdown + Search Input inside Unified Search Capsule */}
+        <div className="flex-1 min-w-[280px] max-w-[500px]">
+          <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 focus-within:bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+            <Search className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
+            
+            {/* Entity Scope Dropdown */}
+            <div className="relative border-r border-gray-200 pr-2 mr-2">
+              <select
+                value={activeModule}
+                onChange={(e) => setActiveModule(e.target.value as any)}
+                className="bg-transparent text-xs font-bold text-gray-800 pr-4 outline-none cursor-pointer appearance-none"
+              >
+                {MODULE_TABS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3 h-3 text-gray-400 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            {/* Search Input */}
+            <input
+              type="text"
+              placeholder={activeTab === "fields" ? `Search ${currentModLabel.toLowerCase()} fields...` : `Search ${currentModLabel.toLowerCase()} sections...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full text-xs bg-transparent border-none outline-none text-gray-900 placeholder:text-gray-400"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="text-gray-400 hover:text-gray-600 ml-1.5"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Right: Action Button */}
+        {activeTab === "fields" ? (
+          <button
+            type="button"
+            onClick={handleOpenCreateField}
+            className="px-4 py-2 bg-[#111827] text-white rounded-xl text-xs font-semibold hover:bg-[#1f2937] transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Field
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setEditingSection(null);
+              setSectionDrawerOpen(true);
+            }}
+            className="px-4 py-2 bg-[#111827] text-white rounded-xl text-xs font-semibold hover:bg-[#1f2937] transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Section
+          </button>
+        )}
       </div>
 
-      {/* ── UNIFIED CONTAINER: TAB BAR JOINED DIRECTLY WITH TABLE ── */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
-        {/* Module Tabs Bar */}
-        <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-gray-200 bg-white">
-          {/* Rectangular Module Tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto">
-            {MODULE_TABS.map((m) => {
-              const isSelected = activeModule === m.value;
-              return (
-                <button
-                  key={m.value}
-                  type="button"
-                  onClick={() => setActiveModule(m.value)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
-                    isSelected
-                      ? "bg-[#111827] text-white shadow-xs"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
-                >
-                  {m.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Action Button inside Bar */}
-          {activeTab === "fields" ? (
-            <button
-              type="button"
-              onClick={handleOpenCreateField}
-              className="px-3.5 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-semibold hover:bg-[#1f2937] transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ml-3"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Field
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setEditingSection(null);
-                setSectionDrawerOpen(true);
-              }}
-              className="px-3.5 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-semibold hover:bg-[#1f2937] transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ml-3"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Section
-            </button>
-          )}
-        </div>
+      {/* ── TABLE CONTAINER ── */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
 
         {/* TAB 1: CUSTOM FIELDS TABLE VIEW */}
         {activeTab === "fields" && (

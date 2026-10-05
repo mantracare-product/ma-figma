@@ -21,20 +21,10 @@ export interface TeamMember {
 const TEAM_MEMBERS_KEY = "ma_team_members";
 
 const DEFAULT_TEAM_MEMBERS: TeamMember[] = [
-  { id: "tm_1", name: "John Smith", email: "john.smith@healthcare.com", role: "Admin", department: "Engineering" },
-  { id: "tm_2", name: "Sarah Johnson", email: "sarah.j@healthcare.com", role: "Admin", department: "Medical" },
-  { id: "tm_3", name: "Emily Davis", email: "emily.d@healthcare.com", role: "Manager", department: "Sales" },
-  { id: "tm_4", name: "Dr. Robert Martinez", email: "robert.m@healthcare.com", role: "Manager", department: "Medical" },
-  { id: "tm_5", name: "Lisa Anderson", email: "lisa.a@healthcare.com", role: "Reception", department: "Reception" },
-  { id: "tm_6", name: "John Agent", email: "john.agent@healthcare.com", role: "Sales", department: "Sales" },
-  { id: "tm_7", name: "Alex Turner", email: "alex.t@healthcare.com", role: "Sales", department: "Sales" },
+  { id: "tm_1", name: "Admin User", email: "admin@mantra.care", role: "Admin", department: "Administration" },
 ];
 
 export function getStoredTeamMembersList(): TeamMember[] {
-  try {
-    const raw = localStorage.getItem(TEAM_MEMBERS_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
   return DEFAULT_TEAM_MEMBERS;
 }
 

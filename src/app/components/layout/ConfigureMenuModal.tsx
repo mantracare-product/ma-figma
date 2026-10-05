@@ -392,7 +392,7 @@ export default function ConfigureMenuModal() {
                                 ? "bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100"
                                 : "bg-white border-gray-200 text-gray-400 hover:text-amber-500 hover:bg-gray-50"
                             }`}
-                            title={item.isFeatured ? "Unfeature item" : "Feature item (quick access badge)"}
+                            title={item.isFeatured ? "Unfeature this page" : "Feature this page (appears in collapsed sidebar)"}
                           >
                             <Star
                               className={`w-3.5 h-3.5 ${

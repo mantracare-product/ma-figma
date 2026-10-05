@@ -4,6 +4,7 @@ export interface TeamMember {
   id: number | string;
   name: string;
   email: string;
+  phone?: string;
   role?: string;
   department?: string;
   status?: boolean;
@@ -26,100 +27,61 @@ const SETTINGS_USERS_KEY = "settings_allUsers";
 export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
   {
     id: 1,
-    name: "John Smith",
-    email: "john.smith@healthcare.com",
+    name: "Admin User",
+    email: "admin@mantra.care",
     role: "Admin",
-    department: "Engineering",
+    department: "Administration",
     status: true,
     organizationId: "1",
     canBookAppointments: true,
     calendarConnected: true,
     connectedCalendar: "google",
   },
-  {
-    id: 2,
-    name: "Sarah Johnson",
-    email: "sarah.j@healthcare.com",
-    role: "Manager",
-    department: "Medical",
-    status: true,
-    organizationId: "1",
-    canBookAppointments: true,
-    calendarConnected: true,
-    connectedCalendar: "outlook",
-  },
-  {
-    id: 3,
-    name: "Michael Chen",
-    email: "michael.c@healthcare.com",
-    role: "Sales",
-    department: "Sales",
-    status: true,
-    organizationId: "1",
-    canBookAppointments: false, // Cannot book appointments initially
-  },
-  {
-    id: 4,
-    name: "Emily Davis",
-    email: "emily.d@healthcare.com",
-    role: "Reception",
-    department: "Reception",
-    status: true,
-    organizationId: "1",
-    canBookAppointments: true,
-  },
-  {
-    id: 5,
-    name: "Dr. Robert Martinez",
-    email: "robert.m@dentalcare.com",
-    role: "Admin",
-    department: "Medical",
-    status: true,
-    organizationId: "2",
-    canBookAppointments: true,
-  },
-  {
-    id: 6,
-    name: "Lisa Anderson",
-    email: "lisa.a@dentalcare.com",
-    role: "Manager",
-    department: "Medical",
-    status: true,
-    organizationId: "2",
-    canBookAppointments: true,
-  },
-  {
-    id: 7,
-    name: "James Wilson",
-    email: "james.w@dentalcare.com",
-    role: "Reception",
-    department: "Reception",
-    status: true,
-    organizationId: "2",
-    canBookAppointments: false, // Cannot book appointments initially
-  },
 ];
+
+const LEGACY_MOCK_NAMES = new Set([
+  "abhishe prod",
+  "avani test",
+  "avani malviya",
+  "vaibhav bhardwaj",
+  "anshul gupta",
+  "ritika sahni",
+  "navodya",
+  "varsha",
+  "karan hinduja",
+  "john smith",
+  "sarah johnson",
+  "michael chen",
+  "emily davis",
+  "dr. robert martinez",
+  "lisa anderson",
+  "james wilson",
+  "john agent",
+  "alex turner",
+]);
+
+function cleanLegacyMembers(list: any[]): TeamMember[] {
+  const filtered = list.filter((m) => m && m.name && !LEGACY_MOCK_NAMES.has(m.name.toLowerCase()));
+  if (!filtered.some((m) => m.name.toLowerCase() === "admin user" || (m.role && m.role.toLowerCase() === "admin"))) {
+    return [...INITIAL_TEAM_MEMBERS, ...filtered];
+  }
+  return filtered;
+}
 
 export function getStoredTeamMembers(): TeamMember[] {
   try {
     const rawLocal = localStorage.getItem(TEAM_STORAGE_KEY) || localStorage.getItem(SETTINGS_USERS_KEY);
     if (rawLocal) {
       const parsed = JSON.parse(rawLocal);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return cleanLegacyMembers(parsed);
+      }
     }
     const rawSession = sessionStorage.getItem(SETTINGS_USERS_KEY);
     if (rawSession) {
       const parsed = JSON.parse(rawSession);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Ensure canBookAppointments is preserved or initialized
-        return parsed.map((u: any) => {
-          if (u.canBookAppointments !== undefined) return u;
-          const matchedInit = INITIAL_TEAM_MEMBERS.find((init) => String(init.id) === String(u.id));
-          return {
-            ...u,
-            canBookAppointments: matchedInit ? matchedInit.canBookAppointments : true,
-          };
-        });
+        return cleanLegacyMembers(parsed);
       }
     }
   } catch {}

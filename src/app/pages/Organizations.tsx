@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router";
 import PageHeader from "../components/layout/PageHeader";
 import SettingsSubnav from "../components/settings/SettingsSubnav";
+import OrganizationDetailDrawer, { OrganizationDetail } from "../components/settings/OrganizationDetailDrawer";
 import { useOrganization } from "../context/OrganizationContext";
 import {
   INITIAL_CATEGORIES,
@@ -116,6 +117,9 @@ export default function Organizations() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingOrg, setEditingOrg] = useState<OrganizationItem | null>(null);
   const [deletingOrg, setDeletingOrg] = useState<OrganizationItem | null>(null);
+
+  const [selectedOrgForDrawer, setSelectedOrgForDrawer] = useState<OrganizationDetail | null>(null);
+  const [showOrgDrawer, setShowOrgDrawer] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -509,10 +513,22 @@ export default function Organizations() {
 
                           {/* Organization Name + Flag */}
                           <td className="px-3 py-1 font-semibold text-[#222222] whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedOrgForDrawer({
+                                  ...org,
+                                  phone: "+1 (555) 000-0000",
+                                  industryCategory: org.industryCategory || "Healthcare",
+                                });
+                                setShowOrgDrawer(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 text-[#1456f0] hover:underline cursor-pointer text-left"
+                            >
                               {org.flag && <span className="text-sm">{org.flag}</span>}
                               <span>{org.name}</span>
-                            </div>
+                            </button>
                           </td>
 
                           {/* Email */}
@@ -976,6 +992,28 @@ export default function Organizations() {
           </p>
         </div>
       </Modal>
+
+      {/* Organization Detail Drawer */}
+      <OrganizationDetailDrawer
+        isOpen={showOrgDrawer}
+        onClose={() => setShowOrgDrawer(false)}
+        organization={selectedOrgForDrawer}
+        onSave={(updated) => {
+          setOrganizations((prev) =>
+            prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o))
+          );
+          updateOrganization(updated.id, {
+            name: updated.name,
+            email: updated.email,
+            phone: updated.phone,
+            industryCategory: updated.industryCategory,
+            industry: updated.industry,
+            location: updated.location,
+            locations: updated.locations,
+            status: updated.status,
+          });
+        }}
+      />
     </div>
   );
 }

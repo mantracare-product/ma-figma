@@ -331,15 +331,6 @@ function CollapsedUserMenu({
               zIndex: 999999,
             }}
           >
-            <div className="px-3 py-2 border-b border-gray-100">
-              <p className="text-xs font-bold text-gray-900 truncate">
-                {user?.name || "Admin User"}
-              </p>
-              <p className="text-[11px] text-gray-500 truncate">
-                {user?.email || "admin@mantrahealth.com"}
-              </p>
-            </div>
-
             <button
               type="button"
               onClick={() => {
@@ -361,7 +352,7 @@ function CollapsedUserMenu({
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-700 hover:text-gray-900 hover:bg-gray-100 transition-colors cursor-pointer"
             >
               <SlidersHorizontal className="w-4 h-4 text-gray-500" />
-              <span>Configure</span>
+              <span>Configure menu</span>
             </button>
 
             <div className="border-t border-gray-100 pt-1">
@@ -408,7 +399,7 @@ export default function Sidebar() {
 
   const [openGearItem, setOpenGearItem] = useState<{
     sectionId: string;
-    item: { id: string; label: string; path: string; visible: boolean; iconName?: string };
+    item: { id: string; label: string; path: string; visible: boolean; isFeatured?: boolean; iconName?: string };
     coords: { top: number; left: number };
   } | null>(null);
   const gearMenuRef = useRef<HTMLDivElement>(null);
@@ -443,18 +434,14 @@ export default function Sidebar() {
       .filter((sec) => sec.items.length > 0);
   }, [config]);
 
-  // Collapsed mode items: all items marked visible AND featured or set as default start page across all sections
+  // Collapsed mode items: all items marked visible AND featured (default quick icons)
   const collapsedItems = React.useMemo(() => {
     const list: Array<NavItem & { isFeatured?: boolean }> = [];
     const seenIds = new Set<string>();
 
     config.sections.forEach((sec) => {
       sec.items.forEach((item) => {
-        const isDefault =
-          config.defaultStartPage &&
-          (config.defaultStartPage === item.path ||
-            (config.defaultStartPage === "/" && item.id === "overview"));
-        if (item.visible && (item.isFeatured || isDefault) && !seenIds.has(item.id)) {
+        if (item.visible && item.isFeatured && !seenIds.has(item.id)) {
           seenIds.add(item.id);
           list.push({
             id: item.id,
@@ -923,12 +910,13 @@ export default function Sidebar() {
           createPortal(
             <div
               ref={gearMenuRef}
-              className="fixed w-52 bg-white/98 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/90 p-1.5 z-[999999] space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-gray-800"
+              className="fixed w-56 bg-white/98 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/90 p-1.5 z-[999999] space-y-0.5 animate-in fade-in zoom-in-95 duration-100 text-gray-800"
               style={{
-                top: `${Math.min(openGearItem.coords.top, window.innerHeight - 90)}px`,
-                left: `${Math.min(openGearItem.coords.left, window.innerWidth - 220)}px`,
+                top: `${Math.min(openGearItem.coords.top, window.innerHeight - 140)}px`,
+                left: `${Math.min(openGearItem.coords.left, window.innerWidth - 240)}px`,
               }}
             >
+              {/* Hide / Show from Menu */}
               <button
                 type="button"
                 onClick={() => {
@@ -938,22 +926,38 @@ export default function Sidebar() {
                   );
                   setOpenGearItem(null);
                 }}
-                className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer"
+                className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer flex items-center justify-between"
               >
-                {openGearItem.item.visible ? "Hide menu item" : "Show menu item"}
+                <span>{openGearItem.item.visible ? "Hide from menu" : "Show in menu"}</span>
+                {openGearItem.item.visible ? (
+                  <EyeOff className="w-3.5 h-3.5 text-gray-400" />
+                ) : (
+                  <Eye className="w-3.5 h-3.5 text-blue-600" />
+                )}
               </button>
 
+              {/* Feature / Unfeature this page (Featured pages appear in Collapsed Sidebar) */}
               <button
                 type="button"
                 onClick={() => {
-                  setDefaultStartPage(openGearItem.item.path);
-                  toast.success(`${openGearItem.item.label} set as default start page`);
+                  toggleItemFeatured(openGearItem.sectionId, openGearItem.item.id);
+                  toast.success(
+                    `${openGearItem.item.label} ${
+                      openGearItem.item.isFeatured ? "removed from featured pages" : "marked as featured"
+                    }`
+                  );
                   setOpenGearItem(null);
                 }}
                 className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer flex items-center justify-between"
               >
-                <span>Set as default start page</span>
-                {defaultStartPage === openGearItem.item.path && <Check className="w-3.5 h-3.5 text-[#1456f0]" />}
+                <span>{openGearItem.item.isFeatured ? "Unfeature this page" : "Feature this page"}</span>
+                <Star
+                  className={`w-3.5 h-3.5 ${
+                    openGearItem.item.isFeatured
+                      ? "fill-amber-400 text-amber-500"
+                      : "text-gray-400"
+                  }`}
+                />
               </button>
             </div>,
             document.body
@@ -998,15 +1002,6 @@ export default function Sidebar() {
             {/* Upward Dropdown Menu */}
             {showUserMenu && (
               <div className="absolute bottom-full left-3 right-3 mb-2 bg-white/95 backdrop-blur-xl border border-gray-200/90 rounded-2xl shadow-xl p-1.5 z-50 space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                <div className="px-3 py-2 border-b border-gray-100">
-                  <p className="text-xs font-bold text-gray-900 truncate">
-                    {user?.name || "Admin User"}
-                  </p>
-                  <p className="text-[11px] text-gray-500 truncate">
-                    {user?.email || "admin@mantrahealth.com"}
-                  </p>
-                </div>
-
                 <button
                   type="button"
                   onClick={() => {
@@ -1028,7 +1023,7 @@ export default function Sidebar() {
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-700 hover:text-gray-900 hover:bg-gray-100 transition-colors cursor-pointer"
                 >
                   <SlidersHorizontal className="w-4 h-4 text-gray-500" />
-                  <span>Configure</span>
+                  <span>Configure menu</span>
                 </button>
 
                 <div className="border-t border-gray-100 pt-1">
