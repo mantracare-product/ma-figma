@@ -8,6 +8,7 @@ import { DynamicResponse, HandoffNoResponse, ButtonAction } from "../../../lib/c
 import ChatbotLibraryDrawer from "./ChatbotLibraryDrawer";
 import { cloneLibraryBotNodes, LibraryBot } from "../../../lib/chatbotLibrary";
 import { useChatbotBots } from "../../../lib/useChatbotBots";
+import TableComponent, { TableColumn } from "../ui/TableComponent";
 
 export type ChannelType = "whatsapp" | "sms" | "website";
 
@@ -365,200 +366,168 @@ export default function ChatbotTab({ campaigns, employees, templates = [], statu
           </div>
 
           {/* Bots Table — Always Rendered */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <table className="w-full">
-              {/* Table Header */}
-              <thead style={{ backgroundColor: "#1F2937" }}>
-                <tr>
-                  <th className="text-left px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
-                    Bot Name
-                  </th>
-                  <th className="text-left px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
-                    Channels
-                  </th>
-                  <th className="text-left px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="text-left px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
-                    Flow Nodes
-                  </th>
-                  <th className="text-right px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {bots.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-16 text-center bg-white">
-                      <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4 shadow-inner">
-                        <Bot className="w-8 h-8 text-blue-400" />
-                      </div>
-                      <h3 className="text-lg font-bold text-gray-900 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        No chatbots yet
-                      </h3>
-                      <p className="text-xs text-gray-500 max-w-xs mx-auto mb-5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Build your first automated chatbot to handle inbound messages across WhatsApp and your website.
+          {/* Bots Table */}
+          {(() => {
+            const filteredBots = bots.filter((b) => {
+              const matchesSearch =
+                !botSearchQuery ||
+                b.name.toLowerCase().includes(botSearchQuery.toLowerCase()) ||
+                b.description.toLowerCase().includes(botSearchQuery.toLowerCase());
+              const matchesStatus =
+                statusFilter === "all" ? true : statusFilter === "active" ? b.active : !b.active;
+              return matchesSearch && matchesStatus;
+            });
+
+            if (bots.length === 0) {
+              return (
+                <div className="py-16 text-center bg-white rounded-xl border border-gray-200">
+                  <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4 shadow-inner">
+                    <Bot className="w-8 h-8 text-blue-400" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    No chatbots yet
+                  </h3>
+                  <p className="text-xs text-gray-500 max-w-xs mx-auto mb-5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Build your first automated chatbot to handle inbound messages across WhatsApp and your website.
+                  </p>
+                  <div className="flex items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowChatbotLibrary(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-50 transition-all shadow-xs cursor-pointer"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      <LibraryBig className="w-4 h-4 text-gray-500" />
+                      Browse Chatbot Library
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCreateBot}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition-all shadow-sm cursor-pointer"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      <Plus className="w-4 h-4" />
+                      Create Your First Chatbot
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            const botColumns: TableColumn<Bot>[] = [
+              {
+                header: "Bot Name",
+                accessorKey: "name",
+                align: "left",
+                render: (bot) => (
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center flex-shrink-0 shadow-sm">
+                      <Bot className="w-4.5 h-4.5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        {bot.name}
                       </p>
-                      <div className="flex items-center justify-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setShowChatbotLibrary(true)}
-                          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-50 transition-all shadow-xs cursor-pointer"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                      <p className="text-[11px] text-gray-400 truncate max-w-[200px]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {bot.description}
+                      </p>
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                header: "Channels",
+                align: "left",
+                render: (bot) => {
+                  const displayChannels = (bot.channels || []).filter((ch) => ch !== "sms");
+                  if (displayChannels.length === 0) {
+                    return <span className="text-xs text-gray-400 italic">No channels</span>;
+                  }
+                  return (
+                    <div className="flex flex-wrap gap-1.5">
+                      {displayChannels.map((ch) => (
+                        <span
+                          key={ch}
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${CHANNEL_CLASSES[ch]}`}
                         >
-                          <LibraryBig className="w-4 h-4 text-gray-500" />
-                          Browse Chatbot Library
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleCreateBot}
-                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition-all shadow-sm cursor-pointer"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          <Plus className="w-4 h-4" />
-                          Create Your First Chatbot
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  bots
-                    .filter(b => {
-                      const matchesSearch = !botSearchQuery ||
-                        b.name.toLowerCase().includes(botSearchQuery.toLowerCase()) ||
-                        b.description.toLowerCase().includes(botSearchQuery.toLowerCase());
-                      const matchesStatus = statusFilter === "all" ? true : statusFilter === "active" ? b.active : !b.active;
-                      return matchesSearch && matchesStatus;
-                    })
-                    .map((bot) => {
-                      const nodeCount = bot.flow?.nodes?.length ?? 0;
-                      const displayChannels = (bot.channels || []).filter(ch => ch !== "sms");
-                      return (
-                        <tr
-                          key={bot.id}
-                          className="hover:bg-blue-50/30 transition-colors group"
-                        >
-                          {/* Bot Name */}
-                          <td className="px-5 py-4">
-                            <button
-                              type="button"
-                              onClick={() => setFlowBuilderBotId(bot.id)}
-                              className="text-left group/name cursor-pointer"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center flex-shrink-0 shadow-sm">
-                                  <Bot className="w-4.5 h-4.5 text-blue-600" />
-                                </div>
-                                <div>
-                                  <p className="text-sm font-bold text-gray-900 group-hover/name:text-blue-600 transition-colors" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                    {bot.name}
-                                  </p>
-                                  <p className="text-[11px] text-gray-400 truncate max-w-[200px]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                    {bot.description}
-                                  </p>
-                                </div>
-                              </div>
-                            </button>
-                          </td>
+                          {CHANNEL_LABELS[ch]}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                },
+              },
+              {
+                header: "Status",
+                accessorKey: "active",
+                align: "center",
+                render: (bot) => (
+                  <label className="relative inline-flex items-center gap-2 cursor-pointer group/toggle" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={bot.active}
+                      onChange={(e) => {
+                        setBots((prev) =>
+                          prev.map((b) => (b.id === bot.id ? { ...b, active: e.target.checked } : b))
+                        );
+                        toast.success(e.target.checked ? `"${bot.name}" enabled` : `"${bot.name}" disabled`);
+                      }}
+                    />
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500 relative" />
+                    <span className={`text-xs font-semibold ${bot.active ? "text-green-600" : "text-gray-400"}`}>
+                      {bot.active ? "Active" : "Inactive"}
+                    </span>
+                  </label>
+                ),
+              },
+              {
+                header: "Flow Nodes",
+                align: "center",
+                render: (bot) => {
+                  const nodeCount = bot.flow?.nodes?.length ?? 0;
+                  return (
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span className={`text-xs font-bold ${nodeCount > 1 ? "text-blue-600" : "text-gray-400"}`}>
+                        {nodeCount}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {nodeCount === 1 ? "node" : "nodes"}
+                      </span>
+                    </div>
+                  );
+                },
+              },
+            ];
 
-                          {/* Channels */}
-                          <td className="px-4 py-4">
-                            <div className="flex flex-wrap gap-1.5">
-                              {displayChannels.length === 0 ? (
-                                <span className="text-xs text-gray-400 italic">No channels</span>
-                              ) : (
-                                displayChannels.map(ch => (
-                                  <span
-                                    key={ch}
-                                    className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${CHANNEL_CLASSES[ch]}`}
-                                  >
-                                    {CHANNEL_LABELS[ch]}
-                                  </span>
-                                ))
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Status */}
-                          <td className="px-4 py-4">
-                            <label className="relative inline-flex items-center gap-2 cursor-pointer group/toggle">
-                              <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={bot.active}
-                                onChange={(e) => {
-                                  setBots(prev => prev.map(b =>
-                                    b.id === bot.id ? { ...b, active: e.target.checked } : b
-                                  ));
-                                  toast.success(e.target.checked ? `"${bot.name}" enabled` : `"${bot.name}" disabled`);
-                                }}
-                              />
-                              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500 relative" />
-                              <span className={`text-xs font-semibold ${bot.active ? "text-green-600" : "text-gray-400"}`}>
-                                {bot.active ? "Active" : "Inactive"}
-                              </span>
-                            </label>
-                          </td>
-
-                          {/* Flow Nodes */}
-                          <td className="px-4 py-4">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`text-xs font-bold ${nodeCount > 1 ? "text-blue-600" : "text-gray-400"}`}>
-                                {nodeCount}
-                              </span>
-                              <span className="text-xs text-gray-400">
-                                {nodeCount === 1 ? "node" : "nodes"}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* Actions */}
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-2 justify-end">
-                              <button
-                                type="button"
-                                title="Open Flow Builder"
-                                onClick={() => setFlowBuilderBotId(bot.id)}
-                                className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                title="Delete bot"
-                                onClick={() => {
-                                  if (confirm(`Delete "${bot.name}"? This cannot be undone.`)) {
-                                    setBots(prev => prev.filter(b => b.id !== bot.id));
-                                    toast.success(`"${bot.name}" deleted`);
-                                  }
-                                }}
-                                className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )
-                }
-              </tbody>
-            </table>
-
-            {/* Table Footer: count */}
-            {bots.length > 0 && (
-              <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                <span className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  {bots.length} {bots.length === 1 ? "bot" : "bots"} total
-                </span>
-                <span className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Multiple bots can share channels — no priority restriction
-                </span>
-              </div>
-            )}
-          </div>
+            return (
+              <TableComponent
+                columns={botColumns}
+                data={filteredBots}
+                getRowId={(bot) => bot.id}
+                onRowClick={(bot) => setFlowBuilderBotId(bot.id)}
+                rowActions={[
+                  {
+                    label: "Edit Flow Builder",
+                    icon: <Pencil className="w-4 h-4 text-gray-500" />,
+                    onClick: (bot) => setFlowBuilderBotId(bot.id),
+                  },
+                  {
+                    label: "Delete Chatbot",
+                    icon: <Trash2 className="w-4 h-4 text-red-500" />,
+                    isDanger: true,
+                    onClick: (bot) => {
+                      if (confirm(`Delete "${bot.name}"? This cannot be undone.`)) {
+                        setBots((prev) => prev.filter((b) => b.id !== bot.id));
+                        toast.success(`"${bot.name}" deleted`);
+                      }
+                    },
+                  },
+                ]}
+                emptyMessage="No chatbots match your filters."
+              />
+            );
+          })()}
         </div>
       )}
 

@@ -40,6 +40,8 @@ import {
 } from "../components/ui/dropdown-menu";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
+import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 
@@ -1441,84 +1443,104 @@ export default function KnowledgeBase() {
           <HowItWorksButton onClick={() => setShowHelp(true)} label="How Knowledge Base Works" />
         </PageHeader>
 
-        {/* ── Action Toolbar (Single Unified Row matching Clients.tsx / Deals.tsx) ── */}
-        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs flex flex-wrap items-center justify-between gap-2.5">
-          {/* Search Input */}
-          <div className="relative flex-1 min-w-[240px]">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-            <input
-              id="kb-search-input"
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              placeholder="Search sources…"
-              className="w-full h-[36px] pl-9 pr-3 bg-input-background border border-input rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            />
-          </div>
-
-          {/* Filter Tabs & View Mode & Primary Action */}
-          <div className="flex items-center gap-2 flex-wrap shrink-0">
-            {/* Filter Tabs Pill */}
-            <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-lg">
-              {filterTabs.map((tab) => {
-                const active = activeFilter === tab.key;
-                return (
-                  <button
-                    key={tab.key}
-                    id={`kb-filter-${tab.key}`}
-                    onClick={() => handleSetFilter(tab.key)}
-                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                      active ? "bg-white text-[#0F172A] shadow-2xs" : "text-[#64748B] hover:text-[#0F172A]"
-                    }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* List / Grid Switch */}
-            <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-lg">
-              <button
-                id="kb-view-list"
-                onClick={() => setViewMode("list")}
-                className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${
-                  viewMode === "list" ? "bg-white text-blue-600 shadow-2xs" : "text-gray-500 hover:text-gray-900"
-                }`}
-                title="List view"
-              >
-                <List className="w-3.5 h-3.5" />
-              </button>
-              <button
-                id="kb-view-grid"
-                onClick={() => setViewMode("grid")}
-                className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${
-                  viewMode === "grid" ? "bg-white text-blue-600 shadow-2xs" : "text-gray-500 hover:text-gray-900"
-                }`}
-                title="Grid view"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Primary Action Button */}
-            <button
-              id="kb-create-btn"
-              type="button"
-              onClick={() => {
-                setEditingSource(null);
-                setPrefillProcessId(null);
-                setCreateOpen(true);
-              }}
-              className="h-[36px] px-3.5 bg-[#1E293B] hover:bg-black text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+        {/* ── Action Toolbar powered by PageTopBar ── */}
+        <PageTopBar
+          isBottomPanelAttached={true}
+          searchQuery={searchQuery}
+          onSearchChange={handleSearch}
+          searchPlaceholder="Search sources..."
+          filterPresets={[
+            {
+              id: "all",
+              label: "All Sources",
+              count: sources.length,
+              isActive: activeFilter === "all",
+              onClick: () => handleSetFilter("all"),
+            },
+            {
+              id: "text",
+              label: "Text Articles",
+              count: sources.filter((s) => s.type === "text").length,
+              isActive: activeFilter === "text",
+              onClick: () => handleSetFilter("text"),
+            },
+            {
+              id: "files",
+              label: "File Documents",
+              count: sources.filter((s) => s.type === "document").length,
+              isActive: activeFilter === "files",
+              onClick: () => handleSetFilter("files"),
+            },
+            {
+              id: "url",
+              label: "URLs & Links",
+              count: sources.filter((s) => s.type === "url").length,
+              isActive: activeFilter === "url",
+              onClick: () => handleSetFilter("url"),
+            },
+          ]}
+          filterFields={[
+            {
+              id: "name",
+              label: "Source Name",
+              type: "text",
+              placeholder: "Filter by title...",
+              value: searchQuery,
+              onChange: (val) => handleSearch(val || ""),
+            },
+            {
+              id: "type",
+              label: "Source Type",
+              type: "select",
+              value: activeFilter,
+              onChange: (val) => handleSetFilter(val as FilterTab),
+              options: [
+                { label: "All Types", value: "all" },
+                { label: "Text", value: "text" },
+                { label: "Files", value: "files" },
+                { label: "URLs", value: "url" },
+              ],
+            },
+          ]}
+          secondaryActions={
+            <select
+              value={activeFilter}
+              onChange={(e) => handleSetFilter(e.target.value as FilterTab)}
+              className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              <Plus className="w-4 h-4" />
-              <span>Create Knowledge Base</span>
-            </button>
-          </div>
-        </div>
+              <option value="all">All ({sources.length})</option>
+              <option value="text">Text ({sources.filter((s) => s.type === "text").length})</option>
+              <option value="files">Files ({sources.filter((s) => s.type === "document").length})</option>
+              <option value="url">URLs ({sources.filter((s) => s.type === "url").length})</option>
+            </select>
+          }
+          viewToggles={[
+            {
+              id: "list",
+              label: "List view",
+              icon: <List className="w-3.5 h-3.5" />,
+              isActive: viewMode === "list",
+              onClick: () => setViewMode("list"),
+            },
+            {
+              id: "grid",
+              label: "Grid view",
+              icon: <LayoutGrid className="w-3.5 h-3.5" />,
+              isActive: viewMode === "grid",
+              onClick: () => setViewMode("grid"),
+            },
+          ]}
+          primaryAction={{
+            label: "Create Knowledge Base",
+            icon: <Plus className="w-4 h-4" />,
+            onClick: () => {
+              setEditingSource(null);
+              setPrefillProcessId(null);
+              setCreateOpen(true);
+            },
+          }}
+        />
 
         {/* ── Bulk Actions Bar ── */}
         {selectedRows.size > 0 && (
@@ -1574,316 +1596,134 @@ export default function KnowledgeBase() {
             ))}
           </div>
         ) : (
-          /* List View (Table card matching Clients page) */
-          <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden relative animate-in fade-in duration-200">
-            <div
-              ref={tableScrollRef}
-              className="overflow-x-auto scrollbar-hide"
-              style={{ scrollBehavior: "auto" }}
-              onScroll={() => {
-                if (tableScrollRef.current) {
-                  const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
-                  const canScrollRight = scrollWidth > clientWidth + 1 && scrollLeft < (scrollWidth - clientWidth - 10);
-                  const canScrollLeft = scrollWidth > clientWidth + 1 && scrollLeft > 10;
-                  setShowScrollIndicator(canScrollRight);
-                  setShowScrollLeftIndicator(canScrollLeft);
-                }
-              }}
-            >
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-[#1E293B] text-white">
-                  <tr className="h-[34px]">
-                    {/* Checkbox Header */}
-                    <th className="px-3 py-1.5 w-8 text-center">
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = someSelected;
-                        }}
-                        onChange={handleSelectAll}
-                        className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                      />
-                    </th>
-                    {TABLE_HEADERS.map((h) => (
-                      <th
-                        key={h}
-                        className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-white ${
-                          h === "Scope" ? "w-[280px] max-w-[280px]" : ""
-                        } ${h === "Actions" ? "w-10 max-w-10 text-center" : "text-left"}`}
-                        style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
+          (() => {
+            const kbColumns: TableColumn<GlobalKnowledgeSource>[] = [
+              {
+                id: "name",
+                header: "Name",
+                align: "left",
+                render: (src) => (
+                  <button
+                    className="font-semibold truncate block text-xs text-blue-600 hover:underline hover:text-blue-700 cursor-pointer text-left max-w-[220px]"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                    title={getSourceName(src)}
+                    onClick={() => { setEditingSource(src); setPrefillProcessId(null); setCreateOpen(true); }}
+                  >
+                    {getSourceName(src)}
+                  </button>
+                ),
+              },
+              {
+                id: "type",
+                header: "Type",
+                align: "center",
+                render: (src) => <TypeBadge type={src.type} />,
+              },
+              {
+                id: "scope",
+                header: "Scope",
+                align: "center",
+                render: (src) => (
+                  <div className="max-w-[260px] inline-flex items-center justify-center">
+                    <ScopeChipList
+                      scopes={src.scopes}
+                      allProcesses={src.allProcesses}
+                      processTree={processTree}
+                    />
+                  </div>
+                ),
+              },
+              {
+                id: "tags",
+                header: "Tags",
+                align: "center",
+                render: (src) => (
+                  <div className="flex flex-wrap gap-1 items-center justify-center">
+                    {src.tags.slice(0, 2).map((t) => (
+                      <span
+                        key={t}
+                        className="text-[10px] px-1.5 py-0.5 rounded-none bg-gray-100 text-gray-600 font-medium whitespace-nowrap"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
                       >
-                        {h === "Actions" ? (
-                          <div className="flex items-center justify-center">
-                            <Settings className="w-3.5 h-3.5 text-white/80" />
-                          </div>
-                        ) : (
-                          h
-                        )}
-                      </th>
+                        {t}
+                      </span>
                     ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border text-xs">
-                  {paginated.map((src) => (
-                    <tr
-                      key={src.id}
-                      className={`h-[32px] transition-colors ${
-                        selectedRows.has(src.id) ? "bg-[#E8F0FE]" : "hover:bg-[#F1F5F9]"
-                      }`}
-                    >
-                      {/* Checkbox Cell */}
-                      <td className="px-4 py-2.5">
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.has(src.id)}
-                          onChange={() => handleSelectRow(src.id)}
-                          className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                        />
-                      </td>
-
-                      {/* Actions (Hamburger vertical menu) - Moved to second column */}
-                      <td className="px-4 py-2.5 relative">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center">
-                              <MoreVertical className="w-4 h-4 text-gray-500" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => { setEditingSource(src); setPrefillProcessId(null); setCreateOpen(true); }}>
-                              <Edit className="w-4 h-4 mr-2" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setDeleteTargetList([src])} className="text-red-600 focus:text-red-600">
-                              <Trash2 className="w-4 h-4 mr-2 text-red-600" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-
-                      <td className="px-4 py-2.5">
-                        <div className="min-w-0 max-w-[220px]">
-                          <button
-                            className="font-medium truncate block text-sm text-blue-600 hover:underline hover:text-blue-700 cursor-pointer text-left w-full"
-                            style={{ fontFamily: "DM Sans, sans-serif" }}
-                            title={getSourceName(src)}
-                            onClick={() => { setEditingSource(src); setPrefillProcessId(null); setCreateOpen(true); }}
-                          >
-                            {getSourceName(src)}
-                          </button>
-                        </div>
-                      </td>
-
-                      {/* Type Badge (neutral gray badge) */}
-                      <td className="px-4 py-2.5">
-                        <TypeBadge type={src.type} />
-                      </td>
-
-                      {/* Scope Cell */}
-                      <td className="px-4 py-2.5 w-[280px] max-w-[280px]">
-                        <ScopeChipList
-                          scopes={src.scopes}
-                          allProcesses={src.allProcesses}
-                          processTree={processTree}
-                        />
-                      </td>
-
-                      {/* Tags Cell (moved here from Name) */}
-                      <td className="px-4 py-2.5">
-                        <div className="flex flex-wrap gap-1 items-center">
-                          {src.tags.slice(0, 2).map((t) => (
-                            <span
-                              key={t}
-                              className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium whitespace-nowrap"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              {t}
-                            </span>
-                          ))}
-                          {src.tags.length > 2 && (
-                            <Tooltip text={src.tags.slice(2).join(", ")} placement="top">
-                              <span
-                                className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium cursor-default whitespace-nowrap"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                +{src.tags.length - 2}
-                              </span>
-                            </Tooltip>
-                          )}
-                          {src.tags.length === 0 && <span className="text-gray-400 text-xs">—</span>}
-                        </div>
-                      </td>
-
-
-                      {/* Status Cell */}
-                      <td className="px-4 py-2.5">
-                        <StatusBadge status={src.status} />
-                      </td>
-
-                      {/* Created Cell */}
-                      <td className="px-4 py-2.5 text-xs whitespace-nowrap text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {formatDate(src.createdAt)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Scroll Right Button - Semicircle */}
-            <button
-              className="absolute right-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-              style={{
-                top: "50%",
-                transform: "translateY(-50%)",
-                height: "112px",
-                width: "40px",
-                backgroundColor: "rgba(255, 255, 255, 0.5)",
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)",
-                borderTopLeftRadius: "9999px",
-                borderBottomLeftRadius: "9999px",
-                borderTopRightRadius: "0",
-                borderBottomRightRadius: "0",
-                opacity: showScrollIndicator ? 1 : 0,
-                visibility: showScrollIndicator ? "visible" : "hidden",
-                pointerEvents: showScrollIndicator ? "auto" : "none"
-              }}
-              onMouseEnter={(e) => {
-                if (showScrollIndicator) {
-                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.65)";
-                  e.currentTarget.style.boxShadow = "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)";
-                  const icon = e.currentTarget.querySelector("svg");
-                  if (icon) {
-                    (icon as SVGElement).style.transform = "scale(1.1)";
-                  }
-                  handleScrollRightMouseEnter();
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.5)";
-                e.currentTarget.style.boxShadow = "";
-                const icon = e.currentTarget.querySelector("svg");
-                if (icon) {
-                  (icon as SVGElement).style.transform = "scale(1)";
-                }
-                handleScrollMouseLeave();
-              }}
-            >
-              <ChevronRight className="w-5 h-5 transition-transform" style={{ color: "#1F2937", opacity: 1 }} />
-            </button>
-
-            {/* Scroll Left Button - Semicircle */}
-            <button
-              className="absolute left-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-              style={{
-                top: "50%",
-                transform: "translateY(-50%)",
-                height: "112px",
-                width: "40px",
-                backgroundColor: "rgba(255, 255, 255, 0.5)",
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)",
-                borderTopRightRadius: "9999px",
-                borderBottomRightRadius: "9999px",
-                borderTopLeftRadius: "0",
-                borderBottomLeftRadius: "0",
-                opacity: showScrollLeftIndicator ? 1 : 0,
-                visibility: showScrollLeftIndicator ? "visible" : "hidden",
-                pointerEvents: showScrollLeftIndicator ? "auto" : "none"
-              }}
-              onMouseEnter={(e) => {
-                if (showScrollLeftIndicator) {
-                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.65)";
-                  e.currentTarget.style.boxShadow = "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)";
-                  const icon = e.currentTarget.querySelector("svg");
-                  if (icon) {
-                    (icon as SVGElement).style.transform = "scale(1.1)";
-                  }
-                  handleScrollLeftMouseEnter();
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.5)";
-                e.currentTarget.style.boxShadow = "";
-                const icon = e.currentTarget.querySelector("svg");
-                if (icon) {
-                  (icon as SVGElement).style.transform = "scale(1)";
-                }
-                handleScrollMouseLeave();
-              }}
-            >
-              <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: "#1F2937", opacity: 1 }} />
-            </button>
-
-            {/* ── Pagination Footer inside Table Card ── */}
-            {filtered.length > 0 && (
-              <div className="border-t border-border px-4 py-3 bg-card">
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                  {/* Left Controls */}
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>Rows per page:</span>
-                      <select
-                        id="kb-page-size-select"
-                        value={pageSize}
-                        onChange={(e) => { setPageSize(Number(e.target.value) as PageSizeValue); resetPage(); }}
-                        className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
-                      >
-                        {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
-                      </select>
-                    </div>
-                    <span className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Showing {startItem}–{endItem} of {filtered.length}
-                    </span>
+                    {src.tags.length > 2 && (
+                      <Tooltip text={src.tags.slice(2).join(", ")} placement="top">
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded-none bg-gray-100 text-gray-600 font-medium cursor-default whitespace-nowrap"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          +{src.tags.length - 2}
+                        </span>
+                      </Tooltip>
+                    )}
+                    {src.tags.length === 0 && <span className="text-gray-400 text-xs">—</span>}
                   </div>
+                ),
+              },
+              {
+                id: "status",
+                header: "Status",
+                align: "center",
+                render: (src) => <StatusBadge status={src.status} />,
+              },
+              {
+                id: "createdAt",
+                header: "Created",
+                align: "center",
+                render: (src) => (
+                  <span className="text-xs whitespace-nowrap text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {formatDate(src.createdAt)}
+                  </span>
+                ),
+              },
+            ];
 
-                  {/* Right Navigation */}
-                  <div className="flex items-center gap-1">
-                    <Tooltip text="First Page">
-                      <button
-                        onClick={() => setCurrentPage(1)}
-                        disabled={safePage === 1}
-                        className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <ChevronsLeft className="w-3.5 h-3.5" />
-                      </button>
-                    </Tooltip>
-                    <Tooltip text="Previous Page">
-                      <button
-                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                        disabled={safePage === 1}
-                        className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <ChevronLeft className="w-3.5 h-3.5" />
-                      </button>
-                    </Tooltip>
-                    <span className="text-xs px-2" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
-                      Page {safePage} of {totalPages}
-                    </span>
-                    <Tooltip text="Next Page">
-                      <button
-                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={safePage === totalPages}
-                        className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </Tooltip>
-                    <Tooltip text="Last Page">
-                      <button
-                        onClick={() => setCurrentPage(totalPages)}
-                        disabled={safePage === totalPages}
-                        className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <ChevronsRight className="w-3.5 h-3.5" />
-                      </button>
-                    </Tooltip>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+            const kbRowActions: TableRowAction<GlobalKnowledgeSource>[] = [
+              {
+                label: "Edit",
+                icon: <Edit className="w-3.5 h-3.5" />,
+                onClick: (src) => {
+                  setEditingSource(src);
+                  setPrefillProcessId(null);
+                  setCreateOpen(true);
+                },
+              },
+              {
+                label: "Delete",
+                icon: <Trash2 className="w-3.5 h-3.5" />,
+                isDanger: true,
+                onClick: (src) => setDeleteTargetList([src]),
+              },
+            ];
+
+            const kbBulkActions: TableBulkAction[] = [
+              {
+                label: "Delete Selected",
+                icon: <Trash2 className="w-3.5 h-3.5" />,
+                isDanger: true,
+                onClick: (selectedIds) => {
+                  const toDelete = sources.filter((s) => selectedIds.has(s.id));
+                  setDeleteTargetList(toDelete);
+                },
+              },
+            ];
+
+            return (
+              <TableComponent
+                data={filtered}
+                columns={kbColumns}
+                getRowId={(src) => src.id}
+                rowActions={kbRowActions}
+                bulkActions={kbBulkActions}
+                selectedIds={selectedRows}
+                onSelectionChange={(ids) => setSelectedRows(new Set(Array.from(ids) as string[]))}
+                defaultRowsPerPage={20}
+                emptyMessage="No knowledge sources found matching your filters."
+              />
+            );
+          })()
         )}
       </div>
 

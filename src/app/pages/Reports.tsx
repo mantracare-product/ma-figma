@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
+import TableComponent, { TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 import { useInvoices } from "../context/InvoiceContext";
 import { ReportDefinition, ReportDataSource } from "../types/invoiceTypes";
 import ReportViewerModal from "../components/reports/ReportViewerModal";
@@ -32,6 +34,7 @@ export default function Reports() {
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [builderInitialReport, setBuilderInitialReport] = useState<ReportDefinition | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -109,209 +112,248 @@ export default function Reports() {
           </div>
         </PageHeader>
 
-        {/* Action / Search Toolbar */}
-        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* Search Input */}
-            <div className="relative flex-1 min-w-[240px] max-w-md">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search reports by name, type, or data source..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full h-[36px] bg-input-background border border-input rounded-lg pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              />
-            </div>
+        {/* Action / Search Toolbar powered by PageTopBar */}
+        <PageTopBar
+          isBottomPanelAttached={true}
+          searchQuery={searchQuery}
+          onSearchChange={(v) => {
+            setSearchQuery(v);
+            setCurrentPage(1);
+          }}
+          searchPlaceholder="Search reports by name, type, or data source..."
+          filterPresets={[
+            {
+              id: "all",
+              label: "All Reports",
+              count: reports.length,
+              isActive: !searchQuery,
+              onClick: () => {
+                setSearchQuery("");
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: "templates",
+              label: "Templates",
+              count: reports.filter((r) => r.type === "template").length,
+              isActive: searchQuery.toLowerCase() === "template",
+              onClick: () => {
+                setSearchQuery("template");
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: "custom",
+              label: "Custom Reports",
+              count: reports.filter((r) => r.type === "custom").length,
+              isActive: searchQuery.toLowerCase() === "custom",
+              onClick: () => {
+                setSearchQuery("custom");
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: "appointments",
+              label: "Appointments Data",
+              count: reports.filter((r) => r.dataSource === "appointments").length,
+              isActive: searchQuery.toLowerCase() === "appointments",
+              onClick: () => {
+                setSearchQuery("appointments");
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: "processes",
+              label: "Processes Data",
+              count: reports.filter((r) => r.dataSource === "processes").length,
+              isActive: searchQuery.toLowerCase() === "processes",
+              onClick: () => {
+                setSearchQuery("processes");
+                setCurrentPage(1);
+              },
+            },
+          ]}
+          filterFields={[
+            {
+              id: "name",
+              label: "Report Name",
+              type: "text",
+              placeholder: "Filter by report name...",
+              value: searchQuery,
+              onChange: (val) => {
+                setSearchQuery(val || "");
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: "type",
+              label: "Report Type",
+              type: "select",
+              value: searchQuery.toLowerCase() === "template" ? "template" : searchQuery.toLowerCase() === "custom" ? "custom" : "all",
+              onChange: (val) => {
+                setSearchQuery(val === "all" ? "" : val || "");
+                setCurrentPage(1);
+              },
+              options: [
+                { label: "All Types", value: "all" },
+                { label: "Template", value: "template" },
+                { label: "Custom", value: "custom" },
+              ],
+            },
+            {
+              id: "datasource",
+              label: "Data Source",
+              type: "select",
+              value: ["appointments", "processes", "calls", "clients", "revenue", "team", "messaging"].includes(searchQuery.toLowerCase()) ? searchQuery.toLowerCase() : "all",
+              onChange: (val) => {
+                setSearchQuery(val === "all" ? "" : val || "");
+                setCurrentPage(1);
+              },
+              options: [
+                { label: "All Data Sources", value: "all" },
+                { label: "Appointments", value: "appointments" },
+                { label: "Processes", value: "processes" },
+                { label: "Calls", value: "calls" },
+                { label: "Clients", value: "clients" },
+                { label: "Revenue", value: "revenue" },
+                { label: "Team", value: "team" },
+                { label: "Messaging", value: "messaging" },
+              ],
+            },
+          ]}
+          primaryAction={{
+            label: "Create Report",
+            icon: <Plus className="w-4 h-4" />,
+            onClick: handleCreateReport,
+          }}
+        />
 
-            {/* Create Report Button */}
-            <button
-              onClick={handleCreateReport}
-              className="h-[36px] px-3.5 bg-[#1E293B] hover:bg-black text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <Plus className="w-4 h-4 text-blue-400" /> Create Report
-            </button>
-          </div>
-        </div>
-
-        {/* Reports Table with Dark Thead */}
-        <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-[#1E293B] text-white">
-                <tr className="h-[34px]">
-                  <th className="py-1.5 px-3 font-semibold text-xs uppercase tracking-wider" style={{ fontFamily: 'Outfit, sans-serif' }}>REPORT NAME</th>
-                  <th className="py-1.5 px-3 font-semibold text-xs uppercase tracking-wider" style={{ fontFamily: 'Outfit, sans-serif' }}>TYPE</th>
-                  <th className="py-1.5 px-3 font-semibold text-xs uppercase tracking-wider" style={{ fontFamily: 'Outfit, sans-serif' }}>DATA SOURCE</th>
-                  <th className="py-1.5 px-3 font-semibold text-xs uppercase tracking-wider" style={{ fontFamily: 'Outfit, sans-serif' }}>LAST RUN</th>
-                  <th className="py-1.5 px-3 text-right font-semibold text-xs uppercase tracking-wider" style={{ fontFamily: 'Outfit, sans-serif' }}>ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border text-xs">
-                {paginatedReports.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center text-muted-foreground text-xs">
-                      No reports found
-                    </td>
-                  </tr>
+        {/* Reports Table with TableComponent */}
+        {(() => {
+          const reportColumns: TableColumn<ReportDefinition>[] = [
+            {
+              id: "name",
+              header: "REPORT NAME",
+              align: "left",
+              render: (report) => (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleViewReport(report)}
+                    className="font-semibold text-slate-900 hover:text-blue-600 text-xs text-left truncate max-w-xs cursor-pointer"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {report.name}
+                  </button>
+                  {report.sharedWith && report.sharedWith.length > 0 && (
+                    <span className="px-1.5 py-0.2 bg-purple-50 border border-purple-200 rounded text-[10px] text-purple-700 font-medium">
+                      Shared
+                    </span>
+                  )}
+                </div>
+              ),
+            },
+            {
+              id: "type",
+              header: "TYPE",
+              align: "center",
+              render: (report) =>
+                report.type === "template" ? (
+                  <span
+                    className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Template
+                  </span>
                 ) : (
-                  paginatedReports.map((report) => (
-                    <tr key={report.id} className="h-[32px] hover:bg-slate-50/80 transition-colors">
-                      <td className="py-1 px-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleViewReport(report)}
-                            className="font-semibold text-slate-900 hover:text-blue-600 text-xs text-left truncate max-w-xs cursor-pointer"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            {report.name}
-                          </button>
-                          {report.sharedWith && report.sharedWith.length > 0 && (
-                            <span className="px-1.5 py-0.2 bg-purple-50 border border-purple-200 rounded text-[10px] text-purple-700 font-medium">
-                              Shared
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                  <span
+                    className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Custom
+                  </span>
+                ),
+            },
+            {
+              id: "dataSource",
+              header: "DATA SOURCE",
+              align: "center",
+              render: (report) => (
+                <span className="font-mono text-[11px] font-semibold text-slate-700 uppercase">
+                  {report.dataSource}
+                </span>
+              ),
+            },
+            {
+              id: "lastRun",
+              header: "LAST RUN",
+              align: "center",
+              render: (report) => (
+                <span className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {report.lastRun}
+                </span>
+              ),
+            },
+          ];
 
-                      <td className="py-1 px-3 whitespace-nowrap">
-                        {report.type === "template" ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            Template
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            Custom
-                          </span>
-                        )}
-                      </td>
+          const reportRowActions: TableRowAction<ReportDefinition>[] = [
+            {
+              label: "View Report",
+              icon: <Eye className="w-3.5 h-3.5 text-[#1A73E8]" />,
+              onClick: (report) => handleViewReport(report),
+            },
+            {
+              label: "Edit Custom Report",
+              icon: <Pencil className="w-3.5 h-3.5 text-slate-600" />,
+              hidden: (report) => report.type !== "custom",
+              onClick: (report) => handleEditReport(report),
+            },
+            {
+              label: "Duplicate Report",
+              icon: <Copy className="w-3.5 h-3.5 text-slate-600" />,
+              onClick: (report) => handleDuplicateReport(report),
+            },
+            {
+              label: "Delete",
+              icon: <Trash2 className="w-3.5 h-3.5 text-rose-500" />,
+              isDanger: true,
+              hidden: (report) => report.type !== "custom",
+              onClick: (report) => handleDelete(report.id, report.name),
+            },
+          ];
 
-                      <td className="py-1 px-3 font-mono text-[11px] font-semibold text-slate-700 uppercase whitespace-nowrap">
-                        {report.dataSource}
-                      </td>
+          const reportBulkActions: TableBulkAction[] = [
+            {
+              label: "Delete Selected",
+              icon: <Trash2 className="w-3.5 h-3.5" />,
+              variant: "danger",
+              onClick: (ids) => {
+                ids.forEach((id) => {
+                  const r = reports.find((rep) => rep.id === id);
+                  if (r && r.type === "custom") {
+                    deleteReport(String(id));
+                  }
+                });
+                setSelectedRows(new Set());
+                toast.success("Deleted selected reports");
+              },
+            },
+          ];
 
-                      <td className="py-1 px-3 text-xs text-slate-600 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {report.lastRun}
-                      </td>
-
-                      <td className="py-1 px-3 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => handleViewReport(report)}
-                            className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            <Eye className="w-3 h-3" /> View
-                          </button>
-
-                          {/* Edit Button for Custom Reports and Copies */}
-                          {report.type === "custom" && (
-                            <button
-                              onClick={() => handleEditReport(report)}
-                              className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition-colors cursor-pointer"
-                              title="Edit Custom Report"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                          )}
-
-                          {/* Duplicate Button */}
-                          <button
-                            onClick={() => handleDuplicateReport(report)}
-                            className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                            title="Duplicate as Custom Report"
-                          >
-                            <Copy className="w-3 h-3" />
-                          </button>
-
-                          {/* Delete Button for Custom Reports and Copies */}
-                          {report.type === "custom" && (
-                            <button
-                              onClick={() => handleDelete(report.id, report.name)}
-                              className="p-1 rounded border border-slate-200 text-slate-600 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-colors cursor-pointer"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Standard Pagination Footer (matching Clients.tsx) */}
-          <div className="px-4 py-2 border-t border-border bg-white flex items-center justify-between text-xs text-muted-foreground select-none">
-            <div className="flex items-center gap-2">
-              <span>Rows per page:</span>
-              <select
-                value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="border border-input rounded px-2 py-0.5 bg-input-background text-xs cursor-pointer focus:outline-none"
-              >
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-              <span className="ml-2">
-                Showing {filteredReports.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredReports.length}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setCurrentPage(1)}
-                disabled={currentPage === 1}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                title="First page"
-              >
-                <span className="text-xs">«</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                title="Previous page"
-              >
-                <span className="text-xs">‹</span>
-              </button>
-              <span className="px-2 font-medium text-foreground">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                title="Next page"
-              >
-                <span className="text-xs">›</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={currentPage === totalPages}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                title="Last page"
-              >
-                <span className="text-xs">»</span>
-              </button>
-            </div>
-          </div>
-        </div>
+          return (
+            <TableComponent
+              data={filteredReports}
+              columns={reportColumns}
+              getRowId={(report) => report.id}
+              rowActions={reportRowActions}
+              bulkActions={reportBulkActions}
+              selectedIds={selectedRows}
+              onSelectionChange={(ids) => setSelectedRows(new Set(Array.from(ids) as string[]))}
+              onRowClick={(report) => handleViewReport(report)}
+              defaultRowsPerPage={rowsPerPage}
+              emptyMessage="No reports found matching your filters."
+            />
+          );
+        })()}
 
 
       {/* Report Execution Viewer */}

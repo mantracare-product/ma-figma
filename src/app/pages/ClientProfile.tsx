@@ -48,6 +48,7 @@ import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
 import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { ClientInvoice } from "../types/invoiceTypes";
 import DocumentsTab from "../components/profile/DocumentsTab";
+import TableComponent, { TableColumn } from "../components/ui/TableComponent";
 import AIScribeModal from "../components/scribe/AIScribeModal";
 import TranscriptDetailDrawer from "../components/scribe/TranscriptDetailDrawer";
 import {
@@ -399,19 +400,16 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     {
       id: "sec-client-details",
       title: "Client Details",
-      iconName: "user",
       fieldKeys: ["name", "email", "phone", "location", "country"],
     },
     {
       id: "sec-company-details",
       title: "Company & Professional",
-      iconName: "briefcase",
       fieldKeys: ["company", "role"],
     },
     {
       id: "sec-process-pipeline",
       title: "Processes & Pipeline",
-      iconName: "workflow",
       fieldKeys: ["status", "processes"],
     },
   ];
@@ -1683,230 +1681,177 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     </div>
 
                     {/* Table View */}
-                    <div style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: "12px", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)", overflow: "hidden" }}>
-                      <div className="overflow-x-auto">
-                        <table className="text-left border-collapse" style={{ fontFamily: "Outfit, sans-serif", minWidth: "960px", width: "100%" }}>
-                          <thead>
-                            <tr style={{ backgroundColor: "#F8FAFC", borderBottom: "1px solid #E5E7EB" }}>
-                              {/* Checkbox */}
-                              <th className="px-3 py-2.5 w-10 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={isAllSelected}
-                                  onChange={handleToggleSelectAll}
-                                  className="rounded border-gray-300"
-                                  style={{ accentColor: "#4F8EF7" }}
-                                />
-                              </th>
-                              {/* Process / Deal */}
-                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "180px" }}>Process / Deal</th>
-                              {/* Stage */}
-                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "220px" }}>Stage</th>
-                              {/* Deal Type */}
-                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "110px" }}>Deal Type</th>
-                              {/* Source */}
-                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "130px" }}>Source</th>
-                              {/* Status */}
-                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "120px" }}>Status</th>
-                              {/* Created */}
-                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "140px" }}>Created</th>
-                              {/* Responsible */}
-                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "140px" }}>Responsible</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filteredProcesses.length === 0 ? (
-                              <tr>
-                                <td colSpan={8} style={{ padding: "24px", textAlign: "center", fontSize: "13px", color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
-                                  No processes found
-                                </td>
-                              </tr>
-                            ) : (
-                              filteredProcesses.map((process, pIdx) => {
-                                const isSelected = selectedProcessIds.includes(process.id);
-                                const isCurrentRowActive = activeProcessTabDrawer === process.id;
-
-                                // Derive stages
-                                const currentStage = drawerProcessStages[process.id] || process.currentStage;
-                                const stages = getStagesForProcess(process.name);
-                                const currentIndex = stages.findIndex((s) => s.label === currentStage);
-
-                                // Format Code
-                                const processCode = `PRC-${client.id}-${pIdx + 1}`;
-
-                                // Avatar initials
-                                const initials = process.responsible
-                                  ? process.responsible.split(" ").map((n) => n[0]).join("")
-                                  : "JS";
-
-                                const rowBg = isCurrentRowActive ? "#F1F5F9" : isSelected ? "#F8FAFC" : "#FFFFFF";
-
-                                return (
-                                  <tr
-                                    key={process.id}
-                                    onClick={() => {
-                                      const allLogs = getStoredCallLogs();
-                                      const matchingLog = allLogs.find(
-                                        (l) => (l.clientId === client.id || l.client.toLowerCase() === client.name.toLowerCase()) &&
-                                               (l.process.toLowerCase() === process.name.toLowerCase())
-                                      ) || {
-                                        id: process.id.startsWith("CALL-") ? process.id : `CALL-${process.name.toUpperCase().replace(/\s+/g, "-")}`,
-                                        client: client.name,
-                                        clientId: client.id,
-                                        type: "Outbound",
-                                        status: process.status,
-                                        process: process.name,
-                                        currentStage: process.currentStage,
-                                        duration: "4:32",
-                                        date: process.created !== "—" ? process.created : "2024-04-10 14:30",
-                                        hasRecording: true,
-                                        hasTranscript: true,
-                                        hasScheduledCall: true,
-                                      };
-
-                                      setSelectedProcessLog(matchingLog);
-                                      setProcessDetailTab("general");
-                                      setShowProcessDetailDrawer(true);
-                                    }}
-                                    className="transition-colors border-b cursor-pointer hover:bg-blue-50/50"
-                                    style={{
-                                      backgroundColor: rowBg,
-                                      borderColor: "#F3F4F6",
-                                      fontFamily: "Outfit, sans-serif",
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      if (!isCurrentRowActive) e.currentTarget.style.backgroundColor = "#F1F5F9";
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      if (!isCurrentRowActive) e.currentTarget.style.backgroundColor = rowBg;
-                                    }}
-                                  >
-                                    {/* Checkbox */}
-                                    <td
-                                      className="px-3 text-center"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={isSelected}
-                                        onChange={() => {
-                                          setSelectedProcessIds((prev) =>
-                                            prev.includes(process.id) ? prev.filter((id) => id !== process.id) : [...prev, process.id]
-                                          );
-                                        }}
-                                        className="rounded border-gray-300"
-                                        style={{ accentColor: "#4F8EF7" }}
-                                      />
-                                    </td>
-                                    {/* Process / Deal */}
-                                    <td className="px-3">
-                                      <div className="flex flex-col" style={{ maxWidth: "172px" }}>
-                                        <span
-                                          title={process.name}
-                                          className="hover:underline overflow-hidden text-ellipsis whitespace-nowrap"
-                                          style={{ color: "#4F8EF7", fontWeight: "600", fontFamily: "DM Sans, sans-serif", fontSize: "13px" }}
-                                        >
-                                          {process.name}
-                                        </span>
-                                        <span className="whitespace-nowrap" style={{ fontSize: "11px", color: "#9CA3AF" }}>{processCode}</span>
+                    {(() => {
+                      const processColumns: TableColumn<any>[] = [
+                        {
+                          header: "Process / Deal",
+                          accessorKey: "name",
+                          align: "left",
+                          render: (process, idx) => {
+                            const processCode = `PRC-${client.id}-${idx + 1}`;
+                            return (
+                              <div className="flex flex-col" style={{ maxWidth: "200px" }}>
+                                <span
+                                  title={process.name}
+                                  className="hover:underline overflow-hidden text-ellipsis whitespace-nowrap"
+                                  style={{ color: "#4F8EF7", fontWeight: "600", fontFamily: "DM Sans, sans-serif", fontSize: "13px" }}
+                                >
+                                  {process.name}
+                                </span>
+                                <span className="whitespace-nowrap" style={{ fontSize: "11px", color: "#9CA3AF" }}>{processCode}</span>
+                              </div>
+                            );
+                          },
+                        },
+                        {
+                          header: "Stage",
+                          align: "center",
+                          render: (process) => {
+                            const currentStage = drawerProcessStages[process.id] || process.currentStage;
+                            const stages = getStagesForProcess(process.name);
+                            const currentIndex = stages.findIndex((s) => s.label === currentStage);
+                            return (
+                              <div className="flex flex-col items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center" style={{ gap: "3px" }}>
+                                  {stages.map((stage, sIdx) => {
+                                    const isFilled = sIdx <= currentIndex;
+                                    const stageKey = `${process.id}-${sIdx}`;
+                                    return (
+                                      <div key={stage.id} style={{ position: "relative" }}>
+                                        <button
+                                          type="button"
+                                          onMouseEnter={() => setHoveredStage(stageKey)}
+                                          onMouseLeave={() => setHoveredStage(null)}
+                                          style={{
+                                            width: "22px",
+                                            height: "6px",
+                                            borderRadius: "1.5px",
+                                            backgroundColor: isFilled ? "#0EA5E9" : "#E5E7EB",
+                                            border: isFilled ? "none" : "1px solid #D1D5DB",
+                                            cursor: "pointer",
+                                            transition: "all 0.2s",
+                                            padding: 0,
+                                          }}
+                                          className="hover:opacity-80"
+                                        />
+                                        {hoveredStage === stageKey && (
+                                          <div style={{ position: "absolute", bottom: "12px", left: "50%", transform: "translateX(-50%)", backgroundColor: "#1A2B4A", color: "#FFFFFF", fontSize: "10px", borderRadius: "4px", padding: "2px 6px", whiteSpace: "nowrap", zIndex: 10, pointerEvents: "none" }}>
+                                            {stage.label}
+                                          </div>
+                                        )}
                                       </div>
-                                    </td>
-                                    {/* Stage */}
-                                    <td className="px-3" onClick={(e) => e.stopPropagation()}>
-                                      <div className="flex flex-col gap-1">
-                                        <div className="flex items-center" style={{ gap: "3px" }}>
-                                          {stages.map((stage, sIdx) => {
-                                            const isFilled = sIdx <= currentIndex;
-                                            const stageKey = `${process.id}-${sIdx}`;
-                                            return (
-                                              <div key={stage.id} style={{ position: "relative" }}>
-                                                <button
-                                                  type="button"
-                                                  onMouseEnter={() => setHoveredStage(stageKey)}
-                                                  onMouseLeave={() => setHoveredStage(null)}
-                                                  style={{
-                                                    width: "22px",
-                                                    height: "6px",
-                                                    borderRadius: "1.5px",
-                                                    backgroundColor: isFilled ? "#0EA5E9" : "#E5E7EB",
-                                                    border: isFilled ? "none" : "1px solid #D1D5DB",
-                                                    cursor: "pointer",
-                                                    transition: "all 0.2s",
-                                                    padding: 0,
-                                                  }}
-                                                  className="hover:opacity-80"
-                                                />
-                                                {hoveredStage === stageKey && (
-                                                  <div style={{ position: "absolute", bottom: "12px", left: "50%", transform: "translateX(-50%)", backgroundColor: "#1A2B4A", color: "#FFFFFF", fontSize: "10px", borderRadius: "4px", padding: "2px 6px", whiteSpace: "nowrap", zIndex: 10, pointerEvents: "none" }}>
-                                                    {stage.label}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                        <span style={{ fontSize: "11px", color: "#9CA3AF", fontFamily: "Outfit, sans-serif", fontWeight: 400 }}>{currentStage}</span>
-                                      </div>
-                                    </td>
-                                    {/* Deal Type */}
-                                    <td className="px-3">
-                                      <span className="whitespace-nowrap" style={{ fontSize: "13px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                                        {process.dealType}
-                                      </span>
-                                    </td>
-                                    {/* Source */}
-                                    <td className="px-3">
-                                      <span className="whitespace-nowrap" style={{ fontSize: "13px", color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
-                                        {process.source}
-                                      </span>
-                                    </td>
-                                    {/* Status */}
-                                    <td className="px-3">
-                                      <span
-                                        className="px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap"
-                                        style={{
-                                          backgroundColor: process.status === "Completed" ? "#D1FAE5" : process.status === "In Progress" ? "#FED7AA" : process.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
-                                          color: process.status === "Completed" ? "#065F46" : process.status === "In Progress" ? "#C2410C" : process.status === "Pending" ? "#92400E" : "#6B7280",
-                                          borderColor: process.status === "Completed" ? "#A7F3D0" : process.status === "In Progress" ? "#FED7AA" : process.status === "Pending" ? "#FDE68A" : "#E5E7EB",
-                                        }}
-                                      >
-                                        {process.status}
-                                      </span>
-                                    </td>
-                                    {/* Created */}
-                                    <td className="px-3">
-                                      <span className="whitespace-nowrap" style={{ fontSize: "12px", color: "#6B7280" }}>{process.created}</span>
-                                    </td>
-                                    {/* Responsible */}
-                                    <td className="px-3">
-                                      <div className="flex items-center gap-2">
-                                        <div
-                                          className="flex items-center justify-center rounded-full text-xs font-semibold"
-                                          style={{ width: "26px", height: "26px", backgroundColor: "#EBF4FF", color: "#4F8EF7", fontFamily: "DM Sans, sans-serif", flexShrink: 0 }}
-                                        >
-                                          {initials}
-                                        </div>
-                                        <span className="whitespace-nowrap" style={{ fontSize: "13px", color: "#1F2937", fontWeight: "500" }}>{process.responsible}</span>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
+                                    );
+                                  })}
+                                </div>
+                                <span style={{ fontSize: "11px", color: "#9CA3AF", fontFamily: "Outfit, sans-serif", fontWeight: 400 }}>{currentStage}</span>
+                              </div>
+                            );
+                          },
+                        },
+                        {
+                          header: "Deal Type",
+                          accessorKey: "dealType",
+                          align: "center",
+                          render: (process) => (
+                            <span className="whitespace-nowrap" style={{ fontSize: "13px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                              {process.dealType}
+                            </span>
+                          ),
+                        },
+                        {
+                          header: "Source",
+                          accessorKey: "source",
+                          align: "center",
+                          render: (process) => (
+                            <span className="whitespace-nowrap" style={{ fontSize: "13px", color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
+                              {process.source}
+                            </span>
+                          ),
+                        },
+                        {
+                          header: "Status",
+                          accessorKey: "status",
+                          align: "center",
+                          render: (process) => (
+                            <span
+                              className="px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap"
+                              style={{
+                                backgroundColor: process.status === "Completed" ? "#D1FAE5" : process.status === "In Progress" ? "#FED7AA" : process.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
+                                color: process.status === "Completed" ? "#065F46" : process.status === "In Progress" ? "#C2410C" : process.status === "Pending" ? "#92400E" : "#6B7280",
+                                borderColor: process.status === "Completed" ? "#A7F3D0" : process.status === "In Progress" ? "#FED7AA" : process.status === "Pending" ? "#FDE68A" : "#E5E7EB",
+                              }}
+                            >
+                              {process.status}
+                            </span>
+                          ),
+                        },
+                        {
+                          header: "Created",
+                          accessorKey: "created",
+                          align: "center",
+                          render: (process) => (
+                            <span className="whitespace-nowrap" style={{ fontSize: "12px", color: "#6B7280" }}>{process.created}</span>
+                          ),
+                        },
+                        {
+                          header: "Responsible",
+                          accessorKey: "responsible",
+                          align: "left",
+                          render: (process) => {
+                            const initials = process.responsible
+                              ? process.responsible.split(" ").map((n) => n[0]).join("")
+                              : "JS";
+                            return (
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="flex items-center justify-center rounded-full text-xs font-semibold"
+                                  style={{ width: "26px", height: "26px", backgroundColor: "#EBF4FF", color: "#4F8EF7", fontFamily: "DM Sans, sans-serif", flexShrink: 0 }}
+                                >
+                                  {initials}
+                                </div>
+                                <span className="whitespace-nowrap" style={{ fontSize: "13px", color: "#1F2937", fontWeight: "500" }}>{process.responsible}</span>
+                              </div>
+                            );
+                          },
+                        },
+                      ];
 
-                      {/* Footer */}
-                      <div style={{ padding: "10px 16px", backgroundColor: "#F8FAFC", borderTop: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px", color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
-                        <div>
-                          Selected: <span style={{ fontWeight: "600", color: "#1F2937" }}>{selectedProcessIds.length}</span> / <span style={{ fontWeight: "600", color: "#1F2937" }}>{filteredProcesses.length}</span>
-                        </div>
-                        <div>
-                          Total {filteredProcesses.length} {filteredProcesses.length === 1 ? "entry" : "entries"}
-                        </div>
-                      </div>
-                    </div>
+                      return (
+                        <TableComponent
+                          columns={processColumns}
+                          data={filteredProcesses}
+                          getRowId={(p) => p.id}
+                          enableSelection={true}
+                          selectedIds={new Set(selectedProcessIds)}
+                          onSelectionChange={(newSet) => setSelectedProcessIds(Array.from(newSet))}
+                          onRowClick={(process) => {
+                            const allLogs = getStoredCallLogs();
+                            const matchingLog = allLogs.find(
+                              (l) => (l.clientId === client.id || l.client.toLowerCase() === client.name.toLowerCase()) &&
+                                     (l.process.toLowerCase() === process.name.toLowerCase())
+                            ) || {
+                              id: process.id.startsWith("CALL-") ? process.id : `CALL-${process.name.toUpperCase().replace(/\s+/g, "-")}`,
+                              client: client.name,
+                              clientId: client.id,
+                              type: "Outbound",
+                              status: process.status,
+                              process: process.name,
+                              currentStage: process.currentStage,
+                              duration: "4:32",
+                              date: process.created !== "—" ? process.created : "2024-04-10 14:30",
+                              hasRecording: true,
+                              hasTranscript: true,
+                              hasScheduledCall: true,
+                            };
+
+                            setSelectedProcessLog(matchingLog);
+                            setProcessDetailTab("general");
+                            setShowProcessDetailDrawer(true);
+                          }}
+                          emptyMessage="No processes found"
+                        />
+                      );
+                    })()}
                   </div>
                 );
               })()}
@@ -2405,21 +2350,83 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     </p>
                   </div>
                 ) : (
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden text-xs">
-                    <table className="w-full text-left border-collapse">
-                      <thead style={{ backgroundColor: "#1F2937" }}>
-                        <tr>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Title</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Date &amp; Time</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Provider</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Product / Service</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">View Transcript</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Status</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-medium">
-                        {filteredAppts.map((appt: any, idx: number) => {
+                  (() => {
+                    const apptColumns: TableColumn<any>[] = [
+                      {
+                        key: "title",
+                        header: "Title",
+                        align: "left",
+                        render: (appt) => (
+                          <span className="font-bold text-slate-900 max-w-[180px] truncate block">
+                            {appt.title || "Appointment"}
+                          </span>
+                        ),
+                      },
+                      {
+                        key: "dateTime",
+                        header: "Date & Time",
+                        align: "center",
+                        render: (appt) => (
+                          <span className="whitespace-nowrap text-slate-700">
+                            {formatDateTime(appt.date, appt.time)}
+                          </span>
+                        ),
+                      },
+                      {
+                        key: "provider",
+                        header: "Provider",
+                        align: "center",
+                        render: (appt) => {
+                          const providerName =
+                            ALL_EMPLOYEES_MAP[String(appt.employeeId)] ||
+                            appt.provider?.name ||
+                            "John Smith";
+                          return <span className="whitespace-nowrap text-slate-700">{providerName}</span>;
+                        },
+                      },
+                      {
+                        key: "service",
+                        header: "Product / Service",
+                        align: "left",
+                        render: (appt) => (
+                          <span className="text-slate-600 max-w-[180px] truncate block">
+                            {getResolvedServiceName(appt)}
+                          </span>
+                        ),
+                      },
+                      {
+                        key: "transcript",
+                        header: "View Transcript",
+                        align: "center",
+                        render: (appt) => {
+                          const providerName =
+                            ALL_EMPLOYEES_MAP[String(appt.employeeId)] ||
+                            appt.provider?.name ||
+                            "John Smith";
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenApptTranscript(appt, providerName)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#1A73E8] rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <FileText className="w-3.5 h-3.5 text-[#1A73E8]" />
+                              View Transcript
+                            </button>
+                          );
+                        },
+                      },
+                      {
+                        key: "status",
+                        header: "Status",
+                        align: "center",
+                        render: (appt) => getStatusPill(appt.status),
+                      },
+                      {
+                        key: "actions",
+                        header: "Actions",
+                        align: "right",
+                        render: (appt) => {
                           const providerName =
                             ALL_EMPLOYEES_MAP[String(appt.employeeId)] ||
                             appt.provider?.name ||
@@ -2428,90 +2435,69 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                           const isCancelled = appt.status === "cancelled";
 
                           return (
-                            <tr key={appt.id || idx} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="py-3 px-4 font-bold text-slate-900 max-w-[180px] truncate">
-                                {appt.title || "Appointment"}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap text-slate-700">
-                                {formatDateTime(appt.date, appt.time)}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap text-slate-700">
-                                {providerName}
-                              </td>
-                              <td className="py-3 px-4 text-slate-600 max-w-[180px] truncate">
-                                {getResolvedServiceName(appt)}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
                                 <button
                                   type="button"
+                                  className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center"
+                                  title="Actions"
+                                >
+                                  <MoreVertical className="w-4 h-4" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40 bg-white border border-slate-200 rounded-xl shadow-lg p-1 z-50">
+                                <DropdownMenuItem
                                   onClick={() => handleOpenApptTranscript(appt, providerName)}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#1A73E8] rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                                  className="px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 rounded-lg cursor-pointer flex items-center gap-2"
                                   style={{ fontFamily: "Outfit, sans-serif" }}
                                 >
-                                  <FileText className="w-3.5 h-3.5 text-[#1A73E8]" />
+                                  <FileText className="w-3.5 h-3.5" />
                                   View Transcript
-                                </button>
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap">
-                                {getStatusPill(appt.status)}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap text-right">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center"
-                                      title="Actions"
-                                    >
-                                      <MoreVertical className="w-4 h-4" />
-                                    </button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-40 bg-white border border-slate-200 rounded-xl shadow-lg p-1 z-50">
-                                    <DropdownMenuItem
-                                      onClick={() => handleOpenApptTranscript(appt, providerName)}
-                                      className="px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 rounded-lg cursor-pointer flex items-center gap-2"
-                                      style={{ fontFamily: "Outfit, sans-serif" }}
-                                    >
-                                      <FileText className="w-3.5 h-3.5" />
-                                      View Transcript
-                                    </DropdownMenuItem>
-                                    {!isCompleted && (
-                                      <DropdownMenuItem
-                                        onClick={() => handleUpdateApptStatus(appt.id, "completed")}
-                                        className="px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 rounded-lg cursor-pointer flex items-center gap-2"
-                                        style={{ fontFamily: "Outfit, sans-serif" }}
-                                      >
-                                        <Check className="w-3.5 h-3.5" />
-                                        Complete
-                                      </DropdownMenuItem>
-                                    )}
-                                    {!isCancelled && !isCompleted && (
-                                      <DropdownMenuItem
-                                        onClick={() => handleUpdateApptStatus(appt.id, "cancelled")}
-                                        className="px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer flex items-center gap-2"
-                                        style={{ fontFamily: "Outfit, sans-serif" }}
-                                      >
-                                        <X className="w-3.5 h-3.5" />
-                                        Cancel
-                                      </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuItem
-                                      onClick={() => handleDeleteAppt(appt.id)}
-                                      className="px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer flex items-center gap-2"
-                                      style={{ fontFamily: "Outfit, sans-serif" }}
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </td>
-                            </tr>
+                                </DropdownMenuItem>
+                                {!isCompleted && (
+                                  <DropdownMenuItem
+                                    onClick={() => handleUpdateApptStatus(appt.id, "completed")}
+                                    className="px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 rounded-lg cursor-pointer flex items-center gap-2"
+                                    style={{ fontFamily: "Outfit, sans-serif" }}
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                    Complete
+                                  </DropdownMenuItem>
+                                )}
+                                {!isCancelled && !isCompleted && (
+                                  <DropdownMenuItem
+                                    onClick={() => handleUpdateApptStatus(appt.id, "cancelled")}
+                                    className="px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer flex items-center gap-2"
+                                    style={{ fontFamily: "Outfit, sans-serif" }}
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                    Cancel
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteAppt(appt.id)}
+                                  className="px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer flex items-center gap-2"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                        },
+                      },
+                    ];
+
+                    return (
+                      <TableComponent
+                        columns={apptColumns}
+                        data={filteredAppts}
+                        getRowId={(appt, idx) => appt.id || idx}
+                        emptyMessage={clientAppts.length === 0 ? "No appointments yet" : "No appointments match your filter"}
+                      />
+                    );
+                  })()
                 )}
               </div>
             );
@@ -2632,91 +2618,109 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   </div>
                 </div>
 
-                {/* Invoices Table matching Image 4 pattern */}
-                {filteredInvoices.length === 0 ? (
-                  <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-6">
-                    <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-slate-700">No invoices match your filter</p>
-                    <p className="text-xs text-slate-400 mt-1">Create a new invoice or change search criteria.</p>
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden text-xs">
-                    <table className="w-full text-left border-collapse">
-                      <thead style={{ backgroundColor: "#1F2937" }}>
-                        <tr>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">ID</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Name / Title</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Amount</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Products</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Status</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-medium">
-                        {filteredInvoices.map((inv) => {
-                          const productNames = inv.lineItems.map((li) => li.description);
-                          const productSummary =
-                            productNames.length <= 2
-                              ? productNames.join(", ")
-                              : `${productNames.slice(0, 2).join(", ")} +${productNames.length - 2} more`;
+                {/* Invoices Table */}
+                {(() => {
+                  const invoiceColumns: TableColumn<any>[] = [
+                    {
+                      header: "ID",
+                      accessorKey: "id",
+                      align: "left",
+                      render: (inv) => (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedInvoiceForDrawer(inv);
+                            setIsInvoiceDrawerOpen(true);
+                          }}
+                          className="font-bold text-blue-600 hover:underline"
+                        >
+                          {inv.id}
+                        </button>
+                      ),
+                    },
+                    {
+                      header: "Name / Title",
+                      accessorKey: "appointmentTitle",
+                      align: "left",
+                      render: (inv) => (
+                        <span className="font-bold text-slate-900 max-w-[180px] truncate block">
+                          {inv.appointmentTitle || "Standalone Invoice"}
+                        </span>
+                      ),
+                    },
+                    {
+                      header: "Amount",
+                      accessorKey: "total",
+                      align: "right",
+                      render: (inv) => (
+                        <span className="font-bold text-slate-900">
+                          ${inv.total.toFixed(2)}
+                        </span>
+                      ),
+                    },
+                    {
+                      header: "Products",
+                      align: "left",
+                      render: (inv) => {
+                        const productNames = (inv.lineItems || []).map((li: any) => li.description);
+                        const productSummary =
+                          productNames.length <= 2
+                            ? productNames.join(", ")
+                            : `${productNames.slice(0, 2).join(", ")} +${productNames.length - 2} more`;
+                        return (
+                          <span className="text-slate-600 max-w-[220px] truncate block" title={productNames.join(", ")}>
+                            {productSummary || "N/A"}
+                          </span>
+                        );
+                      },
+                    },
+                    {
+                      header: "Status",
+                      accessorKey: "status",
+                      align: "center",
+                      render: (inv) => (
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            inv.status === "paid"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : inv.status === "sent"
+                              ? "bg-blue-100 text-blue-800"
+                              : inv.status === "overdue"
+                              ? "bg-rose-100 text-rose-800"
+                              : inv.status === "viewed"
+                              ? "bg-purple-100 text-purple-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {inv.status}
+                        </span>
+                      ),
+                    },
+                  ];
 
-                          return (
-                            <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="py-3 px-4 whitespace-nowrap">
-                                <button
-                                  onClick={() => {
-                                    setSelectedInvoiceForDrawer(inv);
-                                    setIsInvoiceDrawerOpen(true);
-                                  }}
-                                  className="font-bold text-blue-600 hover:underline"
-                                >
-                                  {inv.id}
-                                </button>
-                              </td>
-                              <td className="py-3 px-4 font-bold text-slate-900 max-w-[180px] truncate">
-                                {inv.appointmentTitle || "Standalone Invoice"}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap font-bold text-slate-900">
-                                ${inv.total.toFixed(2)}
-                              </td>
-                              <td className="py-3 px-4 text-slate-600 max-w-[220px] truncate" title={productNames.join(", ")}>
-                                {productSummary || "N/A"}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap">
-                                <span
-                                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                    inv.status === "paid"
-                                      ? "bg-emerald-100 text-emerald-800"
-                                      : inv.status === "sent"
-                                      ? "bg-blue-100 text-blue-800"
-                                      : inv.status === "overdue"
-                                      ? "bg-rose-100 text-rose-800"
-                                      : inv.status === "viewed"
-                                      ? "bg-purple-100 text-purple-800"
-                                      : "bg-amber-100 text-amber-800"
-                                  }`}
-                                >
-                                  {inv.status}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap text-right space-x-1.5">
-                                <button
-                                  onClick={() => {
-                                    setSelectedInvoiceForDrawer(inv);
-                                    setIsInvoiceDrawerOpen(true);
-                                  }}
-                                  className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold"
-                                >
-                                  View
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                  return (
+                    <TableComponent
+                      columns={invoiceColumns}
+                      data={filteredInvoices}
+                      getRowId={(inv) => inv.id}
+                      onRowClick={(inv) => {
+                        setSelectedInvoiceForDrawer(inv);
+                        setIsInvoiceDrawerOpen(true);
+                      }}
+                      rowActions={[
+                        {
+                          label: "View Invoice",
+                          icon: <Eye className="w-3.5 h-3.5" />,
+                          onClick: (inv) => {
+                            setSelectedInvoiceForDrawer(inv);
+                            setIsInvoiceDrawerOpen(true);
+                          },
+                        },
+                      ]}
+                      emptyMessage="No invoices match your filter"
+                    />
+                  );
+                })()}
               </div>
             );
           })()}
@@ -2865,267 +2869,133 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   </div>
                 </div>
 
-                {/* ─── Transcripts Table with Dark Gradient Thead ─────────────────────── */}
-                <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[760px]">
-                      <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                        <tr>
-                          {/* Checkbox Column */}
-                          <th className="px-4 py-2.5 w-10">
-                            <input
-                              type="checkbox"
-                              checked={allSelected}
-                              ref={(el) => {
-                                if (el) el.indeterminate = someSelected;
-                              }}
-                              onChange={handleSelectAll}
-                              className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                            />
-                          </th>
-
-                          {/* Hamburger Menu Column Header */}
-                          <th className="px-2 py-2.5 text-center w-8">
-                            <SettingsIcon className="w-4 h-4 text-[#E5E7EB] mx-auto opacity-70" />
-                          </th>
-
-                          {/* NAME */}
-                          <th
-                            className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                            style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                          >
-                            <div className="flex items-center gap-2">
-                              <GripVertical className="w-4 h-4 opacity-50" />
-                              NAME
-                            </div>
-                          </th>
-
-                          {/* SESSION */}
-                          <th
-                            className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                            style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                          >
-                            <div className="flex items-center gap-2">
-                              <GripVertical className="w-4 h-4 opacity-50" />
-                              SESSION
-                            </div>
-                          </th>
-
-                          {/* DURATION */}
-                          <th
-                            className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                            style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                          >
-                            <div className="flex items-center gap-2">
-                              <GripVertical className="w-4 h-4 opacity-50" />
-                              DURATION
-                            </div>
-                          </th>
-
-                          {/* RESPONSIBLE */}
-                          <th
-                            className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                            style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                          >
-                            <div className="flex items-center gap-2">
-                              <GripVertical className="w-4 h-4 opacity-50" />
-                              RESPONSIBLE
-                            </div>
-                          </th>
-
-                          {/* CREATED AT */}
-                          <th
-                            className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                            style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                          >
-                            <div className="flex items-center gap-2">
-                              <GripVertical className="w-4 h-4 opacity-50" />
-                              CREATED AT
-                            </div>
-                          </th>
-
-                          {/* STATUS */}
-                          <th
-                            className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                            style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                          >
-                            <div className="flex items-center gap-2">
-                              <GripVertical className="w-4 h-4 opacity-50" />
-                              STATUS
-                            </div>
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody className="divide-y divide-border">
-                        {filteredTranscripts.length === 0 ? (
-                          <tr>
-                            <td colSpan={8} className="py-12 text-center text-muted-foreground">
-                              <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                              <div className="font-bold text-sm text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                {transcriptSearchQuery ? "No Matching Transcripts" : `No Transcripts for ${client?.name || "this client"}`}
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                Click the <strong className="text-[#1A73E8]">Add Scribe</strong> button above to record your first consultation.
-                              </p>
-                            </td>
-                          </tr>
-                        ) : (
-                          filteredTranscripts.map((s) => (
-                            <tr
-                              key={s.id}
-                              className={`transition-colors cursor-pointer ${
-                                transcriptSelectedRows.has(s.id) ? "bg-[#E8F0FE]" : "hover:bg-[#F1F5F9]"
-                              }`}
-                              onClick={() => {
-                                setSelectedTranscriptSession(s);
-                                setIsTranscriptDrawerOpen(true);
-                              }}
-                            >
-                              {/* Checkbox */}
-                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="checkbox"
-                                  checked={transcriptSelectedRows.has(s.id)}
-                                  onChange={() => handleSelectRow(s.id)}
-                                  className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                                />
-                              </td>
-
-                              {/* Hamburger / Kebab Menu with Dropdown in front of name */}
-                              <td className="px-2 py-3 relative transcript-kebab-container" onClick={(e) => e.stopPropagation()}>
-                                <button
-                                  onClick={() => setTranscriptOpenMenuId(transcriptOpenMenuId === s.id ? null : s.id)}
-                                  className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center"
-                                  style={{ width: "24px", height: "24px" }}
-                                >
-                                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                                </button>
-
-                                {transcriptOpenMenuId === s.id && (
-                                  <div
-                                    className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl z-50 border border-border py-1"
-                                    style={{
-                                      boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-                                      minWidth: "180px",
-                                    }}
-                                  >
-                                    <button
-                                      onClick={() => {
-                                        setTranscriptOpenMenuId(null);
-                                        setSelectedTranscriptSession(s);
-                                        setIsTranscriptDrawerOpen(true);
-                                      }}
-                                      className="w-full px-3 py-2 text-left text-xs hover:bg-blue-50 flex items-center gap-2.5 text-foreground transition-colors"
-                                      style={{ fontFamily: "Outfit, sans-serif" }}
-                                    >
-                                      <Eye className="w-3.5 h-3.5 text-[#1A73E8]" /> View Transcript
-                                    </button>
-
-                                    <button
-                                      onClick={() => {
-                                        setTranscriptOpenMenuId(null);
-                                        issuePrescriptionDocument(s);
-                                        toast.success(`Prescription downloaded for ${client?.name || s.clientName}!`);
-                                      }}
-                                      className="w-full px-3 py-2 text-left text-xs hover:bg-blue-50 flex items-center gap-2.5 text-foreground transition-colors"
-                                      style={{ fontFamily: "Outfit, sans-serif" }}
-                                    >
-                                      <Download className="w-3.5 h-3.5 text-[#1A73E8]" /> Download PDF
-                                    </button>
-
-                                    <button
-                                      onClick={() => {
-                                        setTranscriptOpenMenuId(null);
-                                        setTranscriptWhatsAppTarget(s);
-                                        setShowTranscriptWhatsAppModal(true);
-                                      }}
-                                      className="w-full px-3 py-2 text-left text-xs hover:bg-emerald-50 flex items-center gap-2.5 text-emerald-700 transition-colors"
-                                      style={{ fontFamily: "Outfit, sans-serif" }}
-                                    >
-                                      <Share2 className="w-3.5 h-3.5 text-emerald-600" /> Share via WhatsApp
-                                    </button>
-
-                                    <div className="border-t border-border my-1" />
-
-                                    <button
-                                      onClick={(e) => handleDeleteTranscript(s.id, e)}
-                                      className="w-full px-3 py-2 text-left text-xs hover:bg-red-50 flex items-center gap-2.5 text-red-600 transition-colors"
-                                      style={{ fontFamily: "Outfit, sans-serif" }}
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5 text-red-500" /> Delete Record
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
-
-                              {/* NAME (Clean - shows current client's name) */}
-                              <td className="px-4 py-3">
-                                <span
-                                  className="font-medium text-sm text-[#1A73E8] hover:underline cursor-pointer"
-                                  style={{ fontFamily: "Outfit, sans-serif" }}
-                                >
-                                  {client?.name || s.clientName}
-                                </span>
-                              </td>
-
-                              {/* SESSION (Only date of the selected session) */}
-                              <td className="px-4 py-3 text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                {s.appointmentId && s.appointmentId !== "none"
-                                  ? new Date(s.sessionDate || s.createdAt).toLocaleDateString("en-IN", {
-                                      month: "short",
-                                      day: "numeric",
-                                      year: "numeric",
-                                    })
-                                  : (s.sessionDate
-                                      ? new Date(s.sessionDate).toLocaleDateString("en-IN", {
-                                          month: "short",
-                                          day: "numeric",
-                                          year: "numeric",
-                                        })
-                                      : "—")}
-                              </td>
-
-                              {/* DURATION (Clean without subtext) */}
-                              <td className="px-4 py-3 font-mono text-xs text-foreground">
-                                {formatTranscriptTime(s.durationSeconds)}
-                              </td>
-
-                              {/* RESPONSIBLE (Doctor / Staff) */}
-                              <td className="px-4 py-3 text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                {s.doctorName || "Dr. Priya Sharma"}
-                              </td>
-
-                              {/* CREATED AT (Clean without subtext) */}
-                              <td className="px-4 py-3 text-xs text-muted-foreground">
-                                <span style={{ fontFamily: "Outfit, sans-serif" }}>
-                                  {new Date(s.createdAt).toLocaleDateString("en-IN", {
+                {/* ─── Transcripts Table ─── */}
+                {(() => {
+                  const transcriptColumns: TableColumn<any>[] = [
+                    {
+                      header: "Name",
+                      accessorKey: "clientName",
+                      align: "left",
+                      render: (s) => (
+                        <span
+                          className="font-medium text-sm text-[#1A73E8] hover:underline cursor-pointer"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {client?.name || s.clientName}
+                        </span>
+                      ),
+                    },
+                    {
+                      header: "Session",
+                      align: "center",
+                      render: (s) => (
+                        <span className="text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {s.appointmentId && s.appointmentId !== "none"
+                            ? new Date(s.sessionDate || s.createdAt).toLocaleDateString("en-IN", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })
+                            : (s.sessionDate
+                                ? new Date(s.sessionDate).toLocaleDateString("en-IN", {
                                     month: "short",
                                     day: "numeric",
                                     year: "numeric",
-                                  })}
-                                </span>
-                              </td>
+                                  })
+                                : "—")}
+                        </span>
+                      ),
+                    },
+                    {
+                      header: "Duration",
+                      accessorKey: "durationSeconds",
+                      align: "center",
+                      render: (s) => (
+                        <span className="font-mono text-xs text-foreground">
+                          {formatTranscriptTime(s.durationSeconds)}
+                        </span>
+                      ),
+                    },
+                    {
+                      header: "Responsible",
+                      accessorKey: "doctorName",
+                      align: "left",
+                      render: (s) => (
+                        <span className="text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {s.doctorName || "Dr. Priya Sharma"}
+                        </span>
+                      ),
+                    },
+                    {
+                      header: "Created At",
+                      accessorKey: "createdAt",
+                      align: "center",
+                      render: (s) => (
+                        <span className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {new Date(s.createdAt).toLocaleDateString("en-IN", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </span>
+                      ),
+                    },
+                    {
+                      header: "Status",
+                      accessorKey: "status",
+                      align: "center",
+                      render: (s) => getTranscriptStatusBadge(s.status),
+                    },
+                  ];
 
-                              {/* STATUS (Completed / Upcoming / In Progress) */}
-                              <td className="px-4 py-3">
-                                {getTranscriptStatusBadge(s.status)}
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Table Footer */}
-                  <div className="px-4 py-3 border-t border-border bg-slate-50/60 flex items-center justify-between text-xs text-muted-foreground">
-                    <span style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Showing <strong>{filteredTranscripts.length}</strong> transcripts • Click any row or the menu icon to inspect
-                    </span>
-                    <span className="font-mono text-[11px]">Deepgram Nova-2 Medical STT</span>
-                  </div>
-                </div>
+                  return (
+                    <TableComponent
+                      columns={transcriptColumns}
+                      data={filteredTranscripts}
+                      getRowId={(s) => s.id}
+                      enableSelection={true}
+                      selectedIds={transcriptSelectedRows}
+                      onSelectionChange={(newSet) => setTranscriptSelectedRows(newSet)}
+                      onRowClick={(s) => {
+                        setSelectedTranscriptSession(s);
+                        setIsTranscriptDrawerOpen(true);
+                      }}
+                      rowActions={[
+                        {
+                          label: "View Transcript",
+                          icon: <Eye className="w-3.5 h-3.5 text-[#1A73E8]" />,
+                          onClick: (s) => {
+                            setSelectedTranscriptSession(s);
+                            setIsTranscriptDrawerOpen(true);
+                          },
+                        },
+                        {
+                          label: "Download PDF",
+                          icon: <Download className="w-3.5 h-3.5 text-[#1A73E8]" />,
+                          onClick: (s) => {
+                            issuePrescriptionDocument(s);
+                            toast.success(`Prescription downloaded for ${client?.name || s.clientName}!`);
+                          },
+                        },
+                        {
+                          label: "Share via WhatsApp",
+                          icon: <Share2 className="w-3.5 h-3.5 text-emerald-600" />,
+                          onClick: (s) => {
+                            setTranscriptWhatsAppTarget(s);
+                            setShowTranscriptWhatsAppModal(true);
+                          },
+                        },
+                        {
+                          label: "Delete Record",
+                          icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+                          isDanger: true,
+                          onClick: (s) => handleDeleteTranscript(s.id, { stopPropagation: () => {} } as any),
+                        },
+                      ]}
+                      emptyMessage={transcriptSearchQuery ? "No matching transcripts" : `No transcripts for ${client?.name || "this client"}`}
+                    />
+                  );
+                })()}
               </div>
             );
           })()}
@@ -3268,101 +3138,111 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 </div>
 
                 {/* Assigned Products Table */}
-                {filteredClientProducts.length > 0 ? (
-                  <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse">
-                        <thead style={{ backgroundColor: "#1F2937" }}>
-                          <tr>
-                            <th className="py-3 px-5 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Product / Service</th>
-                            <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Duration</th>
-                            <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Price</th>
-                            <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Status</th>
-                            <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider text-right" style={{ fontFamily: "Outfit, sans-serif" }}>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {filteredClientProducts.map((product) => (
-                            <tr key={product.id} className="hover:bg-gray-50/80 transition-colors">
-                              <td className="py-3.5 px-5 min-w-[220px]">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0">
-                                    <Briefcase className="w-4 h-4 text-blue-600" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <p className="text-sm font-bold text-gray-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>{product.name}</p>
-                                      {product.cptCode && (
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-cyan-50 text-cyan-800 border border-cyan-200/80 shrink-0" title="CPT / Claim Service Code">
-                                          CPT: {product.cptCode}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <p className="text-xs text-gray-500 line-clamp-1 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>{product.description || "No description"}</p>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-3.5 px-4 whitespace-nowrap">
-                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-lg">
-                                  <Clock className="w-3.5 h-3.5 text-gray-400" />
-                                  <span className="text-xs font-semibold text-gray-700" style={{ fontFamily: "DM Sans, sans-serif" }}>{product.duration} min</span>
-                                </div>
-                              </td>
-                              <td className="py-3.5 px-4 whitespace-nowrap">
-                                <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-lg">
-                                  <span className="text-xs font-bold text-gray-600">{getCurrencySymbol(product.currency)}</span>
-                                  <span className="text-xs font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{product.price}</span>
-                                </div>
-                              </td>
-                              <td className="py-3.5 px-4 whitespace-nowrap">
-                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${product.isActive ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-gray-100 text-gray-600 border border-gray-200"}`} style={{ fontFamily: "Outfit, sans-serif" }}>
-                                  <span className={`w-1.5 h-1.5 rounded-full ${product.isActive ? "bg-emerald-500" : "bg-gray-400"}`} />
-                                  {product.isActive ? "Active" : "Inactive"}
+                {(() => {
+                  const productColumns: TableColumn<any>[] = [
+                    {
+                      header: "Product / Service",
+                      accessorKey: "name",
+                      align: "left",
+                      render: (product) => (
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0">
+                            <Briefcase className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-bold text-gray-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>{product.name}</p>
+                              {product.cptCode && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-cyan-50 text-cyan-800 border border-cyan-200/80 shrink-0" title="CPT / Claim Service Code">
+                                  CPT: {product.cptCode}
                                 </span>
-                              </td>
-                              <td className="py-3.5 px-4 whitespace-nowrap text-right">
-                                <button
-                                  onClick={() => {
-                                    if (!client) return;
-                                    unassignProductFromClient(client.id, product.id);
-                                    setClientProductList(getClientProducts(client.id));
-                                    toast.success(`"${product.name}" removed from ${client.name}`);
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors cursor-pointer font-medium"
-                                  style={{ fontFamily: "Outfit, sans-serif" }}
-                                  title="Remove assignment"
-                                >
-                                  <X className="w-3.5 h-3.5" /> Remove
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-16 bg-white rounded-2xl border-2 border-dashed border-gray-200">
-                    <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                      <Briefcase className="w-7 h-7 text-gray-400" />
-                    </div>
-                    <h3 className="text-sm font-bold text-gray-700 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      {productSearchQuery ? "No matching products" : "No products assigned"}
-                    </h3>
-                    <p className="text-xs text-gray-500 mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      {productSearchQuery ? "Try a different keyword" : "Assign a product or create a new one for this client"}
-                    </p>
-                    {!productSearchQuery && (
-                      <button
-                        onClick={() => { setNewProductForm({ ...SVC_INIT_FORM }); setShowNewProductDrawer(true); }}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#1F2937] hover:bg-gray-800 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        <Plus className="w-4 h-4" /> Create New Product
-                      </button>
-                    )}
-                  </div>
-                )}
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 line-clamp-1 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>{product.description || "No description"}</p>
+                          </div>
+                        </div>
+                      ),
+                    },
+                    {
+                      header: "Duration",
+                      accessorKey: "duration",
+                      align: "center",
+                      render: (product) => (
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-lg">
+                          <Clock className="w-3.5 h-3.5 text-gray-400" />
+                          <span className="text-xs font-semibold text-gray-700" style={{ fontFamily: "DM Sans, sans-serif" }}>{product.duration} min</span>
+                        </div>
+                      ),
+                    },
+                    {
+                      header: "Price",
+                      accessorKey: "price",
+                      align: "center",
+                      render: (product) => (
+                        <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-lg">
+                          <span className="text-xs font-bold text-gray-600">{getCurrencySymbol(product.currency)}</span>
+                          <span className="text-xs font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{product.price}</span>
+                        </div>
+                      ),
+                    },
+                    {
+                      header: "Status",
+                      accessorKey: "isActive",
+                      align: "center",
+                      render: (product) => (
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${product.isActive ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-gray-100 text-gray-600 border border-gray-200"}`} style={{ fontFamily: "Outfit, sans-serif" }}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${product.isActive ? "bg-emerald-500" : "bg-gray-400"}`} />
+                          {product.isActive ? "Active" : "Inactive"}
+                        </span>
+                      ),
+                    },
+                  ];
+
+                  if (filteredClientProducts.length === 0 && !productSearchQuery) {
+                    return (
+                      <div className="text-center py-16 bg-white rounded-2xl border-2 border-dashed border-gray-200">
+                        <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                          <Briefcase className="w-7 h-7 text-gray-400" />
+                        </div>
+                        <h3 className="text-sm font-bold text-gray-700 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          No products assigned
+                        </h3>
+                        <p className="text-xs text-gray-500 mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Assign a product or create a new one for this client
+                        </p>
+                        <button
+                          onClick={() => { setNewProductForm({ ...SVC_INIT_FORM }); setShowNewProductDrawer(true); }}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-[#1F2937] hover:bg-gray-800 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <Plus className="w-4 h-4" /> Create New Product
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <TableComponent
+                      columns={productColumns}
+                      data={filteredClientProducts}
+                      getRowId={(product) => product.id}
+                      rowActions={[
+                        {
+                          label: "Remove Assignment",
+                          icon: <X className="w-3.5 h-3.5 text-rose-500" />,
+                          isDanger: true,
+                          onClick: (product) => {
+                            if (!client) return;
+                            unassignProductFromClient(client.id, product.id);
+                            setClientProductList(getClientProducts(client.id));
+                            toast.success(`"${product.name}" removed from ${client.name}`);
+                          },
+                        },
+                      ]}
+                      emptyMessage="No matching products"
+                    />
+                  );
+                })()}
 
                 {/* Create New Product Drawer — same form as Products & Services page */}
                 <DrawerShell

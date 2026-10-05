@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Plus, Edit, Trash2, Search, Video, Settings, FileText, ChevronRight, MessageSquare, Volume2, MessageCircle, ClipboardList, Play, ChevronDown, Info, Globe, PhoneCall, RefreshCw, Code, Sliders, Calendar, Lightbulb } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Video, Settings, FileText, ChevronRight, MessageSquare, Volume2, MessageCircle, ClipboardList, Play, ChevronDown, Info, Globe, PhoneCall, RefreshCw, Code, Sliders, Calendar, Lightbulb, Sparkles } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
 import { toast } from "sonner";
 
 export default function MyAIReceptionist() {
@@ -164,28 +165,27 @@ export default function MyAIReceptionist() {
     <div className="min-h-screen" style={{ backgroundColor: '#F9FAFB' }}>
       <PageHeader title="My AI Receptionist" />
 
-      <div className="py-6 px-[150px]">
-        <div className="flex items-center justify-between mb-6">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search agents..."
-              className="w-full pl-10 pr-4 py-2 bg-white border border-border rounded-xl"
-              style={{ fontFamily: 'Outfit, sans-serif' }}
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <Button variant="primary">
+      <div className="py-6 px-[150px] space-y-6">
+        <PageTopBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search agents, prompts, or voice models..."
+          secondaryActions={
+            <Button
+              variant="outline"
+              onClick={() => toast.info("New Campaign modal opening...")}
+              className="h-[36px] px-3.5 text-xs font-semibold"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
               New Campaign
             </Button>
-            <Button variant="primary">
-              Train Agent
-            </Button>
-          </div>
-        </div>
+          }
+          primaryAction={{
+            label: "Train Agent",
+            icon: <Sparkles className="w-4 h-4" />,
+            onClick: () => toast.success("Agent training started"),
+          }}
+        />
 
         {/* Video Preview */}
         <div className="bg-white rounded-xl border border-border overflow-hidden aspect-video flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 mb-6">

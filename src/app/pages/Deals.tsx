@@ -15,6 +15,7 @@ import {
 } from "../components/ui/dropdown-menu";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
@@ -27,6 +28,7 @@ import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
 import { getActivityForProcess } from "../../lib/activityLog";
 import { getStoredCallLogs, saveCallLogs, PROCESS_LOGS_STORE_EVENT, updateProcessCallLogStage } from "../../lib/processLogsStore";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
+import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 import { getStagesForProcess } from "../components/ui/ProcessStageSelect";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
@@ -1448,6 +1450,279 @@ export default function Deals() {
     }
   };
 
+  const dealColumns: TableColumn<CallLog>[] = [
+    {
+      key: "client",
+      header: "Client",
+      render: (log) => (
+        <span
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/clients/${log.clientId || getClientIdByName(log.client)}`);
+          }}
+          className="cursor-pointer hover:underline hover:text-blue-700 transition-colors font-semibold"
+          style={{ color: '#1A73E8', fontFamily: 'DM Sans, sans-serif' }}
+          title="Click to view Client Profile"
+        >
+          {log.client}
+        </span>
+      )
+    },
+    {
+      key: "process",
+      header: "Process",
+      render: (log) => (
+        <span className="text-xs text-slate-500" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+          {log.process}
+        </span>
+      )
+    },
+    {
+      key: "currentStage",
+      header: "Stage",
+      render: (log) => {
+        const stagesList = getStagesListForProcess(log.process, log.currentStage);
+        const activeIdx = getStageIndexForProcess(log.process, log.currentStage);
+        return (
+          <div className="flex items-center justify-center gap-[3px]">
+            {stagesList.map((stageName, i) => {
+              const segIdx = i + 1;
+              const isCompleted = segIdx < activeIdx;
+              const isActive = segIdx === activeIdx;
+              const isHovered = hoveredStageSegment?.logId === log.id && hoveredStageSegment?.segIdx === segIdx;
+              return (
+                <div key={stageName} className="relative">
+                  {isHovered && (
+                    <div
+                      className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 pointer-events-none rounded-none"
+                      style={{ backgroundColor: '#1A2B4A', color: '#fff', fontSize: '12px', zIndex: 200 }}
+                    >
+                      {stageName}
+                    </div>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const clientObj = getClientObj(log.clientId, log.client);
+                      const currentValues = {
+                        client_name: log.client,
+                        phone: clientObj?.phone || "9667283405",
+                        email: clientObj?.email || "anshul@mantracare.com",
+                        ...(clientObj || {}),
+                        ...(log || {}),
+                      };
+                      const procFields = getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process);
+                      const missing = getMissingRequiredProcessFields({
+                        processId: (log as any)?.processId,
+                        processName: log.process,
+                        currentStageName: stageName,
+                        allFields: procFields,
+                        fieldValues: currentValues,
+                      });
+
+                      if (missing.length > 0) {
+                        setRequiredFieldsModalState({
+                          isOpen: true,
+                          clientName: log.client,
+                          clientId: log.clientId,
+                          processName: log.process,
+                          processId: (log as any)?.processId,
+                          targetStageName: stageName,
+                          missingFields: missing,
+                          initialValues: currentValues,
+                          onConfirm: (filledValues) => {
+                            const updatedLog = { ...log, ...filledValues, currentStage: stageName };
+                            setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
+                            saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
+                            updateProcessCallLogStage(log.clientId, log.process, stageName);
+                            setDeals((prev) =>
+                              prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
+                            );
+                            setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
+                            toast.success(`Stage moved to ${stageName} with required fields saved ✓`);
+                          },
+                        });
+                        return;
+                      }
+
+                      const updatedLog = { ...log, currentStage: stageName };
+                      setCallLogs(prev => prev.map(l => l.id === log.id ? updatedLog : l));
+                      saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
+                      updateProcessCallLogStage(log.clientId, log.process, stageName);
+                      setDeals(prev =>
+                        prev.map(d => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
+                      );
+                      toast.success(`Stage moved to ${stageName} ✓`);
+                    }}
+                    onMouseEnter={() => setHoveredStageSegment({ logId: log.id, segIdx })}
+                    onMouseLeave={() => setHoveredStageSegment(null)}
+                    style={{
+                      width: '18px',
+                      height: '8px',
+                      borderRadius: '0px',
+                      backgroundColor: (isCompleted || isActive) ? '#1E88E5' : 'transparent',
+                      border: (isCompleted || isActive) ? 'none' : '1px solid #E8ECF0',
+                      cursor: 'pointer',
+                      display: 'block',
+                      padding: 0,
+                      flexShrink: 0,
+                      transition: 'background-color 0.2s ease',
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (log) => (
+        <span className={`inline-block px-2 py-0.5 rounded-none text-[11px] font-semibold whitespace-nowrap ${
+          log.status === "Completed"
+            ? "bg-success-bg text-success"
+            : log.status === "Pending"
+              ? "bg-warning/10 text-warning"
+              : "bg-error-bg text-error"
+        }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
+          {log.status}
+        </span>
+      )
+    },
+    {
+      key: "date",
+      header: "Created",
+      render: (log) => (
+        <span className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>{log.date}</span>
+      )
+    },
+    {
+      key: "activity",
+      header: "Activity",
+      render: (log) => (
+        <div className="flex items-center justify-center gap-1.5 text-xs whitespace-nowrap">
+          <span style={{ color: log.status === "Pending" ? '#DC2626' : '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+            {log.status === "Pending" ? "Scheduled call" : "Last contact"} - {new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </span>
+          <span className="text-slate-300">•</span>
+          <span className="truncate max-w-[140px]" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+            {log.status === "Pending" ? "Follow up needed" : log.currentStage}
+          </span>
+        </div>
+      )
+    },
+    {
+      key: "responsible",
+      header: "Responsible",
+      render: (log) => (
+        <span className="text-xs text-gray-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
+          {getClientObj(log.clientId, log.client)?.responsible || 'Unassigned'}
+        </span>
+      )
+    },
+    {
+      key: "alert",
+      header: "Alert",
+      render: (log) => {
+        const clientObj = getClientObj(log.clientId, log.client);
+        const currentValues = {
+          client_name: log.client,
+          phone: clientObj?.phone || "9667283405",
+          email: clientObj?.email || "anshul@mantracare.com",
+          ...(clientObj || {}),
+          ...(log || {}),
+        };
+        const procFields = getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process);
+
+        const missing = getMissingRequiredProcessFields({
+          processId: (log as any)?.processId,
+          processName: log.process,
+          currentStageName: log.currentStage,
+          allFields: procFields,
+          fieldValues: currentValues,
+        });
+
+        if (missing.length === 0) {
+          return <span className="text-xs font-medium text-slate-400">—</span>;
+        }
+
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setRequiredFieldsModalState({
+                isOpen: true,
+                clientName: log.client,
+                clientId: log.clientId,
+                processName: log.process,
+                processId: (log as any)?.processId,
+                targetStageName: log.currentStage,
+                missingFields: missing,
+                initialValues: currentValues,
+                onConfirm: (filledValues) => {
+                  const updatedLog = { ...log, ...filledValues };
+                  setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
+                  saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
+                  setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
+                  toast.success(`Required fields updated successfully ✓`);
+                },
+              });
+            }}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-none text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 transition-all cursor-pointer"
+            title={`Click to fill ${missing.length} missing required field(s)`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+            <span>{missing.length}</span>
+          </button>
+        );
+      }
+    }
+  ];
+
+  const dealRowActions: TableRowAction<CallLog>[] = [
+    {
+      label: "View",
+      icon: <Eye className="w-3.5 h-3.5" />,
+      onClick: (log) => {
+        setSelectedLogForView(log);
+        setViewDrawerTab("general");
+        setHistoryFilter("");
+        setShowViewDrawer(true);
+      }
+    },
+    {
+      label: "Edit",
+      icon: <Pencil className="w-3.5 h-3.5" />,
+      onClick: () => {
+        toast.info("Edit coming soon");
+      }
+    },
+    {
+      label: "Delete",
+      icon: <Trash2 className="w-3.5 h-3.5" />,
+      isDanger: true,
+      onClick: () => {
+        toast.error("Delete coming soon");
+      }
+    }
+  ];
+
+  const dealBulkActions: TableBulkAction[] = [
+    {
+      label: "Trigger Calls",
+      icon: <Play className="w-4 h-4 text-emerald-600" />,
+      onClick: () => setShowTriggerCallsModal(true),
+    },
+    ...(hasScheduledCalls ? [{
+      label: "Cancel Scheduled Calls",
+      icon: <StopCircle className="w-4 h-4 text-red-600" />,
+      isDanger: true,
+      onClick: () => setShowCancelCallsModal(true),
+    }] : []),
+  ];
+
   return (
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
@@ -1491,114 +1766,113 @@ export default function Deals() {
           </div>
         )}
 
-        {/* Unified Search & Control Bar (Matching Reference Layout) */}
-        <div className="bg-white rounded-xl p-2 px-3 border border-border shadow-xs flex items-center justify-between gap-3">
-          {/* Left: Process Dropdown + Search Icon + Tag Capsule + Search Input */}
-          <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            {/* Process Filter Dropdown */}
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors"
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              >
-                <span className="truncate max-w-[130px]">{selectedProcessFilter ? selectedProcessFilter : "Appointments"}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              </button>
+        {/* Unified Search & Control Bar powered by PageTopBar */}
+        <PageTopBar
+          leftElement={
+            <div className="flex items-center gap-2">
+              {/* Process Filter Dropdown */}
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  <span className="truncate max-w-[130px]">{selectedProcessFilter ? selectedProcessFilter : "Appointments"}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                </button>
 
-              {/* Processes Dropdown Menu */}
-              {showProcessesDropdown && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowProcessesDropdown(false)}
-                  />
-                  <div className="absolute top-full left-0 mt-1.5 w-56 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
-                    <button
-                      onClick={() => {
-                        setSelectedProcessFilter(null);
-                        setShowProcessesDropdown(false);
-                      }}
-                      className={`w-full text-left px-3.5 py-1.5 text-xs transition-colors ${!selectedProcessFilter ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
-                        }`}
-                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                    >
-                      All Processes
-                    </button>
-                    {[
-                      'Appointments',
-                      'Patient Intake',
-                      'Follow-up Calls',
-                      'Insurance Verification',
-                      'Appointment Scheduling',
-                      'Payment Reminder'
-                    ].map((process) => (
+                {/* Processes Dropdown Menu */}
+                {showProcessesDropdown && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowProcessesDropdown(false)}
+                    />
+                    <div className="absolute top-full left-0 mt-1.5 w-56 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
                       <button
-                        key={process}
                         onClick={() => {
-                          setSelectedProcessFilter(process);
+                          setSelectedProcessFilter(null);
                           setShowProcessesDropdown(false);
                         }}
-                        className={`w-full text-left px-3.5 py-1.5 text-xs transition-colors ${selectedProcessFilter === process ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
+                        className={`w-full text-left px-3.5 py-1.5 text-xs transition-colors ${!selectedProcessFilter ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
                           }`}
                         style={{ fontFamily: 'Outfit, sans-serif' }}
                       >
-                        {process}
+                        All Processes
                       </button>
-                    ))}
-                  </div>
-                </>
-              )}
+                      {[
+                        'Appointments',
+                        'Patient Intake',
+                        'Follow-up Calls',
+                        'Insurance Verification',
+                        'Appointment Scheduling',
+                        'Payment Reminder'
+                      ].map((process) => (
+                        <button
+                          key={process}
+                          onClick={() => {
+                            setSelectedProcessFilter(process);
+                            setShowProcessesDropdown(false);
+                          }}
+                          className={`w-full text-left px-3.5 py-1.5 text-xs transition-colors ${selectedProcessFilter === process ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
+                            }`}
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          {process}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-
-            {/* Search Icon */}
-            <Search className="w-4 h-4 text-blue-500 shrink-0" />
-
-            {/* Active Tag Capsule */}
-            <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 border border-blue-200/60 text-xs font-medium shrink-0 whitespace-nowrap"
-              style={{ fontFamily: 'Outfit, sans-serif' }}
-            >
-              <span>{selectedProcessFilter ? `All in ${selectedProcessFilter}` : "All in Appointments"}</span>
-              {selectedProcessFilter && (
+          }
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search processes..."
+          showSearchModal={showSearchModal}
+          onSearchModalToggle={setShowSearchModal}
+          secondaryActions={
+            <div className="flex items-center gap-2 shrink-0">
+              {/* List / Kanban Pill Toggle Switch */}
+              <div className="flex items-center p-0.5 bg-gray-100 rounded-lg border border-gray-200/70 shrink-0">
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedProcessFilter(null);
-                  }}
-                  className="hover:text-blue-800 ml-0.5 cursor-pointer"
+                  onClick={() => setViewMode("list")}
+                  className={`px-3 py-1 rounded-md text-xs transition-all cursor-pointer ${viewMode === "list"
+                    ? "bg-white text-blue-600 shadow-2xs font-semibold"
+                    : "text-gray-500 hover:text-gray-800 font-medium"
+                    }`}
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
                 >
-                  <X className="w-3 h-3" />
+                  List
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={() => setViewMode("kanban")}
+                  className={`px-3 py-1 rounded-md text-xs transition-all cursor-pointer ${viewMode === "kanban"
+                    ? "bg-white text-blue-600 shadow-2xs font-semibold"
+                    : "text-gray-500 hover:text-gray-800 font-medium"
+                    }`}
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  Kanban
+                </button>
+              </div>
+
+              {/* Gear Settings Icon */}
+              <Link
+                to="/process"
+                className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors shrink-0"
+                title="Process Configuration"
+              >
+                <SettingsIcon className="w-4 h-4" />
+              </Link>
             </div>
-
-            {/* Search Input with Advanced Search Modal */}
-            <div className="flex-1 relative min-w-[120px]">
-              <input
-                type="text"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setShowSearchModal(true)}
-                className="w-full bg-transparent border-0 text-xs text-gray-800 placeholder-gray-400 focus:outline-none"
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              />
-
-              {/* Advanced Search Dropdown Panel */}
-              {showSearchModal && (
-                <>
-                  {/* Backdrop to close panel */}
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowSearchModal(false)}
-                  />
-
-                  {/* Dropdown Panel */}
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-border z-50 overflow-hidden">
-                    <div className="flex" style={{ maxHeight: '700px' }}>
+          }
+          customFilterModalContent={
+            <div className="flex" style={{ maxHeight: '700px' }}>
                       {/* Left Sidebar - Saved Searches */}
                       <div className="w-56 border-r border-border p-4 overflow-y-auto bg-muted/30">
                         <div className="space-y-1">
@@ -1967,51 +2241,9 @@ export default function Deals() {
                           </Button>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
-          </div>
-
-          {/* Right: List / Kanban Switch + Gear Icon */}
-          <div className="flex items-center gap-2 shrink-0">
-            {/* List / Kanban Pill Toggle Switch */}
-            <div className="flex items-center p-0.5 bg-gray-100 rounded-lg border border-gray-200/70 shrink-0">
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                className={`px-3 py-1 rounded-md text-xs transition-all cursor-pointer ${viewMode === "list"
-                  ? "bg-white text-blue-600 shadow-2xs font-semibold"
-                  : "text-gray-500 hover:text-gray-800 font-medium"
-                  }`}
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              >
-                List
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("kanban")}
-                className={`px-3 py-1 rounded-md text-xs transition-all cursor-pointer ${viewMode === "kanban"
-                  ? "bg-white text-blue-600 shadow-2xs font-semibold"
-                  : "text-gray-500 hover:text-gray-800 font-medium"
-                  }`}
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              >
-                Kanban
-              </button>
-            </div>
-
-            {/* Gear Settings Icon */}
-            <Link
-              to="/process"
-              className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors shrink-0"
-              title="Process Configuration"
-            >
-              <SettingsIcon className="w-4 h-4" />
-            </Link>
-          </div>
-        </div>
+          }
+        />
 
         {/* Add Field Modal */}
         {showAddFieldModal && (
@@ -2145,516 +2377,23 @@ export default function Deals() {
 
         {/* List View */}
         {viewMode === "list" && (
-          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
-            <div
-              ref={tableScrollRef}
-              className="overflow-x-auto scrollbar-hide"
-              style={{ scrollBehavior: 'auto' }}
-              onScroll={() => {
-                if (tableScrollRef.current) {
-                  const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
-                  setShowScrollIndicator(scrollWidth > clientWidth && scrollLeft < scrollWidth - clientWidth);
-                  setShowScrollLeftIndicator(scrollLeft > 0);
-                }
-              }}
-            >
-              <table className="w-full min-w-[1200px]">
-                <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                  <tr>
-                    <th className="px-3 py-1.5 w-10">
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = someSelected;
-                        }}
-                        onChange={handleSelectAll}
-                        className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB]"
-                      />
-                    </th>
-                    {/* Settings icon column */}
-                    <th className="px-2 py-1.5 text-center relative" style={{ width: '32px' }}>
-                      <div className="relative inline-block">
-                        <button
-                          onClick={() => setShowColumnToggle(!showColumnToggle)}
-                          className="inline-flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-white/10"
-                          aria-label="Customize Columns"
-                        >
-                          <SettingsIcon className="w-3.5 h-3.5 text-[#E5E7EB] hover:text-white transition-colors" />
-                        </button>
-                        {showColumnToggle && (
-                          <div className="absolute left-0 top-full mt-2 w-56 bg-card border border-border rounded-xl shadow-lg p-4 z-50">
-                            <h3 className="font-semibold mb-3" style={{ color: '#1F2937', fontFamily: 'DM Sans, sans-serif' }}>Visible Columns</h3>
-                            <div className="space-y-2">
-                              {Object.keys(visibleColumns).map((col) => (
-                                <label key={col} className="flex items-center gap-2 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns[col as keyof typeof visibleColumns]}
-                                    onChange={(e) =>
-                                      setVisibleColumns({
-                                        ...visibleColumns,
-                                        [col]: e.target.checked,
-                                      })
-                                    }
-                                    className="w-4 h-4"
-                                  />
-                                  <span className="text-sm capitalize" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                    {col === 'client' ? 'Client' : col === 'process' ? 'Process' : col === 'currentStage' ? 'Stage' : col === 'date' ? 'Created' : col}
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </th>
-                    {visibleColumns.client && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Client</th>}
-                    {visibleColumns.process && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Process</th>}
-                    {visibleColumns.currentStage && (
-                      <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>
-                        <div className="flex items-center justify-center gap-1">
-                          Stage
-                          <InfoTooltip text="Each block is one stage. Click a block to move this client to that stage." />
-                        </div>
-                      </th>
-                    )}
-                    {visibleColumns.status && <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>}
-                    {visibleColumns.date && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Created</th>}
-                    {visibleColumns.activity && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider min-w-[240px]" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Activity</th>}
-                    {visibleColumns.responsible && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Responsible</th>}
-                    {visibleColumns.alert && <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Alert</th>}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {paginatedLogs.map((log) => (
-                    <tr
-                      key={log.id}
-                      className={`transition-colors h-[30px] ${selectedRows.has(log.id)
-                        ? "bg-[#E8F0FE]"
-                        : "hover:bg-[#F1F5F9]"
-                        }`}
-                    >
-                      <td className="px-3 py-1">
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.has(log.id)}
-                          onChange={() => handleSelectRow(log.id)}
-                          className="w-3.5 h-3.5 cursor-pointer"
-                        />
-                      </td>
-                      {/* Three-dot menu cell */}
-                      <td className="px-2 py-1 relative" style={{ width: '32px' }}>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setOpenRowMenuId(openRowMenuId === log.id ? null : log.id); }}
-                          className="inline-flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-gray-100"
-                          style={{ color: '#94A3B8' }}
-                        >
-                          <MoreVertical className="w-3.5 h-3.5" />
-                        </button>
-                        {openRowMenuId === log.id && (
-                          <>
-                            <div className="fixed inset-0 z-40" onClick={() => setOpenRowMenuId(null)} />
-                            <div
-                              className="absolute left-8 top-0 z-50 bg-white rounded-lg overflow-hidden"
-                              style={{ width: '140px', boxShadow: '0 4px 12px rgba(0,0,0,0.12)' }}
-                            >
-                              <button
-                                onClick={() => { setOpenRowMenuId(null); setSelectedLogForView(log); setViewDrawerTab("general"); setHistoryFilter(""); setShowViewDrawer(true); }}
-                                className="w-full flex items-center gap-2.5 px-3 text-xs text-gray-700 transition-colors hover:bg-[#F0F4FF]"
-                                style={{ height: '32px', fontSize: '13px' }}
-                              >
-                                <Eye className="w-3.5 h-3.5" /> View
-                              </button>
-                              <button
-                                onClick={() => { setOpenRowMenuId(null); toast.info("Edit coming soon"); }}
-                                className="w-full flex items-center gap-2.5 px-3 text-xs text-gray-700 transition-colors hover:bg-[#F0F4FF]"
-                                style={{ height: '32px', fontSize: '13px' }}
-                              >
-                                <Pencil className="w-3.5 h-3.5" /> Edit
-                              </button>
-                              <button
-                                onClick={() => { setOpenRowMenuId(null); toast.error("Delete coming soon"); }}
-                                className="w-full flex items-center gap-2.5 px-3 transition-colors hover:bg-[#F0F4FF]"
-                                style={{ height: '32px', fontSize: '13px', color: '#D32F2F' }}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" /> Delete
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </td>
-                      {visibleColumns.client && (
-                        <td className="px-3 py-1 font-medium text-xs" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                          <span
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/clients/${log.clientId || getClientIdByName(log.client)}`);
-                            }}
-                            className="text-left cursor-pointer hover:underline hover:text-blue-700 transition-colors font-semibold"
-                            style={{ color: '#1A73E8' }}
-                            title="Click to view Client Profile"
-                          >
-                            {log.client}
-                          </span>
-                        </td>
-                      )}
-                      {visibleColumns.process && (
-                        <td className="px-3 py-1 text-xs" style={{ fontFamily: 'DM Sans, sans-serif', color: '#64748B' }}>
-                          {log.process}
-                        </td>
-                      )}
-                      {visibleColumns.currentStage && (
-                        <td className="px-3 py-1 relative">
-                          {(() => {
-                            const stages = getStagesListForProcess(log.process, log.currentStage);
-                            const activeIdx = getStageIndexForProcess(log.process, log.currentStage);
-                            return (
-                              <div className="flex items-center gap-[3px]">
-                                {stages.map((stageName, i) => {
-                                  const segIdx = i + 1;
-                                  const isCompleted = segIdx < activeIdx;
-                                  const isActive = segIdx === activeIdx;
-                                  const isHovered = hoveredStageSegment?.logId === log.id && hoveredStageSegment?.segIdx === segIdx;
-                                  return (
-                                    <div key={stageName} className="relative">
-                                      {isHovered && (
-                                        <div
-                                          className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 rounded pointer-events-none"
-                                          style={{ backgroundColor: '#1A2B4A', color: '#fff', fontSize: '12px', zIndex: 200, borderRadius: '4px' }}
-                                        >
-                                          {stageName}
-                                        </div>
-                                      )}
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          const clientObj = getClientObj(log.clientId, log.client);
-                                          const currentValues = {
-                                            client_name: log.client,
-                                            phone: clientObj?.phone || "9667283405",
-                                            email: clientObj?.email || "anshul@mantracare.com",
-                                            ...(clientObj || {}),
-                                            ...(log || {}),
-                                          };
-                                          const procFields = getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process);
-                                          const missing = getMissingRequiredProcessFields({
-                                            processId: (log as any)?.processId,
-                                            processName: log.process,
-                                            currentStageName: stageName,
-                                            allFields: procFields,
-                                            fieldValues: currentValues,
-                                          });
-
-                                          if (missing.length > 0) {
-                                            setRequiredFieldsModalState({
-                                              isOpen: true,
-                                              clientName: log.client,
-                                              clientId: log.clientId,
-                                              processName: log.process,
-                                              processId: (log as any)?.processId,
-                                              targetStageName: stageName,
-                                              missingFields: missing,
-                                              initialValues: currentValues,
-                                              onConfirm: (filledValues) => {
-                                                const updatedLog = { ...log, ...filledValues, currentStage: stageName };
-                                                setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
-                                                saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
-                                                updateProcessCallLogStage(log.clientId, log.process, stageName);
-                                                setDeals((prev) =>
-                                                  prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
-                                                );
-                                                setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
-                                                toast.success(`Stage moved to ${stageName} with required fields saved ✓`);
-                                              },
-                                            });
-                                            return;
-                                          }
-
-                                          const updatedLog = { ...log, currentStage: stageName };
-                                          setCallLogs(prev => prev.map(l => l.id === log.id ? updatedLog : l));
-                                          saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
-                                          updateProcessCallLogStage(log.clientId, log.process, stageName);
-                                          setDeals(prev =>
-                                            prev.map(d => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
-                                          );
-                                          toast.success(`Stage moved to ${stageName} ✓`);
-                                        }}
-                                        onMouseEnter={() => setHoveredStageSegment({ logId: log.id, segIdx })}
-                                        onMouseLeave={() => setHoveredStageSegment(null)}
-                                        style={{
-                                          width: '18px',
-                                          height: '8px',
-                                          borderRadius: '2px',
-                                          backgroundColor: (isCompleted || isActive)
-                                            ? '#1E88E5'        // completed and current stages: blue
-                                            : 'transparent',   // future stages: transparent
-                                          border: (isCompleted || isActive) ? 'none' : '1px solid #E8ECF0',
-                                          cursor: 'pointer',
-                                          display: 'block',
-                                          padding: 0,
-                                          flexShrink: 0,
-                                          transition: 'background-color 0.2s ease',
-                                        }}
-                                      />
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          })()}
-                        </td>
-                      )}
-                      {visibleColumns.status && (
-                        <td className="px-3 py-1 text-center">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${log.status === "Completed"
-                            ? "bg-success-bg text-success"
-                            : log.status === "Pending"
-                              ? "bg-warning/10 text-warning"
-                              : "bg-error-bg text-error"
-                            }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            {log.status}
-                          </span>
-                        </td>
-                      )}
-                      {visibleColumns.date && <td className="px-3 py-1 text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.date}</td>}
-                      {visibleColumns.activity && (
-                        <td className="px-3 py-1 min-w-[240px]">
-                          <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
-                            <span style={{ color: log.status === "Pending" ? '#DC2626' : '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                              {log.status === "Pending" ? "Scheduled call" : "Last contact"} - {new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            </span>
-                            <span className="text-slate-300">•</span>
-                            <span className="truncate max-w-[140px]" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                              {log.status === "Pending" ? "Follow up needed" : log.currentStage}
-                            </span>
-                          </div>
-                        </td>
-                      )}
-                      {visibleColumns.responsible && (
-                        <td className="px-3 py-1">
-                          <span className="text-xs" style={{ color: '#1F2937', fontFamily: 'Outfit, sans-serif' }}>
-                            {getClientObj(log.clientId, log.client)?.responsible || 'Unassigned'}
-                          </span>
-                        </td>
-                      )}
-                      {visibleColumns.alert && (
-                        <td className="px-3 py-1 text-center whitespace-nowrap">
-                          {(() => {
-                            const clientObj = getClientObj(log.clientId, log.client);
-                            const currentValues = {
-                              client_name: log.client,
-                              phone: clientObj?.phone || "9667283405",
-                              email: clientObj?.email || "anshul@mantracare.com",
-                              ...(clientObj || {}),
-                              ...(log || {}),
-                            };
-                            const procFields = getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process);
-
-                            const missing = getMissingRequiredProcessFields({
-                              processId: (log as any)?.processId,
-                              processName: log.process,
-                              currentStageName: log.currentStage,
-                              allFields: procFields,
-                              fieldValues: currentValues,
-                            });
-
-                            if (missing.length === 0) {
-                              return (
-                                <span className="text-xs font-medium text-slate-400">—</span>
-                              );
-                            }
-
-                            return (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setRequiredFieldsModalState({
-                                    isOpen: true,
-                                    clientName: log.client,
-                                    clientId: log.clientId,
-                                    processName: log.process,
-                                    processId: (log as any)?.processId,
-                                    targetStageName: log.currentStage,
-                                    missingFields: missing,
-                                    initialValues: currentValues,
-                                    onConfirm: (filledValues) => {
-                                      const updatedLog = { ...log, ...filledValues };
-                                      setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
-                                      saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
-                                      setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
-                                      toast.success(`Required fields updated successfully ✓`);
-                                    },
-                                  });
-                                }}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 transition-all cursor-pointer shadow-2xs hover:scale-105"
-                                title={`Click to fill ${missing.length} missing required field(s)`}
-                              >
-                                <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
-                                <span>{missing.length}</span>
-                              </button>
-                            );
-                          })()}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Controls */}
-            <div className="border-t border-border px-4 py-3">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Rows per page:</span>
-                    <select
-                      value={rowsPerPage}
-                      onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
-                      className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
-                    >
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </select>
-                  </div>
-                  <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                    Showing {startIndex + 1}–{endIndex} of {totalRecords.toLocaleString()}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <Tooltip text="First Page">
-                    <button
-                      onClick={() => setCurrentPage(1)}
-                      disabled={currentPage === 1}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronsLeft className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                  <Tooltip text="Previous Page">
-                    <button
-                      onClick={() => setCurrentPage(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                  <span className="text-xs px-2 hidden sm:inline" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <span className="text-xs px-2 sm:hidden" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                    {currentPage}/{totalPages}
-                  </span>
-                  <Tooltip text="Next Page">
-                    <button
-                      onClick={() => setCurrentPage(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                  <Tooltip text="Last Page">
-                    <button
-                      onClick={() => setCurrentPage(totalPages)}
-                      disabled={currentPage === totalPages}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronsRight className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                </div>
-              </div>
-            </div>
-
-            {/* Scroll Right Button - Semicircle */}
-            <button
-              className="absolute right-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-              style={{
-                top: '50%',
-                transform: 'translateY(-50%)',
-                height: '112px',
-                width: '40px',
-                backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                borderTopLeftRadius: '9999px',
-                borderBottomLeftRadius: '9999px',
-                borderTopRightRadius: '0',
-                borderBottomRightRadius: '0',
-                opacity: showScrollIndicator ? 1 : 0.2,
-                pointerEvents: showScrollIndicator ? 'auto' : 'none'
-              }}
-              onMouseEnter={(e) => {
-                if (showScrollIndicator) {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) {
-                    (icon as SVGElement).style.transform = 'scale(1.1)';
-                  }
-                  handleScrollRightMouseEnter();
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-                e.currentTarget.style.boxShadow = '';
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) {
-                  (icon as SVGElement).style.transform = 'scale(1)';
-                }
-                handleScrollMouseLeave();
-              }}
-            >
-              <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
-            </button>
-
-            {/* Scroll Left Button - Semicircle */}
-            <button
-              className="absolute left-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-              style={{
-                top: '50%',
-                transform: 'translateY(-50%)',
-                height: '112px',
-                width: '40px',
-                backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                borderTopRightRadius: '9999px',
-                borderBottomRightRadius: '9999px',
-                borderTopLeftRadius: '0',
-                borderBottomLeftRadius: '0',
-                opacity: showScrollLeftIndicator ? 1 : 0.2,
-                pointerEvents: showScrollLeftIndicator ? 'auto' : 'none'
-              }}
-              onMouseEnter={(e) => {
-                if (showScrollLeftIndicator) {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) {
-                    (icon as SVGElement).style.transform = 'scale(1.1)';
-                  }
-                  handleScrollLeftMouseEnter();
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-                e.currentTarget.style.boxShadow = '';
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) {
-                  (icon as SVGElement).style.transform = 'scale(1)';
-                }
-                handleScrollMouseLeave();
-              }}
-            >
-              <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
-            </button>
-          </div>
+          <TableComponent
+            data={filteredLogs}
+            columns={dealColumns}
+            getRowId={(log) => log.id}
+            rowActions={dealRowActions}
+            selectedIds={selectedRows}
+            onSelectionChange={setSelectedRows}
+            bulkActions={dealBulkActions}
+            defaultRowsPerPage={20}
+            emptyMessage="No deals or processes found matching your filters."
+            onRowClick={(log) => {
+              setSelectedLogForView(log);
+              setViewDrawerTab("general");
+              setHistoryFilter("");
+              setShowViewDrawer(true);
+            }}
+          />
         )}
 
         {/* Kanban View */}

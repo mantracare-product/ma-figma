@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useAIProviders } from "../context/AIProviderContext";
 import { useSidebar } from "../context/SidebarContext";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { useDrag, useDrop } from "react-dnd";
@@ -107,6 +108,7 @@ export interface Process {
   scopingRules?: ScopingRule[];
   permissions?: ProcessPermissions;
   source?: "system" | "template" | "custom";
+  draft?: boolean;
 }
 
 
@@ -678,9 +680,6 @@ export default function Process() {
   const { activeOrganization: organization } = useOrganization();
   const { templates: adminProcessTemplates, instantiateProcessFromTemplate } = useProcessTemplates();
 
-  useEffect(() => {
-    setCollapsed(true);
-  }, [setCollapsed]);
 
   const [processes, setProcesses] = useState<Process[]>(getStoredProcesses);
 
@@ -2652,36 +2651,50 @@ export default function Process() {
           }
         />
 
-        {/* Top Control Bar: Search Bar + Add New Process */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3.5 flex items-center justify-between gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search processes..."
-              className="w-full pl-10 pr-9 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
-              style={{ fontFamily: 'Outfit, sans-serif' }}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer rounded-full hover:bg-gray-200 transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-          <button
-            onClick={() => setShowAddProcessModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-sm hover:shadow transition-all cursor-pointer flex-shrink-0"
-            style={{ fontFamily: 'DM Sans, sans-serif' }}
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add New Process</span>
-          </button>
-        </div>
+        {/* Top Control Bar: PageTopBar with Search + Add New Process */}
+        <PageTopBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search processes..."
+          filterPresets={[
+            {
+              id: "all",
+              label: "All Processes",
+              count: clientVisibleProcesses.length,
+              isActive: !searchQuery,
+              onClick: () => setSearchQuery(""),
+            },
+            {
+              id: "active",
+              label: "Active Processes",
+              count: clientVisibleProcesses.filter(p => !p.draft).length,
+              isActive: false,
+              onClick: () => setSearchQuery(""),
+            },
+            {
+              id: "drafts",
+              label: "Draft Processes",
+              count: clientVisibleProcesses.filter(p => p.draft).length,
+              isActive: false,
+              onClick: () => setSearchQuery(""),
+            },
+          ]}
+          filterFields={[
+            {
+              id: "name",
+              label: "Process Name",
+              type: "text",
+              placeholder: "Filter by process name...",
+              value: searchQuery,
+              onChange: (val) => setSearchQuery(val || ""),
+            },
+          ]}
+          primaryAction={{
+            label: "Add New Process",
+            icon: <Plus className="w-3.5 h-3.5" />,
+            onClick: () => setShowAddProcessModal(true),
+          }}
+        />
 
         <div className="flex gap-6 min-h-[calc(100vh-270px)]">
           {/* Left Panel - Process List */}

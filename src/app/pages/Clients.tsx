@@ -15,6 +15,7 @@ import {
 } from "../components/ui/dropdown-menu";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
@@ -25,6 +26,7 @@ import { CLIENTS_STORE_EVENT } from "../../lib/clientProcessState";
 import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../components/deals/ProcessDetailDrawer";
 import { getMissingRequiredProcessFields } from "../../lib/processFieldValidation";
 import { addProcessCallLog } from "../../lib/processLogsStore";
+import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 
 interface Client {
   id: string;
@@ -1502,121 +1504,44 @@ export default function Clients() {
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Clients Works" />
           </PageHeader>
 
-          {/* Action Bar */}
-          <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs" style={{ borderBottomLeftRadius: showFilterPanel ? 0 : '0.75rem', borderBottomRightRadius: showFilterPanel ? 0 : '0.75rem' }}>
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Smart Search Bar with Filter Tags */}
-              <div className="flex-1 min-w-64">
-                <div className="relative search-bar-container">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
-                  <div
-                    className="w-full h-[36px] bg-input-background border border-input rounded-lg flex items-center cursor-text overflow-hidden"
-                    onClick={() => {
-                      setShowSearchModal(true);
-                      setShowColumnToggle(false);
-                    }}
-                  >
-                    {/* Scrollable Tags Area */}
-                    <div className="flex items-center gap-2 pl-10 pr-2 flex-1 overflow-x-auto overflow-y-hidden h-full" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                      <style>{`
-                    .flex.items-center.gap-2.pl-10.pr-2.flex-1.overflow-x-auto::-webkit-scrollbar {
-                      display: none;
-                    }
-                  `}</style>
-                      {/* Filter Tags */}
-                      {activeFilters.map((filter, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium whitespace-nowrap flex-shrink-0"
-                          style={{
-                            backgroundColor: '#E8F0FE',
-                            borderColor: '#4F8EF7',
-                            color: '#4F8EF7',
-                            fontFamily: 'Outfit, sans-serif',
-                            fontSize: '13px'
-                          }}
-                        >
-                          {filter.label}: {filter.values.join(', ')}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const newFilters = activeFilters.filter((_, i) => i !== index);
-                              setActiveFilters(newFilters);
-                              // Reset the specific filter
-                              if (filter.field === 'name') setSelectedName([]);
-                              if (filter.field === 'status') setSelectedStatus([]);
-                              if (filter.field === 'process') setSelectedProcess([]);
-                              if (filter.field === 'responsible') setSelectedResponsible([]);
-                            }}
-                            className="hover:opacity-70"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
-
-                      {/* Search Input */}
-                      <input
-                        type="text"
-                        placeholder={activeFilters.length > 0 ? "" : "Search clients..."}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        onFocus={() => { setShowSearchModal(true); setShowColumnToggle(false); }}
-                        onKeyDown={(e) => { if (e.key === 'Escape') { setShowSearchModal(false); setFilterDropdowns({}); setShowAddFieldPopup(false); } }}
-                        className="flex-1 bg-transparent border-none outline-none min-w-[120px] h-full"
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      />
-                    </div>
-
-                    {/* Clear All button - Pinned Right */}
-                    {activeFilters.length > 0 && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveFilters([]);
-                          setSelectedName([]);
-                          setNameSearch("");
-                          setSelectedStatus([]);
-                          setSelectedProcess([]);
-                          setSelectedResponsible([]);
-                          setSelectedLastContact("Any date");
-                          setSelectedCreatedOn("Any date");
-                        }}
-                        className="text-xs text-muted-foreground hover:text-foreground px-3 flex-shrink-0"
-                        style={{ fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
-                      >
-                        ✕ Clear all
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Advanced Search Modal */}
-                  {showSearchModal && (
-                    <>
-                      {/* Backdrop to close modal */}
-                      <div
-                        className="fixed inset-0 z-40"
-                        onClick={() => {
-                          setShowSearchModal(false);
-                          setFilterDropdowns({});
-                          setShowAddFieldPopup(false);
-                        }}
-                      />
-
-                      {/* Modal Panel */}
-                      <div
-                        className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-2xl border border-border z-50 overflow-hidden"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Escape') {
-                            setShowSearchModal(false);
-                            setFilterDropdowns({});
-                            setShowAddFieldPopup(false);
-                          }
-                        }}
-                        style={{ minWidth: '720px', width: '720px' }}
-                      >
-                        <div className="flex" style={{ maxHeight: '580px' }}>
+          {/* Action Bar powered by PageTopBar */}
+          <PageTopBar
+            isBottomPanelAttached={showFilterPanel}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search clients..."
+            activeFilters={activeFilters}
+            onRemoveFilter={(index) => {
+              const filter = activeFilters[index];
+              const newFilters = activeFilters.filter((_, i) => i !== index);
+              setActiveFilters(newFilters);
+              if (filter.field === 'name') setSelectedName([]);
+              if (filter.field === 'status') setSelectedStatus([]);
+              if (filter.field === 'process') setSelectedProcess([]);
+              if (filter.field === 'responsible') setSelectedResponsible([]);
+            }}
+            onClearAllFilters={() => {
+              setActiveFilters([]);
+              setSelectedName([]);
+              setNameSearch("");
+              setSelectedStatus([]);
+              setSelectedProcess([]);
+              setSelectedResponsible([]);
+              setSelectedLastContact("Any date");
+              setSelectedCreatedOn("Any date");
+            }}
+            resultsCount={filteredClients.length}
+            showSearchModal={showSearchModal}
+            onSearchModalToggle={setShowSearchModal}
+            onImport={() => setShowImportModal(true)}
+            onExport={handleExport}
+            isExporting={isExporting}
+            primaryAction={{
+              label: "Add Client",
+              onClick: () => setShowAddModal(true),
+            }}
+            customFilterModalContent={
+              <div className="flex" style={{ maxHeight: '580px' }}>
                           {/* Left Sidebar - Preset Filters */}
                           <div className="w-56 border-r border-border p-5 overflow-y-auto bg-muted/20 flex-shrink-0">
                             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-3 mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>Presets</p>
@@ -2165,53 +2090,10 @@ export default function Clients() {
                                 <span>+</span> Save filter
                               </button>
                             </div>
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
                 </div>
-
-                {/* Results count when filters active */}
-                {activeFilters.length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-1 ml-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                    {filteredClients.length} results found
-                  </p>
-                )}
               </div>
-
-              <button
-                type="button"
-                onClick={() => setShowImportModal(true)}
-                className="h-[36px] px-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-border rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              >
-                <Upload className="w-3.5 h-3.5 text-slate-500" />
-                <span>Import</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleExport}
-                disabled={isExporting}
-                className="h-[36px] px-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-border rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0 disabled:opacity-60"
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              >
-                <Download className="w-3.5 h-3.5 text-slate-500" />
-                <span>{isExporting ? "Exporting..." : "Export"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowAddModal(true)}
-                className="h-[36px] px-4 bg-[#1E293B] hover:bg-black text-white rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Client</span>
-              </button>
-            </div>
-          </div>
+            }
+          />
 
 
           {/* Filter Panel */}
@@ -2915,414 +2797,118 @@ export default function Clients() {
             </div>
           )}
 
-          {/* Bulk Action Bar */}
-          {selectedRows.size > 0 && (
-            <div className="bg-card rounded-xl border border-border shadow-sm">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                    {selectedRows.size} selected
-                  </span>
+          {/* Clients Table with TableComponent */}
+          {(() => {
+            const clientColumns: TableColumn<Client>[] = [
+              {
+                id: "name",
+                header: "Name",
+                render: (client) => (
                   <button
-                    onClick={handleClearSelection}
-                    className="text-xs hover:text-foreground transition-colors"
-                    style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}
+                    onClick={() => navigate(`/clients/${client.id}`)}
+                    className="font-medium text-xs hover:underline cursor-pointer"
+                    style={{
+                      fontFamily: "DM Sans, sans-serif",
+                      color: "#4F8EF7",
+                      fontWeight: 500,
+                    }}
                   >
-                    Clear selection
+                    {client.name}
                   </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  {!isBulkEditMode ? (
-                    <>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => setShowTriggerCallsModal(true)}
-                      >
-                        <Phone className="w-3.5 h-3.5" />
-                        Trigger Calls
-                      </Button>
+                ),
+              },
+              {
+                id: "email",
+                header: "Email",
+                render: (client) => <span className="text-xs text-muted-foreground">{client.email}</span>,
+              },
+              {
+                id: "phone",
+                header: "Phone",
+                render: (client) => <span className="text-xs text-muted-foreground">{client.countryCode} {client.phone}</span>,
+              },
+              {
+                id: "responsible",
+                header: "Responsible",
+                render: (client) => <span className="text-xs text-foreground">{client.responsible || "—"}</span>,
+              },
+              {
+                id: "lastContact",
+                header: "Last Contact",
+                render: (client) => <span className="text-xs text-muted-foreground">{client.lastContact || "—"}</span>,
+              },
+              {
+                id: "status",
+                header: "Status",
+                render: (client) => (
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-none text-[11px] font-medium ${
+                      client.status === "Active"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                        : client.status === "Pending"
+                        ? "bg-amber-50 text-amber-700 border border-amber-200/60"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {client.status}
+                  </span>
+                ),
+              },
+            ];
 
-                      <Tooltip text="Delete selected clients">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (confirm(`Are you sure you want to delete ${selectedRows.size} client(s)?`)) {
-                              setClients(prev => prev.filter(client => !selectedRows.has(client.id)));
-                              setSelectedRows(new Set());
-                              toast.success(`${selectedRows.size} client(s) deleted successfully`);
-                            }
-                          }}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </Tooltip>
+            const clientRowActions: TableRowAction<Client>[] = [
+              {
+                label: "View Profile",
+                icon: <Eye className="w-3.5 h-3.5" />,
+                onClick: (client) => navigate(`/clients/${client.id}`),
+              },
+              {
+                label: "Call",
+                icon: <Phone className="w-3.5 h-3.5" />,
+                onClick: (client) => handleOpenScheduleModal(client),
+              },
+              {
+                label: "Delete",
+                icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+                isDanger: true,
+                onClick: (client) => handleDeleteClient(client.id),
+              },
+            ];
 
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleEnterBulkEdit}
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                          Edit
-                        </Button>
-                        <InfoTooltip text="Edit name, email, or phone for every selected client at once." />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCancelBulkEdit}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={handleSaveBulkEdit}
-                      >
-                        Save
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Table */}
-          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
-            <div
-              ref={tableScrollRef}
-              className="overflow-x-auto scrollbar-hide"
-              style={{ scrollBehavior: 'auto' }}
-              onScroll={() => {
-                if (tableScrollRef.current) {
-                  const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
-                  const canScrollRight = scrollWidth > clientWidth && scrollLeft < (scrollWidth - clientWidth - 10);
-                  const canScrollLeft = scrollLeft > 10;
-                  setShowScrollIndicator(canScrollRight);
-                  setShowScrollLeftIndicator(canScrollLeft);
-                }
-              }}
-            >
-              <table className="w-full min-w-[1200px]">
-                <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                  <tr>
-                    {/* Checkbox column */}
-                    <th className="px-3 py-1.5 w-10">
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = someSelected;
-                        }}
-                        onChange={handleSelectAll}
-                        className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                      />
-                    </th>
-                    {/* Settings icon above hamburger menu column */}
-                    <th className="px-2 py-1.5 text-center relative" style={{ width: '32px' }}>
-                      <div className="relative inline-block">
-                        <button
-                          onClick={() => {
-                            setShowColumnToggle(!showColumnToggle);
-                            setShowFilterPanel(false);
-                          }}
-                          className="inline-flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-white/10"
-                          aria-label="Customize Columns"
-                        >
-                          <SettingsIcon className="w-3.5 h-3.5 text-[#E5E7EB] hover:text-white transition-colors" />
-                        </button>
-                        {showColumnToggle && (
-                          <div className="absolute left-0 top-full mt-2 w-56 bg-card border border-border rounded-xl shadow-lg p-4 z-50">
-                            <h3 className="font-semibold mb-3" style={{ color: '#1F2937', fontFamily: 'DM Sans, sans-serif' }}>Visible Columns</h3>
-                            <div className="space-y-2">
-                              {Object.keys(visibleColumns).map((col) => (
-                                <label key={col} className="flex items-center gap-2 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns[col as keyof typeof visibleColumns]}
-                                    onChange={(e) =>
-                                      setVisibleColumns({
-                                        ...visibleColumns,
-                                        [col]: e.target.checked,
-                                      })
-                                    }
-                                    className="w-4 h-4"
-                                  />
-                                  <span className="text-sm capitalize" style={{ fontFamily: 'Outfit, sans-serif' }}>{col}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </th>
-                    {columnOrder.map((columnKey, index) => {
-                      const columnLabels: { [key: string]: string } = {
-                        name: 'Name',
-                        email: 'Email',
-                        phone: 'Phone',
-                        responsible: 'Responsible',
-                        lastContact: 'Last Contact',
-                        status: 'Status',
-                      };
-
-                      return visibleColumns[columnKey as keyof typeof visibleColumns] ? (
-                        <DraggableColumnHeader
-                          key={columnKey}
-                          columnKey={columnKey}
-                          index={index}
-                          label={columnLabels[columnKey]}
-                          moveColumn={moveColumn}
-                        />
-                      ) : null;
-                    })}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {paginatedClients.map((client) => (
-                    <tr
-                      key={client.id}
-                      className={`transition-colors h-[30px] ${selectedRows.has(client.id)
-                        ? "bg-[#E8F0FE]"
-                        : "hover:bg-[#F1F5F9]"
-                        }`}
-                    >
-                      {/* Checkbox column */}
-                      <td className="px-3 py-1">
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.has(client.id)}
-                          onChange={() => handleSelectRow(client.id)}
-                          className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                        />
-                      </td>
-                      {/* Hamburger menu column */}
-                      <td className="px-2 py-1 relative">
-                        <div className="hamburger-menu-container">
-                          <button
-                            onClick={() => setOpenMenuClientId(openMenuClientId === client.id ? null : client.id)}
-                            className="p-0.5 hover:bg-muted rounded transition-colors flex items-center justify-center"
-                            style={{ width: '22px', height: '22px' }}
-                          >
-                            <MoreVertical className="w-4 h-4" style={{ color: '#9CA3AF' }} />
-                          </button>
-
-                          {/* Hamburger menu popup */}
-                          {openMenuClientId === client.id && (
-                            <div
-                              className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-50"
-                              style={{
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                                minWidth: '160px',
-                                padding: '4px'
-                              }}
-                            >
-                              <button
-                                onClick={() => {
-                                  setOpenMenuClientId(null);
-                                  navigate(`/clients/${client.id}`);
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                                style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                              >
-                                <Eye className="w-4 h-4" />
-                                <span>View Profile</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  handleOpenScheduleModal(client);
-                                  setOpenMenuClientId(null);
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                                style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                              >
-                                <Phone className="w-4 h-4" />
-                                <span>Call</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  handleDeleteClient(client.id);
-                                  setOpenMenuClientId(null);
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                                style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                                <span>Delete</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      {columnOrder.map((columnKey) =>
-                        visibleColumns[columnKey as keyof typeof visibleColumns] ? renderCell(columnKey, client) : null
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Scroll Right Indicator */}
-            {/* Scroll Right Button - Semicircle (2 rows height, centered) */}
-            <button
-              className="absolute right-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-              style={{
-                top: '50%',
-                transform: 'translateY(-50%)',
-                height: '112px', // Approximately 2 table rows (56px each)
-                width: '40px',
-                backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                borderTopLeftRadius: '9999px',
-                borderBottomLeftRadius: '9999px',
-                borderTopRightRadius: '0',
-                borderBottomRightRadius: '0',
-                opacity: showScrollIndicator ? 1 : 0.2,
-                pointerEvents: showScrollIndicator ? 'auto' : 'none'
-              }}
-              onMouseEnter={(e) => {
-                if (showScrollIndicator) {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) {
-                    (icon as SVGElement).style.transform = 'scale(1.1)';
+            const clientBulkActions: TableBulkAction[] = [
+              {
+                label: "Trigger Calls",
+                icon: <Phone className="w-3.5 h-3.5" />,
+                onClick: () => setShowTriggerCallsModal(true),
+              },
+              {
+                label: "Delete Selected",
+                icon: <Trash2 className="w-3.5 h-3.5" />,
+                variant: "danger",
+                onClick: () => {
+                  if (confirm(`Are you sure you want to delete ${selectedRows.size} client(s)?`)) {
+                    setClients((prev) => prev.filter((c) => !selectedRows.has(c.id)));
+                    setSelectedRows(new Set());
+                    toast.success("Clients deleted successfully");
                   }
-                  handleScrollRightMouseEnter();
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-                e.currentTarget.style.boxShadow = '';
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) {
-                  (icon as SVGElement).style.transform = 'scale(1)';
-                }
-                handleScrollMouseLeave();
-              }}
-            >
-              <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1F2937', opacity: 1 }} />
-            </button>
+                },
+              },
+            ];
 
-            {/* Scroll Left Button - Semicircle (2 rows height, centered) */}
-            <button
-              className="absolute left-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-              style={{
-                top: '50%',
-                transform: 'translateY(-50%)',
-                height: '112px', // Approximately 2 table rows (56px each)
-                width: '40px',
-                backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                borderTopRightRadius: '9999px',
-                borderBottomRightRadius: '9999px',
-                borderTopLeftRadius: '0',
-                borderBottomLeftRadius: '0',
-                opacity: showScrollLeftIndicator ? 1 : 0.2,
-                pointerEvents: showScrollLeftIndicator ? 'auto' : 'none'
-              }}
-              onMouseEnter={(e) => {
-                if (showScrollLeftIndicator) {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) {
-                    (icon as SVGElement).style.transform = 'scale(1.1)';
-                  }
-                  handleScrollLeftMouseEnter();
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-                e.currentTarget.style.boxShadow = '';
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) {
-                  (icon as SVGElement).style.transform = 'scale(1)';
-                }
-                handleScrollMouseLeave();
-              }}
-            >
-              <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1F2937', opacity: 1 }} />
-            </button>
-
-            {/* Pagination Controls */}
-            <div className="border-t border-border px-4 py-3">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>Rows per page:</span>
-                    <select
-                      value={rowsPerPage}
-                      onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
-                      className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
-                    >
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </select>
-                  </div>
-                  <span className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                    Showing {startIndex + 1}–{endIndex} of {totalRecords.toLocaleString()}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <Tooltip text="First Page">
-                    <button
-                      onClick={() => setCurrentPage(1)}
-                      disabled={currentPage === 1}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronsLeft className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                  <Tooltip text="Previous Page">
-                    <button
-                      onClick={() => setCurrentPage(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                  <span className="text-xs px-2 hidden sm:inline" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <span className="text-xs px-2 sm:hidden" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                    {currentPage}/{totalPages}
-                  </span>
-                  <Tooltip text="Next Page">
-                    <button
-                      onClick={() => setCurrentPage(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                  <Tooltip text="Last Page">
-                    <button
-                      onClick={() => setCurrentPage(totalPages)}
-                      disabled={currentPage === totalPages}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronsRight className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                </div>
-              </div>
-            </div>
-          </div>
+            return (
+              <TableComponent
+                data={filteredClients}
+                columns={clientColumns}
+                getRowId={(c) => c.id}
+                rowActions={clientRowActions}
+                selectedIds={selectedRows}
+                onSelectionChange={setSelectedRows}
+                bulkActions={clientBulkActions}
+                defaultRowsPerPage={20}
+                emptyMessage="No clients found matching your filters."
+              />
+            );
+          })()}
 
           {/* Add Client Modal */}
           <Modal

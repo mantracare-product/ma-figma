@@ -2328,7 +2328,7 @@ export function AdminFieldDrawer({
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-white">
           <div className="flex items-center gap-2.5">
             <h2 className="text-base font-bold text-[#111827]">
-              {isReadOnly ? "System Field" : isEdit ? "Edit Field" : "New Custom Field"}
+              {isReadOnly ? "System Field" : isEdit ? "Edit Field" : "New Field"}
             </h2>
             {isReadOnly && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-[10px] font-semibold text-amber-700">

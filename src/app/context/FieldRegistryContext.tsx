@@ -1342,24 +1342,136 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
     { key: "price", label: "Price", module: "service", inputType: "number", placeholder: "Price", showAlways: true },
   ],
   organization: [
-    { key: "org_name", label: "Organization Name", module: "organization", inputType: "text", placeholder: "Org Name", showAlways: true },
-    { key: "industry", label: "Industry", module: "organization", inputType: "text", placeholder: "Industry", showAlways: true },
+    { key: "org_name", label: "Organization Name", module: "organization", inputType: "text", placeholder: "Organization name", showAlways: true },
+    { key: "industryCategory", label: "Industry Category", module: "organization", inputType: "select", placeholder: "Select category", showAlways: true },
+    { key: "industry", label: "Industry", module: "organization", inputType: "select", placeholder: "Select industry", showAlways: true },
+    { key: "location", label: "Location", module: "organization", inputType: "text", placeholder: "City, State or Country", showAlways: true },
+    { key: "email", label: "Email", module: "organization", inputType: "email", placeholder: "contact@company.com", validation: "email", showAlways: true },
+    { key: "phone", label: "Phone", module: "organization", inputType: "tel", placeholder: "+1 (555) 000-0000", validation: "phone", showAlways: true },
+    { key: "timezone", label: "Timezone", module: "organization", inputType: "select", placeholder: "Select timezone", showAlways: true },
+    { key: "preferredTime", label: "Preferred Working Hours", module: "organization", inputType: "text", placeholder: "9:00 AM - 5:00 PM", showAlways: true },
+    { key: "defaultCallingCountry", label: "Default Calling Country", module: "organization", inputType: "text", placeholder: "e.g. United States", showAlways: true },
+    // Address individual fields
+    { key: "addr_street", label: "Street", module: "organization", inputType: "text", placeholder: "Street address", showAlways: true },
+    { key: "addr_city", label: "City", module: "organization", inputType: "text", placeholder: "City", showAlways: true },
+    { key: "addr_state", label: "State / Province", module: "organization", inputType: "text", placeholder: "State or Province", showAlways: true },
+    { key: "addr_zip", label: "ZIP / Postal Code", module: "organization", inputType: "text", placeholder: "ZIP or Postal Code", showAlways: true },
+    { key: "addr_country", label: "Country", module: "organization", inputType: "text", placeholder: "Country", showAlways: true },
+    // Address group field
+    {
+      key: "address", label: "Address", module: "organization", inputType: "group", showAlways: true,
+      subFields: [
+        { id: "addr_street", name: "Street", inputType: "text", placeholder: "Street address" },
+        { id: "addr_city", name: "City", inputType: "text", placeholder: "City" },
+        { id: "addr_state", name: "State / Province", inputType: "text", placeholder: "State or Province" },
+        { id: "addr_zip", name: "ZIP / Postal Code", inputType: "text", placeholder: "ZIP or Postal Code" },
+        { id: "addr_country", name: "Country", inputType: "text", placeholder: "Country" },
+      ],
+    },
+    // Billing contact fields
+    { key: "billingContactName", label: "Billing Contact Name", module: "organization", inputType: "text", placeholder: "Billing contact person", showAlways: true },
+    { key: "billingContactEmail", label: "Billing Contact Email", module: "organization", inputType: "email", placeholder: "billing@company.com", validation: "email", showAlways: true },
+    // Billing address individual fields
+    { key: "bill_street", label: "Billing Street", module: "organization", inputType: "text", placeholder: "Billing street address", showAlways: true },
+    { key: "bill_city", label: "Billing City", module: "organization", inputType: "text", placeholder: "Billing city", showAlways: true },
+    { key: "bill_state", label: "Billing State / Province", module: "organization", inputType: "text", placeholder: "Billing state or province", showAlways: true },
+    { key: "bill_zip", label: "Billing ZIP / Postal Code", module: "organization", inputType: "text", placeholder: "Billing ZIP or postal code", showAlways: true },
+    { key: "bill_country", label: "Billing Country", module: "organization", inputType: "text", placeholder: "Billing country", showAlways: true },
+    // Billing address group field
+    {
+      key: "billing_address", label: "Billing Address", module: "organization", inputType: "group", showAlways: true,
+      subFields: [
+        { id: "bill_street", name: "Billing Street", inputType: "text", placeholder: "Billing street address" },
+        { id: "bill_city", name: "Billing City", inputType: "text", placeholder: "Billing city" },
+        { id: "bill_state", name: "Billing State / Province", inputType: "text", placeholder: "Billing state or province" },
+        { id: "bill_zip", name: "Billing ZIP / Postal Code", inputType: "text", placeholder: "Billing ZIP or postal code" },
+        { id: "bill_country", name: "Billing Country", inputType: "text", placeholder: "Billing country" },
+      ],
+    },
+    { key: "registrationIdType", label: "Registration ID Type", module: "organization", inputType: "text", placeholder: "e.g. EIN / GST / NPI", showAlways: true },
+    { key: "registrationNumber", label: "Registration Number", module: "organization", inputType: "text", placeholder: "Tax / business ID", showAlways: true },
+    { key: "website", label: "Website", module: "organization", inputType: "link", placeholder: "https://example.com", showAlways: true },
+    { key: "language", label: "Language", module: "organization", inputType: "text", placeholder: "English", showAlways: true },
+    {
+      key: "status", label: "Status", module: "organization", inputType: "select", placeholder: "Active / Inactive", showAlways: true,
+      options: [
+        { id: 1, label: "Active", value: "Active" },
+        { id: 2, label: "Inactive", value: "Inactive" },
+      ]
+    },
   ],
   teamMember: [
-    { key: "name", label: "Name", module: "teamMember", inputType: "text", placeholder: "Full name", showAlways: true },
-    { key: "status", label: "Status", module: "teamMember", inputType: "text", placeholder: "Active / Inactive", showAlways: true },
+    { key: "name", label: "Full Name", module: "teamMember", inputType: "text", placeholder: "Full name", showAlways: true },
     { key: "email", label: "Email", module: "teamMember", inputType: "email", placeholder: "email@example.com", validation: "email", showAlways: true },
     { key: "phone", label: "Phone", module: "teamMember", inputType: "tel", placeholder: "+1 (555) 000-0000", validation: "phone", showAlways: true },
+    {
+      key: "gender", label: "Gender", module: "teamMember", inputType: "select", placeholder: "Select gender", showAlways: true,
+      options: [
+        { id: 1, label: "Male", value: "Male" },
+        { id: 2, label: "Female", value: "Female" },
+        { id: 3, label: "Other", value: "Other" },
+      ]
+    },
+    { key: "date_of_birth", label: "Date of Birth", module: "teamMember", inputType: "date", placeholder: "DOB", showAlways: true },
+    {
+      key: "role", label: "Role", module: "teamMember", inputType: "select", placeholder: "Select role", showAlways: true,
+      options: [
+        { id: 1, label: "Admin", value: "Admin" },
+        { id: 2, label: "Manager", value: "Manager" },
+        { id: 3, label: "Member", value: "Member" },
+        { id: 4, label: "Agent", value: "Agent" },
+      ]
+    },
+    {
+      key: "department", label: "Department", module: "teamMember", inputType: "select", placeholder: "Select department", showAlways: true,
+      options: [
+        { id: 1, label: "Administration", value: "Administration" },
+        { id: 2, label: "Engineering", value: "Engineering" },
+        { id: 3, label: "Sales", value: "Sales" },
+        { id: 4, label: "Support", value: "Support" },
+        { id: 5, label: "Clinical", value: "Clinical" },
+      ]
+    },
+    {
+      key: "language", label: "Language", module: "teamMember", inputType: "select", placeholder: "Select language", showAlways: true,
+      options: [
+        { id: 1, label: "English", value: "English" },
+        { id: 2, label: "Spanish", value: "Spanish" },
+        { id: 3, label: "French", value: "French" },
+        { id: 4, label: "German", value: "German" },
+      ]
+    },
+    {
+      key: "country", label: "Country", module: "teamMember", inputType: "select", placeholder: "Select country", showAlways: true,
+      options: [
+        { id: 1, label: "USA", value: "USA" },
+        { id: 2, label: "Canada", value: "Canada" },
+        { id: 3, label: "UK", value: "UK" },
+        { id: 4, label: "Australia", value: "Australia" },
+        { id: 5, label: "India", value: "India" },
+      ]
+    },
+    {
+      key: "timezone", label: "Timezone", module: "teamMember", inputType: "select", placeholder: "Select timezone", showAlways: true,
+      options: [
+        { id: 1, label: "UTC", value: "UTC" },
+        { id: 2, label: "EST (UTC-5)", value: "EST" },
+        { id: 3, label: "CST (UTC-6)", value: "CST" },
+        { id: 4, label: "PST (UTC-8)", value: "PST" },
+        { id: 5, label: "IST (UTC+5:30)", value: "IST" },
+      ]
+    },
+    {
+      key: "status", label: "Status", module: "teamMember", inputType: "select", placeholder: "Active / Inactive", showAlways: true,
+      options: [
+        { id: 1, label: "Active", value: "Active" },
+        { id: 2, label: "Inactive", value: "Inactive" },
+      ]
+    },
     { key: "location", label: "Location", module: "teamMember", inputType: "text", placeholder: "Location", showAlways: true },
     { key: "company", label: "Company", module: "teamMember", inputType: "text", placeholder: "Company name", showAlways: true },
-    { key: "role", label: "Role", module: "teamMember", inputType: "text", placeholder: "Job title or role", showAlways: true },
     { key: "company_size", label: "Company Size", module: "teamMember", inputType: "text", placeholder: "10-50", showAlways: true },
     { key: "process", label: "Process", module: "teamMember", inputType: "text", placeholder: "Process", showAlways: true },
-    { key: "gender", label: "Gender", module: "teamMember", inputType: "text", placeholder: "Gender", showAlways: true },
-    { key: "date_of_birth", label: "Date of Birth", module: "teamMember", inputType: "date", placeholder: "DOB", showAlways: true },
-    { key: "language", label: "Language", module: "teamMember", inputType: "text", placeholder: "Language", showAlways: true },
-    { key: "country", label: "Country", module: "teamMember", inputType: "text", placeholder: "Country", showAlways: true },
-    { key: "timezone", label: "Timezone", module: "teamMember", inputType: "text", placeholder: "Timezone", showAlways: true },
     { key: "assigned_service", label: "Assigned Service", module: "teamMember", inputType: "text", placeholder: "Assigned service", showAlways: true },
     { key: "next_available_slot", label: "Next Available Slot", module: "teamMember", inputType: "text", placeholder: "Next slot", showAlways: true },
   ],
@@ -1425,7 +1537,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Basic client identity and contact information",
       module: "client",
       source: "system",
-      iconName: "user",
       fieldKeys: ["name", "email", "phone", "location", "country"],
       createdAt: 0,
     },
@@ -1435,7 +1546,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Organization details and job position",
       module: "client",
       source: "system",
-      iconName: "briefcase",
       fieldKeys: ["company", "role"],
       createdAt: 0,
     },
@@ -1445,7 +1555,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Assigned processes and workflow state",
       module: "client",
       source: "system",
-      iconName: "workflow",
       fieldKeys: ["status", "processes"],
       createdAt: 0,
     },
@@ -1455,7 +1564,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "User-defined custom client properties",
       module: "client",
       source: "system",
-      iconName: "file-text",
       fieldKeys: [],
       createdAt: 0,
     },
@@ -1467,7 +1575,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Core workflow metadata and priority",
       module: "process",
       source: "system",
-      iconName: "workflow",
       fieldKeys: ["title", "type", "priority", "responsible"],
       createdAt: 0,
     },
@@ -1477,7 +1584,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Creation dates and deadline tracking",
       module: "process",
       source: "system",
-      iconName: "calendar",
       fieldKeys: ["createdDate", "deadline"],
       createdAt: 0,
     },
@@ -1487,7 +1593,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Custom parameters and step attributes",
       module: "process",
       source: "system",
-      iconName: "layers",
       fieldKeys: [],
       createdAt: 0,
     },
@@ -1499,7 +1604,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Date, time, duration, and assigned provider",
       module: "appointment",
       source: "system",
-      iconName: "calendar",
       fieldKeys: ["appointmentDate", "appointmentTime", "service", "provider"],
       createdAt: 0,
     },
@@ -1509,7 +1613,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Client contact details and notes",
       module: "appointment",
       source: "system",
-      iconName: "user",
       fieldKeys: ["clientName", "email", "phone"],
       createdAt: 0,
     },
@@ -1519,7 +1622,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Additional appointment custom attributes",
       module: "appointment",
       source: "system",
-      iconName: "file-text",
       fieldKeys: [],
       createdAt: 0,
     },
@@ -1531,7 +1633,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Caller number, duration, direction, and agent",
       module: "call",
       source: "system",
-      iconName: "phone",
       fieldKeys: ["callerName", "phoneNumber", "duration", "status"],
       createdAt: 0,
     },
@@ -1541,7 +1642,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Call sentiment, recording, and summary",
       module: "call",
       source: "system",
-      iconName: "sparkles",
       fieldKeys: ["sentiment", "recording", "notes"],
       createdAt: 0,
     },
@@ -1551,7 +1651,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Additional call custom properties",
       module: "call",
       source: "system",
-      iconName: "layers",
       fieldKeys: [],
       createdAt: 0,
     },
@@ -1563,7 +1662,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Service name, category, and description",
       module: "service",
       source: "system",
-      iconName: "tag",
       fieldKeys: ["name", "category", "price", "duration"],
       createdAt: 0,
     },
@@ -1573,13 +1671,68 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Additional service attributes",
       module: "service",
       source: "system",
-      iconName: "layers",
       fieldKeys: [],
       createdAt: 0,
     },
   ],
-  organization: [],
-  teamMember: [],
+  organization: [
+    {
+      id: "sec-org-basic",
+      title: "Basic Info",
+      description: "Organization identity, industry category, industry, and main location",
+      module: "organization",
+      source: "system",
+      fieldKeys: ["org_name", "industryCategory", "industry", "location"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-org-locations",
+      title: "Organization Locations",
+      description: "Physical and virtual branch locations, operational addresses, and scheduling",
+      module: "organization",
+      source: "system",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+    {
+      id: "sec-org-contact-billing",
+      title: "Contact & Billing",
+      description: "Official contact numbers, emails, addresses, and registration details",
+      module: "organization",
+      source: "system",
+      fieldKeys: ["email", "phone", "timezone", "address", "billing_address", "billingContactName", "billingContactEmail", "registrationNumber", "website"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-org-custom",
+      title: "Custom Fields",
+      description: "User-defined custom organization parameters",
+      module: "organization",
+      source: "system",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+  ],
+  teamMember: [
+    {
+      id: "sec-team-basic",
+      title: "Basic Info",
+      description: "Member personal info, contact info, role, department, country, and timezone",
+      module: "teamMember",
+      source: "system",
+      fieldKeys: ["name", "email", "phone", "gender", "date_of_birth", "role", "department", "language", "country", "timezone", "status"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-team-custom",
+      title: "Custom Fields",
+      description: "User-defined custom team member properties",
+      module: "teamMember",
+      source: "system",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+  ],
   scribe: [
     {
       id: "sec-patient-info",
@@ -1587,7 +1740,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Demographics, age, sex, and visit date",
       module: "scribe",
       source: "system",
-      iconName: "user",
       fieldKeys: ["patient_name", "patient_age_sex", "consultation_date", "patient_id"],
       createdAt: 0,
     },
@@ -1597,7 +1749,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Presenting symptoms and symptom duration",
       module: "scribe",
       source: "system",
-      iconName: "file-text",
       fieldKeys: ["symptoms", "complaint_duration"],
       createdAt: 0,
     },
@@ -1607,7 +1758,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Primary diagnosis, ICD-10 code, and examination notes",
       module: "scribe",
       source: "system",
-      iconName: "shield",
       fieldKeys: ["primary_diagnosis", "icd_code", "diagnosis_type", "clinical_findings"],
       createdAt: 0,
     },
@@ -1617,7 +1767,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Prescribed drugs, dosage, frequency, and duration table",
       module: "scribe",
       source: "system",
-      iconName: "table",
       fieldKeys: ["med_name", "med_strength", "med_form", "med_dosage", "med_frequency", "med_duration", "med_route"],
       createdAt: 0,
     },
@@ -1627,7 +1776,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Care advice, warnings, prognosis, and return review",
       module: "scribe",
       source: "system",
-      iconName: "workflow",
       fieldKeys: ["patient_instructions", "patient_precautions", "prognosis_status", "expected_course", "complication_risk", "follow_up_review", "follow_up_criteria"],
       createdAt: 0,
     },
@@ -1978,7 +2126,7 @@ function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, 
       ? "custom"
       : "template",
     createdIn: s.createdIn || (s.source === "custom" && s.createdIn === "client" ? "client" : "admin"),
-    iconName: s.iconName || "layers",
+    iconName: undefined,
     fieldKeys: Array.isArray(s.fieldKeys)
       ? s.fieldKeys
       : Array.isArray(s.fieldIds)
@@ -2386,7 +2534,10 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
   };
 
   const getAllSections = (module: FieldModule): SectionDefinition[] => {
-    return [...getSystemSections(module), ...getCustomSections(module)];
+    const sys = getSystemSections(module);
+    const sysIds = new Set(sys.map((s) => s.id));
+    const custom = getCustomSections(module).filter((c) => !sysIds.has(c.id));
+    return [...sys, ...custom];
   };
 
   const getFieldsForOrg = (module: FieldModule, org?: OrgScopeFilter | null, processId?: string): FieldDefinition[] => {

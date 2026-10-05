@@ -6,6 +6,7 @@ import { Modal } from "../components/ui/Modal";
 import { toast } from "sonner";
 import { useNavigate, useSearchParams } from "react-router";
 import PageHeader from "../components/layout/PageHeader";
+import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 
 interface PaymentMethod {
   id: string;
@@ -42,6 +43,7 @@ export default function Payments() {
   const [creditAmount, setCreditAmount] = useState(10000);
   const [seats, setSeats] = useState(2);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
 
   // Plan selection state
   const currentPlan = "professional";
@@ -808,40 +810,65 @@ export default function Payments() {
             Export All
           </Button>
         </div>
-        <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full">
-            <thead className="bg-muted/40 border-b border-border">
-              <tr className="h-7">
-                <th className="text-left px-3 py-1 text-xs font-semibold text-muted-foreground">Date</th>
-                <th className="text-left px-3 py-1 text-xs font-semibold text-muted-foreground">Invoice ID</th>
-                <th className="text-left px-3 py-1 text-xs font-semibold text-muted-foreground">Description</th>
-                <th className="text-left px-3 py-1 text-xs font-semibold text-muted-foreground">Status</th>
-                <th className="text-right px-3 py-1 text-xs font-semibold text-muted-foreground">Amount</th>
-                <th className="text-right px-3 py-1 text-xs font-semibold text-muted-foreground">Download</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {invoices.map((invoice) => (
-                <tr key={invoice.id} className="h-[30px] hover:bg-muted/60 transition-colors">
-                  <td className="px-3 py-1 text-xs">{invoice.date}</td>
-                  <td className="px-3 py-1 text-xs font-medium">{invoice.id}</td>
-                  <td className="px-3 py-1 text-xs">Professional Plan - Annual</td>
-                  <td className="px-3 py-1 text-xs">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary/10 text-secondary leading-tight">
-                      {invoice.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-1 text-xs text-right font-medium">${invoice.amount}</td>
-                  <td className="px-3 py-1 text-right">
-                    <button className="text-primary hover:text-primary/80">
-                      <Download className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {(() => {
+          const columns: TableColumn<Invoice>[] = [
+            {
+              id: "date",
+              header: "Date",
+              align: "left",
+              render: (inv) => inv.date,
+            },
+            {
+              id: "id",
+              header: "Invoice ID",
+              align: "left",
+              render: (inv) => <span className="font-medium">{inv.id}</span>,
+            },
+            {
+              id: "description",
+              header: "Description",
+              align: "left",
+              render: () => "Professional Plan - Annual",
+            },
+            {
+              id: "status",
+              header: "Status",
+              align: "center",
+              render: (inv) => (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary/10 text-secondary leading-tight capitalize">
+                  {inv.status}
+                </span>
+              ),
+            },
+            {
+              id: "amount",
+              header: "Amount",
+              align: "right",
+              render: (inv) => <span className="font-medium">${inv.amount}</span>,
+            },
+          ];
+
+          const rowActions: TableRowAction<Invoice>[] = [
+            {
+              label: "Download Invoice",
+              icon: <Download className="w-3.5 h-3.5 text-primary" />,
+              onClick: (inv) => toast.success(`Downloading invoice ${inv.id}`),
+            },
+          ];
+
+          return (
+            <TableComponent
+              data={invoices}
+              columns={columns}
+              getRowId={(inv) => inv.id}
+              rowActions={rowActions}
+              selectedIds={selectedInvoices}
+              onSelectionChange={(ids) => setSelectedInvoices(new Set(Array.from(ids) as string[]))}
+              defaultRowsPerPage={20}
+              emptyMessage="No invoices found."
+            />
+          );
+        })()}
       </div>
     </div>
   );

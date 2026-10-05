@@ -29,6 +29,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
 import AppointmentCard from "../components/appointments/AppointmentCard";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
@@ -843,124 +844,121 @@ export default function Appointments() {
           </div>
         </PageHeader>
 
-        {/* Unified Search & Controls Toolbar */}
-        <div className="bg-card rounded-xl p-2.5 px-3 border border-border shadow-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2.5">
-            {/* View Switcher: List | Calendar | Availability */}
-            <div className="inline-flex bg-gray-100 p-0.5 rounded-lg border border-border shrink-0">
-              <button
-                type="button"
-                onClick={() => setView("list")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                  view === "list"
-                    ? "bg-[#1E293B] text-white shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-                title="List View"
-              >
-                <List className="w-3.5 h-3.5" />
-                <span>List</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("calendar")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                  view === "calendar"
-                    ? "bg-[#1E293B] text-white shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-                title="Calendar View"
-              >
-                <CalendarIcon className="w-3.5 h-3.5" />
-                <span>Calendar</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("availability")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                  view === "availability"
-                    ? "bg-[#1E293B] text-white shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-                title="Team Availability & Days Off"
-              >
-                <CalendarClock className="w-3.5 h-3.5" />
-                <span>Availability</span>
-              </button>
-            </div>
+        {/* Unified Search & Controls Toolbar powered by PageTopBar */}
+        <PageTopBar
+          modes={[
+            { id: "list", label: "List", icon: <List className="w-3.5 h-3.5" /> },
+            { id: "calendar", label: "Calendar", icon: <CalendarIcon className="w-3.5 h-3.5" /> },
+            { id: "availability", label: "Availability", icon: <CalendarClock className="w-3.5 h-3.5" /> },
+          ]}
+          activeMode={view}
+          onModeChange={(m) => setView(m as typeof view)}
+          searchQuery={view !== "availability" ? searchQuery : ""}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search appointments (client, email, notes)..."
+          filterPresets={[
+            {
+              id: "all",
+              label: "All",
+              count: statsSource.length,
+              isActive: listViewTab === "all",
+              onClick: () => setListViewTab("all"),
+            },
+            {
+              id: "upcoming",
+              label: "Upcoming",
+              count: statsSource.filter((a) => a.status === "scheduled").length,
+              isActive: listViewTab === "upcoming",
+              onClick: () => setListViewTab("upcoming"),
+            },
+            {
+              id: "pending",
+              label: "Pending",
+              count: statsSource.filter((a) => a.status === "pending-accept").length,
+              isActive: listViewTab === "pending",
+              onClick: () => setListViewTab("pending"),
+            },
+            {
+              id: "done",
+              label: "Done",
+              count: statsSource.filter((a) => a.status === "completed").length,
+              isActive: listViewTab === "done",
+              onClick: () => setListViewTab("done"),
+            },
+          ]}
+          filterFields={[
+            {
+              id: "status",
+              label: "Status",
+              type: "select",
+              options: [
+                { label: `All (${statsSource.length})`, value: "all" },
+                { label: `Upcoming (${statsSource.filter((a) => a.status === "scheduled").length})`, value: "upcoming" },
+                { label: `Pending (${statsSource.filter((a) => a.status === "pending-accept").length})`, value: "pending" },
+                { label: `Done (${statsSource.filter((a) => a.status === "completed").length})`, value: "done" },
+              ],
+              value: listViewTab,
+              onChange: (v) => setListViewTab(v as typeof listViewTab),
+            },
+            ...(devUserRole !== "provider"
+              ? [
+                  {
+                    id: "provider",
+                    label: "Provider",
+                    type: "select" as const,
+                    options: [
+                      { label: "All Providers", value: "all" },
+                      ...employees.map((emp) => ({ label: emp.name, value: String(emp.id) })),
+                    ],
+                    value: String(selectedEmployee),
+                    onChange: (v: string) => setSelectedEmployee(v === "all" ? "all" : Number(v)),
+                  },
+                ]
+              : []),
+          ]}
+          secondaryActions={
+            view !== "availability" ? (
+              <div className="flex items-center gap-2">
+                <select
+                  value={listViewTab}
+                  onChange={(e) => setListViewTab(e.target.value as typeof listViewTab)}
+                  className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                  title="Filter by Status"
+                >
+                  <option value="all">All ({statsSource.length})</option>
+                  <option value="upcoming">Upcoming ({statsSource.filter((a) => a.status === "scheduled").length})</option>
+                  <option value="pending">Pending ({statsSource.filter((a) => a.status === "pending-accept").length})</option>
+                  <option value="done">Done ({statsSource.filter((a) => a.status === "completed").length})</option>
+                </select>
 
-            {/* Search & Filters (Hidden when in Availability view) */}
-            {view !== "availability" && (
-              <>
-                {/* Search Input */}
-                <div className="relative flex-1 min-w-[220px]">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                  <input
-                    type="text"
-                    placeholder="Search appointments (client, email, notes)..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full h-[36px] bg-input-background border border-input rounded-lg pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  />
-                </div>
-
-                {/* Dropdown Filters */}
-                <div className="flex items-center gap-2 shrink-0">
-                  {/* Status Dropdown Filter */}
+                {devUserRole !== "provider" && (
                   <select
-                    value={listViewTab}
-                    onChange={(e) => setListViewTab(e.target.value as typeof listViewTab)}
+                    value={selectedEmployee}
+                    onChange={(e) => setSelectedEmployee(e.target.value === "all" ? "all" : Number(e.target.value))}
                     className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
                     style={{ fontFamily: "Outfit, sans-serif" }}
-                    title="Filter by Status"
+                    title="Filter by Provider"
                   >
-                    <option value="all">All ({statsSource.length})</option>
-                    <option value="upcoming">Upcoming ({statsSource.filter((a) => a.status === "scheduled").length})</option>
-                    <option value="pending">Pending ({statsSource.filter((a) => a.status === "pending-accept").length})</option>
-                    <option value="done">Done ({statsSource.filter((a) => a.status === "completed").length})</option>
+                    <option value="all">All Providers</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name}
+                      </option>
+                    ))}
                   </select>
-
-                  {devUserRole !== "provider" && (
-                    <select
-                      value={selectedEmployee}
-                      onChange={(e) => setSelectedEmployee(e.target.value === "all" ? "all" : Number(e.target.value))}
-                      className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                      title="Filter by Provider"
-                    >
-                      <option value="all">All Providers</option>
-                      {employees.map((emp) => (
-                        <option key={emp.id} value={emp.id}>
-                          {emp.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* Book Appointment CTA Button */}
-            <div className="flex items-center shrink-0 ml-auto">
-              <button
-                type="button"
-                onClick={() => {
-                  resetBookingWorkflow();
-                  setShowAddModal(true);
-                }}
-                className="inline-flex items-center justify-center gap-1.5 px-3.5 h-[36px] rounded-lg bg-[#1E293B] hover:bg-black text-white text-xs font-semibold shadow-xs transition-all cursor-pointer active:scale-98"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Book Appointment</span>
-              </button>
-            </div>
-          </div>
-        </div>
+                )}
+              </div>
+            ) : null
+          }
+          primaryAction={{
+            label: "Book Appointment",
+            onClick: () => {
+              resetBookingWorkflow();
+              setShowAddModal(true);
+            },
+          }}
+        />
 
         {/* Calendar View */}
         {view === "calendar" && (

@@ -126,6 +126,23 @@ export default function OrganizationDetailDrawer({
   const allOrgFields = useMemo(() => getAllFields("organization"), [getAllFields]);
   const allOrgSections = useMemo(() => getAllSections("organization"), [getAllSections]);
 
+  const BUILTIN_ORGANIZATION_SECTION_TITLES = useMemo(
+    () => new Set(["basic info", "organization locations", "billing info", "contact & billing", "custom fields"]),
+    []
+  );
+
+  const customOrgSections = useMemo(() => {
+    const BUILTIN_SEC_IDS = new Set(["sec-org-basic", "sec-org-locations", "sec-org-contact-billing", "sec-org-custom"]);
+    return allOrgSections.filter((s) => {
+      if (s.source === "system") return false;
+      if (BUILTIN_SEC_IDS.has(s.id)) return false;
+      if (s.id.startsWith("sec-org-")) return false;
+      const lower = (s.title || "").toLowerCase().trim();
+      if (BUILTIN_ORGANIZATION_SECTION_TITLES.has(lower)) return false;
+      return true;
+    });
+  }, [allOrgSections, BUILTIN_ORGANIZATION_SECTION_TITLES]);
+
   // Registry modals state
   const [fieldModalOpen, setFieldModalOpen] = useState(false);
   const [createFieldModalOpen, setCreateFieldModalOpen] = useState(false);
@@ -139,6 +156,20 @@ export default function OrganizationDetailDrawer({
   const [billingCustomFieldKeys, setBillingCustomFieldKeys] = useState<string[]>([]);
   const [languageCustomFieldKeys, setLanguageCustomFieldKeys] = useState<string[]>([]);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
+
+  const systemBasicSec = allOrgSections.find((s) => s.id === "sec-org-basic");
+  const effectiveBasicCustomKeys = useMemo(() => {
+    const CORE_BASIC_KEYS = ["org_name", "industryCategory", "industry", "location"];
+    const fromRegistry = (systemBasicSec?.fieldKeys || []).filter((k) => !CORE_BASIC_KEYS.includes(k));
+    return Array.from(new Set([...fromRegistry, ...basicCustomFieldKeys]));
+  }, [systemBasicSec, basicCustomFieldKeys]);
+
+  const systemBillingSec = allOrgSections.find((s) => s.id === "sec-org-contact-billing");
+  const effectiveBillingCustomKeys = useMemo(() => {
+    const CORE_BILLING_KEYS = ["email", "phone", "timezone", "address", "billing_address", "billingContactName", "billingContactEmail", "registrationNumber", "website"];
+    const fromRegistry = (systemBillingSec?.fieldKeys || []).filter((k) => !CORE_BILLING_KEYS.includes(k));
+    return Array.from(new Set([...fromRegistry, ...billingCustomFieldKeys]));
+  }, [systemBillingSec, billingCustomFieldKeys]);
 
   useEffect(() => {
     if (organization) {
@@ -301,7 +332,6 @@ export default function OrganizationDetailDrawer({
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <GripVertical className="w-3.5 h-3.5 text-slate-300" />
-                <User className="w-4 h-4 text-[#2563EB]" />
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
                   BASIC INFO
                 </h3>
@@ -414,7 +444,7 @@ export default function OrganizationDetailDrawer({
               </div>
 
               {/* Custom Fields added to Basic Info */}
-              {basicCustomFieldKeys.map((fieldKey) => {
+              {effectiveBasicCustomKeys.map((fieldKey) => {
                 const fieldDef = allOrgFields.find((f) => f.key === fieldKey);
                 const fieldLabel = fieldDef?.label || fieldKey;
                 return (
@@ -482,7 +512,6 @@ export default function OrganizationDetailDrawer({
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <GripVertical className="w-3.5 h-3.5 text-slate-300" />
-                <MapPin className="w-4 h-4 text-[#2563EB]" />
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
                   ORGANIZATION LOCATIONS
                 </h3>
@@ -498,7 +527,6 @@ export default function OrganizationDetailDrawer({
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <GripVertical className="w-3.5 h-3.5 text-slate-300" />
-                <CreditCard className="w-4 h-4 text-[#2563EB]" />
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
                   BILLING INFO
                 </h3>
@@ -509,9 +537,8 @@ export default function OrganizationDetailDrawer({
               {/* Address as a Group Field */}
               <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                    Billing Address (Group Field)
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Billing Address
                   </span>
                   <span className="text-[10px] text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
                     Country: United States
@@ -597,7 +624,7 @@ export default function OrganizationDetailDrawer({
               </div>
 
               {/* Custom Fields added to Billing Info */}
-              {billingCustomFieldKeys.map((fieldKey) => {
+              {effectiveBillingCustomKeys.map((fieldKey) => {
                 const fieldDef = allOrgFields.find((f) => f.key === fieldKey);
                 const fieldLabel = fieldDef?.label || fieldKey;
                 return (
@@ -663,7 +690,7 @@ export default function OrganizationDetailDrawer({
 
 
           {/* DYNAMIC CUSTOM SECTIONS */}
-          {allOrgSections.map((section) => (
+          {customOrgSections.map((section) => (
             <div
               key={section.id}
               className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-xs"
@@ -671,7 +698,6 @@ export default function OrganizationDetailDrawer({
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <GripVertical className="w-3.5 h-3.5 text-slate-300" />
-                  <Sparkles className="w-4 h-4 text-[#2563EB]" />
                   <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
                     {section.title}
                   </h3>

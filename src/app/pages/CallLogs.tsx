@@ -14,10 +14,12 @@ import {
 } from "../components/ui/dropdown-menu";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
 import ScheduleCallDrawer, { ScheduleCallClientOption } from "../components/telephony/ScheduleCallDrawer";
+import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 
 interface CallLog {
   id: string;
@@ -1295,35 +1297,20 @@ export default function CallLogs() {
           </div>
         )}
 
-        {/* Action Bar */}
-        <div className="bg-card rounded-xl p-2.5 px-3 border border-border shadow-xs">
-          <div className="flex items-center gap-3">
-            {/* Search Bar */}
-            <div className="flex-1 relative">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search call logs..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => setShowSearchModal(true)}
-                  className="w-full pl-8 pr-3 py-1.5 bg-input-background border border-input rounded-lg text-xs"
-                />
-              </div>
-
-              {/* Advanced Search Dropdown Panel */}
-              {showSearchModal && (
-                <>
-                  {/* Backdrop to close panel */}
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowSearchModal(false)}
-                  />
-
-                  {/* Dropdown Panel */}
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-border z-50 overflow-hidden">
-                    <div className="flex" style={{ maxHeight: '700px' }}>
+        {/* Action Bar powered by PageTopBar */}
+        <PageTopBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search call logs..."
+          showSearchModal={showSearchModal}
+          onSearchModalToggle={setShowSearchModal}
+          primaryAction={{
+            label: "Schedule Call",
+            icon: <CalendarClock className="w-3.5 h-3.5" />,
+            onClick: () => setShowScheduleCallDrawer(true),
+          }}
+          customFilterModalContent={
+            <div className="flex" style={{ maxHeight: '700px' }}>
                       {/* Left Sidebar - Saved Searches */}
                       <div className="w-56 border-r border-border p-4 overflow-y-auto bg-muted/30">
                         <div className="space-y-1">
@@ -1695,29 +1682,9 @@ export default function CallLogs() {
                           </Button>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
-
-            {/* Schedule Call Button */}
-            <button
-              id="schedule-call-btn"
-              onClick={() => setShowScheduleCallDrawer(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap"
-              style={{
-                background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
-                color: '#ffffff',
-                boxShadow: '0 2px 8px rgba(99,102,241,0.35)',
-                border: 'none',
-              }}
-            >
-              <CalendarClock className="w-4 h-4" />
-              Schedule Call
-            </button>
-          </div>
-        </div>
+          }
+        />
 
         {/* Add Field Modal */}
         {showAddFieldModal && (
@@ -1890,335 +1857,137 @@ export default function CallLogs() {
           </div>
         )}
 
-        {/* List View */}
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
-          <div
-            ref={tableScrollRef}
-            className="overflow-x-auto scrollbar-hide"
-            style={{ scrollBehavior: 'auto' }}
-            onScroll={() => {
-              if (tableScrollRef.current) {
-                const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
-                setShowScrollIndicator(scrollWidth > clientWidth && scrollLeft < scrollWidth - clientWidth);
-                setShowScrollLeftIndicator(scrollLeft > 0);
-              }
-            }}
-          >
-            <table className="w-full">
-              <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                <tr>
-                  <th className="px-3 py-1.5 w-10">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      ref={(el) => {
-                        if (el) el.indeterminate = someSelected;
-                      }}
-                      onChange={handleSelectAll}
-                      className="w-3.5 h-3.5 cursor-pointer"
-                    />
-                  </th>
-                  <th className="px-2 py-1.5 w-8"></th>
-                  {visibleColumns.callId && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Call ID</th>}
-                  {visibleColumns.client && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Client</th>}
-                  {visibleColumns.stage && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Stage</th>}
-                  {visibleColumns.status && <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>}
-                  {visibleColumns.date && <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Date & Time</th>}
-                  {visibleColumns.duration && <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Duration</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {paginatedLogs.map((log) => (
-                  <tr
-                    key={log.id}
-                    className={`transition-colors h-[30px] ${selectedRows.has(log.id)
-                      ? "bg-[#E8F0FE]"
-                      : "hover:bg-[#F1F5F9]"
-                      }`}
-                  >
-                    <td className="px-3 py-1">
-                      <input
-                        type="checkbox"
-                        checked={selectedRows.has(log.id)}
-                        onChange={() => handleSelectRow(log.id)}
-                        className="w-3.5 h-3.5 cursor-pointer"
-                      />
-                    </td>
-                    {/* Hamburger menu column */}
-                    <td className="px-2 py-1 relative">
-                      <div className="hamburger-menu-container">
-                        <button
-                          onClick={() => setOpenMenuCallId(openMenuCallId === log.id ? null : log.id)}
-                          className="p-0.5 hover:bg-muted rounded transition-colors flex items-center justify-center"
-                          style={{ width: '22px', height: '22px' }}
-                        >
-                          <MoreVertical className="w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />
-                        </button>
-
-                        {/* Hamburger menu popup */}
-                        {openMenuCallId === log.id && (
-                          <div
-                            className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-50"
-                            style={{
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                              minWidth: '160px',
-                              padding: '4px'
-                            }}
-                          >
-                            <button
-                              onClick={() => {
-                                setSelectedCallForDetails(log);
-                                setShowCallDetailsDrawer(true);
-                                setOpenMenuCallId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded hover:bg-[#E8F0FE] transition-colors"
-                              style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                              <span>View</span>
-                            </button>
-                            <button
-                              onClick={() => {
-                                toast.info('Call feature coming soon');
-                                setOpenMenuCallId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded hover:bg-[#E8F0FE] transition-colors"
-                              style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                            >
-                              <Phone className="w-3.5 h-3.5" />
-                              <span>Call</span>
-                            </button>
-                            <button
-                              onClick={() => {
-                                toast.success(`Call log ${log.id} deleted`);
-                                setOpenMenuCallId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded hover:bg-[#E8F0FE] transition-colors"
-                              style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Delete</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    {visibleColumns.callId && (
-                      <td className="px-3 py-1 font-medium text-xs" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        <button
-                          onClick={() => {
-                            setSelectedCallForDetails(log);
-                            setShowCallDetailsDrawer(true);
-                          }}
-                          className="hover:underline text-left"
-                          style={{ color: '#1A73E8', cursor: 'pointer' }}
-                        >
-                          #{log.id}
-                        </button>
-                      </td>
-                    )}
-                    {visibleColumns.client && (
-                      <td className="px-3 py-1 font-medium text-xs" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        <div className="flex items-center" style={{ gap: '6px' }}>
-                          {log.type === "Outbound" ? (
-                            <PiPhoneOutgoing style={{ width: '13px', height: '13px', color: '#1A73E8', flexShrink: 0 }} />
-                          ) : (
-                            <PiPhoneIncoming style={{ width: '13px', height: '13px', color: '#22C55E', flexShrink: 0 }} />
-                          )}
-                          <span
-                            className="text-left"
-                            style={{ color: '#1A73E8' }}
-                          >
-                            {log.client}
-                          </span>
-                        </div>
-                      </td>
-                    )}
-                    {visibleColumns.stage && (
-                      <td className="px-3 py-1 text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        {log.lastStage && log.lastStage !== "N/A" ? (
-                          <span className="flex items-center gap-1 flex-wrap">
-                            <span style={{ color: '#94A3B8' }}>{log.lastStage}</span>
-                            <span style={{ color: '#94A3B8', margin: '0 2px' }}>→</span>
-                            <span style={{ color: '#111827' }}>{log.currentStage}</span>
-                          </span>
-                        ) : (
-                          <span style={{ color: '#111827' }}>{log.currentStage}</span>
-                        )}
-                      </td>
-                    )}
-                    {visibleColumns.status && (
-                      <td className="px-3 py-1 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${log.status === "Completed"
-                          ? "bg-success-bg text-success"
-                          : log.status === "Pending"
-                            ? "bg-warning/10 text-warning"
-                            : "bg-error-bg text-error"
-                          }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-                          {log.status}
-                        </span>
-                      </td>
-                    )}
-                    {visibleColumns.date && <td className="px-3 py-1 text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.date}</td>}
-                    {visibleColumns.duration && <td className="px-3 py-1 text-xs text-center tabular-nums" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.duration}</td>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination Controls */}
-          <div className="border-t border-border px-4 py-3">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Rows per page:</span>
-                  <select
-                    value={rowsPerPage}
-                    onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
-                    className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
-                  >
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
+        {/* ─── Call Logs Table with TableComponent ─────────────────────── */}
+        {(() => {
+          const callColumns: TableColumn<CallLog>[] = [
+            {
+              id: "callId",
+              header: "Call ID",
+              render: (log) => (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCallForDetails(log);
+                    setShowCallDetailsDrawer(true);
+                  }}
+                  className="hover:underline font-medium cursor-pointer text-[#1A73E8]"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  #{log.id}
+                </button>
+              ),
+            },
+            {
+              id: "client",
+              header: "Client",
+              render: (log) => (
+                <div className="flex items-center gap-1.5 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  {log.type === "Outbound" ? (
+                    <PiPhoneOutgoing className="w-3.5 h-3.5 text-[#1A73E8] shrink-0" />
+                  ) : (
+                    <PiPhoneIncoming className="w-3.5 h-3.5 text-[#22C55E] shrink-0" />
+                  )}
+                  <span className="text-[#1A73E8]">{log.client}</span>
                 </div>
-                <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                  Showing {startIndex + 1}–{endIndex} of {totalRecords.toLocaleString()}
+              ),
+            },
+            {
+              id: "stage",
+              header: "Stage",
+              render: (log) => (
+                <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {log.lastStage && log.lastStage !== "N/A" ? (
+                    <span className="flex items-center gap-1">
+                      <span className="text-[#94A3B8]">{log.lastStage}</span>
+                      <span className="text-[#94A3B8]">→</span>
+                      <span className="text-[#111827]">{log.currentStage}</span>
+                    </span>
+                  ) : (
+                    <span className="text-[#111827]">{log.currentStage}</span>
+                  )}
                 </span>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <Tooltip text="First Page">
-                  <button
-                    onClick={() => setCurrentPage(1)}
-                    disabled={currentPage === 1}
-                    className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronsLeft className="w-3.5 h-3.5" />
-                  </button>
-                </Tooltip>
-                <Tooltip text="Previous Page">
-                  <button
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-                </Tooltip>
-                <span className="text-xs px-2 hidden sm:inline" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                  Page {currentPage} of {totalPages}
+              ),
+            },
+            {
+              id: "status",
+              header: "Status",
+              render: (log) => (
+                <span
+                  className={`inline-block px-2 py-0.5 rounded-none text-[10px] font-semibold whitespace-nowrap ${
+                    log.status === "Completed"
+                      ? "bg-success-bg text-success"
+                      : log.status === "Pending"
+                      ? "bg-warning/10 text-warning"
+                      : "bg-error-bg text-error"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {log.status}
                 </span>
-                <span className="text-xs px-2 sm:hidden" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                  {currentPage}/{totalPages}
-                </span>
-                <Tooltip text="Next Page">
-                  <button
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </Tooltip>
-                <Tooltip text="Last Page">
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={currentPage === totalPages}
-                    className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronsRight className="w-3.5 h-3.5" />
-                  </button>
-                </Tooltip>
-              </div>
-            </div>
-          </div>
+              ),
+            },
+            {
+              id: "date",
+              header: "Date & Time",
+              render: (log) => <span className="text-[#64748B] text-xs">{log.date}</span>,
+            },
+            {
+              id: "duration",
+              header: "Duration",
+              render: (log) => <span className="text-[#64748B] text-xs tabular-nums">{log.duration}</span>,
+            },
+          ];
 
-          {/* Scroll Right Button - Semicircle */}
-          <button
-            className="absolute right-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-            style={{
-              top: '50%',
-              transform: 'translateY(-50%)',
-              height: '112px',
-              width: '40px',
-              backgroundColor: 'rgba(255, 255, 255, 0.5)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              borderTopLeftRadius: '9999px',
-              borderBottomLeftRadius: '9999px',
-              borderTopRightRadius: '0',
-              borderBottomRightRadius: '0',
-              opacity: showScrollIndicator ? 1 : 0.2,
-              pointerEvents: showScrollIndicator ? 'auto' : 'none'
-            }}
-            onMouseEnter={(e) => {
-              if (showScrollIndicator) {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-                e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) {
-                  (icon as SVGElement).style.transform = 'scale(1.1)';
-                }
-                handleScrollRightMouseEnter();
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-              e.currentTarget.style.boxShadow = '';
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) {
-                (icon as SVGElement).style.transform = 'scale(1)';
-              }
-              handleScrollMouseLeave();
-            }}
-          >
-            <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
-          </button>
+          const callRowActions: TableRowAction<CallLog>[] = [
+            {
+              label: "View",
+              icon: <Eye className="w-3.5 h-3.5" />,
+              onClick: (log) => {
+                setSelectedCallForDetails(log);
+                setShowCallDetailsDrawer(true);
+              },
+            },
+            {
+              label: "Call",
+              icon: <Phone className="w-3.5 h-3.5" />,
+              onClick: () => {
+                toast.info("Call feature coming soon");
+              },
+            },
+            {
+              label: "Delete",
+              icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+              isDanger: true,
+              onClick: (log) => {
+                toast.success(`Call log ${log.id} deleted`);
+              },
+            },
+          ];
 
-          {/* Scroll Left Button - Semicircle */}
-          <button
-            className="absolute left-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-            style={{
-              top: '50%',
-              transform: 'translateY(-50%)',
-              height: '112px',
-              width: '40px',
-              backgroundColor: 'rgba(255, 255, 255, 0.5)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              borderTopRightRadius: '9999px',
-              borderBottomRightRadius: '9999px',
-              borderTopLeftRadius: '0',
-              borderBottomLeftRadius: '0',
-              opacity: showScrollLeftIndicator ? 1 : 0.2,
-              pointerEvents: showScrollLeftIndicator ? 'auto' : 'none'
-            }}
-            onMouseEnter={(e) => {
-              if (showScrollLeftIndicator) {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-                e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) {
-                  (icon as SVGElement).style.transform = 'scale(1.1)';
-                }
-                handleScrollLeftMouseEnter();
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-              e.currentTarget.style.boxShadow = '';
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) {
-                (icon as SVGElement).style.transform = 'scale(1)';
-              }
-              handleScrollMouseLeave();
-            }}
-          >
-            <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
-          </button>
-        </div>
+          return (
+            <TableComponent
+              data={filteredLogs}
+              columns={callColumns}
+              getRowId={(log) => log.id}
+              rowActions={callRowActions}
+              selectedIds={selectedRows}
+              onSelectionChange={setSelectedRows}
+              bulkActions={[
+                {
+                  label: "Delete Selected",
+                  icon: <Trash2 className="w-3.5 h-3.5" />,
+                  variant: "danger",
+                  onClick: (ids) => {
+                    toast.success(`${ids.size} call logs deleted`);
+                    setSelectedRows(new Set());
+                  },
+                },
+              ]}
+              defaultRowsPerPage={20}
+              emptyMessage="No call logs found matching your filters."
+            />
+          );
+        })()}
 
         {/* Trigger Calls Modal */}
         <Modal

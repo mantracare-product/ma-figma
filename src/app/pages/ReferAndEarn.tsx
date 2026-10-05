@@ -22,6 +22,7 @@ import PageHeader from "../components/layout/PageHeader";
 import { HowItWorksButton } from "../components/help/HowItWorksModal";
 import ReferralShareDrawer from "../components/refer-earn/ReferralShareDrawer";
 import { ReferralShareTarget } from "../components/refer-earn/referralShareTypes";
+import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 
 type PlanTier = "Starter" | "Growth" | "Scale" | "Enterprise";
 
@@ -88,6 +89,7 @@ export default function ReferAndEarn() {
   // Table filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "pending" | "signed_up">("all");
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
   // FAQ Accordion state
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
@@ -230,44 +232,27 @@ export default function ReferAndEarn() {
                     </p>
                   </div>
 
-                  <div className="overflow-x-auto border border-gray-100 rounded-xl">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-gray-50/80 text-[#64748B] font-semibold border-b border-gray-100">
-                        <tr>
-                          <th className="px-4 py-2.5">Plan Tier</th>
-                          <th className="px-4 py-2.5">First Payment</th>
-                          <th className="px-4 py-2.5">Commission Rate</th>
-                          <th className="px-4 py-2.5 text-right">Estimated Payout</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        <tr className="hover:bg-gray-50/50">
-                          <td className="px-4 py-2.5 font-bold text-[#020817]">Starter</td>
-                          <td className="px-4 py-2.5 text-[#64748B]">₹6,999/mo</td>
-                          <td className="px-4 py-2.5"><span className="font-semibold text-[#4F8EF7]">14% Rate</span></td>
-                          <td className="px-4 py-2.5 text-right font-bold text-[#020817]">~₹980</td>
-                        </tr>
-                        <tr className="hover:bg-gray-50/50">
-                          <td className="px-4 py-2.5 font-bold text-[#020817]">Growth</td>
-                          <td className="px-4 py-2.5 text-[#64748B]">₹19,999/mo</td>
-                          <td className="px-4 py-2.5"><span className="font-semibold text-[#4F8EF7]">12% Rate</span></td>
-                          <td className="px-4 py-2.5 text-right font-bold text-[#020817]">~₹2,400</td>
-                        </tr>
-                        <tr className="hover:bg-gray-50/50">
-                          <td className="px-4 py-2.5 font-bold text-[#020817]">Scale</td>
-                          <td className="px-4 py-2.5 text-[#64748B]">₹44,999/mo</td>
-                          <td className="px-4 py-2.5"><span className="font-semibold text-[#4F8EF7]">10% Rate</span></td>
-                          <td className="px-4 py-2.5 text-right font-bold text-[#020817]">~₹4,500</td>
-                        </tr>
-                        <tr className="hover:bg-gray-50/50">
-                          <td className="px-4 py-2.5 font-bold text-[#020817]">Enterprise</td>
-                          <td className="px-4 py-2.5 text-[#64748B]">Custom</td>
-                          <td className="px-4 py-2.5"><span className="font-semibold text-[#4F8EF7]">~7% Rate</span></td>
-                          <td className="px-4 py-2.5 text-right font-bold text-[#020817]">Scales with deal</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                  {(() => {
+                    const tierData = [
+                      { id: "starter", tier: "Starter", firstPayment: "₹6,999/mo", rate: "14% Rate", payout: "~₹980" },
+                      { id: "growth", tier: "Growth", firstPayment: "₹19,999/mo", rate: "12% Rate", payout: "~₹2,400" },
+                      { id: "scale", tier: "Scale", firstPayment: "₹44,999/mo", rate: "10% Rate", payout: "~₹4,500" },
+                      { id: "enterprise", tier: "Enterprise", firstPayment: "Custom", rate: "~7% Rate", payout: "Scales with deal" },
+                    ];
+                    const tierColumns: TableColumn<typeof tierData[0]>[] = [
+                      { key: "tier", header: "Plan Tier", render: (item) => <span className="font-bold text-[#020817]">{item.tier}</span> },
+                      { key: "firstPayment", header: "First Payment", align: "center", render: (item) => <span className="text-[#64748B]">{item.firstPayment}</span> },
+                      { key: "rate", header: "Commission Rate", align: "center", render: (item) => <span className="font-semibold text-[#4F8EF7]">{item.rate}</span> },
+                      { key: "payout", header: "Estimated Payout", align: "right", render: (item) => <span className="font-bold text-[#020817]">{item.payout}</span> },
+                    ];
+                    return (
+                      <TableComponent
+                        columns={tierColumns}
+                        data={tierData}
+                        getRowId={(item) => item.id}
+                      />
+                    );
+                  })()}
 
                   <p className="text-[11px] text-[#64748B]">
                     * Referrals who choose annual billing earn you a further boosted rate.
@@ -504,68 +489,100 @@ export default function ReferAndEarn() {
                     </div>
                   </div>
 
-                  {/* Table */}
-                  <div className="overflow-x-auto rounded-2xl border border-white/80 overflow-hidden shadow-2xs">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white font-semibold">
-                        <tr>
-                          <th className="px-4 py-3" style={{ fontFamily: 'Outfit, sans-serif' }}>CONTACT NAME</th>
-                          <th className="px-4 py-3" style={{ fontFamily: 'Outfit, sans-serif' }}>EMAIL / PHONE</th>
-                          <th className="px-4 py-3" style={{ fontFamily: 'Outfit, sans-serif' }}>INVITED DATE</th>
-                          <th className="px-4 py-3" style={{ fontFamily: 'Outfit, sans-serif' }}>PLAN</th>
-                          <th className="px-4 py-3" style={{ fontFamily: 'Outfit, sans-serif' }}>STATUS</th>
-                          <th className="px-4 py-3 text-right" style={{ fontFamily: 'Outfit, sans-serif' }}>COMMISSION RATE</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {filteredReferrals.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="py-8 text-center text-[#64748B]">
-                              No matching referral records found.
-                            </td>
-                          </tr>
-                        ) : (
-                          filteredReferrals.map((item) => (
-                            <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
-                              <td className="px-4 py-3.5 font-bold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                {item.name}
-                              </td>
-                              <td className="px-4 py-3.5 text-[#64748B] font-mono text-xs">{item.contact}</td>
-                              <td className="px-4 py-3.5 text-[#64748B]">{item.date}</td>
-                              <td className="px-4 py-3.5">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
-                                  <PackageCheck className="w-3 h-3 text-[#4F8EF7]" /> {item.plan}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3.5">
-                                {item.status === "paid" && (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[rgba(22,163,74,0.10)] text-[#16A34A] border border-green-200/60">
-                                    <Check className="w-3 h-3 text-[#16A34A]" /> Paid
-                                  </span>
-                                )}
-                                {item.status === "pending" && (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/60">
-                                    Pending Approval
-                                  </span>
-                                )}
-                                {item.status === "signed_up" && (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#E8F0FE] text-[#4F8EF7] border border-blue-200/60">
-                                    Signed Up (Trial)
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3.5 text-right font-bold text-[#020817]">
-                                <span className="inline-flex items-center gap-1">
-                                  <span className="text-[#4F8EF7]">{item.rate} Rate</span>
-                                  {item.status === "paid" && <span className="text-gray-400 font-normal">(${item.reward.toFixed(2)})</span>}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  {/* Table with TableComponent */}
+                  {(() => {
+                    const columns: TableColumn<(typeof MOCK_REFERRALS)[0]>[] = [
+                      {
+                        id: "name",
+                        header: "CONTACT NAME",
+                        align: "left",
+                        render: (item) => (
+                          <span className="font-bold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                            {item.name}
+                          </span>
+                        ),
+                      },
+                      {
+                        id: "contact",
+                        header: "EMAIL / PHONE",
+                        align: "left",
+                        render: (item) => <span className="text-[#64748B] font-mono text-xs">{item.contact}</span>,
+                      },
+                      {
+                        id: "date",
+                        header: "INVITED DATE",
+                        align: "center",
+                        render: (item) => <span className="text-[#64748B]">{item.date}</span>,
+                      },
+                      {
+                        id: "plan",
+                        header: "PLAN",
+                        align: "center",
+                        render: (item) => (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+                            <PackageCheck className="w-3 h-3 text-[#4F8EF7]" /> {item.plan}
+                          </span>
+                        ),
+                      },
+                      {
+                        id: "status",
+                        header: "STATUS",
+                        align: "center",
+                        render: (item) => (
+                          item.status === "paid" ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[rgba(22,163,74,0.10)] text-[#16A34A] border border-green-200/60">
+                              <Check className="w-3 h-3 text-[#16A34A]" /> Paid
+                            </span>
+                          ) : item.status === "pending" ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/60">
+                              Pending Approval
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#E8F0FE] text-[#4F8EF7] border border-blue-200/60">
+                              Signed Up (Trial)
+                            </span>
+                          )
+                        ),
+                      },
+                      {
+                        id: "rate",
+                        header: "COMMISSION RATE",
+                        align: "right",
+                        render: (item) => (
+                          <span className="inline-flex items-center gap-1 font-bold text-[#020817]">
+                            <span className="text-[#4F8EF7]">{item.rate} Rate</span>
+                            {item.status === "paid" && <span className="text-gray-400 font-normal">(${item.reward.toFixed(2)})</span>}
+                          </span>
+                        ),
+                      },
+                    ];
+
+                    const rowActions: TableRowAction<(typeof MOCK_REFERRALS)[0]>[] = [
+                      {
+                        label: "Share Referral",
+                        icon: <Share2 className="w-3.5 h-3.5" />,
+                        onClick: () => handleOpenShareDrawer(),
+                      },
+                      {
+                        label: "Copy Invite Link",
+                        icon: <Copy className="w-3.5 h-3.5" />,
+                        onClick: () => handleCopyCurrentLink(),
+                      },
+                    ];
+
+                    return (
+                      <TableComponent
+                        data={filteredReferrals}
+                        columns={columns}
+                        getRowId={(item) => item.id}
+                        rowActions={rowActions}
+                        selectedIds={selectedRows}
+                        onSelectionChange={(ids) => setSelectedRows(new Set(Array.from(ids) as string[]))}
+                        defaultRowsPerPage={20}
+                        emptyMessage="No matching referral records found."
+                      />
+                    );
+                  })()}
                 </div>
               </div>
             )}

@@ -6,6 +6,8 @@ import {
   Settings, Tag, X, Percent
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
+import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import DrawerShell from "../components/ui/DrawerShell";
 import CPTCodeInput from "../components/ui/CPTCodeInput";
@@ -708,462 +710,253 @@ export default function Services() {
           </div>
         </PageHeader>
 
-        {/* Action / Search Toolbar */}
-        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2.5">
-            <div className="relative flex-1 min-w-[240px] max-w-md">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search product/services..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full h-[36px] bg-input-background border border-input rounded-lg pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              />
-            </div>
-            <button
-              onClick={() => { resetForm(); setShowAddDrawer(true); }}
-              className="h-[36px] px-3.5 bg-[#1E293B] hover:bg-black text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <Plus className="w-4 h-4" /> Add Service
-            </button>
-          </div>
-        </div>
+        {/* Action / Search Toolbar powered by PageTopBar */}
+        <PageTopBar
+          isBottomPanelAttached={true}
+          searchQuery={searchQuery}
+          onSearchChange={(v) => {
+            setSearchQuery(v);
+            setCurrentPage(1);
+          }}
+          searchPlaceholder="Search product/services..."
+          filterPresets={[
+            {
+              id: "all",
+              label: "All Services",
+              count: services.length,
+              isActive: !searchQuery,
+              onClick: () => {
+                setSearchQuery("");
+                setCurrentPage(1);
+              },
+            },
+            ...categoryList.slice(0, 4).map((cat) => ({
+              id: cat.toLowerCase(),
+              label: cat,
+              count: services.filter((s) => s.category === cat).length,
+              isActive: searchQuery.toLowerCase() === cat.toLowerCase(),
+              onClick: () => {
+                setSearchQuery(cat);
+                setCurrentPage(1);
+              },
+            })),
+          ]}
+          filterFields={[
+            {
+              id: "name",
+              label: "Service Name / Code",
+              type: "text",
+              placeholder: "Filter by name or CPT code...",
+              value: searchQuery,
+              onChange: (val) => {
+                setSearchQuery(val || "");
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: "category",
+              label: "Category",
+              type: "select",
+              value: searchQuery,
+              onChange: (val) => {
+                setSearchQuery(val === "all" ? "" : val || "");
+                setCurrentPage(1);
+              },
+              options: [
+                { label: "All Categories", value: "all" },
+                ...categoryList.map((c) => ({ label: c, value: c })),
+              ],
+            },
+          ]}
+          primaryAction={{
+            label: "Add Service",
+            icon: <Plus className="w-4 h-4" />,
+            onClick: () => {
+              resetForm();
+              setShowAddDrawer(true);
+            },
+          }}
+        />
 
-        {/* Table View Connected with Dark Thead */}
-        <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-[#1E293B] text-white">
-                <tr className="h-[34px]">
-                  {/* Checkbox Column */}
-                  <th className="py-1.5 px-3 w-8 text-center">
-                    <input
-                      type="checkbox"
-                      checked={selectedServiceIds.length === filteredServices.length && filteredServices.length > 0}
-                      onChange={toggleSelectAll}
-                      className="w-3.5 h-3.5 rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7] cursor-pointer"
-                    />
-                  </th>
 
-                  {/* Column Configuration Gear Button Column */}
-                  <th className="py-1.5 px-1 text-center relative" style={{ width: "28px" }}>
-                      <div className="relative inline-block">
-                        <button
-                          type="button"
-                          onClick={() => setShowColumnSettings((v) => !v)}
-                          className="inline-flex items-center justify-center w-6 h-6 rounded transition-colors hover:bg-white/10"
-                          title="Configure Visible Columns"
-                        >
-                          <Settings className="w-3.5 h-3.5 text-slate-200 hover:text-white transition-colors" />
-                        </button>
 
-                        {/* Visible Columns Popover */}
-                        {showColumnSettings && (
-                          <>
-                            <div className="fixed inset-0 z-40" onClick={() => setShowColumnSettings(false)} />
-                            <div className="absolute left-0 top-full mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-2xl z-50 p-2 text-left" style={{ fontFamily: "Outfit, sans-serif" }}>
-                              <div className="text-[10px] font-bold text-slate-500 uppercase px-2 py-1 mb-1 border-b border-slate-100">
-                                Visible Columns
-                              </div>
-                              <div className="space-y-1 text-xs text-slate-700">
-                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns.cptCode}
-                                    onChange={(e) => setVisibleColumns({ ...visibleColumns, cptCode: e.target.checked })}
-                                    className="rounded border-slate-300 text-blue-600"
-                                  />
-                                  <span>CPT / Service Code</span>
-                                </label>
-                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns.category}
-                                    onChange={(e) => setVisibleColumns({ ...visibleColumns, category: e.target.checked })}
-                                    className="rounded border-slate-300 text-blue-600"
-                                  />
-                                  <span>Category</span>
-                                </label>
-                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns.duration}
-                                    onChange={(e) => setVisibleColumns({ ...visibleColumns, duration: e.target.checked })}
-                                    className="rounded border-slate-300 text-blue-600"
-                                  />
-                                  <span>Duration</span>
-                                </label>
-                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns.price}
-                                    onChange={(e) => setVisibleColumns({ ...visibleColumns, price: e.target.checked })}
-                                    className="rounded border-slate-300 text-blue-600"
-                                  />
-                                  <span>Price</span>
-                                </label>
-                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns.assignedStaff}
-                                    onChange={(e) => setVisibleColumns({ ...visibleColumns, assignedStaff: e.target.checked })}
-                                    className="rounded border-slate-300 text-blue-600"
-                                  />
-                                  <span>Responsible</span>
-                                </label>
-                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns.created}
-                                    onChange={(e) => setVisibleColumns({ ...visibleColumns, created: e.target.checked })}
-                                    className="rounded border-slate-300 text-blue-600"
-                                  />
-                                  <span>Created</span>
-                                </label>
-                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns.activity}
-                                    onChange={(e) => setVisibleColumns({ ...visibleColumns, activity: e.target.checked })}
-                                    className="rounded border-slate-300 text-blue-600"
-                                  />
-                                  <span>Activity</span>
-                                </label>
-                                <label className="flex items-center gap-2 px-1.5 py-0.5 hover:bg-slate-50 rounded cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns.status}
-                                    onChange={(e) => setVisibleColumns({ ...visibleColumns, status: e.target.checked })}
-                                    className="rounded border-slate-300 text-blue-600"
-                                  />
-                                  <span>Status</span>
-                                </label>
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </th>
 
-                    {/* Standard Headers */}
-                    <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Product / Service
-                    </th>
-                    {visibleColumns.cptCode && (
-                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        CPT / Code
-                      </th>
-                    )}
-                    {visibleColumns.category && (
-                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Category
-                      </th>
-                    )}
-                    {visibleColumns.duration && (
-                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Duration
-                      </th>
-                    )}
-                    {visibleColumns.price && (
-                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Price
-                      </th>
-                    )}
-                    {visibleColumns.assignedStaff && (
-                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Responsible
-                      </th>
-                    )}
-                    {visibleColumns.created && (
-                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Created
-                      </th>
-                    )}
-                    {visibleColumns.activity && (
-                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Activity
-                      </th>
-                    )}
-                    {visibleColumns.status && (
-                      <th className="py-1 px-3 text-[11px] font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Status
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {paginatedServices.map((service) => {
-                    const assignedEmps = allTeamEmps.filter((e) =>
-                      service.assignedEmployees?.some((id) => String(id) === String(e.id))
-                    );
-                    const isSelected = selectedServiceIds.includes(service.id);
-
-                    return (
-                      <tr key={service.id} className={`h-[32px] hover:bg-slate-50/80 transition-colors group ${isSelected ? "bg-blue-50/40" : ""}`}>
-                        {/* Checkbox */}
-                        <td className="py-1 px-3 text-center">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelectRow(service.id)}
-                            className="w-3.5 h-3.5 rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7] cursor-pointer"
-                          />
-                        </td>
-
-                        {/* Hamburger Action Menu Column directly under the Gear button */}
-                        <td className="py-1 px-1 text-center relative" style={{ width: "28px" }}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenMenuId(openMenuId === service.id ? null : service.id);
-                            }}
-                            className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-gray-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                            title="Actions"
-                          >
-                            <MoreVertical className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* Row Actions Menu Popover */}
-                          {openMenuId === service.id && (
-                            <>
-                              <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
-                              <div
-                                className="absolute left-full top-0 ml-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-[150px] text-left"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                <button
-                                  onClick={() => openEdit(service)}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5 text-slate-400" /> Edit
-                                </button>
-                                <button
-                                  onClick={() => handleToggleActive(service.id)}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-                                >
-                                  {service.isActive ? (
-                                    <>
-                                      <ToggleLeft className="w-3.5 h-3.5 text-slate-400" /> Deactivate
-                                    </>
-                                  ) : (
-                                    <>
-                                      <ToggleRight className="w-3.5 h-3.5 text-blue-600" /> Activate
-                                    </>
-                                  )}
-                                </button>
-                                <div className="border-t border-slate-100 my-0.5" />
-                                <button
-                                  onClick={() => handleDelete(service.id, service.name)}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" /> Delete
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </td>
-
-                        {/* Service Icon, Name & Description */}
-                        <td className="py-1 px-3 min-w-[200px]">
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded bg-blue-50/80 border border-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600">
-                              <Briefcase className="w-3 h-3" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <h4 className="text-xs font-bold text-slate-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                  {service.name}
-                                </h4>
-                                {service.cptCode && !visibleColumns.cptCode && (
-                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80 shrink-0">
-                                    CPT {service.cptCode}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* CPT / Service Code */}
-                        {visibleColumns.cptCode && (
-                          <td className="py-1 px-3 whitespace-nowrap">
-                            {service.cptCode ? (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80">
-                                {service.cptCode}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-slate-400 italic font-sans">—</span>
-                            )}
-                          </td>
-                        )}
-
-                        {/* Category */}
-                        {visibleColumns.category && (
-                          <td className="py-1 px-3 whitespace-nowrap">
-                            <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                              {service.category || "General"}
-                            </span>
-                          </td>
-                        )}
-
-                        {/* Duration */}
-                        {visibleColumns.duration && (
-                          <td className="py-1 px-3 whitespace-nowrap">
-                            <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                              {service.duration} min
-                            </span>
-                          </td>
-                        )}
-
-                        {/* Price & Tax */}
-                        {visibleColumns.price && (
-                          <td className="py-1 px-3 whitespace-nowrap">
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                {getCurrencySymbol(service.currency)} {service.price}
-                              </span>
-                              {Boolean(service.tax && service.tax > 0) && (
-                                <span className="text-[9px] font-semibold text-slate-500 bg-slate-100 px-1 py-0.2 rounded" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                  +{service.tax}%
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        )}
-
-                        {/* Responsible / Assigned Staff */}
-                        {visibleColumns.assignedStaff && (
-                          <td className="py-1 px-3 whitespace-nowrap">
-                            {assignedEmps.length > 0 ? (
-                              <div className="flex flex-wrap gap-1 items-center">
-                                {assignedEmps.map((emp) => (
-                                  <span
-                                    key={emp.id}
-                                    className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/80"
-                                    style={{ fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    {emp.name}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-slate-400 italic" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                Unassigned
-                              </span>
-                            )}
-                          </td>
-                        )}
-
-                        {/* Created Date */}
-                        {visibleColumns.created && (
-                          <td className="py-1 px-3 whitespace-nowrap">
-                            <span className="text-xs text-slate-600 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                              {service.createdAt || "2024-04-12"}
-                            </span>
-                          </td>
-                        )}
-
-                        {/* Activity */}
-                        {visibleColumns.activity && (
-                          <td className="py-1 px-3 whitespace-nowrap">
-                            <span className="text-xs text-slate-500 font-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
-                              {service.activity || "Apr 12"}
-                            </span>
-                          </td>
-                        )}
-
-                        {/* Status */}
-                        {visibleColumns.status && (
-                          <td className="py-1 px-3 whitespace-nowrap">
-                            <span
-                              className={`inline-flex items-center gap-1 text-xs font-bold ${
-                                service.isActive ? "text-emerald-600" : "text-slate-400"
-                              }`}
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              <span className={`w-1.5 h-1.5 rounded-full ${service.isActive ? "bg-emerald-500" : "bg-slate-300"}`} />
-                              {service.isActive ? "Active" : "Inactive"}
-                            </span>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Standard Pagination Footer (matching Clients.tsx) */}
-            <div className="px-4 py-2 border-t border-border bg-white flex items-center justify-between text-xs text-muted-foreground select-none">
-              <div className="flex items-center gap-2">
-                <span>Rows per page:</span>
-                <select
-                  value={rowsPerPage}
-                  onChange={(e) => {
-                    setRowsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="border border-input rounded px-2 py-0.5 bg-input-background text-xs cursor-pointer focus:outline-none"
-                >
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-                <span className="ml-2">
-                  Showing {filteredServices.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredServices.length}
+        {/* Table View Connected with TableComponent */}
+        {(() => {
+          const serviceColumns: TableColumn<Service>[] = [
+            {
+              id: "name",
+              header: "Product / Service",
+              align: "left",
+              render: (service) => (
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-none bg-blue-50/80 border border-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600">
+                    <Briefcase className="w-3 h-3" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="text-xs font-bold text-slate-900 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                        {service.name}
+                      </h4>
+                      {service.cptCode && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-none text-[9px] font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80 shrink-0">
+                          CPT {service.cptCode}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              id: "cptCode",
+              header: "CPT / Code",
+              align: "center",
+              render: (service) => (
+                service.cptCode ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-none text-[10px] font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80">
+                    {service.cptCode}
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-400 italic font-sans">—</span>
+                )
+              ),
+            },
+            {
+              id: "category",
+              header: "Category",
+              align: "center",
+              render: (service) => (
+                <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  {service.category || "General"}
                 </span>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(1)}
-                  disabled={currentPage === 1}
-                  className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                  title="First page"
-                >
-                  <span className="text-xs">«</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                  title="Previous page"
-                >
-                  <span className="text-xs">‹</span>
-                </button>
-                <span className="px-2 font-medium text-foreground">
-                  Page {currentPage} of {totalPages}
+              ),
+            },
+            {
+              id: "duration",
+              header: "Duration",
+              align: "center",
+              render: (service) => (
+                <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  {service.duration} min
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                  title="Next page"
+              ),
+            },
+            {
+              id: "price",
+              header: "Price",
+              align: "center",
+              render: (service) => (
+                <div className="flex items-center justify-center gap-1">
+                  <span className="text-xs font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    {getCurrencySymbol(service.currency)} {service.price}
+                  </span>
+                  {Boolean(service.tax && service.tax > 0) && (
+                    <span className="text-[9px] font-semibold text-slate-500 bg-slate-100 px-1 py-0.5 rounded-none" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                      +{service.tax}%
+                    </span>
+                  )}
+                </div>
+              ),
+            },
+            {
+              id: "assignedStaff",
+              header: "Responsible",
+              align: "center",
+              render: (service) => {
+                const assignedEmps = allTeamEmps.filter((e) =>
+                  service.assignedEmployees?.some((id) => String(id) === String(e.id))
+                );
+                return assignedEmps.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 items-center justify-center">
+                    {assignedEmps.map((emp) => (
+                      <span
+                        key={emp.id}
+                        className="inline-flex items-center px-1.5 py-0.5 rounded-none text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/80"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        {emp.name}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-slate-400 italic" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    Unassigned
+                  </span>
+                );
+              },
+            },
+            {
+              id: "created",
+              header: "Created",
+              align: "center",
+              render: (service) => (
+                <span className="text-xs text-slate-600 font-medium" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  {service.createdAt || "2024-04-12"}
+                </span>
+              ),
+            },
+            {
+              id: "activity",
+              header: "Activity",
+              align: "center",
+              render: (service) => (
+                <span className="text-xs text-slate-500 font-normal" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  {service.activity || "Apr 12"}
+                </span>
+              ),
+            },
+            {
+              id: "status",
+              header: "Status",
+              align: "center",
+              render: (service) => (
+                <span
+                  className={`inline-flex items-center gap-1 text-xs font-bold ${
+                    service.isActive ? 'text-emerald-600' : 'text-slate-400'
+                  }`}
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
                 >
-                  <span className="text-xs">›</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage(totalPages)}
-                  disabled={currentPage === totalPages}
-                  className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                  title="Last page"
-                >
-                  <span className="text-xs">»</span>
-                </button>
-              </div>
-            </div>
+                  <span className={`w-1.5 h-1.5 rounded-full ${service.isActive ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                  {service.isActive ? "Active" : "Inactive"}
+                </span>
+              ),
+            },
+          ];
+
+          const serviceRowActions: TableRowAction<Service>[] = [
+            {
+              label: "Edit",
+              icon: <Edit2 className="w-3.5 h-3.5" />,
+              onClick: (service) => openEdit(service),
+            },
+            {
+              label: "Toggle Status",
+              icon: <ToggleLeft className="w-3.5 h-3.5" />,
+              onClick: (service) => handleToggleActive(service.id),
+            },
+            {
+              label: "Delete",
+              icon: <Trash2 className="w-3.5 h-3.5" />,
+              isDanger: true,
+              onClick: (service) => handleDelete(service.id, service.name),
+            },
+          ];
+
+          return (
+            <TableComponent
+              data={filteredServices}
+              columns={serviceColumns}
+              getRowId={(s) => s.id}
+              rowActions={serviceRowActions}
+              selectedIds={new Set(selectedServiceIds)}
+              onSelectionChange={(ids) => setSelectedServiceIds(Array.from(ids) as number[])}
+              defaultRowsPerPage={20}
+              emptyMessage="No products or services found matching your filters."
+            />
+          );
+        })()}
           </div>
-        </div>
 
         <DrawerShell
         isOpen={showAddDrawer}

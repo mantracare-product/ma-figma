@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
+import TableComponent, { TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -178,333 +180,185 @@ export default function AIScribeConsole() {
           </div>
         </PageHeader>
 
-        {/* ─── Search & Action Bar ───────────────────────────────────────────── */}
-        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Search Bar */}
-            <div className="relative flex-1 min-w-[240px]">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search transcripts by patient name, keyword..."
-                value={transcriptSearch}
-                onChange={(e) => {
-                  setTranscriptSearch(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full h-[36px] bg-input-background border border-input rounded-lg pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              />
-            </div>
+        {/* ─── Search & Action Bar powered by PageTopBar ─────────────────────── */}
+        <PageTopBar
+          isBottomPanelAttached={true}
+          searchQuery={transcriptSearch}
+          onSearchChange={(val) => {
+            setTranscriptSearch(val);
+            setCurrentPage(1);
+          }}
+          searchPlaceholder="Search transcripts by patient name, keyword..."
+          filterPresets={[
+            { id: "all", label: "All Consultations", isActive: true, onClick: () => setTranscriptSearch("") },
+            { id: "completed", label: "Completed", onClick: () => setTranscriptSearch("completed") },
+            { id: "upcoming", label: "Upcoming", onClick: () => setTranscriptSearch("upcoming") },
+          ]}
+          filterFields={[
+            {
+              id: "patient",
+              label: "Patient Name",
+              type: "text",
+              placeholder: "Filter by patient name...",
+              value: transcriptSearch,
+              onChange: (v) => setTranscriptSearch(v),
+            },
+            {
+              id: "status",
+              label: "Status",
+              type: "select",
+              options: ["All", "Completed", "Upcoming", "In Progress"],
+            },
+          ]}
+          availableFilterFieldsToAdd={["Session", "Provider", "Date", "Tags"]}
+          primaryAction={{
+            label: "Add Scribe",
+            onClick: () => setIsNewConsultationOpen(true),
+          }}
+        />
 
-            {/* Button to Add Scribe / Open Drawer */}
-            <button
-              type="button"
-              onClick={() => setIsNewConsultationOpen(true)}
-              className="h-[36px] px-3.5 bg-[#1E293B] hover:bg-black text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Scribe</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ─── Transcripts Table with Dark Thead ─────────────────────── */}
-        <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden relative">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left border-collapse">
-              <thead className="bg-[#1E293B] text-white">
-                <tr className="h-[34px]">
-                  {/* Checkbox Column */}
-                  <th className="px-3 py-1.5 w-8 text-center">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      ref={(el) => {
-                        if (el) el.indeterminate = someSelected;
-                      }}
-                      onChange={handleSelectAll}
-                      className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                    />
-                  </th>
-
-                  {/* Settings Column Header */}
-                  <th className="px-1 py-1.5 text-center w-8">
-                    <SettingsIcon className="w-3.5 h-3.5 text-[#E5E7EB] mx-auto opacity-70" />
-                  </th>
-
-                  {/* NAME */}
-                  <th
-                    className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    NAME
-                  </th>
-
-                  {/* SESSION */}
-                  <th
-                    className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    SESSION
-                  </th>
-
-                  {/* DURATION */}
-                  <th
-                    className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    DURATION
-                  </th>
-
-                  {/* RESPONSIBLE */}
-                  <th
-                    className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    RESPONSIBLE
-                  </th>
-
-                  {/* CREATED AT */}
-                  <th
-                    className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    CREATED AT
-                  </th>
-
-                  {/* STATUS */}
-                  <th
-                    className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    STATUS
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-border text-xs">
-                {paginatedTranscripts.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
-                      <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                      <div className="font-bold text-sm text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        No Transcripts Found
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Click the <strong className="text-[#1A73E8]">+</strong> button above to record your first consultation.
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedTranscripts.map((s) => (
-                    <tr
-                      key={s.id}
-                      className={`h-[32px] transition-colors cursor-pointer ${
-                        selectedRows.has(s.id) ? "bg-[#E8F0FE]" : "hover:bg-[#F1F5F9]"
-                      }`}
-                      onClick={() => handleOpenDetailDrawer(s)}
-                    >
-                      {/* Checkbox */}
-                      <td className="px-3 py-1 text-center" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.has(s.id)}
-                          onChange={() => handleSelectRow(s.id)}
-                          className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                        />
-                      </td>
-
-                      {/* Hamburger / Kebab Menu with Dropdown in front of name */}
-                      <td className="px-1 py-1 text-center relative kebab-menu-container" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => setOpenMenuSessionId(openMenuSessionId === s.id ? null : s.id)}
-                          className="p-1 hover:bg-muted rounded transition-colors inline-flex items-center justify-center"
-                          style={{ width: "24px", height: "24px" }}
-                        >
-                          <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
-                        </button>
-
-                        {openMenuSessionId === s.id && (
-                          <div
-                            className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl z-50 border border-border py-1 text-left"
-                            style={{
-                              boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-                              minWidth: "180px",
-                            }}
-                          >
-                            <button
-                              onClick={() => {
-                                setOpenMenuSessionId(null);
-                                handleOpenDetailDrawer(s);
-                              }}
-                              className="w-full px-3 py-2 text-left text-xs hover:bg-blue-50 flex items-center gap-2.5 text-foreground transition-colors"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              <Eye className="w-3.5 h-3.5 text-[#1A73E8]" /> View Transcript
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                setOpenMenuSessionId(null);
-                                issuePrescriptionDocument(s);
-                                toast.success(`Prescription downloaded for ${s.clientName}!`);
-                              }}
-                              className="w-full px-3 py-2 text-left text-xs hover:bg-blue-50 flex items-center gap-2.5 text-foreground transition-colors"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              <Download className="w-3.5 h-3.5 text-[#1A73E8]" /> Download PDF
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                setOpenMenuSessionId(null);
-                                setWhatsAppTargetSession(s);
-                                setShowWhatsAppModal(true);
-                              }}
-                              className="w-full px-3 py-2 text-left text-xs hover:bg-emerald-50 flex items-center gap-2.5 text-emerald-700 transition-colors"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              <Share2 className="w-3.5 h-3.5 text-emerald-600" /> Share via WhatsApp
-                            </button>
-
-                            <div className="border-t border-border my-1" />
-
-                            <button
-                              onClick={(e) => handleDelete(s.id, e)}
-                              className="w-full px-3 py-2 text-left text-xs hover:bg-red-50 flex items-center gap-2.5 text-red-600 transition-colors"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-red-500" /> Delete Record
-                            </button>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* NAME */}
-                      <td className="px-3 py-1">
-                        <span
-                          className="font-medium text-xs text-[#1A73E8] hover:underline cursor-pointer"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        >
-                          {s.clientName}
-                        </span>
-                      </td>
-
-                      {/* SESSION */}
-                      <td className="px-3 py-1 text-xs text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {s.appointmentId && s.appointmentId !== "none"
-                          ? new Date(s.sessionDate || s.createdAt).toLocaleDateString("en-IN", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })
-                          : (s.sessionDate
-                              ? new Date(s.sessionDate).toLocaleDateString("en-IN", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                })
-                              : "—")}
-                      </td>
-
-                      {/* DURATION */}
-                      <td className="px-3 py-1 font-mono text-xs text-foreground">
-                        {formatTime(s.durationSeconds)}
-                      </td>
-
-                      {/* RESPONSIBLE */}
-                      <td className="px-3 py-1 text-xs text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {s.doctorName || "Dr. Priya Sharma"}
-                      </td>
-
-                      {/* LAST CONTACT / DATE */}
-                      <td className="px-3 py-1 text-xs text-muted-foreground">
-                        <span style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {new Date(s.createdAt).toLocaleDateString("en-IN", {
+        {/* ─── Transcripts Table with TableComponent ─────────────────── */}
+        {(() => {
+          const columns: TableColumn<ScribeSession>[] = [
+            {
+              id: "clientName",
+              header: "NAME",
+              align: "left",
+              render: (s) => (
+                <span
+                  className="font-medium text-xs text-[#1A73E8] hover:underline cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                  onClick={() => handleOpenDetailDrawer(s)}
+                >
+                  {s.clientName}
+                </span>
+              ),
+            },
+            {
+              id: "session",
+              header: "SESSION",
+              align: "center",
+              render: (s) => (
+                <span className="text-xs text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {s.appointmentId && s.appointmentId !== "none"
+                    ? new Date(s.sessionDate || s.createdAt).toLocaleDateString("en-IN", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })
+                    : (s.sessionDate
+                        ? new Date(s.sessionDate).toLocaleDateString("en-IN", {
                             month: "short",
                             day: "numeric",
                             year: "numeric",
-                          })}
-                        </span>
-                      </td>
+                          })
+                        : "—")}
+                </span>
+              ),
+            },
+            {
+              id: "duration",
+              header: "DURATION",
+              align: "center",
+              render: (s) => (
+                <span className="font-mono text-xs text-foreground">
+                  {formatTime(s.durationSeconds)}
+                </span>
+              ),
+            },
+            {
+              id: "responsible",
+              header: "RESPONSIBLE",
+              align: "left",
+              render: (s) => (
+                <span className="text-xs text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {s.doctorName || "Dr. Priya Sharma"}
+                </span>
+              ),
+            },
+            {
+              id: "createdAt",
+              header: "CREATED AT",
+              align: "center",
+              render: (s) => (
+                <span className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {new Date(s.createdAt).toLocaleDateString("en-IN", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
+              ),
+            },
+            {
+              id: "status",
+              header: "STATUS",
+              align: "center",
+              render: (s) => getStatusBadge(s.status),
+            },
+          ];
 
-                      {/* STATUS */}
-                      <td className="px-3 py-1">
-                        {getStatusBadge(s.status)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          const rowActions: TableRowAction<ScribeSession>[] = [
+            {
+              label: "View Transcript",
+              icon: <Eye className="w-3.5 h-3.5 text-[#1A73E8]" />,
+              onClick: (s) => handleOpenDetailDrawer(s),
+            },
+            {
+              label: "Download PDF",
+              icon: <Download className="w-3.5 h-3.5 text-[#1A73E8]" />,
+              onClick: (s) => {
+                issuePrescriptionDocument(s);
+                toast.success(`Prescription downloaded for ${s.clientName}!`);
+              },
+            },
+            {
+              label: "Share via WhatsApp",
+              icon: <Share2 className="w-3.5 h-3.5 text-emerald-600" />,
+              onClick: (s) => {
+                setWhatsAppTargetSession(s);
+                setShowWhatsAppModal(true);
+              },
+            },
+            {
+              label: "Delete Record",
+              icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+              isDanger: true,
+              onClick: (s) => {
+                deleteScribeSession(s.id);
+                toast.success("Transcript deleted");
+              },
+            },
+          ];
 
-          {/* Standard Pagination Footer (matching Clients.tsx) */}
-          <div className="px-4 py-2 border-t border-border bg-white flex items-center justify-between text-xs text-muted-foreground select-none">
-            <div className="flex items-center gap-2">
-              <span>Rows per page:</span>
-              <select
-                value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="border border-input rounded px-2 py-0.5 bg-input-background text-xs cursor-pointer focus:outline-none"
-              >
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-              <span className="ml-2">
-                Showing {filteredTranscripts.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredTranscripts.length}
-              </span>
-            </div>
+          const bulkActions: TableBulkAction[] = [
+            {
+              label: "Delete Selected",
+              icon: <Trash2 className="w-3.5 h-3.5" />,
+              variant: "danger",
+              onClick: (ids) => {
+                ids.forEach((id) => deleteScribeSession(String(id)));
+                setSelectedRows(new Set());
+                toast.success("Deleted selected transcripts");
+              },
+            },
+          ];
 
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setCurrentPage(1)}
-                disabled={currentPage === 1}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                title="First page"
-              >
-                <span className="text-xs">«</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                title="Previous page"
-              >
-                <span className="text-xs">‹</span>
-              </button>
-              <span className="px-2 font-medium text-foreground">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                title="Next page"
-              >
-                <span className="text-xs">›</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={currentPage === totalPages}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                title="Last page"
-              >
-                <span className="text-xs">»</span>
-              </button>
-            </div>
-          </div>
-        </div>
+          return (
+            <TableComponent
+              data={filteredTranscripts}
+              columns={columns}
+              getRowId={(s) => s.id}
+              rowActions={rowActions}
+              bulkActions={bulkActions}
+              selectedIds={selectedRows}
+              onSelectionChange={(ids) => setSelectedRows(new Set(Array.from(ids) as string[]))}
+              onRowClick={(s) => handleOpenDetailDrawer(s)}
+              defaultRowsPerPage={rowsPerPage}
+              emptyMessage="No Transcripts Found. Click the + button above to record your first consultation."
+            />
+          );
+        })()}
 
         {/* ─── NEW CONSULTATION / RECORDING DRAWER ─────────────────────────── */}
         <NewConsultationDrawer

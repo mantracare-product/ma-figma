@@ -53,6 +53,8 @@ import {
   useFieldRegistry,
   INITIAL_SCRIBE_CUSTOM_FIELDS,
 } from "../../context/FieldRegistryContext";
+import PageTopBar from "../../components/layout/PageTopBar";
+import TableComponent, { TableColumn } from "../../components/ui/TableComponent";
 import { AdminSectionDrawer } from "./components/AdminSectionDrawer";
 import { AdminFieldDrawer } from "./components/AdminFieldDrawer";
 import {
@@ -353,366 +355,390 @@ export function AdminCustomFields() {
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
-      {/* ── UNIFIED TOOLBAR: Pill toggle + Entity Dropdown + Search + Action Button ── */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-2.5 px-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        {/* Left: Custom Fields | Custom Sections Toggle */}
-        <div className="inline-flex items-center gap-0 bg-gray-100 p-1 rounded-xl border border-gray-200/80">
-          <button
-            type="button"
-            onClick={() => setActiveTab("fields")}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === "fields"
-                ? "bg-white text-[#111827] shadow-xs font-bold"
-                : "text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            Custom Fields
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("sections")}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === "sections"
-                ? "bg-white text-[#111827] shadow-xs font-bold"
-                : "text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            Custom Sections
-          </button>
-        </div>
-
-        {/* Center: Entity Dropdown + Search Input inside Unified Search Capsule */}
-        <div className="flex-1 min-w-[280px] max-w-[500px]">
-          <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 focus-within:bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
-            <Search className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-            
-            {/* Entity Scope Dropdown */}
-            <div className="relative border-r border-gray-200 pr-2 mr-2">
-              <select
-                value={activeModule}
-                onChange={(e) => setActiveModule(e.target.value as any)}
-                className="bg-transparent text-xs font-bold text-gray-800 pr-4 outline-none cursor-pointer appearance-none"
-              >
-                {MODULE_TABS.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="w-3 h-3 text-gray-400 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-
-            {/* Search Input */}
-            <input
-              type="text"
-              placeholder={activeTab === "fields" ? `Search ${currentModLabel.toLowerCase()} fields...` : `Search ${currentModLabel.toLowerCase()} sections...`}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full text-xs bg-transparent border-none outline-none text-gray-900 placeholder:text-gray-400"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="text-gray-400 hover:text-gray-600 ml-1.5"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+      {/* ── UNIFIED TOOLBAR powered by PageTopBar ── */}
+      <PageTopBar
+        isBottomPanelAttached={true}
+        modes={[
+          { id: "fields", label: "Fields" },
+          { id: "sections", label: "Sections" },
+        ]}
+        activeMode={activeTab}
+        onModeChange={(m) => setActiveTab(m as typeof activeTab)}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder={
+          activeTab === "fields"
+            ? `Search ${currentModLabel.toLowerCase()} fields...`
+            : `Search ${currentModLabel.toLowerCase()} sections...`
+        }
+        leftElement={
+          <div className="relative border border-gray-200 rounded-lg bg-gray-50 px-2.5 py-1 flex items-center mr-1">
+            <select
+              value={activeModule}
+              onChange={(e) => setActiveModule(e.target.value as any)}
+              className="bg-transparent text-xs font-bold text-gray-800 pr-4 outline-none cursor-pointer appearance-none"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {MODULE_TABS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
-        </div>
-
-        {/* Right: Action Button */}
-        {activeTab === "fields" ? (
-          <button
-            type="button"
-            onClick={handleOpenCreateField}
-            className="px-4 py-2 bg-[#111827] text-white rounded-xl text-xs font-semibold hover:bg-[#1f2937] transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Field
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
+        }
+        filterPresets={
+          activeTab === "fields"
+            ? [
+                {
+                  id: "all",
+                  label: "All Fields",
+                  isActive: !searchQuery,
+                  onClick: () => setSearchQuery(""),
+                },
+                {
+                  id: "required",
+                  label: "Required Fields",
+                  isActive: false,
+                  onClick: () => setSearchQuery("required"),
+                },
+                {
+                  id: "text",
+                  label: "Text Fields",
+                  isActive: false,
+                  onClick: () => setSearchQuery("text"),
+                },
+              ]
+            : [
+                {
+                  id: "all",
+                  label: "All Sections",
+                  isActive: !searchQuery,
+                  onClick: () => setSearchQuery(""),
+                },
+              ]
+        }
+        filterFields={
+          activeTab === "fields"
+            ? [
+                {
+                  id: "name",
+                  label: "Field Label / Key",
+                  type: "text",
+                  placeholder: "Filter fields...",
+                  value: searchQuery,
+                  onChange: (val) => setSearchQuery(val || ""),
+                },
+                {
+                  id: "module",
+                  label: "Target Module",
+                  type: "select",
+                  value: activeModule,
+                  onChange: (val) => setActiveModule(val as any),
+                  options: MODULE_TABS.map((m) => ({ label: m.label, value: m.value })),
+                },
+              ]
+            : [
+                {
+                  id: "title",
+                  label: "Section Title",
+                  type: "text",
+                  placeholder: "Filter sections...",
+                  value: searchQuery,
+                  onChange: (val) => setSearchQuery(val || ""),
+                },
+              ]
+        }
+        primaryAction={{
+          label: activeTab === "fields" ? "Add Field" : "Add Section",
+          icon: <Plus className="w-4 h-4" />,
+          onClick: () => {
+            if (activeTab === "fields") {
+              handleOpenCreateField();
+            } else {
               setEditingSection(null);
               setSectionDrawerOpen(true);
-            }}
-            className="px-4 py-2 bg-[#111827] text-white rounded-xl text-xs font-semibold hover:bg-[#1f2937] transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Section
-          </button>
-        )}
-      </div>
+            }
+          },
+        }}
+      />
 
       {/* ── TABLE CONTAINER ── */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
 
         {/* TAB 1: CUSTOM FIELDS TABLE VIEW */}
-        {activeTab === "fields" && (
-          <table className="w-full">
-            <thead className="bg-[#F8FAFC] border-b border-gray-200">
-              <tr>
-                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Label</th>
-                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Key</th>
-                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                {activeModule === "process" && (
-                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Process</th>
-                )}
-                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Required</th>
-                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Scope</th>
-                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredFields.length === 0 ? (
-                <tr>
-                  <td colSpan={activeModule === "process" ? 7 : 6} className="py-14 text-center">
-                    <p className="text-sm text-gray-500">No fields found for this module.</p>
-                    <p className="text-xs text-gray-400 mt-1">Click "Add Field" above to define one.</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredFields.map((field) => {
-                  const scribeSeed = isScribeSeed(field);
-                  const systemField = isSystemField(field);
+        {activeTab === "fields" && (() => {
+          const fieldColumns: TableColumn<FieldDefinition>[] = [
+            {
+              key: "label",
+              header: "Label",
+              align: "left",
+              render: (field) => <span className="text-sm font-medium text-[#111827]">{field.label}</span>,
+            },
+            {
+              key: "key",
+              header: "Key",
+              align: "center",
+              render: (field) => <span className="text-xs font-mono text-gray-600">{field.key}</span>,
+            },
+            {
+              key: "type",
+              header: "Type",
+              align: "center",
+              render: (field) => {
+                const isCompositeField =
+                  field.compositeDisplayMode !== undefined ||
+                  field.inputType === "table" ||
+                  field.inputType === "group" ||
+                  field.inputType === "group_repeatable" ||
+                  (field.inputType === "list_open" && (field.listEntryType === "structured" || (field.subFields && field.subFields.length > 0))) ||
+                  (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig);
 
-                  const isCompositeField =
-                    field.compositeDisplayMode !== undefined ||
-                    field.inputType === "table" ||
-                    field.inputType === "group" ||
-                    field.inputType === "group_repeatable" ||
-                    (field.inputType === "list_open" && (field.listEntryType === "structured" || (field.subFields && field.subFields.length > 0))) ||
-                    (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig);
+                const isListField =
+                  !isCompositeField &&
+                  (field.inputType === "list_open" ||
+                  field.inputType === "list_select" ||
+                  field.inputType === "select" ||
+                  field.inputType === "multiselect" ||
+                  field.inputType === "list");
 
-                  const isListField =
-                    !isCompositeField &&
-                    (field.inputType === "list_open" ||
-                    field.inputType === "list_select" ||
-                    field.inputType === "select" ||
-                    field.inputType === "multiselect" ||
-                    field.inputType === "list");
+                const typeName =
+                  isCompositeField
+                    ? field.compositeDisplayMode === "table" || field.inputType === "table"
+                      ? "Group Field (Table)"
+                      : "Group Field (Group)"
+                    : field.inputType === "list_open"
+                    ? "List (Open · Tags)"
+                    : isListField
+                    ? field.selectionMode === "multiple" || field.inputType === "multiselect"
+                      ? "List (Multi-Select)"
+                      : "List (Select)"
+                    : FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
+                let typeBadgeStyle = "bg-blue-50 text-blue-700";
+                let TypeIcon = Type;
+                if (isCompositeField) {
+                  typeBadgeStyle = "bg-indigo-50 text-indigo-700";
+                  TypeIcon = field.compositeDisplayMode === "table" || field.inputType === "table" ? TableIcon : Layers;
+                }
+                else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
+                else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
+                  typeBadgeStyle = field.selectionMode === "multiple" ? "bg-teal-50 text-teal-700" : "bg-emerald-50 text-emerald-700";
+                  TypeIcon = ClipboardList;
+                }
+                else if (field.inputType === "new_list") {
+                  typeBadgeStyle = "bg-indigo-50 text-indigo-700";
+                  TypeIcon = Layers;
+                }
+                else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
+                else if (field.inputType === "list_open") {
+                  typeBadgeStyle = "bg-emerald-50 text-emerald-700";
+                  TypeIcon = Tag;
+                }
+                else if (field.inputType === "crm_bind") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = LinkIcon; }
+                else if (field.inputType === "date" || field.inputType === "date_time") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Calendar; }
+                else if (field.inputType === "number") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Hash; }
+                else if (field.inputType === "money") { typeBadgeStyle = "bg-green-50 text-green-700"; TypeIcon = DollarSign; }
+                else if (field.inputType === "textarea" || field.inputType === "richtext") { typeBadgeStyle = "bg-orange-50 text-orange-700"; TypeIcon = AlignLeft; }
+                else if (field.inputType === "link" || field.inputType === "whatsapp_link") { typeBadgeStyle = "bg-sky-50 text-sky-700"; TypeIcon = LinkIcon; }
+                else if (field.inputType === "yes_no") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = CheckCircle2; }
+                else if (field.inputType === "file") { typeBadgeStyle = "bg-violet-50 text-violet-700"; TypeIcon = FileText; }
+                else if (field.inputType === "rating") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Star; }
+                else if (field.inputType === "user") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = User; }
 
-                  const typeName =
-                    isCompositeField
-                      ? field.compositeDisplayMode === "table" || field.inputType === "table"
-                        ? "Group Field (Table)"
-                        : "Group Field (Group)"
-                      : field.inputType === "list_open"
-                      ? "List (Open · Tags)"
-                      : isListField
-                      ? field.selectionMode === "multiple" || field.inputType === "multiselect"
-                        ? "List (Multi-Select)"
-                        : "List (Select)"
-                      : FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
-                  let typeBadgeStyle = "bg-blue-50 text-blue-700";
-                  let TypeIcon = Type;
-                  if (isCompositeField) {
-                    typeBadgeStyle = "bg-indigo-50 text-indigo-700";
-                    TypeIcon = field.compositeDisplayMode === "table" || field.inputType === "table" ? TableIcon : Layers;
-                  }
-                  else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
-                  else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
-                    typeBadgeStyle = field.selectionMode === "multiple" ? "bg-teal-50 text-teal-700" : "bg-emerald-50 text-emerald-700";
-                    TypeIcon = ClipboardList;
-                  }
-                  else if (field.inputType === "new_list") {
-                    typeBadgeStyle = "bg-indigo-50 text-indigo-700";
-                    TypeIcon = Layers;
-                  }
-                  else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
-                  else if (field.inputType === "list_open") {
-                    typeBadgeStyle = "bg-emerald-50 text-emerald-700";
-                    TypeIcon = Tag;
-                  }
-                  else if (field.inputType === "crm_bind") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = LinkIcon; }
-                  else if (field.inputType === "date" || field.inputType === "date_time") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Calendar; }
-                  else if (field.inputType === "number") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Hash; }
-                  else if (field.inputType === "money") { typeBadgeStyle = "bg-green-50 text-green-700"; TypeIcon = DollarSign; }
-                  else if (field.inputType === "textarea" || field.inputType === "richtext") { typeBadgeStyle = "bg-orange-50 text-orange-700"; TypeIcon = AlignLeft; }
-                  else if (field.inputType === "link" || field.inputType === "whatsapp_link") { typeBadgeStyle = "bg-sky-50 text-sky-700"; TypeIcon = LinkIcon; }
-                  else if (field.inputType === "yes_no") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = CheckCircle2; }
-                  else if (field.inputType === "file") { typeBadgeStyle = "bg-violet-50 text-violet-700"; TypeIcon = FileText; }
-                  else if (field.inputType === "rating") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Star; }
-                  else if (field.inputType === "user") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = User; }
-
-                  return (
-                    <tr
-                      key={`${field.module}-${field.key}`}
-                      className="border-b border-gray-100 transition-colors last:border-0 hover:bg-gray-50/60"
+                return (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${typeBadgeStyle}`}>
+                    <TypeIcon className="w-3.5 h-3.5" />
+                    <span>{typeName}</span>
+                  </span>
+                );
+              },
+            },
+            ...(activeModule === "process"
+              ? [
+                  {
+                    key: "process",
+                    header: "Process",
+                    align: "center" as const,
+                    render: (field: FieldDefinition) => renderProcessesCell(field, allProcesses),
+                  },
+                ]
+              : []),
+            {
+              key: "required",
+              header: "Required",
+              align: "center",
+              render: (field) =>
+                field.required ? (
+                  <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/50">Required</span>
+                ) : (
+                  <span className="text-xs text-gray-400">Optional</span>
+                ),
+            },
+            {
+              key: "scope",
+              header: "Scope",
+              align: "center",
+              render: (field) => renderScopeCell(field),
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              align: "center",
+              render: (field) => {
+                const scribeSeed = isScribeSeed(field);
+                const systemField = isSystemField(field);
+                return (
+                  <div className="flex items-center justify-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditField(field)}
+                      className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                      title={scribeSeed ? "View details (protected)" : "Edit field"}
                     >
-                      <td className="px-5 py-3.5 text-center">
-                        <span className="text-sm font-medium text-[#111827]">{field.label}</span>
-                      </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">{field.key}</span>
-                      </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${typeBadgeStyle}`}>
-                          <TypeIcon className="w-3.5 h-3.5" />
-                          <span>{typeName}</span>
-                        </span>
-                      </td>
-                      {activeModule === "process" && (
-                        <td className="px-5 py-3.5 text-center">
-                          {renderProcessesCell(field, allProcesses)}
-                        </td>
-                      )}
-                      <td className="px-5 py-3.5 text-center">
-                        {field.required ? (
-                          <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/50">Required</span>
-                        ) : (
-                          <span className="text-xs text-gray-400">Optional</span>
-                        )}
-                      </td>
-                      {/* Scope */}
-                      <td className="px-5 py-3.5 text-center">
-                        {renderScopeCell(field)}
-                      </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditField(field)}
-                            className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                            title={scribeSeed ? "View details (protected)" : "Edit field"}
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          {scribeSeed ? (
-                            <button
-                              type="button"
-                              disabled
-                              className="p-1.5 text-amber-400 cursor-not-allowed opacity-60"
-                              title="Scribe seed fields cannot be deleted"
-                            >
-                              <Lock className="w-3.5 h-3.5" />
-                            </button>
-                          ) : systemField ? (
-                            <button
-                              type="button"
-                              disabled
-                              className="p-1.5 text-gray-300 cursor-not-allowed opacity-40"
-                              title="Built-in system fields cannot be deleted"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget({ type: "field", id: field.id, name: field.label })}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                              title="Delete field"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        )}
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    {scribeSeed ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="p-1.5 text-amber-400 cursor-not-allowed opacity-60"
+                        title="Scribe seed fields cannot be deleted"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                      </button>
+                    ) : systemField ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="p-1.5 text-gray-300 cursor-not-allowed opacity-40"
+                        title="Built-in system fields cannot be deleted"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget({ type: "field", id: field.id, name: field.label })}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                        title="Delete field"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              },
+            },
+          ];
+
+          return (
+            <TableComponent
+              columns={fieldColumns}
+              data={filteredFields}
+              getRowId={(field) => `${field.module}-${field.key}`}
+              emptyMessage="No fields found for this module. Click 'Add Field' above to define one."
+            />
+          );
+        })()}
 
         {/* TAB 2: CUSTOM SECTIONS TABLE VIEW */}
-        {activeTab === "sections" && (
-          <table className="w-full">
-            <thead className="bg-[#F8FAFC] border-b border-gray-200">
-              <tr>
-                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Section</th>
-                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Description</th>
-                {activeModule === "process" && (
-                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Process</th>
-                )}
-                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Scope</th>
-                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Fields</th>
-                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSections.length === 0 ? (
-                <tr>
-                  <td colSpan={activeModule === "process" ? 6 : 5} className="py-14 text-center">
-                    <p className="text-sm text-gray-500">No sections found for this module.</p>
-                    <p className="text-xs text-gray-400 mt-1">Click "Add Section" above to define one.</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredSections.map((sec) => {
-                  const isSystem = isSystemSection(sec);
-                  const assignedFieldCount = (sec.fieldKeys || []).length;
-
-                  return (
-                    <tr
-                      key={sec.id}
-                      className="border-b border-gray-100 transition-colors last:border-0 hover:bg-gray-50/60"
+        {activeTab === "sections" && (() => {
+          const sectionColumns: TableColumn<SectionDefinition>[] = [
+            {
+              key: "title",
+              header: "Section",
+              align: "left",
+              render: (sec) => <span className="text-sm font-medium text-[#111827]">{sec.title}</span>,
+            },
+            {
+              key: "description",
+              header: "Description",
+              align: "left",
+              render: (sec) => (
+                <span
+                  className="text-xs text-gray-500 max-w-[240px] truncate inline-block"
+                  title={sec.description || ""}
+                >
+                  {sec.description || <span className="text-gray-300 italic">—</span>}
+                </span>
+              ),
+            },
+            ...(activeModule === "process"
+              ? [
+                  {
+                    key: "process",
+                    header: "Process",
+                    align: "center" as const,
+                    render: (sec: SectionDefinition) => renderProcessesCell(sec, allProcesses),
+                  },
+                ]
+              : []),
+            {
+              key: "scope",
+              header: "Scope",
+              align: "center",
+              render: (sec) => renderScopeCell(sec),
+            },
+            {
+              key: "fields",
+              header: "Fields",
+              align: "center",
+              render: (sec) => {
+                const assignedFieldCount = (sec.fieldKeys || []).length;
+                return (
+                  <span className="text-xs text-gray-500 font-medium">
+                    {assignedFieldCount} {assignedFieldCount === 1 ? "field" : "fields"}
+                  </span>
+                );
+              },
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              align: "center",
+              render: (sec) => {
+                const isSystem = isSystemSection(sec);
+                return (
+                  <div className="flex items-center justify-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingSection(sec);
+                        setSectionDrawerOpen(true);
+                      }}
+                      className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                      title="Edit section"
                     >
-                      <td className="px-5 py-3.5 text-center">
-                        <span className="text-sm font-medium text-[#111827]">{sec.title}</span>
-                      </td>
-                      {/* Description */}
-                      <td className="px-5 py-3.5 text-center">
-                        <span
-                          className="text-xs text-gray-500 max-w-[240px] truncate inline-block"
-                          title={sec.description || ""}
-                        >
-                          {sec.description || <span className="text-gray-300 italic">—</span>}
-                        </span>
-                      </td>
-                      {/* Process */}
-                      {activeModule === "process" && (
-                        <td className="px-5 py-3.5 text-center">
-                          {renderProcessesCell(sec, allProcesses)}
-                        </td>
-                      )}
-                      {/* Scope */}
-                      <td className="px-5 py-3.5 text-center">
-                        {renderScopeCell(sec)}
-                      </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <span className="text-xs text-gray-500 font-medium">
-                          {assignedFieldCount} {assignedFieldCount === 1 ? "field" : "fields"}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingSection(sec);
-                              setSectionDrawerOpen(true);
-                            }}
-                            className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                            title="Edit section"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          {!isSystem ? (
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget({ type: "section", id: sec.id, name: sec.title })}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                              title="Delete section"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <span className="w-7" />
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        )}
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    {!isSystem ? (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget({ type: "section", id: sec.id, name: sec.title })}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                        title="Delete section"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <span className="w-7" />
+                    )}
+                  </div>
+                );
+              },
+            },
+          ];
+
+          return (
+            <TableComponent
+              columns={sectionColumns}
+              data={filteredSections}
+              getRowId={(sec) => sec.id}
+              emptyMessage="No sections found for this module. Click 'Add Section' above to define one."
+            />
+          );
+        })()}
       </div>
 
       {/* ── Field Drawer (Right Side) ── */}

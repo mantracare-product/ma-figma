@@ -24,6 +24,8 @@ import { Tooltip } from "../components/ui/Tooltip";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
+import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import SettingsSubnav from "../components/settings/SettingsSubnav";
 import OrganizationDetailDrawer, { OrganizationDetail } from "../components/settings/OrganizationDetailDrawer";
 import { useOrganization } from "../context/OrganizationContext";
@@ -112,6 +114,7 @@ export default function Organizations() {
   const [organizations, setOrganizations] = useState<OrganizationItem[]>(initialOrgs);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedOrgs, setSelectedOrgs] = useState<string[]>([]);
+  const [selectedOrgSet, setSelectedOrgSet] = useState<Set<any>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -362,341 +365,151 @@ export default function Organizations() {
             </div>
           </div>
 
-          {/* Search & Actions Toolbar */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-0.5">
-            <div className="flex items-center gap-2.5 w-full sm:w-auto">
-              <button
-                type="button"
-                className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-[#1456f0] border border-blue-200/60 shadow-2xs hover:bg-blue-100/60 transition-all cursor-pointer"
-              >
-                All Organizations
-              </button>
+          {/* Search & Actions Toolbar powered by PageTopBar */}
+          <PageTopBar
+            isBottomPanelAttached={true}
+            searchQuery={searchQuery}
+            onSearchChange={(v) => {
+              setSearchQuery(v);
+              setCurrentPage(1);
+            }}
+            searchPlaceholder="Search organizations..."
+            primaryAction={{
+              label: "Add Organization",
+              icon: <Plus className="w-4 h-4" />,
+              onClick: () => setShowAddModal(true),
+            }}
+          />
 
-              <div className="relative flex-1 sm:w-60">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full pl-8 pr-3 py-1 text-xs bg-white/80 border border-slate-200/80 rounded-full text-[#222222] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 focus:border-[#1456f0] transition-all"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 self-end sm:self-auto">
-              <span className="text-xs font-medium text-[#64748b]">
-                {filteredOrgs.length} {filteredOrgs.length === 1 ? "org" : "orgs"}
-              </span>
-
-              {/* Circular Dark Plus Button */}
-              <button
-                type="button"
-                onClick={() => setShowAddModal(true)}
-                className="w-7 h-7 rounded-full bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white flex items-center justify-center shadow-sm hover:shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer"
-                title="Add Organization"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Table Container */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                {/* Dark Table Header */}
-                <thead>
-                  <tr className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white text-left" style={{ height: "30px" }}>
-                    <th className="w-8 px-3 py-1 text-center">
-                      <input
-                        type="checkbox"
-                        checked={
-                          paginatedOrgs.length > 0 &&
-                          selectedOrgs.length === paginatedOrgs.length
-                        }
-                        onChange={(e) => handleSelectAll(e.target.checked)}
-                        className="w-3.5 h-3.5 rounded border-slate-400 accent-[#1456f0] cursor-pointer"
-                      />
-                    </th>
-                    <th className="w-7 px-1 py-1 text-center">
-                      <SettingsIcon className="w-3.5 h-3.5 text-slate-400 hover:text-white transition-colors cursor-pointer mx-auto" />
-                    </th>
-                    <th
-                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      ORGANIZATION NAME
-                    </th>
-                    <th
-                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      EMAIL
-                    </th>
-                    <th
-                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      INDUSTRY
-                    </th>
-                    <th
-                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      LOCATION
-                    </th>
-                    <th
-                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      PREFERRED TIME
-                    </th>
-                    <th
-                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      STATUS
-                    </th>
-                    <th
-                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      USERS
-                    </th>
-                    <th
-                      className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      CREATED ON
-                    </th>
-                    <th className="w-10 px-2 py-1 text-right"></th>
-                  </tr>
-                </thead>
-
-                {/* Table Body */}
-                <tbody className="divide-y divide-slate-100 text-xs text-[#45515e]">
-                  {paginatedOrgs.length > 0 ? (
-                    paginatedOrgs.map((org) => {
-                      const isSelected = selectedOrgs.includes(org.id);
-                      return (
-                        <tr
-                          key={org.id}
-                          onClick={() => handleRowClick(org)}
-                          className={`h-[30px] hover:bg-slate-50/80 transition-colors cursor-pointer group ${
-                            isSelected ? "bg-blue-50/30" : ""
-                          }`}
-                        >
-                          {/* Checkbox */}
-                          <td
-                            className="px-3 py-1 text-center"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectOne(org.id);
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => {}}
-                              className="w-3.5 h-3.5 rounded border-slate-300 accent-[#1456f0] cursor-pointer"
-                            />
-                          </td>
-
-                          {/* Grip Handle */}
-                          <td className="px-1 py-1 text-center text-slate-300 group-hover:text-slate-400 transition-colors">
-                            <GripVertical className="w-3.5 h-3.5 mx-auto opacity-60" />
-                          </td>
-
-                          {/* Organization Name + Flag */}
-                          <td className="px-3 py-1 font-semibold text-[#222222] whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedOrgForDrawer({
-                                  ...org,
-                                  phone: "+1 (555) 000-0000",
-                                  industryCategory: org.industryCategory || "Healthcare",
-                                });
-                                setShowOrgDrawer(true);
-                              }}
-                              className="inline-flex items-center gap-1.5 text-[#1456f0] hover:underline cursor-pointer text-left"
-                            >
-                              {org.flag && <span className="text-sm">{org.flag}</span>}
-                              <span>{org.name}</span>
-                            </button>
-                          </td>
-
-                          {/* Email */}
-                          <td className="px-3 py-1 text-[#45515e] whitespace-nowrap">
-                            {org.email}
-                          </td>
-
-                          {/* Industry */}
-                          <td className="px-3 py-1 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-semibold text-[#222222]">{org.industry}</span>
-                              {org.industryCategory && (
-                                <span className="text-[10px] text-[#64748b]">({org.industryCategory})</span>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Location */}
-                          <td className="px-3 py-1 text-[#45515e] whitespace-nowrap">
-                            {org.location || (org.locations && org.locations.length > 0 ? org.locations.join(", ") : "—")}
-                          </td>
-
-                          {/* Preferred Time */}
-                          <td className="px-3 py-1 text-[#45515e] whitespace-nowrap">
-                            {org.preferredTime}
-                          </td>
-
-                          {/* Status */}
-                          <td className="px-3 py-1 whitespace-nowrap">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                                org.status === "Active"
-                                  ? "bg-emerald-50 text-[#10b981] border border-emerald-200/60"
-                                  : "bg-slate-100 text-slate-500 border border-slate-200"
-                              }`}
-                            >
-                              <span
-                                className={`w-1 h-1 rounded-full ${
-                                  org.status === "Active" ? "bg-[#10b981]" : "bg-slate-400"
-                                }`}
-                              />
-                              {org.status}
-                            </span>
-                          </td>
-
-                          {/* Users */}
-                          <td className="px-3 py-1 text-[#45515e] whitespace-nowrap">
-                            {org.users} Users
-                          </td>
-
-                          {/* Created On */}
-                          <td className="px-3 py-1 text-[#64748b] whitespace-nowrap text-[11px]">
-                            {org.createdDate}
-                          </td>
-
-                          {/* Row Action / Chevron */}
-                          <td className="px-2 py-1 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingOrg(org);
-                                  setShowEditModal(true);
-                                }}
-                                className="p-1 text-slate-400 hover:text-[#1456f0] hover:bg-blue-50 rounded transition-colors"
-                                title="Edit"
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDeletingOrg(org);
-                                  setShowDeleteModal(true);
-                                }}
-                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors ml-0.5" />
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={10} className="px-4 py-8 text-center text-xs text-slate-400">
-                        No organizations found matching your search.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Footer Bar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-1.5 border-t border-slate-100 bg-white/40 text-xs text-[#64748b]">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span>Rows per page</span>
-                  <select
-                    value={rowsPerPage}
-                    onChange={(e) => {
-                      setRowsPerPage(Number(e.target.value));
-                      setCurrentPage(1);
+          {/* Table Container using TableComponent */}
+          {(() => {
+            const orgColumns: TableColumn<OrganizationItem>[] = [
+              {
+                id: "name",
+                header: "Organization Name",
+                align: "left",
+                render: (org) => (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedOrgForDrawer({
+                        ...org,
+                        phone: "+1 (555) 000-0000",
+                        industryCategory: org.industryCategory || "Healthcare",
+                      });
+                      setShowOrgDrawer(true);
                     }}
-                    className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-xs text-[#222222] font-semibold focus:outline-none"
+                    className="inline-flex items-center gap-1.5 text-[#1456f0] hover:underline cursor-pointer font-semibold"
                   >
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                </div>
+                    {org.flag && <span className="text-sm">{org.flag}</span>}
+                    <span>{org.name}</span>
+                  </span>
+                ),
+              },
+              {
+                id: "email",
+                header: "Email",
+                align: "center",
+                render: (org) => <span className="text-[#45515e]">{org.email}</span>,
+              },
+              {
+                id: "industry",
+                header: "Industry",
+                align: "center",
+                render: (org) => (
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span className="font-semibold text-[#222222]">{org.industry}</span>
+                    {org.industryCategory && (
+                      <span className="text-[10px] text-[#64748b]">({org.industryCategory})</span>
+                    )}
+                  </div>
+                ),
+              },
+              {
+                id: "location",
+                header: "Location",
+                align: "center",
+                render: (org) => (
+                  <span className="text-[#45515e]">
+                    {org.location || (org.locations && org.locations.length > 0 ? org.locations.join(", ") : "—")}
+                  </span>
+                ),
+              },
+              {
+                id: "preferredTime",
+                header: "Preferred Time",
+                align: "center",
+                render: (org) => <span className="text-[#45515e]">{org.preferredTime}</span>,
+              },
+              {
+                id: "status",
+                header: "Status",
+                align: "center",
+                render: (org) => (
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-none text-[11px] font-semibold ${
+                      org.status === "Active"
+                        ? "bg-emerald-50 text-[#10b981] border border-emerald-200/60"
+                        : "bg-slate-100 text-slate-500 border border-slate-200"
+                    }`}
+                  >
+                    <span
+                      className={`w-1 h-1 rounded-full ${
+                        org.status === "Active" ? "bg-[#10b981]" : "bg-slate-400"
+                      }`}
+                    />
+                    {org.status}
+                  </span>
+                ),
+              },
+              {
+                id: "users",
+                header: "Users",
+                align: "center",
+                render: (org) => <span className="text-[#45515e]">{org.users} Users</span>,
+              },
+              {
+                id: "createdDate",
+                header: "Created On",
+                align: "center",
+                render: (org) => <span className="text-[#64748b] text-[11px]">{org.createdDate}</span>,
+              },
+            ];
 
-                <div className="h-4 w-px bg-slate-200" />
+            const orgRowActions: TableRowAction<OrganizationItem>[] = [
+              {
+                label: "Edit",
+                icon: <Edit className="w-3.5 h-3.5" />,
+                onClick: (org) => {
+                  setEditingOrg(org);
+                  setShowEditModal(true);
+                },
+              },
+              {
+                label: "Delete",
+                icon: <Trash2 className="w-3.5 h-3.5" />,
+                isDanger: true,
+                onClick: (org) => {
+                  setDeletingOrg(org);
+                  setShowDeleteModal(true);
+                },
+              },
+            ];
 
-                <span>
-                  Showing {filteredOrgs.length > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0}
-                  -
-                  {Math.min(currentPage * rowsPerPage, filteredOrgs.length)} of {filteredOrgs.length}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="font-semibold uppercase tracking-wider text-[11px] text-[#8e8e93]">
-                  PAGE {currentPage} / {totalPages}
-                </span>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled={currentPage <= 1}
-                    onClick={() => setCurrentPage(1)}
-                    className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-800 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
-                  >
-                    <ChevronsLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={currentPage <= 1}
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-800 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-800 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setCurrentPage(totalPages)}
-                    className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-800 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
-                  >
-                    <ChevronsRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+            return (
+              <TableComponent
+                data={filteredOrgs}
+                columns={orgColumns}
+                getRowId={(org) => org.id}
+                rowActions={orgRowActions}
+                selectedIds={selectedOrgSet}
+                onSelectionChange={setSelectedOrgSet}
+                defaultRowsPerPage={20}
+                emptyMessage="No organizations found matching your search."
+                onRowClick={(org) => handleRowClick(org)}
+              />
+            );
+          })()}
         </div>
       </div>
 

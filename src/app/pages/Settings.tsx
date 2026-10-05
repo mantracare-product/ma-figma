@@ -13,8 +13,10 @@ import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg, isS
 import { TelephonyIntegrationPanel } from "../components/telephony/TelephonyIntegrationPanel";
 import { getStoredWhatsAppNumbers, saveStoredWhatsAppNumbers, WHATSAPP_NUMBERS_EVENT, WhatsAppNumberEntry } from "../../lib/useWhatsAppNumbers";
 import { SelectFieldsModal } from "../components/help/FieldManager";
+import PageTopBar from "../components/layout/PageTopBar";
 import { AdminFieldDrawer } from "./admin/components/AdminFieldDrawer";
 import { AdminSectionDrawer } from "./admin/components/AdminSectionDrawer";
+import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import OrganizationLocationsSection from "../components/settings/OrganizationLocationsSection";
 import MemberLocationScheduleTab from "../components/settings/MemberLocationScheduleTab";
 import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
@@ -27,8 +29,11 @@ import {
   Trash2,
   Info,
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   Phone,
   Mail,
   Globe,
@@ -1403,7 +1408,7 @@ export default function Settings() {
     "processes": "process",
     "appointments": "appointment",
     "forms": "appointment",
-    "team": "organization",
+    "team": "teamMember",
     "scribe": "scribe",
   };
 
@@ -1450,14 +1455,74 @@ export default function Settings() {
     "user": "User / Member",
   };
 
-  // Layout View Tabs: Custom Fields vs Custom Sections
+  // Layout View Tabs: Fields vs Sections
   const [layoutViewTab, setLayoutViewTab] = useState<"fields" | "sections">("fields");
   const [layoutSearchQuery, setLayoutSearchQuery] = useState("");
+  const [layoutRowsPerPage, setLayoutRowsPerPage] = useState<number>(20);
+  const [layoutCurrentPage, setLayoutCurrentPage] = useState<number>(1);
+
+  // Fields Column Customization & Selection
+  const DEFAULT_FIELDS_COLUMN_ORDER = ["label", "key", "type", "fieldType", "required"];
+  const [fieldsColumnOrder, setFieldsColumnOrder] = useState<string[]>(DEFAULT_FIELDS_COLUMN_ORDER);
+  const [fieldsVisibleColumns, setFieldsVisibleColumns] = useState<Record<string, boolean>>({
+    label: true,
+    key: true,
+    type: true,
+    fieldType: true,
+    required: true,
+  });
+  const [showFieldsColumnMenu, setShowFieldsColumnMenu] = useState(false);
+  const [selectedFieldIds, setSelectedFieldIds] = useState<Set<number | string>>(new Set());
+  const [openFieldMenuId, setOpenFieldMenuId] = useState<number | string | null>(null);
+
+  // Sections Column Customization & Selection
+  const DEFAULT_SECTIONS_COLUMN_ORDER = ["title", "type", "fields", "description"];
+  const [sectionsColumnOrder, setSectionsColumnOrder] = useState<string[]>(DEFAULT_SECTIONS_COLUMN_ORDER);
+  const [sectionsVisibleColumns, setSectionsVisibleColumns] = useState<Record<string, boolean>>({
+    title: true,
+    type: true,
+    fields: true,
+    description: true,
+  });
+  const [showSectionsColumnMenu, setShowSectionsColumnMenu] = useState(false);
+  const [selectedSectionIds, setSelectedSectionIds] = useState<Set<string>>(new Set());
+  const [openSectionMenuId, setOpenSectionMenuId] = useState<string | null>(null);
+
+  const moveFieldsColumn = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= fieldsColumnOrder.length) return;
+    setFieldsColumnOrder((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, item);
+      return next;
+    });
+  };
+
+  const moveSectionsColumn = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= sectionsColumnOrder.length) return;
+    setSectionsColumnOrder((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, item);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setOpenFieldMenuId(null);
+      setOpenSectionMenuId(null);
+      setShowFieldsColumnMenu(false);
+      setShowSectionsColumnMenu(false);
+    };
+    window.addEventListener("click", handleGlobalClick);
+    return () => window.removeEventListener("click", handleGlobalClick);
+  }, []);
   // Table field preview rows
   const [tablePreviewRows, setTablePreviewRows] = useState<Record<string, string>[]>([{}]);
 
   // Module filter tab
-  const [customFieldsTab, setCustomFieldsTab] = useState<"clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe">("clients");
+  const [customFieldsTab, setCustomFieldsTab] = useState<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe">("clients");
 
   const currentModule = tabToModule[customFieldsTab || "clients"];
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
@@ -1522,23 +1587,19 @@ export default function Settings() {
   const [newSectionData, setNewSectionData] = useState<{
     title: string;
     description: string;
-    iconName: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
     fieldKeys: string[];
   }>({
     title: "",
     description: "",
-    iconName: "layers",
     fieldKeys: [],
   });
   const [editingSectionData, setEditingSectionData] = useState<{
     title: string;
     description: string;
-    iconName: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
     fieldKeys: string[];
   }>({
     title: "",
     description: "",
-    iconName: "layers",
     fieldKeys: [],
   });
 
@@ -4050,634 +4111,497 @@ export default function Settings() {
         {/* Organization Tab (Matching Reference Image 2) */}
         {activeTab === "organization" && (
           <div className="space-y-4">
-            {/* Top Filter & Search Action Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              {/* Left Unified Search Bar Container */}
-              <div className="inline-flex items-center bg-white border border-gray-200 rounded-xl shadow-2xs px-2.5 py-1.5 gap-2 w-full max-w-md">
-                <Search className="w-4 h-4 text-gray-400 shrink-0 ml-1" />
-                <select
-                  value={orgCategoryFilter}
-                  onChange={(e) => {
-                    setOrgCategoryFilter(e.target.value);
+            {/* Top Filter & Search Action Bar using PageTopBar */}
+            <PageTopBar
+              searchQuery={orgSearchQuery}
+              onSearchChange={(q) => {
+                setOrgSearchQuery(q);
+                setOrgCurrentPage(1);
+              }}
+              searchPlaceholder="Search organizations..."
+              filterPresets={[
+                {
+                  id: "all",
+                  label: "All Organizations",
+                  count: orgList.length,
+                  isActive: orgCategoryFilter === "All",
+                  onClick: () => {
+                    setOrgCategoryFilter("All");
                     setOrgCurrentPage(1);
-                  }}
-                  className="text-xs font-semibold text-gray-700 bg-transparent border-r border-gray-200 pr-2 py-0.5 outline-none cursor-pointer"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <option value="All">All Organizations</option>
-                  <option value="Healthcare">Healthcare</option>
-                  <option value="Ophthalmology">Ophthalmology</option>
-                  <option value="Dental Care">Dental Care</option>
-                  <option value="Dermatologist">Dermatologist</option>
-                </select>
-                <input
-                  type="text"
-                  value={orgSearchQuery}
-                  onChange={(e) => {
-                    setOrgSearchQuery(e.target.value);
+                  },
+                },
+                {
+                  id: "healthcare",
+                  label: "Healthcare",
+                  count: orgList.filter((o) => o.industryCategory === "Healthcare" || o.industry === "Healthcare").length,
+                  isActive: orgCategoryFilter === "Healthcare",
+                  onClick: () => {
+                    setOrgCategoryFilter("Healthcare");
                     setOrgCurrentPage(1);
-                  }}
-                  placeholder="Search..."
-                  className="w-full text-xs bg-transparent border-none outline-none text-gray-900 placeholder:text-gray-400 h-6"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                />
-                {orgSearchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setOrgSearchQuery("")}
-                    className="text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Right Action: Org count + Create Organization button */}
-              <div className="flex items-center gap-3 shrink-0">
-                <span
-                  className="text-xs font-semibold text-gray-500"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  {orgList.filter((o) => {
-                    const matchCategory =
-                      orgCategoryFilter === "All" ||
-                      o.industryCategory === orgCategoryFilter ||
-                      o.industry === orgCategoryFilter;
-                    const matchSearch =
-                      !orgSearchQuery.trim() ||
-                      o.name.toLowerCase().includes(orgSearchQuery.toLowerCase()) ||
-                      o.email.toLowerCase().includes(orgSearchQuery.toLowerCase()) ||
-                      o.industry.toLowerCase().includes(orgSearchQuery.toLowerCase());
-                    return matchCategory && matchSearch;
-                  }).length}{" "}
-                  organizations
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => setShowCreateOrgModal(true)}
-                  className="px-4 py-2 bg-[#111827] hover:bg-[#1f2937] text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Create Organization
-                </button>
-              </div>
-            </div>
+                  },
+                },
+                {
+                  id: "ophthalmology",
+                  label: "Ophthalmology",
+                  count: orgList.filter((o) => o.industryCategory === "Ophthalmology" || o.industry === "Ophthalmology").length,
+                  isActive: orgCategoryFilter === "Ophthalmology",
+                  onClick: () => {
+                    setOrgCategoryFilter("Ophthalmology");
+                    setOrgCurrentPage(1);
+                  },
+                },
+                {
+                  id: "dental",
+                  label: "Dental Care",
+                  count: orgList.filter((o) => o.industryCategory === "Dental Care" || o.industry === "Dental Care").length,
+                  isActive: orgCategoryFilter === "Dental Care",
+                  onClick: () => {
+                    setOrgCategoryFilter("Dental Care");
+                    setOrgCurrentPage(1);
+                  },
+                },
+              ]}
+              filterFields={[
+                {
+                  id: "name",
+                  label: "Organization Name",
+                  type: "text",
+                  placeholder: "Filter by organization name...",
+                  value: orgSearchQuery,
+                  onChange: (val) => {
+                    setOrgSearchQuery(val || "");
+                    setOrgCurrentPage(1);
+                  },
+                },
+                {
+                  id: "category",
+                  label: "Industry Category",
+                  type: "select",
+                  value: orgCategoryFilter,
+                  onChange: (val) => {
+                    setOrgCategoryFilter(val || "All");
+                    setOrgCurrentPage(1);
+                  },
+                  options: [
+                    { label: "All Categories", value: "All" },
+                    { label: "Healthcare", value: "Healthcare" },
+                    { label: "Ophthalmology", value: "Ophthalmology" },
+                    { label: "Dental Care", value: "Dental Care" },
+                    { label: "Dermatologist", value: "Dermatologist" },
+                  ],
+                },
+              ]}
+              primaryAction={{
+                label: "Create Organization",
+                icon: <Plus className="w-3.5 h-3.5" />,
+                onClick: () => setShowCreateOrgModal(true),
+              }}
+            />
 
             {/* Organizations Table */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px]">
-                  <thead className="bg-[#1e293b] text-white">
-                    <tr>
-                      {/* Checkbox Column */}
-                      <th className="px-3.5 py-3 w-10 text-center">
-                        <input
-                          type="checkbox"
-                          checked={
-                            orgList.length > 0 &&
-                            orgList.every((o) => selectedOrgRows.has(o.id))
-                          }
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedOrgRows(new Set(orgList.map((o) => o.id)));
-                            } else {
-                              setSelectedOrgRows(new Set());
-                            }
-                          }}
-                          className="w-3.5 h-3.5 rounded border-gray-300 text-[#1456f0] focus:ring-0 cursor-pointer"
-                        />
-                      </th>
-                      {/* Hamburger / Settings Icon */}
-                      <th className="px-2 py-3 w-8 text-center text-gray-400">
-                        <Sliders className="w-3.5 h-3.5 mx-auto" />
-                      </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-white">
-                        ORGANIZATION NAME
-                      </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-white">
-                        EMAIL
-                      </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-white">
-                        INDUSTRY
-                      </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-white">
-                        PREFERRED TIME
-                      </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-white">
-                        USERS
-                      </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-white">
-                        CREATED ON ▾
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {(() => {
-                      const filtered = orgList.filter((o) => {
-                        const matchCategory =
-                          orgCategoryFilter === "All" ||
-                          o.industryCategory === orgCategoryFilter ||
-                          o.industry === orgCategoryFilter;
-                        const matchSearch =
-                          !orgSearchQuery.trim() ||
-                          o.name.toLowerCase().includes(orgSearchQuery.toLowerCase()) ||
-                          o.email.toLowerCase().includes(orgSearchQuery.toLowerCase()) ||
-                          o.industry.toLowerCase().includes(orgSearchQuery.toLowerCase());
-                        return matchCategory && matchSearch;
-                      });
+            {(() => {
+              const filteredOrgs = orgList.filter((o) => {
+                const matchCategory =
+                  orgCategoryFilter === "All" ||
+                  o.industryCategory === orgCategoryFilter ||
+                  o.industry === orgCategoryFilter;
+                const matchSearch =
+                  !orgSearchQuery.trim() ||
+                  o.name.toLowerCase().includes(orgSearchQuery.toLowerCase()) ||
+                  o.email.toLowerCase().includes(orgSearchQuery.toLowerCase()) ||
+                  o.industry.toLowerCase().includes(orgSearchQuery.toLowerCase());
+                return matchCategory && matchSearch;
+              });
 
-                      const totalRecords = filtered.length;
-                      const totalPages = Math.ceil(totalRecords / orgRowsPerPage) || 1;
-                      const startIdx = (orgCurrentPage - 1) * orgRowsPerPage;
-                      const pageItems = filtered.slice(startIdx, startIdx + orgRowsPerPage);
-
-                      if (pageItems.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan={8} className="py-12 text-center text-gray-400 text-xs">
-                              No organizations found matching your criteria.
-                            </td>
-                          </tr>
-                        );
-                      }
-
-                      return pageItems.map((org) => {
-                        const isSelected = selectedOrgRows.has(org.id);
-                        return (
-                          <tr
-                            key={org.id}
-                            className={`hover:bg-gray-50/80 transition-colors ${
-                              isSelected ? "bg-blue-50/40" : ""
-                            }`}
-                          >
-                            {/* Checkbox */}
-                            <td className="px-3.5 py-3.5 text-center">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={(e) => {
-                                  const next = new Set(selectedOrgRows);
-                                  if (e.target.checked) next.add(org.id);
-                                  else next.delete(org.id);
-                                  setSelectedOrgRows(next);
-                                }}
-                                className="w-3.5 h-3.5 rounded border-gray-300 text-[#1456f0] focus:ring-0 cursor-pointer"
-                              />
-                            </td>
-                            {/* Drag / Action Handle */}
-                            <td className="px-2 py-3.5 text-center text-gray-400">
-                              <span className="text-gray-400 hover:text-gray-600 cursor-grab">
-                                ≡
-                              </span>
-                            </td>
-                            {/* Organization Name (Clickable link with Flag) */}
-                            <td className="px-4 py-3.5">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenOrgDrawer(org)}
-                                className="inline-flex items-center gap-2 text-xs font-semibold text-[#1456f0] hover:underline cursor-pointer text-left"
-                              >
-                                <span>{org.flag || "🇮🇳"}</span>
-                                <span>{org.name}</span>
-                              </button>
-                            </td>
-                            {/* Email */}
-                            <td className="px-4 py-3.5">
-                              <span className="text-xs text-gray-600 font-normal">
-                                {org.email}
-                              </span>
-                            </td>
-                            {/* Industry */}
-                            <td className="px-4 py-3.5">
-                              <span className="text-xs text-gray-700 font-medium">
-                                {org.industry || "Ophthalmology"}
-                              </span>
-                            </td>
-                            {/* Preferred Time */}
-                            <td className="px-4 py-3.5">
-                              <span className="text-xs text-gray-600">
-                                {org.preferredTime || "2:00 PM · IST"}
-                              </span>
-                            </td>
-                            {/* Users */}
-                            <td className="px-4 py-3.5">
-                              <span className="inline-flex items-center gap-1.5 text-xs text-gray-600">
-                                <User className="w-3.5 h-3.5 text-gray-400" />
-                                <span>{org.users ?? 1} Users</span>
-                              </span>
-                            </td>
-                            {/* Created On */}
-                            <td className="px-4 py-3.5">
-                              <span className="text-xs text-gray-500">
-                                {org.createdDate || "Oct 02, 26, 12:33 PM"}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Table Footer with Pagination matching Reference Image 2 */}
-              <div className="px-4 py-3 bg-white border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold text-gray-600">ROWS PER PAGE</span>
-                  <select
-                    value={orgRowsPerPage}
-                    onChange={(e) => {
-                      setOrgRowsPerPage(Number(e.target.value));
-                      setOrgCurrentPage(1);
-                    }}
-                    className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 outline-none cursor-pointer"
-                  >
-                    <option value={10}>10</option>
-                    <option value={15}>15</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                  </select>
-                  <span>
-                    Showing{" "}
-                    {Math.min(
-                      (orgCurrentPage - 1) * orgRowsPerPage + 1,
-                      orgList.length
-                    )}
-                    -
-                    {Math.min(
-                      orgCurrentPage * orgRowsPerPage,
-                      orgList.length
-                    )}{" "}
-                    of {orgList.length}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-600">
-                    PAGE {orgCurrentPage} /{" "}
-                    {Math.ceil(orgList.length / orgRowsPerPage) || 1}
-                  </span>
-                  <div className="inline-flex items-center gap-1">
+              const orgColumns: TableColumn<typeof orgList[0]>[] = [
+                {
+                  key: "name",
+                  header: "ORGANIZATION NAME",
+                  align: "left",
+                  render: (org) => (
                     <button
                       type="button"
-                      disabled={orgCurrentPage <= 1}
-                      onClick={() => setOrgCurrentPage((p) => Math.max(1, p - 1))}
-                      className="p-1 rounded-lg border border-gray-200 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
+                      onClick={() => handleOpenOrgDrawer(org)}
+                      className="inline-flex items-center gap-2 text-xs font-semibold text-[#1456f0] hover:underline cursor-pointer text-left"
                     >
-                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span>{org.flag || "🇮🇳"}</span>
+                      <span>{org.name}</span>
                     </button>
-                    <button
-                      type="button"
-                      disabled={
-                        orgCurrentPage >=
-                        Math.ceil(orgList.length / orgRowsPerPage)
-                      }
-                      onClick={() =>
-                        setOrgCurrentPage((p) =>
-                          Math.min(
-                            Math.ceil(orgList.length / orgRowsPerPage),
-                            p + 1
-                          )
-                        )
-                      }
-                      className="p-1 rounded-lg border border-gray-200 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+                  ),
+                },
+                {
+                  key: "email",
+                  header: "EMAIL",
+                  align: "left",
+                  render: (org) => (
+                    <span className="text-xs text-gray-600 font-normal">
+                      {org.email}
+                    </span>
+                  ),
+                },
+                {
+                  key: "industry",
+                  header: "INDUSTRY",
+                  align: "center",
+                  render: (org) => (
+                    <span className="text-xs text-gray-700 font-medium">
+                      {org.industry || "Ophthalmology"}
+                    </span>
+                  ),
+                },
+                {
+                  key: "preferredTime",
+                  header: "PREFERRED TIME",
+                  align: "center",
+                  render: (org) => (
+                    <span className="text-xs text-gray-600">
+                      {org.preferredTime || "2:00 PM · IST"}
+                    </span>
+                  ),
+                },
+                {
+                  key: "users",
+                  header: "USERS",
+                  align: "center",
+                  render: (org) => (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+                      <User className="w-3.5 h-3.5 text-gray-400" />
+                      <span>{org.users ?? 1} Users</span>
+                    </span>
+                  ),
+                },
+                {
+                  key: "createdDate",
+                  header: "CREATED ON",
+                  align: "center",
+                  render: (org) => (
+                    <span className="text-xs text-gray-500">
+                      {org.createdDate || "Oct 02, 26, 12:33 PM"}
+                    </span>
+                  ),
+                },
+              ];
+
+              return (
+                <TableComponent
+                  columns={orgColumns}
+                  data={filteredOrgs}
+                  getRowId={(org) => org.id}
+                  enableSelection={true}
+                  selectedIds={selectedOrgRows}
+                  onSelectionChange={setSelectedOrgRows}
+                  emptyMessage="No organizations found matching your criteria."
+                />
+              );
+            })()}
           </div>
         )}
 
             {/* Users / Team Tab (Matching Image 3 & 4) */}
             {activeTab === "users" && (
               <div className="space-y-4">
-                {/* Team Toolbar matching Image 3 */}
-                <div className="bg-white rounded-2xl border border-gray-200 p-2.5 px-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
-                  {/* Left: Users | Roles | Departments Sub-tabs */}
-                  <div className="inline-flex items-center gap-0 bg-gray-100 p-1 rounded-xl border border-gray-200/80">
-                    <button
-                      type="button"
-                      onClick={() => setTeamSubTab("users")}
-                      className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                        teamSubTab === "users"
-                          ? "bg-white text-[#111827] shadow-xs font-bold"
-                          : "text-gray-500 hover:text-gray-800"
-                      }`}
-                    >
-                      Users
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTeamSubTab("roles")}
-                      className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                        teamSubTab === "roles"
-                          ? "bg-white text-[#111827] shadow-xs font-bold"
-                          : "text-gray-500 hover:text-gray-800"
-                      }`}
-                    >
-                      Roles
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTeamSubTab("departments")}
-                      className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                        teamSubTab === "departments"
-                          ? "bg-white text-[#111827] shadow-xs font-bold"
-                          : "text-gray-500 hover:text-gray-800"
-                      }`}
-                    >
-                      Departments
-                    </button>
-                  </div>
-
-                  {/* Center: Wide Search Capsule */}
-                  <div className="flex-1 min-w-[280px]">
-                    <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 focus-within:bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
-                      <Search className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-                      <input
-                        type="text"
-                        placeholder={
-                          teamSubTab === "roles"
-                            ? "Search roles..."
-                            : teamSubTab === "departments"
-                            ? "Search departments..."
-                            : "Search.."
-                        }
-                        value={teamSearchQuery}
-                        onChange={(e) => setTeamSearchQuery(e.target.value)}
-                        className="w-full text-xs bg-transparent border-none outline-none text-gray-900 placeholder:text-gray-400"
-                      />
-                      {teamSearchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setTeamSearchQuery("")}
-                          className="text-gray-400 hover:text-gray-600 ml-1.5"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Right: Counter + Add Action Button */}
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold text-gray-500">
-                      {teamSubTab === "roles"
-                        ? `${roles.length} roles`
+                {/* Team Toolbar using standard PageTopBar */}
+                <PageTopBar
+                  modes={[
+                    { id: "users", label: "Users", badge: allUsers.length },
+                    { id: "roles", label: "Roles", badge: roles.length },
+                    { id: "departments", label: "Departments", badge: 3 },
+                  ]}
+                  activeMode={teamSubTab}
+                  onModeChange={(m) => setTeamSubTab(m as any)}
+                  searchQuery={teamSearchQuery}
+                  onSearchChange={setTeamSearchQuery}
+                  searchPlaceholder={
+                    teamSubTab === "roles"
+                      ? "Search roles..."
+                      : teamSubTab === "departments"
+                      ? "Search departments..."
+                      : "Search users..."
+                  }
+                  filterPresets={[
+                    {
+                      id: "all",
+                      label: "All Team Members",
+                      count: allUsers.length,
+                      isActive: !teamSearchQuery,
+                      onClick: () => setTeamSearchQuery(""),
+                    },
+                    {
+                      id: "admins",
+                      label: "Admins",
+                      count: allUsers.filter((u: any) => u.role?.toLowerCase().includes("admin")).length,
+                      isActive: false,
+                      onClick: () => setTeamSearchQuery("Admin"),
+                    },
+                    {
+                      id: "members",
+                      label: "Members & Staff",
+                      count: allUsers.filter((u: any) => !u.role?.toLowerCase().includes("admin")).length,
+                      isActive: false,
+                      onClick: () => setTeamSearchQuery(""),
+                    },
+                  ]}
+                  filterFields={[
+                    {
+                      id: "name",
+                      label: "Name / Email",
+                      type: "text",
+                      placeholder: "Filter by name or email...",
+                      value: teamSearchQuery,
+                      onChange: (val) => setTeamSearchQuery(val || ""),
+                    },
+                    {
+                      id: "role",
+                      label: "Role",
+                      type: "select",
+                      value: "all",
+                      onChange: (val) => setTeamSearchQuery(val === "all" ? "" : val || ""),
+                      options: [
+                        { label: "All Roles", value: "all" },
+                        { label: "Admin", value: "Admin" },
+                        { label: "Manager", value: "Manager" },
+                        { label: "Agent", value: "Agent" },
+                      ],
+                    },
+                  ]}
+                  primaryAction={{
+                    label:
+                      teamSubTab === "roles"
+                        ? "Create Role"
                         : teamSubTab === "departments"
-                        ? "3 departments"
-                        : `${allUsers.length} user${allUsers.length === 1 ? "" : "s"}`}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (teamSubTab === "roles") {
-                          setShowRolesDrawer(true);
-                        } else if (teamSubTab === "departments") {
-                          toast.info("Create department");
-                        } else {
-                          setShowAddUserModal(true);
-                        }
-                      }}
-                      className="w-8 h-8 rounded-full bg-[#111827] hover:bg-[#1f2937] text-white flex items-center justify-center transition-all shadow-xs cursor-pointer"
-                      title={
-                        teamSubTab === "roles"
-                          ? "Create Role"
-                          : teamSubTab === "departments"
-                          ? "Create Department"
-                          : "Add User"
+                        ? "Create Department"
+                        : "Add User",
+                    icon: <Plus className="w-3.5 h-3.5" />,
+                    onClick: () => {
+                      if (teamSubTab === "roles") {
+                        setShowRolesDrawer(true);
+                      } else if (teamSubTab === "departments") {
+                        toast.info("Create department");
+                      } else {
+                        setShowAddUserModal(true);
                       }
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+                    },
+                  }}
+                />
 
                 {/* VIEW 1: ROLES TABLE */}
-                {teamSubTab === "roles" && (
-                  <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-2xs">
-                    <table className="w-full">
-                      <thead style={{ backgroundColor: "#1E293B" }} className="border-b border-gray-200">
-                        <tr>
-                          <th className="w-10 px-4 py-3 text-center">
-                            <input
-                              type="checkbox"
-                              className="w-4 h-4 rounded border-gray-600 accent-blue-600 cursor-pointer"
-                            />
-                          </th>
-                          <th className="w-10 px-3 py-3 text-center text-slate-300">
-                            <Shield className="w-4 h-4 mx-auto text-slate-400" />
-                          </th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            ROLE NAME
-                          </th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            DESCRIPTION
-                          </th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            USERS ASSIGNED
-                          </th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            PERMISSIONS
-                          </th>
-                          <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            ACTIONS
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {roles
-                          .filter((r) => !teamSearchQuery.trim() || r.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) || (r.description && r.description.toLowerCase().includes(teamSearchQuery.toLowerCase())))
-                          .map((r) => {
-                            const count = allUsers.filter(
-                              (u) => (u.role || "").toLowerCase() === (r.name || "").toLowerCase()
-                            ).length;
-                            return (
-                              <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
-                                <td className="px-4 py-3.5 text-center">
-                                  <input
-                                    type="checkbox"
-                                    className="w-4 h-4 rounded border-gray-300 accent-blue-600 cursor-pointer"
-                                  />
-                                </td>
-                                <td className="px-3 py-3.5 text-center text-slate-300">
-                                  <GripVertical className="w-4 h-4 mx-auto text-slate-300 cursor-move" />
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowRolesDrawer(true)}
-                                    className="text-xs font-bold text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0 flex items-center gap-1.5"
-                                    style={{ fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    <Shield className="w-3.5 h-3.5" />
-                                    {r.name}
-                                  </button>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <span className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                    {r.description || "Custom role permissions"}
-                                  </span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
-                                    <User className="w-3 h-3 text-slate-500" />
-                                    {count} {count === 1 ? "user" : "users"}
-                                  </span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase ${
-                                    r.isDefault ? "bg-blue-50 text-blue-700 border border-blue-200/60" : "bg-purple-50 text-purple-700 border border-purple-200/60"
-                                  }`}>
-                                    {r.isDefault ? "SYSTEM DEFAULT" : "CUSTOM ROLE"}
-                                  </span>
-                                </td>
-                                <td className="px-5 py-3.5 text-right">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => setShowRolesDrawer(true)}
-                                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                                      title="Edit Role Permissions"
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                {teamSubTab === "roles" && (() => {
+                  const filteredRoles = roles.filter(
+                    (r) =>
+                      !teamSearchQuery.trim() ||
+                      r.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
+                      (r.description && r.description.toLowerCase().includes(teamSearchQuery.toLowerCase()))
+                  );
+
+                  const roleColumns: TableColumn<Role>[] = [
+                    {
+                      key: "name",
+                      header: "ROLE NAME",
+                      align: "left",
+                      render: (r) => (
+                        <button
+                          type="button"
+                          onClick={() => setShowRolesDrawer(true)}
+                          className="text-xs font-bold text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0 flex items-center gap-1.5"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <Shield className="w-3.5 h-3.5" />
+                          {r.name}
+                        </button>
+                      ),
+                    },
+                    {
+                      key: "description",
+                      header: "DESCRIPTION",
+                      align: "left",
+                      render: (r) => (
+                        <span className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {r.description || "Custom role permissions"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "users",
+                      header: "USERS ASSIGNED",
+                      align: "center",
+                      render: (r) => {
+                        const count = allUsers.filter(
+                          (u) => (u.role || "").toLowerCase() === (r.name || "").toLowerCase()
+                        ).length;
+                        return (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+                            <User className="w-3 h-3 text-slate-500" />
+                            {count} {count === 1 ? "user" : "users"}
+                          </span>
+                        );
+                      },
+                    },
+                    {
+                      key: "permissions",
+                      header: "PERMISSIONS",
+                      align: "center",
+                      render: (r) => (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase ${
+                            r.isDefault
+                              ? "bg-blue-50 text-blue-700 border border-blue-200/60"
+                              : "bg-purple-50 text-purple-700 border border-purple-200/60"
+                          }`}
+                        >
+                          {r.isDefault ? "SYSTEM DEFAULT" : "CUSTOM ROLE"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "actions",
+                      header: "ACTIONS",
+                      align: "center",
+                      render: () => (
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowRolesDrawer(true)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Role Permissions"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ),
+                    },
+                  ];
+
+                  return (
+                    <TableComponent
+                      columns={roleColumns}
+                      data={filteredRoles}
+                      getRowId={(r) => r.id}
+                      emptyMessage="No roles found matching your search."
+                    />
+                  );
+                })()}
 
                 {/* VIEW 2: USERS TABLE (Dynamic synced with team store) */}
-                {teamSubTab === "users" && (
-                  <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-2xs">
-                    <table className="w-full">
-                      <thead style={{ backgroundColor: '#1E293B' }} className="border-b border-gray-200">
-                        <tr>
-                          <th className="w-10 px-4 py-3 text-center">
-                            <input
-                              type="checkbox"
-                              className="w-4 h-4 rounded border-gray-600 accent-blue-600 cursor-pointer"
-                              checked={selectedTeamRows.size > 0 && selectedTeamRows.size === allUsers.length}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedTeamRows(new Set(allUsers.map((u) => String(u.id))));
-                                } else {
-                                  setSelectedTeamRows(new Set());
-                                }
-                              }}
+                {teamSubTab === "users" && (() => {
+                  const filteredUsers = allUsers.filter((u) => {
+                    const matchSearch =
+                      teamSearchQuery === "" ||
+                      u.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
+                      u.email.toLowerCase().includes(teamSearchQuery.toLowerCase());
+                    const matchRole = teamRoleFilter === "All" || u.role === teamRoleFilter;
+                    return matchSearch && matchRole;
+                  });
+
+                  const userColumns: TableColumn<User>[] = [
+                    {
+                      key: "name",
+                      header: "NAME",
+                      align: "left",
+                      render: (u) => (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTeamMember(u);
+                            setIsTeamDrawerOpen(true);
+                          }}
+                          className="text-xs font-semibold text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0 text-left"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {u.name}
+                        </button>
+                      ),
+                    },
+                    {
+                      key: "role",
+                      header: "ROLE",
+                      align: "center",
+                      render: (u) => (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase ${
+                            (u.role || "").toUpperCase() === "ADMIN"
+                              ? "bg-slate-200 text-slate-800"
+                              : (u.role || "").toUpperCase() === "EXECUTIVE"
+                              ? "bg-slate-100 text-slate-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {u.role || "UNASSIGNED"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "email",
+                      header: "EMAIL",
+                      align: "left",
+                      render: (u) => (
+                        <span className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {u.email}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "createdAt",
+                      header: "CREATED AT",
+                      align: "center",
+                      render: (u) => (
+                        <span className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {(u as any).createdAt || "Oct 1, 2026"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "status",
+                      header: "STATUS",
+                      align: "center",
+                      render: (u) => (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          {u.status === false ? "Inactive" : "Active"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "credits",
+                      header: "CREDITS",
+                      align: "center",
+                      render: (u) => (
+                        <span className="inline-flex items-center gap-1 text-xs text-slate-600 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          <span className="text-amber-500">🔑</span> {(u as any).credits || "0 / 0"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "usageBalance",
+                      header: "USAGE BALANCE",
+                      align: "center",
+                      render: (u) => (
+                        <div className="flex items-center gap-2 max-w-[120px] mx-auto">
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded-full"
+                              style={{ width: `${(u as any).usagePercent || 0}%` }}
                             />
-                          </th>
-                          <th className="w-10 px-3 py-3 text-center text-slate-300">
-                            <SettingsIcon className="w-4 h-4 mx-auto text-slate-400" />
-                          </th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>NAME</th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>ROLE</th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>EMAIL</th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>CREATED AT</th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>STATUS</th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>CREDITS</th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white" style={{ fontFamily: 'Outfit, sans-serif' }}>USAGE BALANCE</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {allUsers
-                          .filter((u) => {
-                            const matchSearch = teamSearchQuery === "" || u.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) || u.email.toLowerCase().includes(teamSearchQuery.toLowerCase());
-                            const matchRole = teamRoleFilter === "All" || u.role === teamRoleFilter;
-                            return matchSearch && matchRole;
-                          })
-                          .map((u) => (
-                            <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
-                              <td className="px-4 py-3.5 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedTeamRows.has(String(u.id))}
-                                  onChange={(e) => {
-                                    const next = new Set(selectedTeamRows);
-                                    if (e.target.checked) next.add(String(u.id));
-                                    else next.delete(String(u.id));
-                                    setSelectedTeamRows(next);
-                                  }}
-                                  className="w-4 h-4 rounded border-gray-300 accent-blue-600 cursor-pointer"
-                                />
-                              </td>
-                              <td className="px-3 py-3.5 text-center text-slate-300">
-                                <GripVertical className="w-4 h-4 mx-auto text-slate-300 cursor-move" />
-                              </td>
-                              <td className="px-5 py-3.5">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedTeamMember(u);
-                                    setIsTeamDrawerOpen(true);
-                                  }}
-                                  className="text-xs font-semibold text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0"
-                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                >
-                                  {u.name}
-                                </button>
-                              </td>
-                              <td className="px-5 py-3.5">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase ${
-                                  (u.role || "").toUpperCase() === "ADMIN"
-                                    ? "bg-slate-200 text-slate-800"
-                                    : (u.role || "").toUpperCase() === "EXECUTIVE"
-                                      ? "bg-slate-100 text-slate-700"
-                                      : "bg-slate-100 text-slate-600"
-                                }`}>
-                                  {u.role || "UNASSIGNED"}
-                                </span>
-                              </td>
-                              <td className="px-5 py-3.5">
-                                <span className="text-xs text-slate-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                  {u.email}
-                                </span>
-                              </td>
-                              <td className="px-5 py-3.5">
-                                <span className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                  {(u as any).createdAt || "Oct 1, 2026"}
-                                </span>
-                              </td>
-                              <td className="px-5 py-3.5">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                  {u.status === false ? "Inactive" : "Active"}
-                                </span>
-                              </td>
-                              <td className="px-5 py-3.5">
-                                <span className="inline-flex items-center gap-1 text-xs text-slate-600 font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                  <span className="text-amber-500">🔑</span> {(u as any).credits || "0 / 0"}
-                                </span>
-                              </td>
-                              <td className="px-5 py-3.5">
-                                <div className="flex items-center gap-2 max-w-[120px]">
-                                  <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                    <div
-                                      className="h-full bg-emerald-500 rounded-full"
-                                      style={{ width: `${(u as any).usagePercent || 0}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-[11px] text-slate-400 font-medium">
-                                    {(u as any).usagePercent || 0}%
-                                  </span>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                          </div>
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            {(u as any).usagePercent || 0}%
+                          </span>
+                        </div>
+                      ),
+                    },
+                  ];
+
+                  return (
+                    <TableComponent
+                      columns={userColumns}
+                      data={filteredUsers}
+                      getRowId={(u) => String(u.id)}
+                      enableSelection={true}
+                      selectedIds={selectedTeamRows}
+                      onSelectionChange={setSelectedTeamRows}
+                      emptyMessage="No users found matching your filters."
+                    />
+                  );
+                })()}
 
                 {/* VIEW 3: DEPARTMENTS TABLE */}
                 {teamSubTab === "departments" && (
@@ -5239,69 +5163,52 @@ export default function Settings() {
 
                     {/* Transaction History */}
                     <h3 className="text-base font-bold mt-8">Transaction History</h3>
-                    <div className="bg-white rounded-xl border border-border overflow-hidden">
-                      <table className="w-full">
-                        <thead className="bg-muted/30 border-b border-border">
-                          <tr>
-                            <th className="text-left px-6 py-3 text-sm font-medium text-[#64748B]">Date</th>
-                            <th className="text-left px-6 py-3 text-sm font-medium text-[#64748B]">Description</th>
-                            <th className="text-left px-6 py-3 text-sm font-medium text-[#64748B]">Amount</th>
-                            <th className="text-left px-6 py-3 text-sm font-medium text-[#64748B]">Status</th>
-                            <th className="text-right px-6 py-3 text-sm font-medium text-[#64748B]">Invoice</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr className="border-b border-border">
-                            <td className="px-6 py-4 text-sm">May 1, 2026</td>
-                            <td className="px-6 py-4 text-sm">Professional Plan (Annual)</td>
-                            <td className="px-6 py-4 text-sm font-medium">$1,896</td>
-                            <td className="px-6 py-4">
-                              <span className="flex items-center gap-1 text-sm text-green-600">
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                </svg>
-                                Paid
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <button className="text-[13px] text-[#2563EB] underline hover:text-blue-700">Download</button>
-                            </td>
-                          </tr>
-                          <tr className="border-b border-border">
-                            <td className="px-6 py-4 text-sm">Apr 1, 2026</td>
-                            <td className="px-6 py-4 text-sm">Professional Plan (Monthly)</td>
-                            <td className="px-6 py-4 text-sm font-medium">$158</td>
-                            <td className="px-6 py-4">
-                              <span className="flex items-center gap-1 text-sm text-green-600">
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                </svg>
-                                Paid
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <button className="text-[13px] text-[#2563EB] underline hover:text-blue-700">Download</button>
-                            </td>
-                          </tr>
-                          <tr className="border-b border-border">
-                            <td className="px-6 py-4 text-sm">Mar 1, 2026</td>
-                            <td className="px-6 py-4 text-sm">Professional Plan (Monthly)</td>
-                            <td className="px-6 py-4 text-sm font-medium">$158</td>
-                            <td className="px-6 py-4">
-                              <span className="flex items-center gap-1 text-sm text-green-600">
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                </svg>
-                                Paid
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <button className="text-[13px] text-[#2563EB] underline hover:text-blue-700">Download</button>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
+                    {(() => {
+                      const txData = [
+                        { id: "tx-1", date: "May 1, 2026", description: "Professional Plan (Annual)", amount: "$1,896", status: "Paid" },
+                        { id: "tx-2", date: "Apr 1, 2026", description: "Professional Plan (Monthly)", amount: "$158", status: "Paid" },
+                        { id: "tx-3", date: "Mar 1, 2026", description: "Professional Plan (Monthly)", amount: "$158", status: "Paid" },
+                      ];
+
+                      const txColumns: TableColumn<typeof txData[0]>[] = [
+                        { key: "date", header: "Date", align: "left", render: (tx) => <span className="text-sm text-slate-700">{tx.date}</span> },
+                        { key: "description", header: "Description", align: "left", render: (tx) => <span className="text-sm font-medium text-slate-900">{tx.description}</span> },
+                        { key: "amount", header: "Amount", align: "right", render: (tx) => <span className="text-sm font-semibold text-slate-900">{tx.amount}</span> },
+                        {
+                          key: "status",
+                          header: "Status",
+                          align: "center",
+                          render: (tx) => (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              {tx.status}
+                            </span>
+                          ),
+                        },
+                        {
+                          key: "invoice",
+                          header: "Invoice",
+                          align: "right",
+                          render: () => (
+                            <button
+                              type="button"
+                              onClick={() => toast.success("Invoice downloaded")}
+                              className="text-xs font-semibold text-[#2563EB] hover:underline cursor-pointer"
+                            >
+                              Download
+                            </button>
+                          ),
+                        },
+                      ];
+
+                      return (
+                        <TableComponent
+                          columns={txColumns}
+                          data={txData}
+                          getRowId={(tx) => tx.id}
+                        />
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -5643,186 +5550,196 @@ export default function Settings() {
                       </div>
 
                       {/* Table */}
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-[#E5E7EB]">
-                            <th className="w-8 px-4 py-3" />
-                            <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Name</th>
-                            <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Email</th>
-                            <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Credits</th>
-                            <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Usage Balance</th>
-                            <th className="w-8 px-4 py-3" />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {teamMembersFilter === "active" ? (
-                            [
-                              { name: "Eye Mantra test dev", role: "TEAM MEMBER", email: "dev@mantracare.com", used: 0, total: 1000, pct: 0 },
-                              { name: "Karan Hinduja", role: "TEAM MEMBER", email: "karan@mantra.care", used: 0, total: 6000, pct: 0 },
-                              { name: "Varsha", role: "TEAM MEMBER", email: "varsha@mantra.care", used: 7921, total: 11000, pct: 72 },
-                            ]
-                              .filter((m) => {
-                                if (!teamMembersSearch) return true;
-                                const q = teamMembersSearch.toLowerCase();
-                                return m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
-                              })
-                              .map((member, idx, arr) => {
-                                return (
-                                  <tr key={member.email} className={`${idx !== arr.length - 1 ? "border-b border-[#F3F4F6]" : ""} hover:bg-[#F9FAFB] transition-colors`}>
-                                    <td className="px-4 py-4 text-center" style={{ position: 'relative' }}>
-                                      <button
-                                        className="text-[#9CA3AF] hover:text-[#374151] transition-colors"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setOpenMemberRowMenu(openMemberRowMenu === member.email ? null : member.email);
-                                        }}
-                                      >
-                                        <MoreVertical className="w-4 h-4" />
-                                      </button>
-                                      {openMemberRowMenu === member.email && (
-                                        <>
-                                          <div
-                                            className="fixed inset-0"
-                                            style={{ zIndex: 9998 }}
-                                            onClick={() => setOpenMemberRowMenu(null)}
-                                          />
-                                          <div
-                                            style={{
-                                              position: 'absolute',
-                                              top: '100%',
-                                              left: '50%',
-                                              transform: 'translateX(-50%)',
-                                              zIndex: 9999,
-                                              backgroundColor: '#FFFFFF',
-                                              border: '0.5px solid #E5E7EB',
-                                              borderRadius: '8px',
-                                              boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                              minWidth: '110px',
-                                              padding: '4px',
-                                            }}
-                                          >
-                                            <button
-                                              className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-[13px] text-[#374151] hover:bg-[#F3F4F6] transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setOpenMemberRowMenu(null);
-                                                setSelectedMemberForUsage(member);
-                                                setShowMemberUsageDrawer(true);
-                                                setMemberUsageTab("breakdown");
-                                              }}
-                                            >
-                                              <Eye className="w-3.5 h-3.5 text-[#6B7280]" />
-                                              View
-                                            </button>
-                                          </div>
-                                        </>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <p className="text-[13px] font-semibold text-[#2563EB] cursor-pointer hover:underline" style={{ fontFamily: "Outfit, sans-serif" }}>{member.name}</p>
-                                      <span className="text-[10px] text-[#9CA3AF] font-medium tracking-wide">+ {member.role}</span>
-                                    </td>
-                                    <td className="px-4 py-4 text-[13px] text-[#374151]" style={{ fontFamily: "Outfit, sans-serif" }}>{member.email}</td>
-                                    <td className="px-4 py-4">
-                                      <div className="flex items-center gap-1.5">
-                                        <Coins className="w-3.5 h-3.5 text-[#F59E0B] flex-shrink-0" />
-                                        <span className="text-[13px] text-[#374151]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                          {member.used.toLocaleString()} / {member.total.toLocaleString()}
-                                        </span>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex-1 h-1.5 bg-[#F3F4F6] rounded-full overflow-hidden">
-                                          <div
-                                            className="h-full rounded-full"
-                                            style={{ width: `${member.pct}%`, backgroundColor: "#2563EB" }}
-                                          />
-                                        </div>
-                                        <span className="text-[12px] text-[#6B7280] w-8 text-right flex-shrink-0" style={{ fontFamily: "Outfit, sans-serif" }}>{member.pct}%</span>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })
-                          ) : (
-                            pendingInvites.length === 0 ? (
-                              <tr>
-                                <td colSpan={6} className="px-4 py-12 text-center">
-                                  <div className="flex flex-col items-center justify-center gap-2">
-                                    <User className="w-10 h-10 text-[#D1D5DB]" />
-                                    <p className="text-[14px] text-[#9CA3AF]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                      No pending invitations yet
-                                    </p>
-                                  </div>
-                                </td>
-                              </tr>
-                            ) : (
-                              pendingInvites
-                                .filter((invite) => {
-                                  if (!teamMembersSearch) return true;
-                                  const q = teamMembersSearch.toLowerCase();
-                                  return invite.email.toLowerCase().includes(q) || invite.role.toLowerCase().includes(q);
-                                })
-                                .map((invite, idx, arr) => (
-                                  <tr key={invite.id} className={`${idx !== arr.length - 1 ? "border-b border-[#F3F4F6]" : ""} hover:bg-[#F9FAFB] transition-colors`}>
-                                    <td className="px-4 py-4" />
-                                    <td className="px-4 py-4">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center flex-shrink-0">
-                                          <Mail className="w-4 h-4 text-[#9CA3AF]" />
-                                        </div>
-                                        <span className="text-[13px] font-medium text-[#374151]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                          {invite.email}
-                                        </span>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <span className="text-[13px] text-[#6B7280]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                        {invite.role}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <span className="inline-flex items-center px-2.5 py-1 bg-[#FEF3C7] text-[#92400E] text-[11px] font-semibold rounded-full">
-                                        Pending
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <span className="text-[12px] text-[#9CA3AF]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                        Sent {invite.sentAt}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <div className="flex items-center gap-2">
-                                        <button
-                                          onClick={() => {
-                                            toast.success("Invitation resent successfully");
-                                          }}
-                                          className="text-[13px] text-[#2563EB] hover:text-[#1D4ED8] font-medium"
-                                          style={{ fontFamily: "Outfit, sans-serif" }}
-                                        >
-                                          Resend
-                                        </button>
-                                        <span className="text-[#D1D5DB]">|</span>
-                                        <button
-                                          onClick={() => {
-                                            setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
-                                            toast.success("Invitation cancelled");
-                                          }}
-                                          className="text-[13px] text-[#DC2626] hover:text-[#B91C1C] font-medium"
-                                          style={{ fontFamily: "Outfit, sans-serif" }}
-                                        >
-                                          Cancel
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))
-                            )
-                          )}
-                        </tbody>
-                      </table>
+                      {teamMembersFilter === "active" ? (() => {
+                        const activeMembersData = [
+                          { id: "dev@mantracare.com", name: "Eye Mantra test dev", role: "TEAM MEMBER", email: "dev@mantracare.com", used: 0, total: 1000, pct: 0 },
+                          { id: "karan@mantra.care", name: "Karan Hinduja", role: "TEAM MEMBER", email: "karan@mantra.care", used: 0, total: 6000, pct: 0 },
+                          { id: "varsha@mantra.care", name: "Varsha", role: "TEAM MEMBER", email: "varsha@mantra.care", used: 7921, total: 11000, pct: 72 },
+                        ].filter((m) => {
+                          if (!teamMembersSearch) return true;
+                          const q = teamMembersSearch.toLowerCase();
+                          return m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+                        });
+
+                        const columns: TableColumn<any>[] = [
+                          {
+                            header: "Name",
+                            accessorKey: "name",
+                            align: "left",
+                            render: (member) => (
+                              <div>
+                                <p
+                                  onClick={() => {
+                                    setSelectedMemberForUsage(member);
+                                    setShowMemberUsageDrawer(true);
+                                    setMemberUsageTab("breakdown");
+                                  }}
+                                  className="text-[13px] font-semibold text-[#2563EB] cursor-pointer hover:underline"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  {member.name}
+                                </p>
+                                <span className="text-[10px] text-[#9CA3AF] font-medium tracking-wide">+ {member.role}</span>
+                              </div>
+                            ),
+                          },
+                          {
+                            header: "Email",
+                            accessorKey: "email",
+                            align: "left",
+                            render: (member) => (
+                              <span className="text-[13px] text-[#374151]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {member.email}
+                              </span>
+                            ),
+                          },
+                          {
+                            header: "Credits",
+                            align: "left",
+                            render: (member) => (
+                              <div className="flex items-center gap-1.5">
+                                <Coins className="w-3.5 h-3.5 text-[#F59E0B] flex-shrink-0" />
+                                <span className="text-[13px] text-[#374151]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  {member.used.toLocaleString()} / {member.total.toLocaleString()}
+                                </span>
+                              </div>
+                            ),
+                          },
+                          {
+                            header: "Usage Balance",
+                            align: "left",
+                            render: (member) => (
+                              <div className="flex items-center gap-3" style={{ minWidth: "140px" }}>
+                                <div className="flex-1 h-1.5 bg-[#F3F4F6] rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full"
+                                    style={{ width: `${member.pct}%`, backgroundColor: "#2563EB" }}
+                                  />
+                                </div>
+                                <span className="text-[12px] text-[#6B7280] w-8 text-right flex-shrink-0" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  {member.pct}%
+                                </span>
+                              </div>
+                            ),
+                          },
+                        ];
+
+                        return (
+                          <TableComponent
+                            columns={columns}
+                            data={activeMembersData}
+                            getRowId={(m) => m.id}
+                            onRowClick={(member) => {
+                              setSelectedMemberForUsage(member);
+                              setShowMemberUsageDrawer(true);
+                              setMemberUsageTab("breakdown");
+                            }}
+                            rowActions={[
+                              {
+                                label: "View Usage",
+                                icon: <Eye className="w-3.5 h-3.5 text-[#6B7280]" />,
+                                onClick: (member) => {
+                                  setSelectedMemberForUsage(member);
+                                  setShowMemberUsageDrawer(true);
+                                  setMemberUsageTab("breakdown");
+                                },
+                              },
+                            ]}
+                            emptyMessage="No team members match your search."
+                          />
+                        );
+                      })() : (() => {
+                        const pendingData = pendingInvites.filter((invite) => {
+                          if (!teamMembersSearch) return true;
+                          const q = teamMembersSearch.toLowerCase();
+                          return invite.email.toLowerCase().includes(q) || invite.role.toLowerCase().includes(q);
+                        });
+
+                        const pendingColumns: TableColumn<any>[] = [
+                          {
+                            header: "Email",
+                            accessorKey: "email",
+                            align: "left",
+                            render: (invite) => (
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center flex-shrink-0">
+                                  <Mail className="w-4 h-4 text-[#9CA3AF]" />
+                                </div>
+                                <span className="text-[13px] font-medium text-[#374151]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  {invite.email}
+                                </span>
+                              </div>
+                            ),
+                          },
+                          {
+                            header: "Role",
+                            accessorKey: "role",
+                            align: "left",
+                            render: (invite) => (
+                              <span className="text-[13px] text-[#6B7280]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {invite.role}
+                              </span>
+                            ),
+                          },
+                          {
+                            header: "Status",
+                            align: "center",
+                            render: () => (
+                              <span className="inline-flex items-center px-2.5 py-1 bg-[#FEF3C7] text-[#92400E] text-[11px] font-semibold rounded-full">
+                                Pending
+                              </span>
+                            ),
+                          },
+                          {
+                            header: "Sent At",
+                            accessorKey: "sentAt",
+                            align: "left",
+                            render: (invite) => (
+                              <span className="text-[12px] text-[#9CA3AF]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                Sent {invite.sentAt}
+                              </span>
+                            ),
+                          },
+                        ];
+
+                        if (pendingInvites.length === 0) {
+                          return (
+                            <div className="px-4 py-12 text-center flex flex-col items-center justify-center gap-2">
+                              <User className="w-10 h-10 text-[#D1D5DB]" />
+                              <p className="text-[14px] text-[#9CA3AF]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                No pending invitations yet
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <TableComponent
+                            columns={pendingColumns}
+                            data={pendingData}
+                            getRowId={(inv) => inv.id}
+                            rowActions={[
+                              {
+                                label: "Resend Invitation",
+                                icon: <Mail className="w-3.5 h-3.5 text-[#2563EB]" />,
+                                onClick: () => {
+                                  toast.success("Invitation resent successfully");
+                                },
+                              },
+                              {
+                                label: "Cancel Invitation",
+                                icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+                                isDanger: true,
+                                onClick: (invite) => {
+                                  setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
+                                  toast.success("Invitation cancelled");
+                                },
+                              },
+                            ]}
+                            emptyMessage="No pending invitations match your search."
+                          />
+                        );
+                      })()}
                     </div>
 
                     {/* Invite Member Modal */}
@@ -6114,53 +6031,90 @@ export default function Settings() {
                           />
                         </div>
                       </div>
-                      <div className="overflow-hidden rounded-lg border border-[#E5E7EB]">
-                        <table className="w-full">
-                          <thead className="bg-[#111827] text-white">
-                            <tr>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">Transaction ID</th>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">User</th>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">Role</th>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">Type</th>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">Description</th>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">Credits</th>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">Date</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {[
-                              { id: "Txn-1778389229", user: "Anurag Kashuap", role: "System User", type: "Domestic call outbound usage", description: "Outbound call usage by Anurag Kashuap", credits: "-1.00", date: "May 10, 2026, 10:30 AM" },
-                              { id: "Txn-1778389228", user: "Sarah Johnson", role: "Admin", type: "International call inbound usage", description: "Inbound international call usage", credits: "-2.50", date: "May 10, 2026, 9:15 AM" },
-                              { id: "Txn-1778389227", user: "Michael Chen", role: "Agent", type: "Domestic call inbound usage", description: "Inbound call usage by Michael Chen", credits: "-0.75", date: "May 9, 2026, 4:45 PM" },
-                              { id: "Txn-1778389226", user: "Anurag Kashuap", role: "System User", type: "Webhook usage", description: "API webhook processing", credits: "-0.10", date: "May 9, 2026, 2:20 PM" },
-                              { id: "Txn-1778389225", user: "Sarah Johnson", role: "Admin", type: "International call outbound usage", description: "Outbound international call", credits: "-3.25", date: "May 9, 2026, 11:00 AM" },
-                            ]
-                              .filter((t) => {
-                                if (!creditUsageSearchQuery) return true;
-                                const q = creditUsageSearchQuery.toLowerCase();
-                                return t.id.toLowerCase().includes(q) || t.user.toLowerCase().includes(q) || t.type.toLowerCase().includes(q) || t.description.toLowerCase().includes(q);
-                              })
-                              .map((transaction, index, arr) => (
-                                <tr key={transaction.id} className={`${index !== arr.length - 1 ? "border-b border-[#F3F4F6]" : ""} hover:bg-[#F9FAFB] transition-colors`}>
-                                  <td className="px-4 py-3 text-[13px] text-[#374151]">{transaction.id}</td>
-                                  <td className="px-4 py-3 text-[13px] text-[#374151] font-medium">{transaction.user}</td>
-                                  <td className="px-4 py-3">
-                                    <span className="px-2 py-0.5 bg-[#EFF6FF] text-[#2563EB] text-[11px] rounded-full font-medium">{transaction.role}</span>
-                                  </td>
-                                  <td className="px-4 py-3 text-[13px] text-[#374151]">{transaction.type}</td>
-                                  <td className="px-4 py-3 text-[13px] text-[#6B7280]">{transaction.description}</td>
-                                  <td className="px-4 py-3">
-                                    <div className="flex items-center gap-1">
-                                      <Coins className="w-3.5 h-3.5 text-[#F59E0B]" />
-                                      <span className="text-[13px] font-semibold text-[#DC2626]">{transaction.credits}</span>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3 text-[13px] text-[#6B7280]">{transaction.date}</td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      {(() => {
+                        const txData = [
+                          { id: "Txn-1778389229", user: "Anurag Kashuap", role: "System User", type: "Domestic call outbound usage", description: "Outbound call usage by Anurag Kashuap", credits: "-1.00", date: "May 10, 2026, 10:30 AM" },
+                          { id: "Txn-1778389228", user: "Sarah Johnson", role: "Admin", type: "International call inbound usage", description: "Inbound international call usage", credits: "-2.50", date: "May 10, 2026, 9:15 AM" },
+                          { id: "Txn-1778389227", user: "Michael Chen", role: "Agent", type: "Domestic call inbound usage", description: "Inbound call usage by Michael Chen", credits: "-0.75", date: "May 9, 2026, 4:45 PM" },
+                          { id: "Txn-1778389226", user: "Anurag Kashuap", role: "System User", type: "Webhook usage", description: "API webhook processing", credits: "-0.10", date: "May 9, 2026, 2:20 PM" },
+                          { id: "Txn-1778389225", user: "Sarah Johnson", role: "Admin", type: "International call outbound usage", description: "Outbound international call", credits: "-3.25", date: "May 9, 2026, 11:00 AM" },
+                        ].filter((t) => {
+                          if (!creditUsageSearchQuery) return true;
+                          const q = creditUsageSearchQuery.toLowerCase();
+                          return t.id.toLowerCase().includes(q) || t.user.toLowerCase().includes(q) || t.type.toLowerCase().includes(q) || t.description.toLowerCase().includes(q);
+                        });
+
+                        const txColumns: TableColumn<any>[] = [
+                          {
+                            header: "Transaction ID",
+                            accessorKey: "id",
+                            align: "left",
+                            render: (t) => (
+                              <span className="text-[13px] text-[#374151] font-mono">{t.id}</span>
+                            ),
+                          },
+                          {
+                            header: "User",
+                            accessorKey: "user",
+                            align: "left",
+                            render: (t) => (
+                              <span className="text-[13px] text-[#374151] font-medium">{t.user}</span>
+                            ),
+                          },
+                          {
+                            header: "Role",
+                            accessorKey: "role",
+                            align: "center",
+                            render: (t) => (
+                              <span className="px-2 py-0.5 bg-[#EFF6FF] text-[#2563EB] text-[11px] rounded-full font-medium">{t.role}</span>
+                            ),
+                          },
+                          {
+                            header: "Type",
+                            accessorKey: "type",
+                            align: "left",
+                            render: (t) => (
+                              <span className="text-[13px] text-[#374151]">{t.type}</span>
+                            ),
+                          },
+                          {
+                            header: "Description",
+                            accessorKey: "description",
+                            align: "left",
+                            render: (t) => (
+                              <span className="text-[13px] text-[#6B7280]">{t.description}</span>
+                            ),
+                          },
+                          {
+                            header: "Credits",
+                            accessorKey: "credits",
+                            align: "center",
+                            render: (t) => (
+                              <div className="flex items-center justify-center gap-1">
+                                <Coins className="w-3.5 h-3.5 text-[#F59E0B]" />
+                                <span className="text-[13px] font-semibold text-[#DC2626]">{t.credits}</span>
+                              </div>
+                            ),
+                          },
+                          {
+                            header: "Date",
+                            accessorKey: "date",
+                            align: "center",
+                            render: (t) => (
+                              <span className="text-[13px] text-[#6B7280]">{t.date}</span>
+                            ),
+                          },
+                        ];
+
+                        return (
+                          <TableComponent
+                            columns={txColumns}
+                            data={txData}
+                            getRowId={(t) => t.id}
+                            emptyMessage="No transactions match your search."
+                          />
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -6251,100 +6205,138 @@ export default function Settings() {
             {activeTab === "voice-config" && (
               <div className="space-y-4">
                 <div>
-                  {/* Unified Search & Filter Toolbar Capsule */}
-                    <div className="flex flex-wrap items-center gap-2.5 bg-[#F8FAFC] border border-gray-200/80 rounded-2xl p-1.5 shadow-2xs mb-4">
-                      <div className="flex items-center gap-2 pl-2 flex-wrap">
-                        {/* Gender Filter */}
-                        <div className="relative">
-                          <select
-                            value={voiceFilters.gender}
-                            onChange={(e) => setVoiceFilters(prev => ({ ...prev, gender: e.target.value }))}
-                            className="px-3 py-1.5 pr-7 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:border-primary appearance-none cursor-pointer shadow-2xs"
-                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                          >
-                            <option value="All Genders">All Genders</option>
-                            <option value="Female">Female</option>
-                            <option value="Male">Male</option>
-                          </select>
-                          <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
-
-                        {/* Country Filter */}
-                        <div className="relative">
-                          <select
-                            value={voiceFilters.country}
-                            onChange={(e) => setVoiceFilters(prev => ({ ...prev, country: e.target.value }))}
-                            className="px-3 py-1.5 pr-7 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:border-primary appearance-none cursor-pointer shadow-2xs"
-                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                          >
-                            <option value="All Countries">All Countries</option>
-                            <option value="USA">USA</option>
-                            <option value="UK">UK</option>
-                            <option value="Australia">Australia</option>
-                            <option value="Canada">Canada</option>
-                          </select>
-                          <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
-
-                        {/* Tone Filter */}
-                        <div className="relative">
-                          <select
-                            value={voiceFilters.tone}
-                            onChange={(e) => setVoiceFilters(prev => ({ ...prev, tone: e.target.value }))}
-                            className="px-3 py-1.5 pr-7 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:border-primary appearance-none cursor-pointer shadow-2xs"
-                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                          >
-                            <option value="All Tones">All Tones</option>
-                            <option value="Professional">Professional</option>
-                            <option value="Formal">Formal</option>
-                            <option value="Friendly">Friendly</option>
-                            <option value="Casual">Casual</option>
-                            <option value="Empathetic">Empathetic</option>
-                            <option value="Energetic">Energetic</option>
-                          </select>
-                          <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
-
-                        {/* Clear filters if active */}
-                        {(voiceFilters.gender !== "All Genders" || voiceFilters.country !== "All Countries" || voiceFilters.tone !== "All Tones" || voiceSearchQuery) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setVoiceFilters({ language: "All Languages", tone: "All Tones", gender: "All Genders", age: "All Ages", country: "All Countries" });
-                              setVoiceSearchQuery("");
-                            }}
-                            className="text-xs text-muted-foreground hover:text-destructive px-2 py-1 transition-colors flex items-center gap-1 cursor-pointer"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                            Reset
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="hidden sm:block h-6 w-[1px] bg-gray-200" />
-
-                      {/* Search Bar */}
-                      <div className="relative flex-1 min-w-[200px] flex items-center">
-                        <Search className="w-4 h-4 text-gray-400 absolute left-3 pointer-events-none" />
-                        <input
-                          type="text"
-                          placeholder="Search voices..."
-                          value={voiceSearchQuery}
-                          onChange={(e) => setVoiceSearchQuery(e.target.value)}
-                          className="w-full pl-9 pr-8 py-1.5 bg-transparent border-0 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none"
+                  {/* Unified Search & Filter Toolbar using PageTopBar */}
+                  <PageTopBar
+                    className="mb-4"
+                    searchQuery={voiceSearchQuery}
+                    onSearchChange={setVoiceSearchQuery}
+                    searchPlaceholder="Search voices..."
+                    filterPresets={[
+                      {
+                        id: "all",
+                        label: "All Voices",
+                        isActive: voiceFilters.gender === "All Genders" && voiceFilters.country === "All Countries" && voiceFilters.tone === "All Tones" && !voiceSearchQuery,
+                        onClick: () => {
+                          setVoiceFilters({ language: "All Languages", tone: "All Tones", gender: "All Genders", age: "All Ages", country: "All Countries" });
+                          setVoiceSearchQuery("");
+                        },
+                      },
+                      {
+                        id: "female",
+                        label: "Female Voices",
+                        isActive: voiceFilters.gender === "Female",
+                        onClick: () => setVoiceFilters(prev => ({ ...prev, gender: "Female" })),
+                      },
+                      {
+                        id: "male",
+                        label: "Male Voices",
+                        isActive: voiceFilters.gender === "Male",
+                        onClick: () => setVoiceFilters(prev => ({ ...prev, gender: "Male" })),
+                      },
+                      {
+                        id: "professional",
+                        label: "Professional Tone",
+                        isActive: voiceFilters.tone === "Professional",
+                        onClick: () => setVoiceFilters(prev => ({ ...prev, tone: "Professional" })),
+                      },
+                    ]}
+                    filterFields={[
+                      {
+                        id: "query",
+                        label: "Voice Name / Accent",
+                        type: "text",
+                        placeholder: "Filter by voice name...",
+                        value: voiceSearchQuery,
+                        onChange: (val) => setVoiceSearchQuery(val || ""),
+                      },
+                      {
+                        id: "gender",
+                        label: "Gender",
+                        type: "select",
+                        value: voiceFilters.gender,
+                        onChange: (val) => setVoiceFilters(prev => ({ ...prev, gender: val || "All Genders" })),
+                        options: [
+                          { label: "All Genders", value: "All Genders" },
+                          { label: "Female", value: "Female" },
+                          { label: "Male", value: "Male" },
+                        ],
+                      },
+                      {
+                        id: "country",
+                        label: "Country / Accent",
+                        type: "select",
+                        value: voiceFilters.country,
+                        onChange: (val) => setVoiceFilters(prev => ({ ...prev, country: val || "All Countries" })),
+                        options: [
+                          { label: "All Countries", value: "All Countries" },
+                          { label: "USA", value: "USA" },
+                          { label: "UK", value: "UK" },
+                          { label: "Australia", value: "Australia" },
+                          { label: "Canada", value: "Canada" },
+                        ],
+                      },
+                      {
+                        id: "tone",
+                        label: "Tone",
+                        type: "select",
+                        value: voiceFilters.tone,
+                        onChange: (val) => setVoiceFilters(prev => ({ ...prev, tone: val || "All Tones" })),
+                        options: [
+                          { label: "All Tones", value: "All Tones" },
+                          { label: "Professional", value: "Professional" },
+                          { label: "Formal", value: "Formal" },
+                          { label: "Friendly", value: "Friendly" },
+                          { label: "Casual", value: "Casual" },
+                          { label: "Empathetic", value: "Empathetic" },
+                          { label: "Energetic", value: "Energetic" },
+                        ],
+                      },
+                    ]}
+                    leftElement={
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <select
+                          value={voiceFilters.gender}
+                          onChange={(e) => setVoiceFilters(prev => ({ ...prev, gender: e.target.value }))}
+                          className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
                           style={{ fontFamily: 'Outfit, sans-serif' }}
-                        />
-                        {voiceSearchQuery && (
-                          <button
-                            type="button"
-                            onClick={() => setVoiceSearchQuery("")}
-                            className="p-1 text-gray-400 hover:text-gray-600 absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full cursor-pointer"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        >
+                          <option value="All Genders">All Genders</option>
+                          <option value="Female">Female</option>
+                          <option value="Male">Male</option>
+                        </select>
+                        <select
+                          value={voiceFilters.country}
+                          onChange={(e) => setVoiceFilters(prev => ({ ...prev, country: e.target.value }))}
+                          className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          <option value="All Countries">All Countries</option>
+                          <option value="USA">USA</option>
+                          <option value="UK">UK</option>
+                          <option value="Australia">Australia</option>
+                          <option value="Canada">Canada</option>
+                        </select>
+                        <select
+                          value={voiceFilters.tone}
+                          onChange={(e) => setVoiceFilters(prev => ({ ...prev, tone: e.target.value }))}
+                          className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          <option value="All Tones">All Tones</option>
+                          <option value="Professional">Professional</option>
+                          <option value="Formal">Formal</option>
+                          <option value="Friendly">Friendly</option>
+                          <option value="Casual">Casual</option>
+                          <option value="Empathetic">Empathetic</option>
+                          <option value="Energetic">Energetic</option>
+                        </select>
                       </div>
-                    </div>
+                    }
+                    onClearAllFilters={() => {
+                      setVoiceFilters({ language: "All Languages", tone: "All Tones", gender: "All Genders", age: "All Ages", country: "All Countries" });
+                      setVoiceSearchQuery("");
+                    }}
+                  />
 
                     {/* Backdrop to close open menus */}
                     {addProcessVoiceId !== null && (
@@ -6618,86 +6610,125 @@ export default function Settings() {
             {/* Layout Tab (Custom Fields & Custom Sections) */}
             {(activeTab === "custom-fields" || activeTab === "layout" || activeTab === "sections-fields") && (
               <div className="space-y-4">
-                {/* Top Toolbar Capsule matching Image 4 */}
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  {/* Left: Pill Toggle [Custom Fields] [Custom Sections] */}
-                  <div className="inline-flex p-1 bg-slate-100 rounded-2xl border border-slate-200/80">
-                    <button
-                      type="button"
-                      onClick={() => setLayoutViewTab("fields")}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        layoutViewTab === "fields"
-                          ? "bg-[#181e25] text-white shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
+                {/* Top Toolbar using standard PageTopBar */}
+                <PageTopBar
+                  modes={[
+                    { id: "fields", label: "Fields" },
+                    { id: "sections", label: "Sections" },
+                  ]}
+                  activeMode={layoutViewTab}
+                  onModeChange={(mode) => {
+                    setLayoutViewTab(mode as any);
+                    setLayoutCurrentPage(1);
+                  }}
+                  leftElement={
+                    <select
+                      value={customFieldsTab}
+                      onChange={(e) => {
+                        setCustomFieldsTab(e.target.value as any);
+                        setLayoutCurrentPage(1);
+                      }}
+                      className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      Custom Fields
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLayoutViewTab("sections")}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        layoutViewTab === "sections"
-                          ? "bg-[#181e25] text-white shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      Custom Sections
-                    </button>
-                  </div>
-
-                  {/* Center: Search Capsule with Entity Dropdown (Including Organization) */}
-                  <div className="flex-1 min-w-[280px]">
-                    <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 focus-within:bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
-                      <Search className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-
-                      {/* Entity Dropdown including Organization */}
-                      <div className="relative border-r border-gray-200 pr-2 mr-2 shrink-0">
-                        <select
-                          value={customFieldsTab}
-                          onChange={(e) => setCustomFieldsTab(e.target.value as any)}
-                          className="bg-transparent text-xs font-bold text-gray-800 pr-4 outline-none cursor-pointer appearance-none"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        >
-                          <option value="organization">Organizations</option>
-                          <option value="clients">Clients</option>
-                          <option value="call-logs">Call Logs</option>
-                          <option value="processes">Processes</option>
-                          <option value="appointments">Appointments</option>
-                          <option value="forms">Forms</option>
-                          <option value="team">Team</option>
-                          <option value="scribe">AI Scribe</option>
-                        </select>
-                        <ChevronDown className="w-3 h-3 text-gray-400 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
-
-                      <input
-                        type="text"
-                        placeholder={layoutViewTab === "fields" ? "Search fields..." : "Search sections..."}
-                        value={layoutSearchQuery}
-                        onChange={(e) => setLayoutSearchQuery(e.target.value)}
-                        className="w-full text-xs bg-transparent border-none outline-none text-gray-900 placeholder:text-gray-400"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      />
-                      {layoutSearchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setLayoutSearchQuery("")}
-                          className="text-gray-400 hover:text-gray-600 ml-1.5"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Right: Add Field / Section Button */}
-                  {layoutViewTab === "fields" ? (
-                    <button
-                      type="button"
-                      onClick={() => {
+                      <option value="organization">Organizations</option>
+                      <option value="clients">Clients</option>
+                      <option value="call-logs">Call Logs</option>
+                      <option value="processes">Processes</option>
+                      <option value="appointments">Appointments</option>
+                      <option value="forms">Forms</option>
+                      <option value="team">Team</option>
+                      <option value="scribe">AI Scribe</option>
+                    </select>
+                  }
+                  searchQuery={layoutSearchQuery}
+                  onSearchChange={(query) => {
+                    setLayoutSearchQuery(query);
+                    setLayoutCurrentPage(1);
+                  }}
+                  searchPlaceholder={layoutViewTab === "fields" ? "Search fields..." : "Search sections..."}
+                  filterPresets={
+                    layoutViewTab === "fields"
+                      ? [
+                          {
+                            id: "all",
+                            label: "All Fields",
+                            isActive: !layoutSearchQuery,
+                            onClick: () => setLayoutSearchQuery(""),
+                          },
+                          {
+                            id: "required",
+                            label: "Required Fields",
+                            isActive: false,
+                            onClick: () => setLayoutSearchQuery("required"),
+                          },
+                          {
+                            id: "text",
+                            label: "Text Fields",
+                            isActive: false,
+                            onClick: () => setLayoutSearchQuery("text"),
+                          },
+                          {
+                            id: "select",
+                            label: "Dropdowns & Choices",
+                            isActive: false,
+                            onClick: () => setLayoutSearchQuery("select"),
+                          },
+                        ]
+                      : [
+                          {
+                            id: "all",
+                            label: "All Sections",
+                            isActive: !layoutSearchQuery,
+                            onClick: () => setLayoutSearchQuery(""),
+                          },
+                        ]
+                  }
+                  filterFields={
+                    layoutViewTab === "fields"
+                      ? [
+                          {
+                            id: "label",
+                            label: "Field Label / Key",
+                            type: "text",
+                            placeholder: "Filter by field name...",
+                            value: layoutSearchQuery,
+                            onChange: (val) => setLayoutSearchQuery(val || ""),
+                          },
+                          {
+                            id: "entity",
+                            label: "Target Entity",
+                            type: "select",
+                            value: customFieldsTab,
+                            onChange: (val) => setCustomFieldsTab(val as any),
+                            options: [
+                              { label: "Organizations", value: "organization" },
+                              { label: "Clients", value: "clients" },
+                              { label: "Call Logs", value: "call-logs" },
+                              { label: "Processes", value: "processes" },
+                              { label: "Appointments", value: "appointments" },
+                              { label: "Forms", value: "forms" },
+                              { label: "Team", value: "team" },
+                              { label: "AI Scribe", value: "scribe" },
+                            ],
+                          },
+                        ]
+                      : [
+                          {
+                            id: "title",
+                            label: "Section Title",
+                            type: "text",
+                            placeholder: "Filter sections...",
+                            value: layoutSearchQuery,
+                            onChange: (val) => setLayoutSearchQuery(val || ""),
+                          },
+                        ]
+                  }
+                  primaryAction={{
+                    label: layoutViewTab === "fields" ? "Add Field" : "Add Section",
+                    icon: <Plus className="w-3.5 h-3.5" />,
+                    onClick: () => {
+                      if (layoutViewTab === "fields") {
                         setNewFieldData({
                           label: "",
                           key: "",
@@ -6719,300 +6750,348 @@ export default function Settings() {
                           ],
                         });
                         setShowAddFieldDrawer(true);
-                      }}
-                      className="px-4 py-2 bg-[#111827] hover:bg-[#1f2937] text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Add Field
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewSectionData({ title: "", description: "", iconName: "layers", fieldKeys: [] });
+                      } else {
+                        setNewSectionData({ title: "", description: "", fieldKeys: [] });
                         setShowAddSectionDrawer(true);
-                      }}
-                      className="px-4 py-2 bg-[#111827] hover:bg-[#1f2937] text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Add Section
-                    </button>
-                  )}
-                </div>
+                      }
+                    },
+                  }}
+                />
 
                 {/* TABLE CONTAINER */}
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
-                  {/* TAB 1: CUSTOM FIELDS TABLE VIEW */}
-                  {layoutViewTab === "fields" && (
-                    <table className="w-full">
-                      <thead className="bg-[#F8FAFC] border-b border-gray-200">
-                        <tr>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Label</th>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Key</th>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Field Type</th>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Required</th>
-                          <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody key={`fields-${customFieldsTab}-${currentModule}`}>
-                        {(() => {
-                          const currentFields = getAllFields(currentModule).filter((field) =>
-                            isFieldMatchingOrg(field, activeOrganization)
+                <div className="bg-white rounded-none border-0 overflow-hidden shadow-2xs">
+                  {/* TAB 1: FIELDS TABLE VIEW */}
+                  {layoutViewTab === "fields" && (() => {
+                    const currentFields = getAllFields(currentModule).filter((field) =>
+                      isFieldMatchingOrg(field, activeOrganization)
+                    );
+                    const sections = getAllSections(currentModule).filter((sec) =>
+                      isSectionMatchingOrg(sec, activeOrganization)
+                    );
+
+                    const filteredFields = currentFields.filter((field) => {
+                      if (!layoutSearchQuery.trim()) return true;
+                      const q = layoutSearchQuery.toLowerCase();
+                      const typeName = (FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType).toLowerCase();
+                      const originType = (field.source || "custom").toLowerCase();
+                      return (
+                        field.label.toLowerCase().includes(q) ||
+                        field.key.toLowerCase().includes(q) ||
+                        typeName.includes(q) ||
+                        originType.includes(q)
+                      );
+                    });
+
+                    const fieldsColumns: TableColumn<any>[] = [
+                      {
+                        id: "label",
+                        header: "Label",
+                        render: (field) => <span className="font-medium text-[#111827]">{field.label}</span>,
+                      },
+                      {
+                        id: "key",
+                        header: "Key",
+                        render: (field) => <span className="font-mono text-gray-600">{field.key}</span>,
+                      },
+                      {
+                        id: "type",
+                        header: "Type",
+                        render: (field) => {
+                          const isSystem = field.source === "system";
+                          const isTemplate = field.source === "template";
+                          return (
+                            <span className={`font-medium ${isSystem ? "text-gray-500" : isTemplate ? "text-purple-600" : "text-blue-600"}`}>
+                              {isSystem ? "System" : isTemplate ? "Template" : "Custom"}
+                            </span>
                           );
-                          const sections = getAllSections(currentModule).filter((sec) =>
-                            isSectionMatchingOrg(sec, activeOrganization)
+                        },
+                      },
+                      {
+                        id: "fieldType",
+                        header: "Field Type",
+                        render: (field) => {
+                          const isCompositeField =
+                            field.compositeDisplayMode !== undefined ||
+                            field.inputType === "table" ||
+                            field.inputType === "group" ||
+                            field.inputType === "group_repeatable" ||
+                            (field.inputType === "list_open" && (field.listEntryType === "structured" || (field.subFields && field.subFields.length > 0))) ||
+                            (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig);
+
+                          const isListField =
+                            !isCompositeField &&
+                            (field.inputType === "list_open" ||
+                            field.inputType === "list_select" ||
+                            field.inputType === "select" ||
+                            field.inputType === "multiselect" ||
+                            field.inputType === "list");
+                          const typeName =
+                            isCompositeField
+                              ? field.compositeDisplayMode === "table" || field.inputType === "table"
+                                ? "Group Field (Table)"
+                                : "Group Field (Group)"
+                              : field.inputType === "list_open"
+                              ? "List (Open · Tags)"
+                              : isListField
+                              ? field.selectionMode === "multiple" || field.inputType === "multiselect"
+                                ? "List (Multi-Select)"
+                                : "List (Select)"
+                              : FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
+
+                          let typeBadgeStyle = "bg-blue-50 text-blue-700";
+                          let TypeIcon = Type;
+                          if (isCompositeField) {
+                            typeBadgeStyle = "bg-indigo-50 text-indigo-700";
+                            TypeIcon = field.compositeDisplayMode === "table" || field.inputType === "table" ? TableIcon : Layers;
+                          }
+                          else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
+                          else if (field.inputType === "new_list") {
+                            typeBadgeStyle = "bg-indigo-50 text-indigo-700";
+                            TypeIcon = Layers;
+                          }
+                          else if (field.inputType === "list_open") {
+                            typeBadgeStyle = "bg-emerald-50 text-emerald-700";
+                            TypeIcon = Tag;
+                          }
+                          else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
+                            typeBadgeStyle = field.selectionMode === "multiple" ? "bg-teal-50 text-teal-700" : "bg-emerald-50 text-emerald-700";
+                            TypeIcon = field.selectionMode === "multiple" ? Tag : ClipboardList;
+                          }
+                          else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
+                          else if (field.inputType === "date" || field.inputType === "date_time") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Calendar; }
+                          else if (field.inputType === "number") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Hash; }
+                          else if (field.inputType === "money") { typeBadgeStyle = "bg-green-50 text-green-700"; TypeIcon = DollarSign; }
+                          else if (field.inputType === "textarea" || field.inputType === "richtext") { typeBadgeStyle = "bg-orange-50 text-orange-700"; TypeIcon = AlignLeft; }
+                          else if (field.inputType === "link" || field.inputType === "whatsapp_link") { typeBadgeStyle = "bg-sky-50 text-sky-700"; TypeIcon = LinkIcon; }
+                          else if (field.inputType === "yes_no") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = CheckCircle2; }
+                          else if (field.inputType === "file") { typeBadgeStyle = "bg-violet-50 text-violet-700"; TypeIcon = FileIcon; }
+                          else if (field.inputType === "rating") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Star; }
+                          else if (field.inputType === "user") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = User; }
+
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-none text-[11px] font-medium ${typeBadgeStyle}`}>
+                              <TypeIcon className="w-3 h-3" />
+                              <span>{typeName}</span>
+                            </span>
                           );
+                        },
+                      },
+                      {
+                        id: "required",
+                        header: "Required",
+                        render: (field) => field.required ? (
+                          <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-none border border-amber-200/50">Required</span>
+                        ) : (
+                          <span className="text-gray-400">Optional</span>
+                        ),
+                      },
+                    ];
 
-                          const filteredFields = currentFields.filter((field) => {
-                            if (!layoutSearchQuery.trim()) return true;
-                            const q = layoutSearchQuery.toLowerCase();
-                            const typeName = (FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType).toLowerCase();
-                            const originType = (field.source || "custom").toLowerCase();
-                            return (
-                              field.label.toLowerCase().includes(q) ||
-                              field.key.toLowerCase().includes(q) ||
-                              typeName.includes(q) ||
-                              originType.includes(q)
-                            );
-                          });
-
-                          return filteredFields.map((field) => {
-                            const assignedSection = sections.find((s) => s.fieldKeys?.includes(field.key) || s.id === field.sectionId);
-                            const isCompositeField =
-                              field.compositeDisplayMode !== undefined ||
-                              field.inputType === "table" ||
-                              field.inputType === "group" ||
-                              field.inputType === "group_repeatable" ||
-                              (field.inputType === "list_open" && (field.listEntryType === "structured" || (field.subFields && field.subFields.length > 0))) ||
-                              (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig);
-
-                            const isListField =
-                              !isCompositeField &&
-                              (field.inputType === "list_open" ||
-                              field.inputType === "list_select" ||
-                              field.inputType === "select" ||
-                              field.inputType === "multiselect" ||
-                              field.inputType === "list");
-                            const typeName =
-                              isCompositeField
-                                ? field.compositeDisplayMode === "table" || field.inputType === "table"
-                                  ? "Group Field (Table)"
-                                  : "Group Field (Group)"
-                                : field.inputType === "list_open"
-                                ? "List (Open · Tags)"
-                                : isListField
-                                ? field.selectionMode === "multiple" || field.inputType === "multiselect"
-                                  ? "List (Multi-Select)"
-                                  : "List (Select)"
-                                : FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
-
-                            // Type badge style
-                            let typeBadgeStyle = "bg-blue-50 text-blue-700";
-                            let TypeIcon = Type;
-                            if (isCompositeField) {
-                              typeBadgeStyle = "bg-indigo-50 text-indigo-700";
-                              TypeIcon = field.compositeDisplayMode === "table" || field.inputType === "table" ? TableIcon : Layers;
+                    const fieldsRowActions = (field: any) => {
+                      const isSystem = field.source === "system";
+                      const assignedSection = sections.find((s) => s.fieldKeys?.includes(field.key) || s.id === field.sectionId);
+                      const actions: TableRowAction<any>[] = [];
+                      if (!isSystem) {
+                        actions.push({
+                          label: "Edit field",
+                          icon: <Edit className="w-3.5 h-3.5 text-gray-500" />,
+                          onClick: () => {
+                            setEditingFieldId(field.id);
+                            setEditingFieldData({
+                              label: field.label,
+                              type: FIELD_TYPE_REVERSE_MAP[field.inputType] || "String / Text",
+                              sectionId: assignedSection?.id || "",
+                              required: field.required || false,
+                              options: field.options || [
+                                { id: 1, label: "Option 1", value: "option_1" },
+                                { id: 2, label: "Option 2", value: "option_2" },
+                              ],
+                              tableColumns: field.tableColumns || [
+                                { id: "col_1", name: "Item Name", type: "Text" },
+                                { id: "col_2", name: "Quantity", type: "Number" },
+                              ],
+                            });
+                          },
+                        });
+                      }
+                      actions.push({
+                        label: "Copy key",
+                        icon: <Copy className="w-3.5 h-3.5 text-gray-500" />,
+                        onClick: () => {
+                          navigator.clipboard.writeText(field.key);
+                          toast.success(`Copied key "${field.key}"`);
+                        },
+                      });
+                      if (!isSystem) {
+                        actions.push({
+                          label: "Delete field",
+                          icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+                          isDanger: true,
+                          onClick: () => {
+                            if (confirm(`Delete field "${field.label}"?`)) {
+                              deleteCustomField(currentModule, field.id);
+                              toast.success("Field deleted");
                             }
-                            else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
-                            else if (field.inputType === "new_list") {
-                              typeBadgeStyle = "bg-indigo-50 text-indigo-700";
-                              TypeIcon = Layers;
-                            }
-                            else if (field.inputType === "list_open") {
-                              typeBadgeStyle = "bg-emerald-50 text-emerald-700";
-                              TypeIcon = Tag;
-                            }
-                            else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
-                              typeBadgeStyle = field.selectionMode === "multiple" ? "bg-teal-50 text-teal-700" : "bg-emerald-50 text-emerald-700";
-                              TypeIcon = field.selectionMode === "multiple" ? Tag : ClipboardList;
-                            }
-                            else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
-                            else if (field.inputType === "date" || field.inputType === "date_time") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Calendar; }
-                            else if (field.inputType === "number") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Hash; }
-                            else if (field.inputType === "money") { typeBadgeStyle = "bg-green-50 text-green-700"; TypeIcon = DollarSign; }
-                            else if (field.inputType === "textarea" || field.inputType === "richtext") { typeBadgeStyle = "bg-orange-50 text-orange-700"; TypeIcon = AlignLeft; }
-                            else if (field.inputType === "link" || field.inputType === "whatsapp_link") { typeBadgeStyle = "bg-sky-50 text-sky-700"; TypeIcon = LinkIcon; }
-                            else if (field.inputType === "yes_no") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = CheckCircle2; }
-                            else if (field.inputType === "file") { typeBadgeStyle = "bg-violet-50 text-violet-700"; TypeIcon = FileIcon; }
-                            else if (field.inputType === "rating") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Star; }
-                            else if (field.inputType === "user") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = User; }
+                          },
+                        });
+                      }
+                      return actions;
+                    };
 
-                            const isSystem = field.source === "system";
-                            const isTemplate = field.source === "template";
+                    return (
+                      <TableComponent
+                        data={filteredFields}
+                        columns={fieldsColumns}
+                        getRowId={(f) => f.id}
+                        rowActions={fieldsRowActions}
+                        selectedIds={selectedFieldIds}
+                        onSelectionChange={setSelectedFieldIds}
+                        bulkActions={[
+                          {
+                            label: "Delete Selected",
+                            icon: <Trash2 className="w-3.5 h-3.5" />,
+                            variant: "danger",
+                            onClick: (ids) => {
+                              const customSelected = currentFields.filter((f) => ids.has(f.id) && f.source !== "system");
+                              if (customSelected.length === 0) {
+                                toast.info("Selected fields are system fields and cannot be deleted");
+                                return;
+                              }
+                              if (confirm(`Delete ${customSelected.length} selected field(s)?`)) {
+                                customSelected.forEach((f) => deleteCustomField(currentModule, f.id));
+                                setSelectedFieldIds(new Set());
+                                toast.success(`Deleted ${customSelected.length} field(s)`);
+                              }
+                            },
+                          },
+                        ]}
+                        emptyMessage="No fields found for this entity."
+                      />
+                    );
+                  })()}
 
-                            return (
-                              <tr key={`${currentModule}-${field.key}-${field.id}`} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-0">
-                                <td className="px-5 py-3.5">
-                                  <span className="text-sm font-medium text-[#111827]">{field.label}</span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">{field.key}</span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  {isSystem ? (
-                                    <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200/60">System</span>
-                                  ) : isTemplate ? (
-                                    <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200/60">Template</span>
-                                  ) : (
-                                    <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/60">Custom</span>
-                                  )}
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${typeBadgeStyle}`}>
-                                    <TypeIcon className="w-3.5 h-3.5" />
-                                    <span>{typeName}</span>
-                                  </span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  {field.required ? (
-                                    <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/50">Required</span>
-                                  ) : (
-                                    <span className="text-xs text-gray-400">Optional</span>
-                                  )}
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <div className="flex items-center justify-end gap-1">
-                                    {!isSystem && (
-                                      <button
-                                        onClick={() => {
-                                          setEditingFieldId(field.id);
-                                          setEditingFieldData({
-                                            label: field.label,
-                                            type: FIELD_TYPE_REVERSE_MAP[field.inputType] || "String / Text",
-                                            sectionId: assignedSection?.id || "",
-                                            required: field.required || false,
-                                            options: field.options || [
-                                              { id: 1, label: "Option 1", value: "option_1" },
-                                              { id: 2, label: "Option 2", value: "option_2" },
-                                            ],
-                                            tableColumns: field.tableColumns || [
-                                              { id: "col_1", name: "Item Name", type: "Text" },
-                                              { id: "col_2", name: "Quantity", type: "Number" },
-                                            ],
-                                          });
-                                        }}
-                                        className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                                        title="Edit field"
-                                      >
-                                        <Edit className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                    {!isSystem ? (
-                                      <button
-                                        onClick={() => {
-                                          if (confirm(`Delete field "${field.label}"?`)) {
-                                            deleteCustomField(currentModule, field.id);
-                                            toast.success("Field deleted");
-                                          }
-                                        }}
-                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                        title="Delete field"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    ) : <span className="w-7" />}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          });
-                        })()}
-                      </tbody>
-                    </table>
-                  )}
+                  {/* TAB 2: SECTIONS TABLE VIEW */}
+                  {layoutViewTab === "sections" && (() => {
+                    const allSecs = getAllSections(currentModule).filter((sec) =>
+                      isSectionMatchingOrg(sec, activeOrganization)
+                    );
 
-                  {/* TAB 2: CUSTOM SECTIONS TABLE VIEW */}
-                  {layoutViewTab === "sections" && (
-                    <table className="w-full">
-                      <thead className="bg-[#F8FAFC] border-b border-gray-200">
-                        <tr>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Section</th>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Fields</th>
-                          <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody key={`sections-${customFieldsTab}-${currentModule}`}>
-                        {(() => {
-                          const allSecs = getAllSections(currentModule).filter((sec) =>
-                            isSectionMatchingOrg(sec, activeOrganization)
+                    const filteredSections = allSecs.filter((sec) => {
+                      if (!layoutSearchQuery.trim()) return true;
+                      const q = layoutSearchQuery.toLowerCase();
+                      const originType = (sec.source || "custom").toLowerCase();
+                      return (
+                        sec.title.toLowerCase().includes(q) ||
+                        (sec.description && sec.description.toLowerCase().includes(q)) ||
+                        originType.includes(q)
+                      );
+                    });
+
+                    const sectionsColumns: TableColumn<any>[] = [
+                      {
+                        id: "title",
+                        header: "Section",
+                        render: (sec) => <span className="font-medium text-[#111827]">{sec.title}</span>,
+                      },
+                      {
+                        id: "type",
+                        header: "Type",
+                        render: (sec) => {
+                          const isSystem = sec.source === "system";
+                          const isTemplate = sec.source === "template";
+                          return (
+                            <span className={`font-medium ${isSystem ? "text-gray-500" : isTemplate ? "text-purple-600" : "text-blue-600"}`}>
+                              {isSystem ? "System" : isTemplate ? "Template" : "Custom"}
+                            </span>
                           );
+                        },
+                      },
+                      {
+                        id: "fields",
+                        header: "Fields",
+                        render: (sec) => {
+                          const count = (sec.fieldKeys || []).length;
+                          return (
+                            <span className="text-gray-500 font-medium">
+                              {count} {count === 1 ? "field" : "fields"}
+                            </span>
+                          );
+                        },
+                      },
+                      {
+                        id: "description",
+                        header: "Description",
+                        render: (sec) => (
+                          <span className="text-gray-500 truncate max-w-[200px] inline-block" title={sec.description || ""}>
+                            {sec.description || <span className="text-gray-300 italic">—</span>}
+                          </span>
+                        ),
+                      },
+                    ];
 
-                          const filteredSections = allSecs.filter((sec) => {
-                            if (!layoutSearchQuery.trim()) return true;
-                            const q = layoutSearchQuery.toLowerCase();
-                            const originType = (sec.source || "custom").toLowerCase();
-                            return (
-                              sec.title.toLowerCase().includes(q) ||
-                              (sec.description && sec.description.toLowerCase().includes(q)) ||
-                              originType.includes(q)
-                            );
-                          });
+                    const sectionsRowActions = (sec: any) => {
+                      const isSystem = sec.source === "system";
+                      const actions: TableRowAction<any>[] = [
+                        {
+                          label: "Edit section",
+                          icon: <Edit className="w-3.5 h-3.5 text-gray-500" />,
+                          onClick: () => {
+                            setEditingSectionId(sec.id);
+                            setEditingSectionData({
+                              title: sec.title,
+                              description: sec.description || "",
+                              fieldKeys: sec.fieldKeys || [],
+                            });
+                          },
+                        },
+                      ];
+                      if (!isSystem) {
+                        actions.push({
+                          label: "Delete section",
+                          icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+                          isDanger: true,
+                          onClick: () => {
+                            if (confirm(`Delete section "${sec.title}"?`)) {
+                              deleteCustomSection(currentModule, sec.id);
+                              toast.success("Section deleted");
+                            }
+                          },
+                        });
+                      }
+                      return actions;
+                    };
 
-                          return filteredSections.map((sec) => {
-                            const isSystem = sec.source === "system";
-                            const isTemplate = sec.source === "template";
-                            const assignedFieldCount = (sec.fieldKeys || []).length;
-                            return (
-                              <tr key={`${currentModule}-${sec.id}`} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-0">
-                                <td className="px-5 py-3.5">
-                                  <span className="text-sm font-medium text-[#111827]">{sec.title}</span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  {isSystem ? (
-                                    <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200/60">System</span>
-                                  ) : isTemplate ? (
-                                    <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200/60">Template</span>
-                                  ) : (
-                                    <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/60">Custom</span>
-                                  )}
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <span className="text-xs text-gray-500 font-medium">
-                                    {assignedFieldCount} {assignedFieldCount === 1 ? 'field' : 'fields'}
-                                  </span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <button
-                                      onClick={() => {
-                                        setEditingSectionId(sec.id);
-                                        setEditingSectionData({
-                                          title: sec.title,
-                                          description: sec.description || "",
-                                          iconName: sec.iconName || "layers",
-                                          fieldKeys: sec.fieldKeys || [],
-                                        });
-                                      }}
-                                      className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                                      title="Edit section"
-                                    >
-                                      <Edit className="w-3.5 h-3.5" />
-                                    </button>
-                                    {!isSystem ? (
-                                      <button
-                                        onClick={() => {
-                                          if (confirm(`Delete section "${sec.title}"?`)) {
-                                            deleteCustomSection(currentModule, sec.id);
-                                            toast.success("Section deleted");
-                                          }
-                                        }}
-                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                        title="Delete section"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    ) : <span className="w-7" />}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          });
-                        })()}
-                      </tbody>
-                    </table>
-                  )}
+                    return (
+                      <TableComponent
+                        data={filteredSections}
+                        columns={sectionsColumns}
+                        getRowId={(s) => s.id}
+                        rowActions={sectionsRowActions}
+                        selectedIds={selectedSectionIds}
+                        onSelectionChange={setSelectedSectionIds}
+                        bulkActions={[
+                          {
+                            label: "Delete Selected",
+                            icon: <Trash2 className="w-3.5 h-3.5" />,
+                            variant: "danger",
+                            onClick: (ids) => {
+                              const customSelected = allSecs.filter((s) => ids.has(s.id) && s.source !== "system");
+                              if (customSelected.length === 0) {
+                                toast.info("Selected sections are system sections and cannot be deleted");
+                                return;
+                              }
+                              if (confirm(`Delete ${customSelected.length} selected section(s)?`)) {
+                                customSelected.forEach((s) => deleteCustomSection(currentModule, s.id));
+                                setSelectedSectionIds(new Set());
+                                toast.success(`Deleted ${customSelected.length} section(s)`);
+                              }
+                            },
+                          },
+                        ]}
+                        emptyMessage="No sections found for this entity."
+                      />
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -7021,125 +7100,97 @@ export default function Settings() {
 
             {activeTab === "audit-logs" && (
               <div className="space-y-4">
-                {/* Top Search Toolbar Capsule */}
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex-1 min-w-[280px]">
-                    <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 focus-within:bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
-                      <Search className="w-4 h-4 text-gray-400 mr-2 shrink-0" />
-                      <input
-                        type="text"
-                        placeholder="Search audit logs..."
-                        value={auditLogSearchQuery}
-                        onChange={(e) => setAuditLogSearchQuery(e.target.value)}
-                        className="w-full text-xs bg-transparent border-none outline-none text-gray-900 placeholder:text-gray-400"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      />
-                      {auditLogSearchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setAuditLogSearchQuery("")}
-                          className="text-gray-400 hover:text-gray-600 ml-1.5"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => { }}>
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                      </svg>
-                      Filters
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => toast.success("Audit logs refreshed")}>
+                {/* Top Search Toolbar using standard PageTopBar */}
+                <PageTopBar
+                  searchQuery={auditLogSearchQuery}
+                  onSearchChange={setAuditLogSearchQuery}
+                  searchPlaceholder="Search audit logs..."
+                  showFilterToggle={true}
+                  onExport={() => toast.success("Exporting audit logs...")}
+                  primaryAction={{
+                    label: "Refresh",
+                    icon: (
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
-                      Refresh
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => toast.success("Exporting audit logs...")}>
-                      Export
-                    </Button>
-                  </div>
-                </div>
+                    ),
+                    onClick: () => toast.success("Audit logs refreshed"),
+                  }}
+                />
 
                 {/* Audit Logs Table */}
-                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-2xs">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-[#F8FAFC] border-b border-gray-200">
-                        <tr>
-                          <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider" style={TEXT_STYLES.subtext}>Time</th>
-                          <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider" style={TEXT_STYLES.subtext}>Event</th>
-                          <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider" style={TEXT_STYLES.subtext}>Method</th>
-                          <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider" style={TEXT_STYLES.subtext}>User</th>
-                          <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider" style={TEXT_STYLES.subtext}>Agent</th>
-                          <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider" style={TEXT_STYLES.subtext}></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {auditLogs
-                          .filter((log) => {
-                            if (!auditLogSearchQuery.trim()) return true;
-                            const q = auditLogSearchQuery.toLowerCase();
-                            return (
-                              log.time.toLowerCase().includes(q) ||
-                              log.event.toLowerCase().includes(q) ||
-                              log.method.toLowerCase().includes(q) ||
-                              log.user.toLowerCase().includes(q) ||
-                              log.agent.toLowerCase().includes(q)
-                            );
-                          })
-                          .map((log) => (
-                          <tr key={log.id} className="border-b border-gray-100 hover:bg-slate-50/70 transition-colors last:border-0">
-                            <td className="px-6 py-4">
-                              <p className="text-xs" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{log.time}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-xs font-semibold text-[#111827]">{log.event}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-slate-100 text-slate-700">{log.method}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-xs text-primary font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>{log.user}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-xs" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{log.agent}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <button
-                                onClick={() => {
-                                  setSelectedAuditLog(log);
-                                  setShowRequestBodyModal(true);
-                                }}
-                                className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors cursor-pointer"
-                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                {(() => {
+                  const filteredAuditLogs = auditLogs.filter((log) => {
+                    if (!auditLogSearchQuery.trim()) return true;
+                    const q = auditLogSearchQuery.toLowerCase();
+                    return (
+                      log.time.toLowerCase().includes(q) ||
+                      log.event.toLowerCase().includes(q) ||
+                      log.method.toLowerCase().includes(q) ||
+                      log.user.toLowerCase().includes(q) ||
+                      log.agent.toLowerCase().includes(q)
+                    );
+                  });
 
-                {/* Pagination */}
-                <div className="flex items-center justify-between">
-                  <Button variant="outline" disabled onClick={() => setAuditLogPage(auditLogPage - 1)}>
-                    <ChevronRight className="w-4 h-4 rotate-180" />
-                    Previous
-                  </Button>
-                  <p className="text-sm" style={TEXT_STYLES.subtext}>Page {auditLogPage}</p>
-                  <Button variant="outline" onClick={() => setAuditLogPage(auditLogPage + 1)}>
-                    Next
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
+                  const auditColumns: TableColumn<typeof auditLogs[0]>[] = [
+                    {
+                      key: "time",
+                      header: "Time",
+                      align: "left",
+                      render: (log) => <p className="text-xs" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{log.time}</p>,
+                    },
+                    {
+                      key: "event",
+                      header: "Event",
+                      align: "left",
+                      render: (log) => <p className="text-xs font-semibold text-[#111827]">{log.event}</p>,
+                    },
+                    {
+                      key: "method",
+                      header: "Method",
+                      align: "center",
+                      render: (log) => <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-slate-100 text-slate-700">{log.method}</span>,
+                    },
+                    {
+                      key: "user",
+                      header: "User",
+                      align: "left",
+                      render: (log) => <p className="text-xs text-primary font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>{log.user}</p>,
+                    },
+                    {
+                      key: "agent",
+                      header: "Agent",
+                      align: "left",
+                      render: (log) => <p className="text-xs" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{log.agent}</p>,
+                    },
+                    {
+                      key: "actions",
+                      header: "Action",
+                      align: "center",
+                      render: (log) => (
+                        <button
+                          onClick={() => {
+                            setSelectedAuditLog(log);
+                            setShowRequestBodyModal(true);
+                          }}
+                          className="flex items-center justify-center p-1 text-primary hover:text-primary/80 transition-colors cursor-pointer"
+                          title="View Request Body"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      ),
+                    },
+                  ];
+
+                  return (
+                    <TableComponent
+                      columns={auditColumns}
+                      data={filteredAuditLogs}
+                      getRowId={(log) => log.id}
+                      emptyMessage="No audit logs found"
+                    />
+                  );
+                })()}
               </div>
             )}
 
@@ -11251,94 +11302,104 @@ export default function Settings() {
                   </div>
 
                   {/* Numbers Table */}
-                  {telephonyNumbers.filter((n) => n.provider === selectedIntegration.id).length > 0 ? (
-                    <div className="border border-border rounded-xl overflow-hidden">
-                      <table className="w-full">
-                        <thead className="bg-muted/50">
-                          <tr>
-                            <th className="text-left px-4 py-3 text-xs font-semibold" style={TEXT_STYLES.subtext}>Number</th>
-                            <th className="text-left px-4 py-3 text-xs font-semibold" style={TEXT_STYLES.subtext}>Country</th>
-                            <th className="text-left px-4 py-3 text-xs font-semibold" style={TEXT_STYLES.subtext}>Provider</th>
-                            <th className="text-left px-4 py-3 text-xs font-semibold" style={TEXT_STYLES.subtext}>Status</th>
-                            <th className="text-right px-4 py-3 text-xs font-semibold" style={TEXT_STYLES.subtext}>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                          {telephonyNumbers
-                            .filter((n) => n.provider === selectedIntegration.id)
-                            .map((number) => (
-                              <tr
-                                key={number.id}
-                                className={`hover:bg-muted/30 transition-colors ${number.isDefault ? "bg-primary/5" : ""
-                                  }`}
-                              >
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium text-sm">{number.number}</span>
-                                    {number.isDefault && (
-                                      <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">
-                                        Default
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-sm">{number.country}</td>
-                                <td className="px-4 py-3 text-sm text-muted-foreground capitalize">
-                                  {selectedIntegration.name}
-                                </td>
-                                <td className="px-4 py-3">
-                                  <label className="flex items-center gap-2 cursor-pointer w-fit">
-                                    <div className="relative">
-                                      <input
-                                        type="checkbox"
-                                        checked={number.status === "active"}
-                                        onChange={() => handleToggleNumberStatus(number.id)}
-                                        className="sr-only peer"
-                                      />
-                                      <div className="w-11 h-6 bg-muted rounded-full peer-checked:bg-primary transition-colors"></div>
-                                      <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
-                                    </div>
-                                    <span className="text-xs" style={TEXT_STYLES.subtext}>
-                                      {number.status === "active" ? "Active" : "Inactive"}
-                                    </span>
-                                  </label>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center justify-end gap-2">
-                                    <button
-                                      onClick={() => handleEditNumber(number)}
-                                      className="p-2 hover:bg-muted rounded-lg transition-colors"
-                                      title="Edit number"
-                                    >
-                                      <Edit className="w-4 h-4 text-muted-foreground" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteNumber(number.id)}
-                                      className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
-                                      title="Delete number"
-                                    >
-                                      <Trash2 className="w-4 h-4 text-destructive" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
-                      <Phone className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                      <h4 className="font-semibold mb-1" style={TEXT_STYLES.heading}>No numbers configured</h4>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Add a phone number to start routing calls through this provider
-                      </p>
-                      <Button variant="outline" onClick={handleAddNumber} size="sm">
-                        <Plus className="w-4 h-4" />
-                        Add Your First Number
-                      </Button>
-                    </div>
-                  )}
+                  {(() => {
+                    const integrationNumbers = telephonyNumbers.filter((n) => n.provider === selectedIntegration.id);
+
+                    if (integrationNumbers.length === 0) {
+                      return (
+                        <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
+                          <Phone className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                          <h4 className="font-semibold mb-1" style={TEXT_STYLES.heading}>No numbers configured</h4>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            Add a phone number to start routing calls through this provider
+                          </p>
+                          <Button variant="outline" onClick={handleAddNumber} size="sm">
+                            <Plus className="w-4 h-4" />
+                            Add Your First Number
+                          </Button>
+                        </div>
+                      );
+                    }
+
+                    const numberColumns: TableColumn<any>[] = [
+                      {
+                        header: "Number",
+                        accessorKey: "number",
+                        align: "left",
+                        render: (number) => (
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{number.number}</span>
+                            {number.isDefault && (
+                              <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                        ),
+                      },
+                      {
+                        header: "Country",
+                        accessorKey: "country",
+                        align: "left",
+                        render: (number) => (
+                          <span className="text-sm">{number.country}</span>
+                        ),
+                      },
+                      {
+                        header: "Provider",
+                        align: "left",
+                        render: () => (
+                          <span className="text-sm text-muted-foreground capitalize">
+                            {selectedIntegration.name}
+                          </span>
+                        ),
+                      },
+                      {
+                        header: "Status",
+                        accessorKey: "status",
+                        align: "center",
+                        render: (number) => (
+                          <label className="flex items-center justify-center gap-2 cursor-pointer w-fit mx-auto" onClick={(e) => e.stopPropagation()}>
+                            <div className="relative">
+                              <input
+                                type="checkbox"
+                                checked={number.status === "active"}
+                                onChange={() => handleToggleNumberStatus(number.id)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-muted rounded-full peer-checked:bg-primary transition-colors"></div>
+                              <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                            </div>
+                            <span className="text-xs" style={TEXT_STYLES.subtext}>
+                              {number.status === "active" ? "Active" : "Inactive"}
+                            </span>
+                          </label>
+                        ),
+                      },
+                    ];
+
+                    return (
+                      <TableComponent
+                        columns={numberColumns}
+                        data={integrationNumbers}
+                        getRowId={(n) => n.id}
+                        rowActions={[
+                          {
+                            label: "Edit Number",
+                            icon: <Edit className="w-4 h-4 text-muted-foreground" />,
+                            onClick: (number) => handleEditNumber(number),
+                          },
+                          {
+                            label: "Delete Number",
+                            icon: <Trash2 className="w-4 h-4 text-destructive" />,
+                            isDanger: true,
+                            onClick: (number) => handleDeleteNumber(number.id),
+                          },
+                        ]}
+                        emptyMessage="No numbers configured for this provider."
+                      />
+                    );
+                  })()}
 
                   {/* Routing Settings */}
                   {telephonyNumbers.filter((n) => n.provider === selectedIntegration.id).length > 0 && (
@@ -12196,7 +12257,7 @@ export default function Settings() {
             field={editingFieldId !== null ? (getAllFields(currentModule).find((f) => f.id === editingFieldId) || null) : null}
             initialModule={currentModule as Exclude<FieldModule, "deal">}
             sections={getAllSections(currentModule)}
-            isAdmin={true}
+            isAdmin={false}
             onClose={() => {
               setShowAddFieldDrawer(false);
               setEditingFieldId(null);
@@ -12213,7 +12274,7 @@ export default function Settings() {
           <AdminSectionDrawer
             section={editingSectionId !== null ? (getAllSections(currentModule).find((s) => s.id === editingSectionId) || null) : null}
             initialModule={currentModule as Exclude<FieldModule, "deal">}
-            isAdmin={true}
+            isAdmin={false}
             onClose={() => {
               setShowAddSectionDrawer(false);
               setEditingSectionId(null);

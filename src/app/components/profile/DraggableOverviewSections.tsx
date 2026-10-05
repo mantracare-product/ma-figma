@@ -96,17 +96,6 @@ export interface DraggableOverviewSectionsProps {
   highlightRequiredKeys?: string[];
 }
 
-const SECTION_ICONS: Record<string, React.ReactNode> = {
-  user: <User className="w-3.5 h-3.5 text-blue-600" />,
-  briefcase: <Briefcase className="w-3.5 h-3.5 text-blue-600" />,
-  workflow: <Workflow className="w-3.5 h-3.5 text-blue-600" />,
-  layers: <Layers className="w-3.5 h-3.5 text-blue-600" />,
-  "file-text": <FileText className="w-3.5 h-3.5 text-blue-600" />,
-  settings: <SettingsIcon className="w-3.5 h-3.5 text-blue-600" />,
-  sparkles: <Sparkles className="w-3.5 h-3.5 text-amber-500" />,
-  shield: <Shield className="w-3.5 h-3.5 text-emerald-600" />,
-  tag: <Tag className="w-3.5 h-3.5 text-purple-600" />,
-};
 
 const SignatureDrawingPad: React.FC<{
   value?: string;
@@ -467,7 +456,6 @@ export default function DraggableOverviewSections({
   const [addSectionModalOpen, setAddSectionModalOpen] = useState(false);
   const [newSectionTitle, setNewSectionTitle] = useState("");
   const [newSectionDescription, setNewSectionDescription] = useState("");
-  const [newSectionIcon, setNewSectionIcon] = useState<OverviewSection["iconName"]>("layers");
   const [selectedInitialFields, setSelectedInitialFields] = useState<string[]>([]);
 
   // Responsible dropdown open state per section
@@ -654,7 +642,6 @@ export default function DraggableOverviewSections({
       title: newSectionTitle.trim(),
       description: newSectionDescription.trim() || undefined,
       module: customFieldsModule,
-      iconName: newSectionIcon || "layers",
       fieldKeys: selectedInitialFields || [],
       processIds: (customFieldsModule === "process" && (activeProcessObj?.id || activeProcessName)) ? [activeProcessObj?.id || activeProcessName] : undefined,
       source: "custom",
@@ -665,7 +652,6 @@ export default function DraggableOverviewSections({
       id: registered.id,
       title: registered.title,
       description: registered.description,
-      iconName: (registered.iconName as any) || "layers",
       isCustom: true,
       fieldKeys: selectedInitialFields || [],
       processIds: registered.processIds,
@@ -1588,11 +1574,6 @@ export default function DraggableOverviewSections({
                   ) : (
                     <div className="flex flex-col min-w-0">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        {section.iconName && (
-                          <span className="shrink-0">
-                            {SECTION_ICONS[section.iconName] || <Layers className="w-3.5 h-3.5 text-blue-600" />}
-                          </span>
-                        )}
                         <h3
                           className="text-xs font-bold text-slate-700 uppercase tracking-wider truncate"
                           style={{ fontFamily: "Outfit, sans-serif" }}

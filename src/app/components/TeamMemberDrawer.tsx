@@ -225,6 +225,23 @@ export function TeamMemberDrawer({
   const allTeamMemberFields = useMemo(() => getAllFields("teamMember"), [getAllFields]);
   const allTeamMemberSections = useMemo(() => getAllSections("teamMember"), [getAllSections]);
 
+  const BUILTIN_TEAM_SECTION_TITLES = useMemo(
+    () => new Set(["basic info", "custom fields"]),
+    []
+  );
+
+  const customTeamMemberSections = useMemo(() => {
+    const BUILTIN_SEC_IDS = new Set(["sec-team-basic", "sec-team-custom"]);
+    return allTeamMemberSections.filter((s) => {
+      if (s.source === "system") return false;
+      if (BUILTIN_SEC_IDS.has(s.id)) return false;
+      if (s.id.startsWith("sec-team-")) return false;
+      const lower = (s.title || "").toLowerCase().trim();
+      if (BUILTIN_TEAM_SECTION_TITLES.has(lower)) return false;
+      return true;
+    });
+  }, [allTeamMemberSections, BUILTIN_TEAM_SECTION_TITLES]);
+
   // Registry-backed custom field values for this team member
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>(() => {
     return (member as any)?.customFields || {};
@@ -238,6 +255,13 @@ export function TeamMemberDrawer({
 
   // Basic Info custom field keys
   const [basicMemberCustomFieldKeys, setBasicMemberCustomFieldKeys] = useState<string[]>([]);
+
+  const systemBasicTeamSec = allTeamMemberSections.find((s) => s.id === "sec-team-basic");
+  const effectiveTeamMemberBasicCustomKeys = useMemo(() => {
+    const CORE_TEAM_KEYS = ["name", "email", "phone", "gender", "date_of_birth", "role", "department", "language", "country", "timezone", "status"];
+    const fromRegistry = (systemBasicTeamSec?.fieldKeys || []).filter((k) => !CORE_TEAM_KEYS.includes(k));
+    return Array.from(new Set([...fromRegistry, ...basicMemberCustomFieldKeys]));
+  }, [systemBasicTeamSec, basicMemberCustomFieldKeys]);
 
   // Modals for central Field & Section registry
   const [fieldModalOpen, setFieldModalOpen] = useState(false);
@@ -543,9 +567,11 @@ export function TeamMemberDrawer({
         isOpen={isOpen}
         onClose={onClose}
         maxWidth="max-w-[60vw]"
+        headerClassName="px-6 py-2"
+        zIndex={zIndex}
         title={
           <div className="w-full">
-            <div className="flex items-center gap-4 mb-4">
+            <div className="flex items-center gap-3">
               <div className="relative group cursor-pointer">
                 <input
                   ref={profilePictureInputRef}
@@ -567,48 +593,31 @@ export function TeamMemberDrawer({
                 />
                 <div
                   onClick={() => profilePictureInputRef.current?.click()}
-                  className="w-16 h-16 rounded-xl flex items-center justify-center relative overflow-hidden transition-all group-hover:opacity-90 cursor-pointer shadow-md"
+                  className="w-10 h-10 rounded-xl flex items-center justify-center relative overflow-hidden transition-all group-hover:opacity-90 cursor-pointer shadow-sm"
                   style={{ backgroundColor: "#1F2937" }}
                 >
                   {profilePicture ? (
                     <img src={profilePicture} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-white text-xl font-bold select-none">
+                    <span className="text-white text-sm font-bold select-none">
                       {(member?.name || "?").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
                     </span>
                   )}
-                  <div className="absolute bottom-0 right-0 w-5 h-5 bg-white rounded-full flex items-center justify-center border-2 border-gray-200 shadow-sm">
-                    <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-white rounded-full flex items-center justify-center border border-gray-200 shadow-xs">
+                    <svg className="w-2 h-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   </div>
                 </div>
               </div>
-              <div className="flex-1">
-                <h3 className="text-xl font-bold text-[#020817]">{member?.name}</h3>
-                <p className="text-sm text-[#6B7280]">{member?.email}</p>
-              </div>
-            </div>
-
-            {/* Status Badges */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-full">
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
-                <span className="text-xs font-medium text-green-700">Email verified</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full">
-                <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
-                <span className="text-xs font-medium text-blue-700">Active member</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-full">
-                <CalendarClock className="w-3.5 h-3.5 text-purple-600" />
-                <span className="text-xs font-medium text-purple-700">Calendar connected</span>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-bold text-[#020817] leading-tight truncate">{member?.name}</h3>
+                <p className="text-xs text-[#6B7280] leading-tight truncate mt-0.5">{member?.email}</p>
               </div>
             </div>
           </div>
         }
-        zIndex={zIndex}
       >
         {member && (
           <div className="relative">
@@ -667,7 +676,6 @@ export function TeamMemberDrawer({
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <GripVertical className="w-3.5 h-3.5 text-slate-300" />
-                        <User className="w-4 h-4 text-[#2563EB]" />
                         <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
                           BASIC INFO
                         </h3>
@@ -977,7 +985,7 @@ export function TeamMemberDrawer({
                       </div>
 
                       {/* Custom Fields added to Basic Info */}
-                      {basicMemberCustomFieldKeys.map((fieldKey) => {
+                      {effectiveTeamMemberBasicCustomKeys.map((fieldKey) => {
                         const fieldDef = allTeamMemberFields.find((f) => f.key === fieldKey);
                         const fieldLabel = fieldDef?.label || fieldKey;
                         return (
@@ -1041,7 +1049,7 @@ export function TeamMemberDrawer({
                   </div>
 
                   {/* DYNAMIC CUSTOM SECTIONS (FROM REGISTRY) */}
-                  {allTeamMemberSections.map((section) => {
+                  {customTeamMemberSections.map((section) => {
                     const sectionFields = (section.fieldKeys || [])
                       .map((k) => allTeamMemberFields.find((f) => f.key === k))
                       .filter(Boolean) as FieldDefinition[];
@@ -1054,7 +1062,6 @@ export function TeamMemberDrawer({
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-2">
                             <GripVertical className="w-3.5 h-3.5 text-slate-300" />
-                            <Sparkles className="w-4 h-4 text-[#2563EB]" />
                             <div>
                               <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]">
                                 {section.title}

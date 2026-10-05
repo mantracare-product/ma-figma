@@ -58,6 +58,7 @@ import {
 import TemplateLibraryDrawer from "../components/chats/TemplateLibraryDrawer";
 import { LibraryTemplate } from "../../lib/templateLibrary";
 import { useWhatsappTemplates } from "../../lib/useWhatsappTemplates";
+import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import { useConversations, Message as ConvMessage, Conversation as ConvConversation, computeSessionWindow } from "../../lib/useConversations";
 import ConversationHeader from "../components/chats/ConversationHeader";
 import MessageThreadList from "../components/chats/MessageThreadList";
@@ -1268,6 +1269,8 @@ export default function Chats() {
   const [openMenuCampaignId, setOpenMenuCampaignId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const campaignTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [selectedTemplates, setSelectedTemplates] = useState<Set<string>>(new Set());
+  const [selectedCampaigns, setSelectedCampaigns] = useState<Set<string>>(new Set());
 
   const [approvingTemplate, setApprovingTemplate] = useState<WhatsappTemplate | null>(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
@@ -1844,72 +1847,106 @@ export default function Chats() {
                 </div>
 
                 {/* Templates Table — always rendered */}
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                  <table className="w-full">
-                    <thead style={{ backgroundColor: "#1F2937" }}>
-                      <tr>
-                        {["Name", "Identifier", "Category", "Status", "Language", "Actions"].map(col => (
-                          <th key={col} className={`px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider ${col === "Actions" ? "text-right" : "text-left"}`} style={{ fontFamily: "Outfit, sans-serif" }}>{col}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {globalTemplates.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-16 text-center bg-white">
-                            <FileText className="w-8 h-8 mx-auto text-blue-300 mb-3" />
-                            <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>No templates yet</h3>
-                            <p className="text-xs text-gray-500 mb-5" style={{ fontFamily: "Outfit, sans-serif" }}>Build a pre-approved WhatsApp message template to reuse in campaigns and chatbot flows.</p>
-                            <div className="flex items-center justify-center gap-3">
-                              <Button variant="outline" onClick={() => setShowTemplateLibrary(true)}>
-                                <LibraryBig className="w-4 h-4" /> Browse Template Library
-                              </Button>
-                              <Button variant="primary" onClick={() => { handleCreateNewTemplate(); setTemplatesView("builder"); }}>
-                                <Plus className="w-4 h-4" /> Create Your First Template
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : (
-                        globalTemplates.map(tpl => (
-                          <tr key={tpl.id} className="hover:bg-blue-50/30 transition-colors">
-                            <td className="px-5 py-4">
-                              <button onClick={() => { handleEditTemplate(tpl); setTemplatesView("builder"); }} className="text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                {tpl.name}
-                              </button>
-                            </td>
-                            <td className="px-4 py-4"><span className="text-xs font-mono text-gray-500">{tpl.identifier}</span></td>
-                            <td className="px-4 py-4"><span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5 uppercase">{tpl.category}</span></td>
-                            {/* STATUS column */}
-                            <td className="px-4 py-4">
-                              {(!tpl.approvalStatus || tpl.approvalStatus === "pending") && (
-                                <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-100 rounded-full px-2 py-0.5 uppercase">Pending</span>
-                              )}
-                              {tpl.approvalStatus === "approved" && (
-                                <span className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 rounded-full px-2 py-0.5 uppercase">Approved</span>
-                              )}
-                              {tpl.approvalStatus === "denied" && (
-                                <span title={tpl.rejectionReason || "Denied by Meta"} className="text-[10px] font-bold bg-red-50 text-red-700 border border-red-100 rounded-full px-2 py-0.5 uppercase cursor-help">Denied</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-4"><span className="text-xs text-gray-500">{tpl.language}</span></td>
-                            <td className="px-5 py-4">
-                              <div className="flex justify-end">
-                                <button
-                                  ref={el => { templateTriggerRefs.current[tpl.id] = el; }}
-                                  onClick={() => openMenuTemplateId === tpl.id ? setOpenMenuTemplateId(null) : openTemplateMenu(tpl.id)}
-                                  className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                                >
-                                  <MoreVertical className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                {(() => {
+                  const templateColumns: TableColumn<WhatsappTemplate>[] = [
+                    {
+                      id: "name",
+                      header: "Name",
+                      align: "left",
+                      render: (tpl) => (
+                        <button
+                          onClick={() => {
+                            handleEditTemplate(tpl);
+                            setTemplatesView("builder");
+                          }}
+                          className="text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors text-left cursor-pointer"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          {tpl.name}
+                        </button>
+                      ),
+                    },
+                    {
+                      id: "identifier",
+                      header: "Identifier",
+                      align: "left",
+                      render: (tpl) => <span className="text-xs font-mono text-gray-500">{tpl.identifier}</span>,
+                    },
+                    {
+                      id: "category",
+                      header: "Category",
+                      align: "center",
+                      render: (tpl) => (
+                        <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5 uppercase">
+                          {tpl.category}
+                        </span>
+                      ),
+                    },
+                    {
+                      id: "status",
+                      header: "Status",
+                      align: "center",
+                      render: (tpl) => (
+                        (!tpl.approvalStatus || tpl.approvalStatus === "pending") ? (
+                          <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-100 rounded-full px-2 py-0.5 uppercase">Pending</span>
+                        ) : tpl.approvalStatus === "approved" ? (
+                          <span className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 rounded-full px-2 py-0.5 uppercase">Approved</span>
+                        ) : (
+                          <span title={tpl.rejectionReason || "Denied by Meta"} className="text-[10px] font-bold bg-red-50 text-red-700 border border-red-100 rounded-full px-2 py-0.5 uppercase cursor-help">Denied</span>
+                        )
+                      ),
+                    },
+                    {
+                      id: "language",
+                      header: "Language",
+                      align: "center",
+                      render: (tpl) => <span className="text-xs text-gray-500">{tpl.language}</span>,
+                    },
+                  ];
+
+                  const templateRowActions: TableRowAction<WhatsappTemplate>[] = [
+                    {
+                      label: "Edit",
+                      icon: <Pencil className="w-3.5 h-3.5 text-blue-500" />,
+                      onClick: (tpl) => {
+                        handleEditTemplate(tpl);
+                        setTemplatesView("builder");
+                      },
+                    },
+                    {
+                      label: "Get Approved",
+                      icon: <ShieldCheck className="w-3.5 h-3.5 text-green-600" />,
+                      hidden: (tpl) => tpl.approvalStatus === "approved",
+                      onClick: (tpl) => {
+                        setApprovingTemplate(tpl);
+                        setShowApprovalModal(true);
+                      },
+                    },
+                    {
+                      label: "Delete",
+                      icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+                      isDanger: true,
+                      onClick: (tpl) => handleDeleteTemplate(tpl.id),
+                    },
+                  ];
+
+                  return (
+                    <TableComponent
+                      data={globalTemplates}
+                      columns={templateColumns}
+                      getRowId={(tpl) => tpl.id}
+                      rowActions={templateRowActions}
+                      selectedIds={selectedTemplates}
+                      onSelectionChange={(ids) => setSelectedTemplates(new Set(Array.from(ids) as string[]))}
+                      onRowClick={(tpl) => {
+                        handleEditTemplate(tpl);
+                        setTemplatesView("builder");
+                      }}
+                      defaultRowsPerPage={20}
+                      emptyMessage="No templates yet. Build a pre-approved WhatsApp message template to reuse in campaigns and chatbot flows."
+                    />
+                  );
+                })()}
               </div>
             )}
 
@@ -2359,64 +2396,136 @@ export default function Chats() {
                         <Button variant="primary" onClick={handleNewCampaignFromAnywhere}><Plus className="w-4 h-4" />New Campaign</Button>
                       </div>
                     ) : (
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-gray-100" style={{ backgroundColor: '#1F2937' }}>
-                            {["Campaign Name", "Status", "Audience", "Sent", "Created", "Actions"].map(col => (
-                              <th key={col} className={`px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider ${col === "Actions" ? "text-center" : ""}`} style={{ fontFamily: "Outfit, sans-serif" }}>{col}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {campaigns.map(campaign => (
-                            <tr key={campaign.id} className="hover:bg-gray-50/50 transition-colors">
-                              <td className="px-4 py-3"><p className="text-sm font-semibold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{campaign.name}</p></td>
-                              <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${STATUS_COLOR[campaign.status]}`}>{campaign.status}</span></td>
-                              <td className="px-4 py-3">
-                                {(() => {
-                                  const clientCount = campaign.audienceClientIds?.length ?? 0;
-                                  const manualCount = campaign.audienceManualRecipients?.length ?? 0;
-                                  const totalCount = clientCount + manualCount;
-                                  const displayName = campaign.audienceName || campaign.audience;
+                      (() => {
+                        const campaignCols: TableColumn<Campaign>[] = [
+                          {
+                            id: "name",
+                            header: "Campaign Name",
+                            align: "left",
+                            render: (campaign) => (
+                              <button
+                                onClick={() => handleOpenView(campaign)}
+                                className="text-sm font-semibold text-gray-900 hover:text-blue-600 transition-colors text-left cursor-pointer"
+                                style={{ fontFamily: "DM Sans, sans-serif" }}
+                              >
+                                {campaign.name}
+                              </button>
+                            ),
+                          },
+                          {
+                            id: "status",
+                            header: "Status",
+                            align: "center",
+                            render: (campaign) => (
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${STATUS_COLOR[campaign.status]}`}>
+                                {campaign.status}
+                              </span>
+                            ),
+                          },
+                          {
+                            id: "audience",
+                            header: "Audience",
+                            align: "left",
+                            render: (campaign) => {
+                              const clientCount = campaign.audienceClientIds?.length ?? 0;
+                              const manualCount = campaign.audienceManualRecipients?.length ?? 0;
+                              const totalCount = clientCount + manualCount;
+                              const displayName = campaign.audienceName || campaign.audience;
 
-                                  if (displayName) {
-                                    if (!LEGACY_CHATBOT_MODULE_ENABLED) {
-                                      return (
-                                        <span className="text-xs text-purple-700 font-semibold block">
-                                          {displayName}{totalCount > 0 ? ` (${totalCount})` : ""}
-                                        </span>
-                                      );
-                                    }
-                                    return (
-                                      <button
-                                        onClick={() => { setSharingCampaign(campaign); setShowShareModal(true); }}
-                                        className="text-xs text-purple-700 font-semibold hover:underline text-left block"
-                                        title="Click to manage audience"
-                                      >
-                                        {displayName}{totalCount > 0 ? ` (${totalCount})` : ""}
-                                      </button>
-                                    );
-                                  }
-                                  return <span className="text-gray-400 italic text-xs">No audience selected</span>;
-                                })()}
-                              </td>
-                              <td className="px-4 py-3"><p className="text-sm font-bold text-gray-900">{campaign.sent.toLocaleString()}</p></td>
-                              <td className="px-4 py-3"><p className="text-xs text-gray-400">{campaign.createdAt}</p></td>
-                              <td className="px-4 py-3">
-                                <div className="flex justify-center">
+                              if (displayName) {
+                                if (!LEGACY_CHATBOT_MODULE_ENABLED) {
+                                  return (
+                                    <span className="text-xs text-purple-700 font-semibold block">
+                                      {displayName}{totalCount > 0 ? ` (${totalCount})` : ""}
+                                    </span>
+                                  );
+                                }
+                                return (
                                   <button
-                                    ref={el => { campaignTriggerRefs.current[campaign.id] = el; }}
-                                    onClick={() => openMenuCampaignId === campaign.id ? setOpenMenuCampaignId(null) : openCampaignMenu(campaign.id)}
-                                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500"
+                                    onClick={() => { setSharingCampaign(campaign); setShowShareModal(true); }}
+                                    className="text-xs text-purple-700 font-semibold hover:underline text-left block"
+                                    title="Click to manage audience"
                                   >
-                                    <MoreVertical className="w-4 h-4" />
+                                    {displayName}{totalCount > 0 ? ` (${totalCount})` : ""}
                                   </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                                );
+                              }
+                              return <span className="text-gray-400 italic text-xs">No audience selected</span>;
+                            },
+                          },
+                          {
+                            id: "sent",
+                            header: "Sent",
+                            align: "center",
+                            render: (campaign) => (
+                              <span className="text-sm font-bold text-gray-900">
+                                {campaign.sent.toLocaleString()}
+                              </span>
+                            ),
+                          },
+                          {
+                            id: "createdAt",
+                            header: "Created",
+                            align: "center",
+                            render: (campaign) => (
+                              <span className="text-xs text-gray-400">
+                                {campaign.createdAt}
+                              </span>
+                            ),
+                          },
+                        ];
+
+                        const campaignActions: TableRowAction<Campaign>[] = [
+                          {
+                            label: "View Overview",
+                            icon: <Eye className="w-3.5 h-3.5 text-blue-500" />,
+                            onClick: (campaign) => handleOpenView(campaign),
+                          },
+                          {
+                            label: "Edit Campaign",
+                            icon: <Pencil className="w-3.5 h-3.5 text-slate-600" />,
+                            onClick: (campaign) => {
+                              handleOpenEdit(campaign);
+                              handleTabChange("campaigns");
+                            },
+                          },
+                          {
+                            label: "Share",
+                            icon: <Share2 className="w-3.5 h-3.5 text-purple-600" />,
+                            hidden: () => !LEGACY_CHATBOT_MODULE_ENABLED,
+                            onClick: (campaign) => {
+                              setSharingCampaign(campaign);
+                              setShowShareModal(true);
+                            },
+                          },
+                          {
+                            label: "Pause / Resume",
+                            icon: <Play className="w-3.5 h-3.5 text-amber-500" />,
+                            hidden: (campaign) => campaign.status !== "active" && campaign.status !== "paused",
+                            onClick: (campaign) => handleToggleCampaign(campaign.id),
+                          },
+                          {
+                            label: "Delete",
+                            icon: <Trash2 className="w-3.5 h-3.5 text-rose-500" />,
+                            isDanger: true,
+                            onClick: (campaign) => handleDeleteCampaign(campaign.id),
+                          },
+                        ];
+
+                        return (
+                          <TableComponent
+                            data={campaigns}
+                            columns={campaignCols}
+                            getRowId={(campaign) => campaign.id}
+                            rowActions={campaignActions}
+                            selectedIds={selectedCampaigns}
+                            onSelectionChange={(ids) => setSelectedCampaigns(new Set(Array.from(ids) as string[]))}
+                            onRowClick={(campaign) => handleOpenView(campaign)}
+                            defaultRowsPerPage={20}
+                            emptyMessage="No campaigns found."
+                          />
+                        );
+                      })()
                     )}
                   </div>
                 </div>

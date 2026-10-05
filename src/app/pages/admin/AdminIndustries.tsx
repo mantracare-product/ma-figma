@@ -33,6 +33,7 @@ import {
   INITIAL_CATEGORIES,
   INITIAL_INDUSTRIES,
 } from "../../../data/industryReferenceData";
+import TableComponent, { TableColumn } from "../../components/ui/TableComponent";
 
 export type { IndustryCategory, IndustryItem };
 
@@ -416,307 +417,277 @@ export function AdminIndustries() {
       {/* ── Main Unified Table Card ── */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
         {/* ── TAB 1: INDUSTRIES TABLE ── */}
-        {activeTab === "industries" && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-[#F8FAFC] border-b border-gray-200">
-                <tr>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center">
-                    Industry Name
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center">
-                    Industry Category
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center">
-                    ID
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center">
-                    Record Type
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center">
-                    Status
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 text-xs">
-                {filteredIndustries.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-14 text-center">
-                      <p className="text-sm text-gray-500">No industries found.</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Try adjusting your search criteria or click "New Industry" above to add one.
-                      </p>
-                    </td>
-                  </tr>
+        {activeTab === "industries" && (() => {
+          const industryColumns: TableColumn<IndustryItem>[] = [
+            {
+              key: "name",
+              header: "Industry Name",
+              align: "left",
+              render: (ind) => (
+                <button
+                  type="button"
+                  onClick={() => handleOpenEditIndustry(ind)}
+                  className="font-semibold text-sm text-[#111827] hover:text-blue-600 transition-colors text-left cursor-pointer"
+                >
+                  {ind.name}
+                </button>
+              ),
+            },
+            {
+              key: "category",
+              header: "Industry Category",
+              align: "center",
+              render: (ind) => (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700">
+                  {ind.category}
+                </span>
+              ),
+            },
+            {
+              key: "idNumber",
+              header: "ID",
+              align: "center",
+              render: (ind) => (
+                <span className="font-mono text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+                  #{ind.idNumber}
+                </span>
+              ),
+            },
+            {
+              key: "recordType",
+              header: "Record Type",
+              align: "center",
+              render: (ind) =>
+                ind.isSystemRecord ? (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">
+                    System
+                  </span>
                 ) : (
-                  filteredIndustries.map((ind) => (
-                    <tr
-                      key={ind.id}
-                      className="hover:bg-gray-50/60 transition-colors last:border-0"
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700">
+                    Custom
+                  </span>
+                ),
+            },
+            {
+              key: "status",
+              header: "Status",
+              align: "center",
+              render: (ind) =>
+                ind.isActive ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/50">
+                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                    Active
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500">
+                    <XCircle className="w-2.5 h-2.5 text-gray-400" />
+                    Inactive
+                  </span>
+                ),
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              align: "center",
+              render: (ind) => (
+                <div className="flex items-center justify-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditIndustry(ind)}
+                    className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                    title="Edit Industry"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicateIndustry(ind)}
+                    className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                    title="Duplicate Industry"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                  {!ind.isSystemRecord ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDeleteTarget({
+                          type: "industry",
+                          id: ind.id,
+                          name: ind.name,
+                        })
+                      }
+                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                      title="Delete Industry"
                     >
-                      {/* Industry Name */}
-                      <td className="px-5 py-3.5 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditIndustry(ind)}
-                          className="font-semibold text-sm text-[#111827] hover:text-blue-600 transition-colors text-center cursor-pointer"
-                        >
-                          {ind.name}
-                        </button>
-                      </td>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <span className="w-7" />
+                  )}
+                </div>
+              ),
+            },
+          ];
 
-                      {/* Category */}
-                      <td className="px-5 py-3.5 text-center">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700">
-                          {ind.category}
-                        </span>
-                      </td>
-
-                      {/* ID */}
-                      <td className="px-5 py-3.5 text-center">
-                        <span className="font-mono text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
-                          #{ind.idNumber}
-                        </span>
-                      </td>
-
-                      {/* Record Type */}
-                      <td className="px-5 py-3.5 text-center">
-                        {ind.isSystemRecord ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">
-                            System
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700">
-                            Custom
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-5 py-3.5 text-center">
-                        {ind.isActive ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/50">
-                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500">
-                            <XCircle className="w-2.5 h-2.5 text-gray-400" />
-                            Inactive
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-5 py-3.5 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditIndustry(ind)}
-                            className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                            title="Edit Industry"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDuplicateIndustry(ind)}
-                            className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                            title="Duplicate Industry"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                          {!ind.isSystemRecord ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDeleteTarget({
-                                  type: "industry",
-                                  id: ind.id,
-                                  name: ind.name,
-                                })
-                              }
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                              title="Delete Industry"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <span className="w-7" />
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+          return (
+            <TableComponent
+              columns={industryColumns}
+              data={filteredIndustries}
+              getRowId={(ind) => ind.id}
+              emptyMessage="No industries found. Try adjusting your search criteria or click 'New Industry' above to add one."
+            />
+          );
+        })()}
 
         {/* ── TAB 2: INDUSTRY CATEGORY TABLE ── */}
-        {activeTab === "categories" && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-[#F8FAFC] border-b border-gray-200">
-                <tr>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center w-[24%]">
-                    Category Name
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center w-[42%]">
-                    Attached Industries
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center w-[10%]">
-                    ID
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center w-[12%]">
-                    Status
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center w-[12%]">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 text-xs">
-                {filteredCategories.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-14 text-center">
-                      <p className="text-sm text-gray-500">No industry categories found.</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Click "New Category" above to define one.
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredCategories.map((cat) => {
-                    const isExpanded = expandedCategories[cat.id];
-                    const visibleIndustries = isExpanded
-                      ? cat.industries
-                      : cat.industries.slice(0, 2);
-                    const remainingCount = cat.industries.length - 2;
+        {activeTab === "categories" && (() => {
+          const categoryColumns: TableColumn<IndustryCategory>[] = [
+            {
+              key: "name",
+              header: "Category Name",
+              align: "left",
+              width: "24%",
+              render: (cat) => (
+                <button
+                  type="button"
+                  onClick={() => handleOpenEditCategory(cat)}
+                  className="font-semibold text-sm text-[#111827] hover:text-blue-600 transition-colors text-left cursor-pointer"
+                >
+                  {cat.name}
+                </button>
+              ),
+            },
+            {
+              key: "industries",
+              header: "Attached Industries",
+              align: "center",
+              width: "42%",
+              render: (cat) => {
+                const isExpanded = expandedCategories[cat.id];
+                const visibleIndustries = isExpanded
+                  ? cat.industries
+                  : cat.industries.slice(0, 2);
+                const remainingCount = cat.industries.length - 2;
 
-                    return (
-                      <tr
-                        key={cat.id}
-                        className="hover:bg-gray-50/60 transition-colors last:border-0 align-middle"
-                      >
-                        {/* Category Name */}
-                        <td className="px-5 py-3.5 text-center">
+                return (
+                  <div className="flex flex-wrap items-center justify-center gap-1.5">
+                    {cat.industries && cat.industries.length > 0 ? (
+                      <>
+                        {visibleIndustries.map((indName) => (
+                          <span
+                            key={indName}
+                            className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#eaf0f7] text-[#334155] text-[11px] font-medium"
+                          >
+                            <span className="truncate max-w-[160px]">{indName}</span>
+                          </span>
+                        ))}
+                        {remainingCount > 0 && (
                           <button
                             type="button"
-                            onClick={() => handleOpenEditCategory(cat)}
-                            className="font-semibold text-sm text-[#111827] hover:text-blue-600 transition-colors text-center cursor-pointer"
+                            onClick={() => toggleCategoryExpand(cat.id)}
+                            className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 text-[11px] font-semibold transition-colors cursor-pointer border border-blue-200/60"
+                            title={isExpanded ? "Collapse" : `View ${remainingCount} more industries`}
                           >
-                            {cat.name}
+                            {isExpanded ? "Show less" : `+${remainingCount} more`}
                           </button>
-                        </td>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-xs text-gray-400 italic">No industries attached</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCreateIndustry(cat.name)}
+                      className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-gray-100 hover:bg-blue-50 text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-300 transition-all cursor-pointer"
+                      title={`Add industry to ${cat.name}`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              },
+            },
+            {
+              key: "idNumber",
+              header: "ID",
+              align: "center",
+              width: "10%",
+              render: (cat) => (
+                <span className="font-mono text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+                  #{cat.idNumber}
+                </span>
+              ),
+            },
+            {
+              key: "status",
+              header: "Status",
+              align: "center",
+              width: "12%",
+              render: (cat) =>
+                cat.isActive ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/50">
+                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                    Active
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500">
+                    <XCircle className="w-2.5 h-2.5 text-gray-400" />
+                    Inactive
+                  </span>
+                ),
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              align: "center",
+              width: "12%",
+              render: (cat) => (
+                <div className="flex items-center justify-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditCategory(cat)}
+                    className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                    title="Edit Category"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicateCategory(cat)}
+                    className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                    title="Duplicate Category"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDeleteTarget({
+                        type: "category",
+                        id: cat.id,
+                        name: cat.name,
+                      })
+                    }
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                    title="Delete Category"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ),
+            },
+          ];
 
-                        {/* Attached Industries: only show 2 industries and rest X more, plus icon to add more */}
-                        <td className="px-5 py-3.5 text-center">
-                          <div className="flex flex-wrap items-center justify-center gap-1.5">
-                            {cat.industries && cat.industries.length > 0 ? (
-                              <>
-                                {visibleIndustries.map((indName) => (
-                                  <span
-                                    key={indName}
-                                    className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#eaf0f7] text-[#334155] text-[11px] font-medium"
-                                  >
-                                    <span className="truncate max-w-[160px]">{indName}</span>
-                                  </span>
-                                ))}
-                                {remainingCount > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleCategoryExpand(cat.id)}
-                                    className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 text-[11px] font-semibold transition-colors cursor-pointer border border-blue-200/60"
-                                    title={isExpanded ? "Collapse" : `View ${remainingCount} more industries`}
-                                  >
-                                    {isExpanded ? "Show less" : `+${remainingCount} more`}
-                                  </button>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-xs text-gray-400 italic">No industries attached</span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenCreateIndustry(cat.name)}
-                              className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-gray-100 hover:bg-blue-50 text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-300 transition-all cursor-pointer"
-                              title={`Add industry to ${cat.name}`}
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-
-                        {/* ID */}
-                        <td className="px-5 py-4 text-center">
-                          <span className="font-mono text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
-                            #{cat.idNumber}
-                          </span>
-                        </td>
-
-                        {/* Status */}
-                        <td className="px-5 py-4 text-center">
-                          {cat.isActive ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/50">
-                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
-                              Active
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500">
-                              <XCircle className="w-2.5 h-2.5 text-gray-400" />
-                              Inactive
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-5 py-4 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditCategory(cat)}
-                              className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                              title="Edit Category"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDuplicateCategory(cat)}
-                              className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                              title="Duplicate Category"
-                            >
-                              <Copy className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDeleteTarget({
-                                  type: "category",
-                                  id: cat.id,
-                                  name: cat.name,
-                                })
-                              }
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                              title="Delete Category"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+          return (
+            <TableComponent
+              columns={categoryColumns}
+              data={filteredCategories}
+              getRowId={(cat) => cat.id}
+              emptyMessage="No industry categories found. Click 'New Category' above to define one."
+            />
+          );
+        })()}
       </div>
 
       {/* ── Create / Edit Industry Right-Side Drawer ── */}

@@ -275,13 +275,11 @@ export default function ProcessDetailDrawer({
     {
       id: "sec-client-details",
       title: "Client Details",
-      iconName: "user",
       fieldKeys: ["client_name", "phone", "email", "source"],
     },
     {
       id: "sec-process-info",
       title: "Process Information",
-      iconName: "layers",
       fieldKeys: ["responsible", "created_at"],
     },
   ];

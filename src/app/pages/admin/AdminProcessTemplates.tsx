@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useAIProviders } from "../../context/AIProviderContext";
 import { useSidebar } from "../../context/SidebarContext";
 import PageHeader from "../../components/layout/PageHeader";
+import PageTopBar from "../../components/layout/PageTopBar";
 import { HowItWorksModal, HowItWorksButton } from "../../components/help/HowItWorksModal";
 import { InfoTooltip } from "../../components/help/InfoTooltip";
 import { useDrag, useDrop } from "react-dnd";
@@ -682,9 +683,6 @@ export default function AdminProcessTemplates() {
   const { activeOrganization: organization } = useOrganization();
   const { templates: adminProcessTemplates, instantiateProcessFromTemplate } = useProcessTemplates();
 
-  useEffect(() => {
-    setCollapsed(true);
-  }, [setCollapsed]);
 
   const [processes, setProcesses] = useState<Process[]>(getStoredProcesses);
 
@@ -2543,43 +2541,21 @@ export default function AdminProcessTemplates() {
           }
         />
 
-        {/* Top Control Bar: Search + Scope Filters + Add Process */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3.5 flex flex-wrap items-center justify-between gap-3">
-          {/* Left / Center: Search & Filters */}
-          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[300px]">
-            {/* Search */}
-            <div className="relative min-w-[200px] flex-1 max-w-xs">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search processes..."
-                className="w-full pl-10 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer rounded-full hover:bg-gray-200 transition-colors"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Scope Filter Tag/Divider */}
-            <div className="h-6 w-px bg-gray-200 hidden sm:block mx-0.5" />
-
-            {/* 1. Industry Category */}
-            <div className="min-w-[140px]">
+        {/* Top Control Bar using standard PageTopBar */}
+        <PageTopBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search processes..."
+          leftElement={
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* 1. Industry Category */}
               <select
                 value={selectedCategoryFilter}
                 onChange={(e) => {
                   setSelectedCategoryFilter(e.target.value);
                   setSelectedIndustryFilter("All");
                 }}
-                className="w-full text-xs px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-gray-700 font-medium cursor-pointer transition-all"
+                className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
                 style={{ fontFamily: 'Outfit, sans-serif' }}
               >
                 <option value="All">All Categories</option>
@@ -2589,14 +2565,12 @@ export default function AdminProcessTemplates() {
                   </option>
                 ))}
               </select>
-            </div>
 
-            {/* 2. Industry */}
-            <div className="min-w-[140px]">
+              {/* 2. Industry */}
               <select
                 value={selectedIndustryFilter}
                 onChange={(e) => setSelectedIndustryFilter(e.target.value)}
-                className="w-full text-xs px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-gray-700 font-medium cursor-pointer transition-all"
+                className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
                 style={{ fontFamily: 'Outfit, sans-serif' }}
               >
                 <option value="All">All Industries</option>
@@ -2606,14 +2580,12 @@ export default function AdminProcessTemplates() {
                   </option>
                 ))}
               </select>
-            </div>
 
-            {/* 3. Location */}
-            <div className="min-w-[130px]">
+              {/* 3. Location */}
               <select
                 value={selectedLocationFilter}
                 onChange={(e) => setSelectedLocationFilter(e.target.value)}
-                className="w-full text-xs px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-gray-700 font-medium cursor-pointer transition-all"
+                className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
                 style={{ fontFamily: 'Outfit, sans-serif' }}
               >
                 <option value="All">All Locations</option>
@@ -2624,38 +2596,92 @@ export default function AdminProcessTemplates() {
                 ))}
               </select>
             </div>
-
-            {/* Reset Filters button */}
-            {(selectedCategoryFilter !== "All" || selectedIndustryFilter !== "All" || selectedLocationFilter !== "All" || searchQuery) && (
-              <button
-                onClick={() => {
-                  setSelectedCategoryFilter("All");
-                  setSelectedIndustryFilter("All");
-                  setSelectedLocationFilter("All");
-                  setSearchQuery("");
-                }}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-800 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
-                style={{ fontFamily: 'DM Sans, sans-serif' }}
-              >
-                Reset Filters
-              </button>
-            )}
-          </div>
-
-          {/* Right: Add New Process Button */}
-          <button
-            onClick={() => {
+          }
+          filterPresets={[
+            {
+              id: "all",
+              label: "All Processes",
+              count: adminProcessTemplates.length,
+              isActive: selectedCategoryFilter === "All" && selectedIndustryFilter === "All" && selectedLocationFilter === "All",
+              onClick: () => {
+                setSelectedCategoryFilter("All");
+                setSelectedIndustryFilter("All");
+                setSelectedLocationFilter("All");
+                setSearchQuery("");
+              },
+            },
+            {
+              id: "healthcare",
+              label: "Healthcare",
+              count: adminProcessTemplates.filter((p: any) => p.category === "Healthcare" || p.industryCategory === "Healthcare").length,
+              isActive: selectedCategoryFilter === "Healthcare",
+              onClick: () => {
+                setSelectedCategoryFilter("Healthcare");
+                setSelectedIndustryFilter("All");
+              },
+            },
+            {
+              id: "dental",
+              label: "Dental Care",
+              count: adminProcessTemplates.filter((p: any) => p.category === "Dental Care" || p.industryCategory === "Dental Care").length,
+              isActive: selectedCategoryFilter === "Dental Care",
+              onClick: () => {
+                setSelectedCategoryFilter("Dental Care");
+                setSelectedIndustryFilter("All");
+              },
+            },
+          ]}
+          filterFields={[
+            {
+              id: "name",
+              label: "Process Name",
+              type: "text",
+              placeholder: "Filter by name...",
+              value: searchQuery,
+              onChange: (val) => setSearchQuery(val || ""),
+            },
+            {
+              id: "category",
+              label: "Category",
+              type: "select",
+              value: selectedCategoryFilter,
+              onChange: (val) => {
+                setSelectedCategoryFilter(val || "All");
+                setSelectedIndustryFilter("All");
+              },
+              options: [
+                { label: "All Categories", value: "All" },
+                ...INITIAL_CATEGORIES.map((cat) => ({ label: cat.name, value: cat.name })),
+              ],
+            },
+            {
+              id: "industry",
+              label: "Industry",
+              type: "select",
+              value: selectedIndustryFilter,
+              onChange: (val) => setSelectedIndustryFilter(val || "All"),
+              options: [
+                { label: "All Industries", value: "All" },
+                ...availableIndustriesForFilter.map((ind) => ({ label: ind, value: ind })),
+              ],
+            },
+          ]}
+          onClearAllFilters={() => {
+            setSelectedCategoryFilter("All");
+            setSelectedIndustryFilter("All");
+            setSelectedLocationFilter("All");
+            setSearchQuery("");
+          }}
+          primaryAction={{
+            label: "Add New Process",
+            icon: <Plus className="w-3.5 h-3.5" />,
+            onClick: () => {
               setModalScopingRules([]);
               setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
               setShowAddProcessModal(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-sm hover:shadow transition-all cursor-pointer flex-shrink-0"
-            style={{ fontFamily: 'DM Sans, sans-serif' }}
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add New Process</span>
-          </button>
-        </div>
+            },
+          }}
+        />
 
         <div className="flex gap-6 min-h-[calc(100vh-270px)]">
           {/* Left Panel - Process List */}

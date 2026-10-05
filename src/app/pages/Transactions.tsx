@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer } from "recharts";
-import { Filter, Download, DollarSign, Calendar } from "lucide-react";
+import { Filter, Download, DollarSign, Calendar, Eye } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
+import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 
 const usageData = [
   { id: 1, date: "Apr 1", credits: 45 },
@@ -27,6 +28,7 @@ const handleExportData = () => {
 };
 
 export default function Transactions() {
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [dateRange, setDateRange] = useState("Last 7 days");
   const [isExporting, setIsExporting] = useState(false);
@@ -195,56 +197,90 @@ export default function Transactions() {
       </div>
 
       {/* Transaction Table */}
-      <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-white/80 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white text-xs font-semibold uppercase tracking-wider">
-              <tr className="h-7">
-                <th className="px-3 py-1 text-left font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>DATE</th>
-                <th className="px-3 py-1 text-left font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>TYPE</th>
-                <th className="px-3 py-1 text-left font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>USER</th>
-                <th className="px-3 py-1 text-left font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>AMOUNT</th>
-                <th className="px-3 py-1 text-left font-semibold text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>STATUS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {transactions.map((transaction) => (
-                <tr key={transaction.id} className="h-[30px] hover:bg-muted/60 transition-colors">
-                  <td className="px-3 py-1 text-xs text-muted-foreground whitespace-nowrap">{transaction.date}</td>
-                  <td className="px-3 py-1 text-xs whitespace-nowrap">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[11px] font-medium leading-tight ${
-                        transaction.type === "Purchase"
-                          ? "bg-primary/10 text-primary"
-                          : transaction.type === "Usage"
-                          ? "bg-destructive/10 text-destructive"
-                          : "bg-secondary/10 text-secondary"
-                      }`}
-                    >
-                      {transaction.type}
-                    </span>
-                  </td>
-                  <td className="px-3 py-1 text-xs font-medium whitespace-nowrap">{transaction.user}</td>
-                  <td className="px-3 py-1 text-xs whitespace-nowrap">
-                    <span
-                      className={`font-medium ${
-                        transaction.amount.startsWith("+") ? "text-secondary" : "text-destructive"
-                      }`}
-                    >
-                      {transaction.amount}
-                    </span>
-                  </td>
-                  <td className="px-3 py-1 text-xs whitespace-nowrap">
-                    <span className="px-2 py-0.5 bg-secondary/10 text-secondary rounded-full text-[11px] font-medium leading-tight">
-                      {transaction.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {(() => {
+        const columns: TableColumn<(typeof transactions)[0]>[] = [
+          {
+            id: "date",
+            header: "DATE",
+            align: "left",
+            render: (t) => <span className="text-muted-foreground whitespace-nowrap">{t.date}</span>,
+          },
+          {
+            id: "type",
+            header: "TYPE",
+            align: "center",
+            render: (t) => (
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-medium leading-tight ${
+                  t.type === "Purchase"
+                    ? "bg-primary/10 text-primary"
+                    : t.type === "Usage"
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-secondary/10 text-secondary"
+                }`}
+              >
+                {t.type}
+              </span>
+            ),
+          },
+          {
+            id: "user",
+            header: "USER",
+            align: "left",
+            render: (t) => <span className="font-medium whitespace-nowrap">{t.user}</span>,
+          },
+          {
+            id: "amount",
+            header: "AMOUNT",
+            align: "center",
+            render: (t) => (
+              <span
+                className={`font-medium whitespace-nowrap ${
+                  t.amount.startsWith("+") ? "text-secondary" : "text-destructive"
+                }`}
+              >
+                {t.amount}
+              </span>
+            ),
+          },
+          {
+            id: "status",
+            header: "STATUS",
+            align: "center",
+            render: (t) => (
+              <span className="px-2 py-0.5 bg-secondary/10 text-secondary rounded-full text-[11px] font-medium leading-tight">
+                {t.status}
+              </span>
+            ),
+          },
+        ];
+
+        const rowActions: TableRowAction<(typeof transactions)[0]>[] = [
+          {
+            label: "Download Receipt",
+            icon: <Download className="w-3.5 h-3.5 text-primary" />,
+            onClick: (t) => toast.success(`Receipt downloaded for transaction #${t.id}`),
+          },
+          {
+            label: "View Details",
+            icon: <Eye className="w-3.5 h-3.5 text-muted-foreground" />,
+            onClick: (t) => toast.info(`Transaction #${t.id}: ${t.type} of ${t.amount} by ${t.user}`),
+          },
+        ];
+
+        return (
+          <TableComponent
+            data={transactions}
+            columns={columns}
+            getRowId={(t) => t.id}
+            rowActions={rowActions}
+            selectedIds={selectedRows}
+            onSelectionChange={(ids) => setSelectedRows(new Set(Array.from(ids) as string[]))}
+            defaultRowsPerPage={20}
+            emptyMessage="No transactions found."
+          />
+        );
+      })()}
     </div>
   );
 }

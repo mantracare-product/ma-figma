@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import Button from "../components/ui/Button";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
+import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import {
   Claim,
   ClaimStatus,
@@ -29,6 +31,7 @@ export default function Claims() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatusTab, setSelectedStatusTab] = useState<string>("all");
   const [selectedPayerFilter, setSelectedPayerFilter] = useState<string>("all");
+  const [selectedClaimIds, setSelectedClaimIds] = useState<string[]>([]);
 
   // Modals state
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
@@ -163,349 +166,275 @@ export default function Claims() {
           subtitle="End-to-end RCM: Auto-link appointments, CPT codes, and AI Scribe ICD-10 notes into electronic 837P claims and CMS-1500 forms."
         />
 
-        {/* Filter and Search Bar — Unified Top Toolbar */}
-        <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2.5">
-            {/* Tabs row in search bar */}
-            <div className="inline-flex bg-gray-100 p-0.5 rounded-lg border border-border shrink-0">
-              {[
-                { id: "all", label: "All Claims", count: claims.length },
-                { id: "ready", label: "Ready to Submit", count: stats.readyCount },
-                { id: "submitted", label: "Submitted & Review", count: stats.submittedCount },
-                { id: "paid", label: "Paid", count: stats.paidCount },
-                { id: "draft", label: "Drafts", count: stats.draftCount },
-              ].map((tab) => (
+        {/* Filter and Search Bar powered by PageTopBar */}
+        <PageTopBar
+          isBottomPanelAttached={true}
+          searchQuery={searchQuery}
+          onSearchChange={(v) => {
+            setSearchQuery(v);
+            setCurrentPage(1);
+          }}
+          searchPlaceholder="Search by Claim #, Patient Name, Insurance Payer, ICD-10 or CPT code..."
+          filterPresets={[
+            {
+              id: "all",
+              label: "All Claims",
+              count: claims.length,
+              isActive: selectedStatusTab === "all",
+              onClick: () => {
+                setSelectedStatusTab("all");
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: "ready",
+              label: "Ready to Submit",
+              count: stats.readyCount,
+              isActive: selectedStatusTab === "ready",
+              onClick: () => {
+                setSelectedStatusTab("ready");
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: "submitted",
+              label: "Submitted & Review",
+              count: stats.submittedCount,
+              isActive: selectedStatusTab === "submitted",
+              onClick: () => {
+                setSelectedStatusTab("submitted");
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: "paid",
+              label: "Paid Claims",
+              count: stats.paidCount,
+              isActive: selectedStatusTab === "paid",
+              onClick: () => {
+                setSelectedStatusTab("paid");
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: "draft",
+              label: "Drafts",
+              count: stats.draftCount,
+              isActive: selectedStatusTab === "draft",
+              onClick: () => {
+                setSelectedStatusTab("draft");
+                setCurrentPage(1);
+              },
+            },
+          ]}
+          filterFields={[
+            {
+              id: "query",
+              label: "Patient Name / Claim #",
+              type: "text",
+              placeholder: "Filter by patient or ID...",
+              value: searchQuery,
+              onChange: (val) => {
+                setSearchQuery(val || "");
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: "status",
+              label: "Claim Status",
+              type: "select",
+              value: selectedStatusTab,
+              onChange: (val) => {
+                setSelectedStatusTab(val || "all");
+                setCurrentPage(1);
+              },
+              options: [
+                { label: `All Claims (${claims.length})`, value: "all" },
+                { label: `Ready to Submit (${stats.readyCount})`, value: "ready" },
+                { label: `Submitted & Review (${stats.submittedCount})`, value: "submitted" },
+                { label: `Paid (${stats.paidCount})`, value: "paid" },
+                { label: `Drafts (${stats.draftCount})`, value: "draft" },
+              ],
+            },
+            {
+              id: "payer",
+              label: "Insurance Payer",
+              type: "select",
+              value: selectedPayerFilter,
+              onChange: (val) => {
+                setSelectedPayerFilter(val || "all");
+                setCurrentPage(1);
+              },
+              options: [
+                { label: "All Payers", value: "all" },
+                ...uniquePayers.map((p) => ({ label: p, value: p })),
+              ],
+            },
+          ]}
+          secondaryActions={
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedStatusTab}
+                onChange={(e) => {
+                  setSelectedStatusTab(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="all">All Claims ({claims.length})</option>
+                <option value="ready">Ready to Submit ({stats.readyCount})</option>
+                <option value="submitted">Submitted & Review ({stats.submittedCount})</option>
+                <option value="paid">Paid ({stats.paidCount})</option>
+                <option value="draft">Drafts ({stats.draftCount})</option>
+              </select>
+
+              <select
+                value={selectedPayerFilter}
+                onChange={(e) => {
+                  setSelectedPayerFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="all">All Payers</option>
+                {uniquePayers.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+          }
+          primaryAction={{
+            label: "Create Claim",
+            icon: <Plus className="w-4 h-4" />,
+            onClick: () => {
+              setEditingClaim(null);
+              setIsCreateDrawerOpen(true);
+            },
+          }}
+        />
+
+        {/* Claims Table View Connected with TableComponent */}
+        {(() => {
+          const claimColumns: TableColumn<Claim>[] = [
+            {
+              id: "patientName",
+              header: "Client",
+              align: "left",
+              render: (claim) => (
                 <button
-                  key={tab.id}
                   type="button"
-                  onClick={() => {
-                    setSelectedStatusTab(tab.id);
-                    setCurrentPage(1);
-                  }}
-                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    selectedStatusTab === tab.id
-                      ? "bg-[#1E293B] text-white shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  onClick={() => handleEditClaim(claim)}
+                  className="font-semibold text-[#1456f0] hover:underline text-xs cursor-pointer text-left"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  <span>{tab.label}</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                      selectedStatusTab === tab.id ? "bg-slate-700 text-slate-200" : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {tab.count}
-                  </span>
+                  {claim.patientName}
                 </button>
-              ))}
-            </div>
+              ),
+            },
+            {
+              id: "claimNumber",
+              header: "Claim ID",
+              align: "left",
+              render: (claim) => (
+                <span className="font-mono font-bold text-slate-800 text-xs">
+                  {claim.claimNumber}
+                </span>
+              ),
+            },
+            {
+              id: "payer",
+              header: "Insurance Payer",
+              align: "center",
+              render: (claim) => (
+                <span className="font-medium text-slate-700 text-xs truncate max-w-[180px] inline-block" title={claim.payer.name} style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {claim.payer.name}
+                </span>
+              ),
+            },
+            {
+              id: "stage",
+              header: "Stage",
+              align: "center",
+              render: (claim) => (
+                <div className="flex items-center justify-center">
+                  <ClaimProgressBar
+                    status={claim.status}
+                    onStatusChange={(newSt) => handleStatusChange(claim.id, newSt)}
+                    interactive={true}
+                    claimId={claim.id}
+                  />
+                </div>
+              ),
+            },
+            {
+              id: "status",
+              header: "Status",
+              align: "center",
+              render: (claim) => getStatusBadge(claim.status),
+            },
+            {
+              id: "serviceDate",
+              header: "Service Date",
+              align: "center",
+              render: (claim) => (
+                <span className="text-slate-600 font-medium text-xs font-mono">
+                  {claim.serviceDate}
+                </span>
+              ),
+            },
+            {
+              id: "totalCharge",
+              header: "Billed Amount",
+              align: "center",
+              render: (claim) => (
+                <span className="font-mono font-bold text-slate-900 text-xs">
+                  ${claim.totalCharge.toFixed(2)}
+                </span>
+              ),
+            },
+          ];
 
-            {/* Search input */}
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="Search by Claim #, Patient Name, Insurance Payer, ICD-10 or CPT code..."
-                className="w-full h-[36px] pl-9 pr-3 bg-input-background border border-input rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              />
-            </div>
+          const claimRowActions: TableRowAction<Claim>[] = [
+            {
+              label: "Edit Claim",
+              icon: <Pencil className="w-3.5 h-3.5" />,
+              onClick: (claim) => handleEditClaim(claim),
+            },
+            {
+              label: "Submit / View Status",
+              icon: <Send className="w-3.5 h-3.5" />,
+              onClick: (claim) => {
+                if (["Ready to Submit", "Draft"].includes(claim.status)) {
+                  setActiveSubmissionClaim(claim);
+                } else {
+                  setActiveStatusClaim(claim);
+                }
+              },
+            },
+            {
+              label: "View CMS-1500 Form",
+              icon: <Eye className="w-3.5 h-3.5" />,
+              onClick: (claim) => setActiveCMS1500Claim(claim),
+            },
+          ];
 
-            {/* Payer Filter dropdown */}
-            <select
-              value={selectedPayerFilter}
-              onChange={(e) => {
-                setSelectedPayerFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="h-[36px] text-xs px-2.5 border border-input rounded-lg bg-input-background text-foreground focus:outline-none cursor-pointer"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <option value="all">All Payers</option>
-              {uniquePayers.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-
-            {/* Action button */}
-            <button
-              type="button"
-              onClick={() => {
-                setEditingClaim(null);
-                setIsCreateDrawerOpen(true);
-              }}
-              className="h-[36px] px-3.5 bg-[#1E293B] hover:bg-black text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs shrink-0"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <Plus className="w-4 h-4" />
-              <span>Create Claim</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Claims Table Card with Dark Thead */}
-        <div className="bg-white rounded-b-xl border border-t-0 border-border shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-[#1E293B] text-white">
-                <tr className="h-[34px] select-none">
-                  {/* CLIENT Column */}
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                    CLIENT
-                  </th>
-
-                  {/* CLAIM ID Column */}
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                    CLAIM ID
-                  </th>
-
-                  {/* INSURANCE PAYER Column */}
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                    INSURANCE PAYER
-                  </th>
-
-                  {/* STAGE Column */}
-                  <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                    <div className="flex items-center justify-center gap-1">
-                      STAGE
-                      <InfoTooltip text="Claim lifecycle: Draft → Ready to Submit → Submitted → Under Review → Accepted → Paid. Click to change stage." />
-                    </div>
-                  </th>
-
-                  {/* STATUS Column */}
-                  <th className="px-3 py-1.5 text-center text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                    STATUS
-                  </th>
-
-                  {/* SERVICE DATE Column */}
-                  <th className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                    SERVICE DATE
-                  </th>
-
-                  {/* BILLED AMOUNT Column */}
-                  <th className="px-3 py-1.5 text-right text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                    BILLED AMOUNT
-                  </th>
-
-                  {/* ACTIONS Column */}
-                  <th className="px-3 py-1.5 text-right text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                    ACTIONS
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {paginatedClaims.length > 0 ? (
-                  paginatedClaims.map((claim) => (
-                    <tr key={claim.id} className="h-[32px] hover:bg-slate-50/60 transition-colors">
-                      {/* Client Name in blue link style */}
-                      <td className="px-3 py-1 whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => handleEditClaim(claim)}
-                          className="font-semibold text-[#1456f0] hover:underline text-xs cursor-pointer text-left"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        >
-                          {claim.patientName}
-                        </button>
-                      </td>
-
-                      {/* Claim ID */}
-                      <td className="px-3 py-1 whitespace-nowrap font-mono font-bold text-slate-800 text-xs">
-                        {claim.claimNumber}
-                      </td>
-
-                      {/* Insurance Payer */}
-                      <td className="px-3 py-1 whitespace-nowrap">
-                        <span className="font-medium text-slate-700 text-xs truncate max-w-[180px] block" title={claim.payer.name} style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {claim.payer.name}
-                        </span>
-                      </td>
-
-                      {/* STAGE (Dedicated Column with Visual Progress Bar) */}
-                      <td className="px-3 py-1 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center">
-                          <ClaimProgressBar
-                            status={claim.status}
-                            onStatusChange={(newSt) => handleStatusChange(claim.id, newSt)}
-                            interactive={true}
-                            claimId={claim.id}
-                          />
-                        </div>
-                      </td>
-
-                      {/* STATUS Column */}
-                      <td className="px-3 py-1 text-center whitespace-nowrap">
-                        {getStatusBadge(claim.status)}
-                      </td>
-
-                      {/* Service Date */}
-                      <td className="px-3 py-1 whitespace-nowrap">
-                        <span className="text-slate-600 font-medium text-xs font-mono">
-                          {claim.serviceDate}
-                        </span>
-                      </td>
-
-                      {/* Billed Amount */}
-                      <td className="px-3 py-1 text-right whitespace-nowrap">
-                        <span className="font-mono font-bold text-slate-900 text-xs">
-                          ${claim.totalCharge.toFixed(2)}
-                        </span>
-                      </td>
-
-                      {/* Actions: All 3 styled as unified icon action buttons */}
-                      <td className="px-3 py-1 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
-                          {/* 1. Edit Action Icon Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleEditClaim(claim)}
-                            className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded inline-flex items-center justify-center transition-colors cursor-pointer"
-                            title="Edit Claim"
-                            aria-label="Edit Claim"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* 2. Submit or View Transmission Status Icon Button */}
-                          {["Ready to Submit", "Draft"].includes(claim.status) ? (
-                            <button
-                              type="button"
-                              onClick={() => setActiveSubmissionClaim(claim)}
-                              className="p-1 rounded inline-flex items-center justify-center transition-colors cursor-pointer border text-blue-600 hover:text-blue-700 bg-blue-50/70 hover:bg-blue-100 border-blue-200"
-                              title="Submit Electronic Claim (EDI 837P)"
-                              aria-label="Submit Electronic Claim"
-                            >
-                              <Send className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setActiveStatusClaim(claim)}
-                              className="p-1 rounded inline-flex items-center justify-center transition-colors cursor-pointer border text-indigo-600 hover:text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 border-indigo-200"
-                              title="View Clearinghouse Transmission & Gateway Status"
-                              aria-label="View Transmission Status"
-                            >
-                              <FileCheck className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {/* 3. View CMS-1500 Eye Icon Button */}
-                          <button
-                            type="button"
-                            onClick={() => setActiveCMS1500Claim(claim)}
-                            className="p-1 text-slate-600 hover:text-red-600 hover:bg-red-50/60 border border-slate-200 hover:border-red-200 rounded inline-flex items-center justify-center transition-colors cursor-pointer"
-                            title="View CMS-1500 Form"
-                            aria-label="View CMS-1500 Form"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
-                      <Shield className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                      <p className="font-semibold text-slate-600">No insurance claims found</p>
-                      <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                        {searchQuery
-                          ? `No claims match "${searchQuery}". Try clearing search filters.`
-                          : "Create your first claim linking booked appointments, service CPT codes, and AI Scribe diagnosis."}
-                      </p>
-                      <div className="mt-4">
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={() => {
-                            setEditingClaim(null);
-                            setIsCreateDrawerOpen(true);
-                          }}
-                          className="inline-flex items-center gap-1.5 text-xs bg-blue-600 text-white cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Create Claim
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Standard Pagination Footer (matching Clients.tsx) */}
-          <div className="px-4 py-2 border-t border-border bg-white flex items-center justify-between text-xs text-muted-foreground select-none">
-            <div className="flex items-center gap-2">
-              <span>Rows per page:</span>
-              <select
-                value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="border border-input rounded px-2 py-0.5 bg-input-background text-xs cursor-pointer focus:outline-none"
-              >
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-              <span className="ml-2">
-                Showing {filteredClaims.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredClaims.length}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setCurrentPage(1)}
-                disabled={currentPage === 1}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                title="First page"
-              >
-                <span className="text-xs">«</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                title="Previous page"
-              >
-                <span className="text-xs">‹</span>
-              </button>
-              <span className="px-2 font-medium text-foreground">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                title="Next page"
-              >
-                <span className="text-xs">›</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={currentPage === totalPages}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-                title="Last page"
-              >
-                <span className="text-xs">»</span>
-              </button>
-            </div>
-          </div>
-        </div>
+          return (
+            <TableComponent
+              data={filteredClaims}
+              columns={claimColumns}
+              getRowId={(claim) => claim.id}
+              rowActions={claimRowActions}
+              selectedIds={new Set(selectedClaimIds)}
+              onSelectionChange={(ids) => setSelectedClaimIds(Array.from(ids) as string[])}
+              defaultRowsPerPage={20}
+              emptyMessage="No insurance claims found matching your filters."
+            />
+          );
+        })()}
 
       {/* Create / Edit Claim Drawer */}
       <CreateClaimDrawer
