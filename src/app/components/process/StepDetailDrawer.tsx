@@ -1,19 +1,24 @@
 import React, { useState } from "react";
-import { X, ChevronRight, Info } from "lucide-react";
+import { X, ChevronRight, ChevronDown, Info, GitBranch } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import StepParametersFields from "./StepParametersFields";
 import type { WorkflowStep } from "../../types/workflow";
-import { InfoTooltip } from "../help/InfoTooltip";
+import { EVENT_CATALOG } from "../../../lib/useAutomationStore";
+import { EntityType } from "../../../lib/useProcessStore";
 
 export interface StepDetailDrawerProps {
   isOpen: boolean;
   step: WorkflowStep | null;
   isCreatingNewStep: boolean;
-  stepAllowedTriggers: Record<string, Array<"stage" | "incall" | "inchat" | "postcall">>;
+  stepAllowedTriggers?: Record<string, Array<string>>;
   processes: any[];
 
-  stepTrigger: "stage" | "incall" | "inchat" | "postcall";
-  onStepTriggerChange: (t: "stage" | "incall" | "inchat" | "postcall") => void;
+  stepTrigger: string;
+  onStepTriggerChange: (t: any) => void;
+
+  context?: "stage" | "automation";
+  entityType?: EntityType;
+  customTriggers?: Array<{ key: string; label: string; desc?: string }>;
 
   executionType: "wait" | "parallel";
   onExecutionTypeChange: (t: "wait" | "parallel") => void;
@@ -33,16 +38,30 @@ export interface StepDetailDrawerProps {
   onBack: () => void;
   onClose: () => void;
   onSave: () => void;
+  onShowInFlowBuilder?: () => void;
+}
+
+function InfoTooltip({ text }: { text: string }) {
+  return (
+    <Tooltip content={text} position="top">
+      <span className="inline-flex items-center text-muted-foreground hover:text-foreground cursor-help">
+        <Info className="w-3.5 h-3.5" />
+      </span>
+    </Tooltip>
+  );
 }
 
 export default function StepDetailDrawer({
   isOpen,
   step,
   isCreatingNewStep,
-  stepAllowedTriggers,
+  stepAllowedTriggers = {},
   processes,
   stepTrigger,
   onStepTriggerChange,
+  context = "stage",
+  entityType,
+  customTriggers,
   executionType,
   onExecutionTypeChange,
   delayValue,
@@ -57,33 +76,54 @@ export default function StepDetailDrawer({
   onBack,
   onClose,
   onSave,
+  onShowInFlowBuilder,
 }: StepDetailDrawerProps) {
   // Local UI-only state — neither caller needs to own this
   const [executionTimingModalOpen, setExecutionTimingModalOpen] = useState(false);
 
   if (!isOpen || !step) return null;
 
-  const allowedTriggers =
-    stepAllowedTriggers[step.stepKey ?? ""] ?? ["stage", "incall", "postcall"];
-  const visibleButtons = (
-    [
-      { key: "stage" as const, label: "On Entering Stage" },
-      { key: "incall" as const, label: "In Call" },
-      { key: "inchat" as const, label: "In Chat" },
-      { key: "postcall" as const, label: "Post Call" },
-    ] as const
-  ).filter((t) => allowedTriggers.includes(t.key as any));
+  // Build trigger options based on context
+  let triggerOptions: Array<{ key: string; label: string; desc: string }> = [];
 
+  if (context === "automation") {
+    if (customTriggers && customTriggers.length > 0) {
+      triggerOptions = customTriggers.map((ct) => ({
+        key: ct.key,
+        label: ct.label,
+        desc: ct.desc || `Fires when ${ct.label} occurs`,
+      }));
+    } else {
+      const entityEvents = EVENT_CATALOG[entityType || "appointment"] || EVENT_CATALOG.appointment;
+      triggerOptions = entityEvents.map((ev) => ({
+        key: ev.event,
+        label: ev.label,
+        desc: `Fires automatically when the ${ev.label.toLowerCase()} event is triggered.`,
+      }));
+    }
+  } else {
+    // Stage-level triggers: Enter Stage, Exit Stage, In Call, In Chat, Post Call
+    const allowed = stepAllowedTriggers[step.stepKey ?? ""] ?? ["stage", "enter_stage", "exit_stage", "incall", "postcall"];
+    const stageCandidates = [
+      { key: "stage", label: "Enter Stage", desc: "Runs automatically when the record enters this stage." },
+      { key: "exit_stage", label: "Exit Stage", desc: "Runs automatically when the record exits this stage." },
+      { key: "incall", label: "In Call", desc: "Fires mid-conversation when the AI decides to execute this action." },
+      { key: "inchat", label: "In Chat", desc: "Fires when the client sends a message in a chat channel during this stage." },
+      { key: "postcall", label: "Post Call", desc: "Fires automatically once the call has finished." },
+    ];
+
+    triggerOptions = stageCandidates.filter((cand) => {
+      if (cand.key === "stage" || cand.key === "exit_stage") return true;
+      return allowed.includes(cand.key);
+    });
+  }
+
+  const activeTrigger = triggerOptions.find((t) => t.key === stepTrigger) || triggerOptions[0];
   const subtitleText =
-    stepTrigger === "stage"
-      ? "Runs in sequence as part of this stage's step order, with an optional delay."
-      : stepTrigger === "incall"
-        ? "Fires the moment the AI decides to take this action mid-conversation."
-        : stepTrigger === "inchat"
-          ? "Fires when the client sends a message in a chat channel (WhatsApp, SMS, or Website) during this stage."
-          : "Fires automatically once the call has ended.";
-
-  const isSingle = visibleButtons.length === 1;
+    activeTrigger?.desc ||
+    (stepTrigger === "exit_stage"
+      ? "Runs automatically when the record exits this stage."
+      : "Runs in sequence as part of this stage's step order, with an optional delay.");
 
   return (
     <>
@@ -129,74 +169,78 @@ export default function StepDetailDrawer({
                 {step.description}
               </p>
             </div>
-            <button
-              onClick={() => {
-                if (isCreatingNewStep) {
-                  onBack();
-                } else {
-                  onClose();
-                }
-              }}
-              className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0"
-            >
-              <X className="w-5 h-5 text-muted-foreground" />
-            </button>
+            <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+              {onShowInFlowBuilder && (
+                <button
+                  type="button"
+                  onClick={onShowInFlowBuilder}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition-colors cursor-pointer"
+                  title="Open this step in the visual flow builder canvas"
+                >
+                  <GitBranch className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Show in flow builder</span>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (isCreatingNewStep) {
+                    onBack();
+                  } else {
+                    onClose();
+                  }
+                }}
+                className="p-2 rounded hover:bg-muted/40 transition-colors"
+              >
+                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
           {/* Trigger, Execution & Delay Row */}
-          <div className="flex items-start gap-3">
-            {/* Column 1 — Trigger */}
-            <div className="flex-shrink-0">
-              <label
-                className="block text-sm font-semibold mb-2"
-                style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-              >
-                Trigger
-              </label>
-              {/* Trigger toggle + conditional info */}
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <div className="inline-flex items-center gap-0 p-1 rounded-lg border border-border bg-muted/20">
-                    {visibleButtons.map((t, idx) => (
-                      <React.Fragment key={t.key}>
-                        {idx > 0 && (
-                          <div className="w-px h-5 bg-gray-300 flex-shrink-0 mx-0.5" />
-                        )}
-                        <button
-                          onClick={() => onStepTriggerChange(t.key)}
-                          className={`w-[160px] px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${stepTrigger === t.key
-                              ? "bg-primary text-white"
-                              : "text-gray-600 hover:text-gray-900"
-                            }`}
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        >
-                          {t.label}
-                        </button>
-                      </React.Fragment>
-                    ))}
-                  </div>
-                  {isSingle && (
-                    <Tooltip text={subtitleText} placement="top">
-                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 flex-shrink-0" />
-                    </Tooltip>
-                  )}
-                </div>
-                {!isSingle && (
-                  <p
-                    className="text-xs mt-2"
-                    style={{ color: "#64748B", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {subtitleText}
-                  </p>
-                )}
+          <div className="flex items-start gap-4">
+            {/* Column 1 — Trigger Dropdown */}
+            <div className="w-[280px] flex-shrink-0">
+              <div className="flex items-center gap-1.5 mb-2">
+                <label
+                  className="text-sm font-semibold"
+                  style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                >
+                  Trigger
+                </label>
+                <InfoTooltip text="Select the event or stage lifecycle point that triggers this action." />
               </div>
+
+              <div className="relative">
+                <select
+                  value={stepTrigger}
+                  onChange={(e) => onStepTriggerChange(e.target.value)}
+                  className="w-full appearance-none px-3.5 py-2.5 pr-9 text-sm font-medium rounded-lg border border-border bg-white text-gray-900 shadow-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer transition-colors"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {triggerOptions.map((opt) => (
+                    <option key={opt.key} value={opt.key}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400">
+                  <ChevronDown className="w-4 h-4" />
+                </div>
+              </div>
+
+              <p
+                className="text-xs mt-2 leading-relaxed"
+                style={{ color: "#64748B", fontFamily: "Outfit, sans-serif" }}
+              >
+                {subtitleText}
+              </p>
             </div>
 
             {/* Column 2 — Execution */}
-            {stepTrigger === "stage" ? (
+            {stepTrigger === "stage" || stepTrigger === "enter_stage" || stepTrigger === "exit_stage" || context === "automation" ? (
               <div className="w-[140px] flex-shrink-0">
                 <div className="flex items-center gap-1.5 mb-2">
                   <label

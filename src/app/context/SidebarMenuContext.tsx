@@ -25,7 +25,7 @@ export interface SidebarMenuConfig {
 }
 
 export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
-  version: 3,
+  version: 5,
   defaultStartPage: "/",
   sections: [
     {
@@ -44,10 +44,11 @@ export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
     },
     {
       id: "automation",
-      title: "AUTOMATIONS",
+      title: "CUSTOMIZATIONS",
       defaultExpanded: false,
       items: [
         { id: "workflows", label: "Workflows", iconName: "SlidersHorizontal", path: "/process", visible: true },
+        { id: "global-automation", label: "Automation", iconName: "Zap", path: "/automation", visible: true },
         { id: "knowledge-base", label: "Knowledge Base", iconName: "Database", path: "/knowledge-base", visible: true },
         { id: "web-forms", label: "Webforms", iconName: "FileText", path: "/web-forms", visible: true },
       ],
@@ -104,13 +105,19 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (parsed.sections && Array.isArray(parsed.sections)) {
-        if (!parsed.version || parsed.version < 4) {
-          // Migrate: ensure workspace items default to isFeatured: true, remove legacy settings-numbers item, and update billing to REVENUE & INSIGHTS
+        if (!parsed.version || parsed.version < 5) {
+          // Migrate: ensure workspace items default to isFeatured: true, remove legacy settings-numbers item, update billing to REVENUE & INSIGHTS, and automation to CUSTOMIZATIONS
           const migratedSections = parsed.sections.map((sec: NavSectionConfig) => {
             if (sec.id === "billing") {
               return {
                 ...sec,
                 title: "REVENUE & INSIGHTS",
+              };
+            }
+            if (sec.id === "automation") {
+              return {
+                ...sec,
+                title: "CUSTOMIZATIONS",
               };
             }
             if (sec.id === "workspace") {
@@ -130,15 +137,37 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
             }
             return sec;
           });
-          const migrated = { ...parsed, version: 4, sections: migratedSections };
+          const migrated = { ...parsed, version: 5, sections: migratedSections };
           localStorage.setItem(storageKey, JSON.stringify(migrated));
           return migrated;
         }
-        // Always ensure billing section has REVENUE & INSIGHTS title
+        // Always ensure billing and automation sections have correct titles and items
         if (parsed.sections) {
-          parsed.sections = parsed.sections.map((sec: NavSectionConfig) =>
-            sec.id === "billing" ? { ...sec, title: "REVENUE & INSIGHTS" } : sec
-          );
+          parsed.sections = parsed.sections.map((sec: NavSectionConfig) => {
+            if (sec.id === "billing") return { ...sec, title: "REVENUE & INSIGHTS" };
+            if (sec.id === "automation") {
+              const hasAuto = sec.items.some((it) => it.id === "global-automation");
+              if (!hasAuto) {
+                const wfIdx = sec.items.findIndex((it) => it.id === "workflows");
+                const newItems = [...sec.items];
+                const autoItem: NavItemConfig = {
+                  id: "global-automation",
+                  label: "Automation",
+                  iconName: "Zap",
+                  path: "/automation",
+                  visible: true,
+                };
+                if (wfIdx !== -1) {
+                  newItems.splice(wfIdx + 1, 0, autoItem);
+                } else {
+                  newItems.unshift(autoItem);
+                }
+                return { ...sec, title: "CUSTOMIZATIONS", items: newItems };
+              }
+              return { ...sec, title: "CUSTOMIZATIONS" };
+            }
+            return sec;
+          });
         }
         return parsed;
       }

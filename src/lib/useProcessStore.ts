@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { WorkflowStep } from "../app/types/workflow";
+import { runEntityStageMigration } from "./entityMigration";
 
 export interface AISettings {
   platform: string;
@@ -63,12 +64,16 @@ export interface ProcessTransitionTarget {
   endCurrentProcess?: boolean;
 }
 
+export type EntityType = "client" | "appointment" | "invoice" | "insurance" | "claim";
+
 export interface Stage {
   id: string;
   name: string;
   description: string;
   status: string;
   color?: string;
+  systemCategory?: string; // e.g. "booked", "completed", "draft", "paid", "verified"
+  isSystemCategoryRequired?: boolean; // Required system categories cannot be deleted
   aiSettings?: AISettings;
   stageType?: string;
   selectedInboundNumbers?: string[];
@@ -108,6 +113,7 @@ export interface Process {
   assignedToUserId: number;
   stages: Stage[];
   aiSettings: AISettings;
+  entityType?: EntityType; // "client" | "appointment" | "invoice" | "insurance" | "claim" (default: "client")
   // Scoping & Tenant Permissions
   industryCategory?: string;
   industry?: string;
@@ -245,12 +251,143 @@ export function saveDefaultCallTriggerSettings(settings: CallTriggerSettings) {
   } catch {}
 }
 
+export const REQUIRED_SYSTEM_CATEGORIES: Record<EntityType, string[]> = {
+  client: [],
+  appointment: ["booked", "rescheduled", "completed", "cancelled"],
+  invoice: ["draft", "paid", "void"],
+  insurance: ["pending", "verified", "failed"],
+  claim: ["draft", "submitted", "paid", "denied"],
+};
+
+export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Process> = {
+  appointment: {
+    id: "process-appointment-default",
+    name: "Appointment Flow",
+    description: "Standard scheduling, attendance, and completion lifecycle",
+    assignedToUserId: 1,
+    entityType: "appointment",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "appt-1", name: "Booked", description: "Appointment confirmed and scheduled", status: "active", color: "#3B82F6", systemCategory: "booked", isSystemCategoryRequired: true, isInitial: true, stagePosition: "initial" },
+      { id: "appt-2", name: "Rescheduled", description: "Appointment date or time moved", status: "active", color: "#F59E0B", systemCategory: "rescheduled", isSystemCategoryRequired: true, stagePosition: "intermediate" },
+      { id: "appt-3", name: "Reminder", description: "Reminder notification dispatched", status: "active", color: "#8B5CF6", systemCategory: "reminder", isSystemCategoryRequired: false, stagePosition: "intermediate" },
+      { id: "appt-4", name: "Checked In", description: "Patient arrived at facility or joined session", status: "active", color: "#06B6D4", systemCategory: "checked_in", isSystemCategoryRequired: false, stagePosition: "intermediate" },
+      { id: "appt-5", name: "Completed", description: "Consultation successfully completed", status: "active", color: "#10B981", systemCategory: "completed", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "appt-6", name: "Cancelled", description: "Appointment cancelled by patient or clinic", status: "active", color: "#EF4444", systemCategory: "cancelled", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "appt-7", name: "No-show", description: "Patient did not attend scheduled time", status: "active", color: "#64748B", systemCategory: "no_show", isSystemCategoryRequired: false, isFinal: true, isFinalStage: true, stagePosition: "final" },
+    ],
+  },
+  invoice: {
+    id: "process-invoice-default",
+    name: "Billing & Invoicing",
+    description: "Patient and provider billing lifecycle from draft to settlement",
+    assignedToUserId: 1,
+    entityType: "invoice",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "inv-1", name: "Draft", description: "New invoice created, pending review", status: "active", color: "#64748B", systemCategory: "draft", isSystemCategoryRequired: true, isInitial: true, stagePosition: "initial" },
+      { id: "inv-2", name: "Sent", description: "Invoice sent to client or payer", status: "active", color: "#3B82F6", systemCategory: "sent", isSystemCategoryRequired: false, stagePosition: "intermediate" },
+      { id: "inv-3", name: "Viewed", description: "Invoice viewed by recipient", status: "active", color: "#06B6D4", systemCategory: "viewed", isSystemCategoryRequired: false, stagePosition: "intermediate" },
+      { id: "inv-4", name: "Partially Paid", description: "Partial payment received", status: "active", color: "#F59E0B", systemCategory: "partially_paid", isSystemCategoryRequired: false, stagePosition: "intermediate" },
+      { id: "inv-5", name: "Paid", description: "Full balance settled", status: "active", color: "#10B981", systemCategory: "paid", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "inv-6", name: "Overdue", description: "Payment past due date", status: "active", color: "#F97316", systemCategory: "overdue", isSystemCategoryRequired: false, stagePosition: "intermediate" },
+      { id: "inv-7", name: "Void", description: "Invoice cancelled or voided", status: "active", color: "#EF4444", systemCategory: "void", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+    ],
+  },
+  insurance: {
+    id: "process-insurance-default",
+    name: "Insurance Verification",
+    description: "Patient policy verification and coverage validation",
+    assignedToUserId: 1,
+    entityType: "insurance",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "ins-1", name: "Pending", description: "Eligibility verification in progress", status: "active", color: "#F59E0B", systemCategory: "pending", isSystemCategoryRequired: true, isInitial: true, stagePosition: "initial" },
+      { id: "ins-2", name: "Verified", description: "Coverage active and verified", status: "active", color: "#10B981", systemCategory: "verified", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "ins-3", name: "Failed", description: "Coverage inactive or verification rejected", status: "active", color: "#EF4444", systemCategory: "failed", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+    ],
+  },
+  claim: {
+    id: "process-claim-default",
+    name: "Claims Management",
+    description: "Submission, adjudication, and reimbursement lifecycle",
+    assignedToUserId: 1,
+    entityType: "claim",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "clm-1", name: "Draft", description: "Claim prepared, pending submission", status: "active", color: "#64748B", systemCategory: "draft", isSystemCategoryRequired: true, isInitial: true, stagePosition: "initial" },
+      { id: "clm-2", name: "Submitted", description: "Sent to clearinghouse / payer", status: "active", color: "#3B82F6", systemCategory: "submitted", isSystemCategoryRequired: true, stagePosition: "intermediate" },
+      { id: "clm-3", name: "In Review", description: "Under adjudication by payer", status: "active", color: "#8B5CF6", systemCategory: "in_review", isSystemCategoryRequired: false, stagePosition: "intermediate" },
+      { id: "clm-4", name: "Paid", description: "Claim paid and reconciled", status: "active", color: "#10B981", systemCategory: "paid", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "clm-5", name: "Denied", description: "Claim denied or rejected by payer", status: "active", color: "#EF4444", systemCategory: "denied", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+    ],
+  },
+};
+
+export function isRequiredSystemCategory(entityType: EntityType | undefined, category: string | undefined): boolean {
+  if (!category) return false;
+  const targetEntity = entityType || "client";
+  const requiredList = REQUIRED_SYSTEM_CATEGORIES[targetEntity] || [];
+  return requiredList.includes(category.toLowerCase().trim());
+}
+
+export function isStageDeletable(process: Process, stageId: string): { deletable: boolean; reason?: string } {
+  if (!process?.stages) return { deletable: false, reason: "Process has no stages" };
+  const stage = process.stages.find((s) => s.id === stageId);
+  if (!stage) return { deletable: false, reason: "Stage not found" };
+
+  if (process.stages.length <= 1) {
+    return { deletable: false, reason: "A process must have at least one stage" };
+  }
+
+  if (stage.isSystemCategoryRequired || isRequiredSystemCategory(process.entityType, stage.systemCategory)) {
+    return {
+      deletable: false,
+      reason: `Stages with required category "${stage.systemCategory || stage.name}" cannot be deleted.`,
+    };
+  }
+
+  return { deletable: true };
+}
+
+export function getEntityProcess(processes: Process[], entityType: EntityType): Process | undefined {
+  if (entityType === "client") {
+    return processes.find((p) => !p.entityType || p.entityType === "client");
+  }
+  return processes.find((p) => p.entityType === entityType) || DEFAULT_ENTITY_PROCESSES[entityType];
+}
+
 export const DEFAULT_INITIAL_PROCESSES: Process[] = [
   {
     id: "1",
     name: "Patient Intake",
     description: "Initial patient onboarding, qualification and intent triage workflow",
     assignedToUserId: 1,
+    entityType: "client",
     aiSettings: {
       platform: "OpenAI - GPT-4o",
       voiceSpeed: 1.0,
@@ -340,6 +477,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     name: "Follow-up Calls",
     description: "Post-visit follow-up, consultation onboarding, and reminders",
     assignedToUserId: 2,
+    entityType: "client",
     aiSettings: {
       platform: "Anthropic Claude",
       voiceSpeed: 1.2,
@@ -368,6 +506,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     name: "Nurture Campaign",
     description: "Long-term patient re-engagement and educational newsletter outreach",
     assignedToUserId: 3,
+    entityType: "client",
     aiSettings: {
       platform: "OpenAI - GPT-4o",
       voiceSpeed: 1.0,
@@ -380,6 +519,10 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
       { id: "3-2", name: "Re-engagement Call", description: "Follow up to see if healthcare needs have changed", status: "active", color: "#EC4899" },
     ],
   },
+  DEFAULT_ENTITY_PROCESSES.appointment,
+  DEFAULT_ENTITY_PROCESSES.invoice,
+  DEFAULT_ENTITY_PROCESSES.insurance,
+  DEFAULT_ENTITY_PROCESSES.claim,
 ];
 
 export const DEFAULT_WORKFLOW_STEPS: Record<string, WorkflowStep[]> = {
@@ -399,19 +542,98 @@ export const DEFAULT_WORKFLOW_STEPS: Record<string, WorkflowStep[]> = {
 };
 
 export function getStoredProcesses(): Process[] {
+  let list: Process[] = [];
   try {
     const raw = localStorage.getItem(PROCESSES_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : DEFAULT_INITIAL_PROCESSES;
+    list = raw ? JSON.parse(raw) : DEFAULT_INITIAL_PROCESSES;
+    if (!Array.isArray(list) || list.length === 0) {
+      list = [...DEFAULT_INITIAL_PROCESSES];
+    }
   } catch {
-    return DEFAULT_INITIAL_PROCESSES;
+    list = [...DEFAULT_INITIAL_PROCESSES];
   }
+
+  let changed = false;
+  // Ensure existing client processes have entityType assigned
+  list = list.map((p) => {
+    if (!p.entityType) {
+      changed = true;
+      return { ...p, entityType: "client" as EntityType };
+    }
+    return p;
+  });
+
+  // Ensure singleton processes for non-client entities exist
+  const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim"];
+  for (const et of nonClientTypes) {
+    const exists = list.some((p) => p.entityType === et);
+    if (!exists) {
+      list.push(DEFAULT_ENTITY_PROCESSES[et]);
+      changed = true;
+    }
+  }
+
+  // Ensure systemCategory and isSystemCategoryRequired flags are set properly
+  list = list.map((p) => {
+    if (p.entityType && p.entityType !== "client") {
+      const defaultProc = DEFAULT_ENTITY_PROCESSES[p.entityType];
+      if (defaultProc) {
+        const updatedStages = p.stages.map((st) => {
+          const defaultStage = defaultProc.stages.find((ds) => ds.id === st.id || ds.systemCategory === st.systemCategory);
+          const req = isRequiredSystemCategory(p.entityType, st.systemCategory || defaultStage?.systemCategory);
+          return {
+            ...st,
+            systemCategory: st.systemCategory || defaultStage?.systemCategory,
+            isSystemCategoryRequired: req || defaultStage?.isSystemCategoryRequired || false,
+          };
+        });
+        return { ...p, stages: updatedStages };
+      }
+    }
+    return p;
+  });
+
+  if (changed) {
+    try {
+      localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(list));
+    } catch {}
+  }
+
+  // Trigger one-time entity migration if needed
+  try {
+    runEntityStageMigration(list);
+  } catch (err) {
+    console.warn("Entity stage migration notice:", err);
+  }
+
+  return list;
 }
 
 export function saveStoredProcesses(processes: Process[]) {
   try {
-    localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(processes));
+    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim"];
+    const sanitized: Process[] = [];
+
+    // 1. Client processes (free to add, edit, delete, reorder)
+    for (const p of processes) {
+      if (!p.entityType || p.entityType === "client") {
+        sanitized.push({ ...p, entityType: "client" });
+      }
+    }
+
+    // 2. Non-client processes (singletons only - prevent delete and duplicates)
+    for (const et of nonClientTypes) {
+      const candidates = processes.filter((p) => p.entityType === et);
+      if (candidates.length > 0) {
+        sanitized.push(candidates[0]);
+      } else {
+        sanitized.push(DEFAULT_ENTITY_PROCESSES[et]);
+      }
+    }
+
+    localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(sanitized));
     window.dispatchEvent(new Event(PROCESS_STORE_EVENT));
-  } catch { }
+  } catch {}
 }
 
 export function getStoredWorkflowSteps(): Record<string, WorkflowStep[]> {

@@ -27,6 +27,8 @@ export interface Appointment {
   tags?: string[];
   processId?: string;
   stageId?: string;
+  currentStageId?: string;
+  statusLabel?: string;
 }
 
 export interface Employee {

@@ -1933,6 +1933,89 @@ export default function StepParametersFields({
               </div>
             )}
 
+            {/* Stage Entry Action: Generate Invoice (Records category) */}
+            {stepKey === "generate_invoice" && (
+              <div className="space-y-4">
+                <div className="p-3 bg-blue-50/60 border border-blue-200/80 rounded-xl space-y-1 text-xs">
+                  <div className="flex items-center gap-2 font-semibold text-blue-900">
+                    <span>Generate Invoice (Records)</span>
+                    <InfoTooltip text="Strictly idempotent per appointment: if an invoice already exists for this appointment, duplicate generation is automatically skipped." />
+                  </div>
+                  <p className="text-blue-700/80 text-[11px]">
+                    Creates a draft invoice in the Billing &amp; Invoicing process upon entering this stage.
+                  </p>
+                </div>
+
+                {renderField("Payment Due In",
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={params.dueDays || 14}
+                      onChange={e => onChange({ dueDays: parseInt(e.target.value) || 14 })}
+                      className="w-24 px-3 py-2 border rounded-md bg-white text-sm"
+                    />
+                    <span className="text-sm text-gray-500">days after appointment booking</span>
+                  </div>
+                )}
+
+                {renderField("Default Line Item Service",
+                  <select
+                    value={params.defaultServiceId || "1"}
+                    onChange={e => onChange({ defaultServiceId: e.target.value })}
+                    className="w-full px-3 py-2.5 border rounded-md bg-white text-sm"
+                  >
+                    {MOCK_SERVICES.map(srv => (
+                      <option key={srv.id} value={srv.id}>
+                        {srv.name} (${srv.price})
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <div className="flex items-center justify-between p-3 bg-gray-50 border rounded-lg">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-800">Auto-send upon generation</p>
+                    <p className="text-[11px] text-gray-500">Automatically dispatch payment link to client via preferred channel</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={params.autoSend !== false}
+                    onChange={e => onChange({ autoSend: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Stage Entry Action: Send Payment (Records category) */}
+            {stepKey === "send_payment" && (
+              <div className="space-y-4">
+                <div className="p-3 bg-blue-50/60 border border-blue-200/80 rounded-xl space-y-1 text-xs">
+                  <div className="flex items-center gap-2 font-semibold text-blue-900">
+                    <span>Send Payment Link</span>
+                    <InfoTooltip text="Sends a secure payment collection link directly to the contact." />
+                  </div>
+                  <p className="text-blue-700/80 text-[11px]">
+                    Dispatches the client's current outstanding balance or invoice link.
+                  </p>
+                </div>
+
+                {renderField("Delivery Channel",
+                  <select
+                    value={params.channel || "whatsapp"}
+                    onChange={e => onChange({ channel: e.target.value })}
+                    className="w-full px-3 py-2.5 border rounded-md bg-white text-sm"
+                  >
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="sms">SMS Text</option>
+                    <option value="email">Email</option>
+                  </select>
+                )}
+              </div>
+            )}
+
             {stepKey === "smartcallanalysis" && (
               <div className="space-y-4">
                 {renderField(

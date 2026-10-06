@@ -27,9 +27,15 @@ import {
   LayoutGrid,
   List,
   CalendarClock,
+  History,
+  Undo2,
 } from "lucide-react";
+import { appointmentService } from "../../lib/appointmentService";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses } from "../../lib/useProcessStore";
+import { getStoredStageMoves, undoStageMove, StageMove } from "../../lib/useAutomationStore";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
+import StageMovementTimelineModal from "../components/automation/StageMovementTimelineModal";
 import AppointmentCard from "../components/appointments/AppointmentCard";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
@@ -61,6 +67,8 @@ interface Appointment {
   tags?: string[];
   processId?: string;
   stageId?: string;
+  currentStageId?: string;
+  statusLabel?: string;
 }
 
 interface Employee {
@@ -119,63 +127,27 @@ export default function Appointments() {
     { id: 4, name: "X-Ray Imaging", duration: 20, price: 80 },
   ];
 
-  const [appointments, setAppointments] = useState<Appointment[]>(() => {
-    const saved = sessionStorage.getItem("appointments_v1");
-    if (saved) {
-      try { return JSON.parse(saved); } catch { }
-    }
-    return [
-      {
-        id: 1,
-        clientName: "James Wilson",
-        clientEmail: "james.w@example.com",
-        clientPhone: "+1 (555) 123-4567",
-        employeeId: 1,
-        serviceId: 1,
-        date: "2026-05-12",
-        time: "09:00",
-        duration: 60,
-        status: "pending-accept",
-        notes: "First-time patient",
-      },
-      {
-        id: 2,
-        clientName: "Emma Brown",
-        clientEmail: "emma.b@example.com",
-        clientPhone: "+1 (555) 234-5678",
-        employeeId: 2,
-        serviceId: 2,
-        date: "2026-05-12",
-        time: "10:30",
-        duration: 30,
-        status: "scheduled",
-      },
-      {
-        id: 3,
-        clientName: "Oliver Davis",
-        clientEmail: "oliver.d@example.com",
-        clientPhone: "+1 (555) 345-6789",
-        employeeId: 1,
-        serviceId: 4,
-        date: "2026-05-13",
-        time: "14:00",
-        duration: 20,
-        status: "scheduled",
-      },
-      {
-        id: 4,
-        clientName: "Sophia Martinez",
-        clientEmail: "sophia.m@example.com",
-        clientPhone: "+1 (555) 456-7890",
-        employeeId: 5,
-        serviceId: 3,
-        date: "2026-05-14",
-        time: "11:00",
-        duration: 45,
-        status: "scheduled",
-      },
-    ];
-  });
+  const appointmentProcess = useMemo(() => {
+    const processes = getStoredProcesses();
+    return processes.find((p) => p.entityType === "appointment") || DEFAULT_ENTITY_PROCESSES.appointment;
+  }, []);
+
+  const [appointments, setAppointments] = useState<Appointment[]>(() => appointmentService.getAppointments() as any);
+  const [stageFilter, setStageFilter] = useState<string>("all");
+  const [showTimelineModal, setShowTimelineModal] = useState(false);
+  const [stageMoves, setStageMoves] = useState<StageMove[]>(() => getStoredStageMoves());
+
+  useEffect(() => {
+    const handleMovesUpdate = () => setStageMoves(getStoredStageMoves());
+    window.addEventListener("mantra_stage_moves_store_updated", handleMovesUpdate);
+    return () => window.removeEventListener("mantra_stage_moves_store_updated", handleMovesUpdate);
+  }, []);
+
+  useEffect(() => {
+    return appointmentService.subscribe((updated) => {
+      setAppointments(updated as any);
+    });
+  }, []);
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date());
@@ -504,67 +476,32 @@ export default function Appointments() {
     const parsedTags = bookingTags ? bookingTags.split(",").map((t) => t.trim()).filter(Boolean) : undefined;
 
     if (drawerMode === "reschedule" && selectedAppointment) {
-      setAppointments(
-        appointments.map((a) =>
-          a.id === selectedAppointment.id
-            ? {
-              ...a,
-              clientName: selectedClient.name,
-              clientEmail: selectedClient.email,
-              clientPhone: selectedClient.phone,
-              employeeId: selectedProvider.id,
-              date: selectedDate,
-              time: timeStr,
-              notes: bookingNote || `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
-              title: bookingTitle.trim(),
-              description: bookingDescription.trim() || undefined,
-              tags: parsedTags,
-              processId: bookingProcessId || undefined,
-              stageId: bookingStageId || undefined,
-            }
-            : a
-        )
-      );
+      appointmentService.rescheduleAppointment(selectedAppointment.id, selectedDate, timeStr, bookingNote);
       toast.success("Appointment rescheduled successfully!");
     } else {
-      const newAppointment: Appointment = {
-        id: appointments.length > 0 ? Math.max(...appointments.map((a) => a.id)) + 1 : 1,
+      const res = appointmentService.createAppointment({
         clientName: selectedClient.name,
         clientEmail: selectedClient.email,
         clientPhone: selectedClient.phone,
         employeeId: selectedProvider.id,
-        serviceId: 1,
+        serviceId: bookingServiceId ? Number(bookingServiceId) : 1,
         date: selectedDate,
         time: timeStr,
         duration: 60,
-        status: "scheduled",
         notes: bookingNote || `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
         title: bookingTitle.trim(),
         description: bookingDescription.trim() || undefined,
         tags: parsedTags,
-        processId: bookingProcessId || undefined,
-        stageId: bookingStageId || undefined,
-      };
+        clientId: selectedClient.id ? String(selectedClient.id) : undefined,
+        location: bookingLocation,
+        sessionType,
+        generateInvoice: bookingGenerateInvoice,
+        lineItems: bookingLineItems && bookingLineItems.length > 0 ? bookingLineItems : undefined,
+        source: "screen",
+      });
 
-      setAppointments([...appointments, newAppointment]);
-
-      if (bookingGenerateInvoice && bookingLineItems && bookingLineItems.length > 0) {
-        const inv = createInvoiceFromAppointment(
-          {
-            id: newAppointment.id,
-            clientId: String(selectedClient.id || "c-1"),
-            clientName: selectedClient.name,
-            clientEmail: selectedClient.email,
-            clientPhone: selectedClient.phone,
-            title: bookingTitle.trim(),
-          },
-          bookingLineItems,
-          {
-            discountAmount: bookingDiscountAmount,
-            createdBy: "Admin User",
-          }
-        );
-        toast.success(`Appointment scheduled — Invoice ${inv.id} created!`);
+      if (res.invoiceId) {
+        toast.success(`Appointment scheduled — Invoice ${res.invoiceId} created!`);
       } else {
         toast.success("Appointment scheduled successfully!");
       }
@@ -658,27 +595,24 @@ export default function Appointments() {
   };
 
   const handleDeleteAppointment = (appointmentId: number) => {
-    setAppointments(appointments.filter((a) => a.id !== appointmentId));
-    const linkedInvoice = invoices.find(i => String(i.appointmentId) === String(appointmentId));
-    if (linkedInvoice && linkedInvoice.status !== "paid") {
-      voidInvoice(linkedInvoice.id);
-      toast.success(`Appointment cancelled & Invoice ${linkedInvoice.id} voided`);
-    } else {
-      toast.success("Appointment cancelled");
-    }
+    appointmentService.cancelAppointment(appointmentId);
+    toast.success("Appointment cancelled & invoice voided if unpaid");
   };
 
   const handleStatusChange = (appointmentId: number, status: Appointment["status"]) => {
-    setAppointments(appointments.map((a) => (a.id === appointmentId ? { ...a, status } : a)));
     if (status === "cancelled") {
-      const linkedInvoice = invoices.find(i => String(i.appointmentId) === String(appointmentId));
-      if (linkedInvoice && linkedInvoice.status !== "paid") {
-        voidInvoice(linkedInvoice.id);
-        toast.success(`Appointment marked cancelled & Invoice ${linkedInvoice.id} voided`);
-        return;
+      appointmentService.cancelAppointment(appointmentId);
+    } else if (status === "completed") {
+      appointmentService.completeAppointment(appointmentId);
+    } else {
+      const targetStage = appointmentProcess.stages.find(s => s.systemCategory === status);
+      if (targetStage) {
+        appointmentService.moveToStage(appointmentId, targetStage.id);
+      } else {
+        appointmentService.updateAppointment(appointmentId, { status });
       }
     }
-    toast.success(`Appointment marked as ${status}`);
+    toast.success("Appointment status updated");
   };
 
   const openEditModal = (appointment: Appointment) => {
@@ -768,8 +702,9 @@ export default function Appointments() {
         matchesTab = true;
         break;
     }
+    const matchesStage = stageFilter === "all" || apt.currentStageId === stageFilter || apt.status === stageFilter;
 
-    return matchesSearch && matchesEmployee && matchesTab;
+    return matchesSearch && matchesEmployee && matchesTab && matchesStage;
   });
 
   const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentDate);
@@ -840,6 +775,15 @@ export default function Appointments() {
           }
         >
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowTimelineModal(true)}
+              className="h-8 px-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Audit trail of stage movements and 1-click Undo"
+            >
+              <History className="w-3.5 h-3.5 text-blue-600" />
+              <span>Stage History</span>
+            </button>
             <HowItWorksButton label="How Appointments Works" onClick={() => setShowHelp(true)} />
           </div>
         </PageHeader>
@@ -861,44 +805,31 @@ export default function Appointments() {
               id: "all",
               label: "All",
               count: statsSource.length,
-              isActive: listViewTab === "all",
-              onClick: () => setListViewTab("all"),
+              isActive: stageFilter === "all",
+              onClick: () => { setStageFilter("all"); setListViewTab("all"); },
             },
-            {
-              id: "upcoming",
-              label: "Upcoming",
-              count: statsSource.filter((a) => a.status === "scheduled").length,
-              isActive: listViewTab === "upcoming",
-              onClick: () => setListViewTab("upcoming"),
-            },
-            {
-              id: "pending",
-              label: "Pending",
-              count: statsSource.filter((a) => a.status === "pending-accept").length,
-              isActive: listViewTab === "pending",
-              onClick: () => setListViewTab("pending"),
-            },
-            {
-              id: "done",
-              label: "Done",
-              count: statsSource.filter((a) => a.status === "completed").length,
-              isActive: listViewTab === "done",
-              onClick: () => setListViewTab("done"),
-            },
+            ...appointmentProcess.stages.map((stg) => ({
+              id: stg.id,
+              label: stg.name,
+              count: statsSource.filter((a) => a.currentStageId === stg.id || a.status === stg.systemCategory).length,
+              isActive: stageFilter === stg.id,
+              onClick: () => { setStageFilter(stg.id); },
+            })),
           ]}
           filterFields={[
             {
-              id: "status",
-              label: "Status",
+              id: "stage",
+              label: "Stage",
               type: "select",
               options: [
-                { label: `All (${statsSource.length})`, value: "all" },
-                { label: `Upcoming (${statsSource.filter((a) => a.status === "scheduled").length})`, value: "upcoming" },
-                { label: `Pending (${statsSource.filter((a) => a.status === "pending-accept").length})`, value: "pending" },
-                { label: `Done (${statsSource.filter((a) => a.status === "completed").length})`, value: "done" },
+                { label: `All Stages (${statsSource.length})`, value: "all" },
+                ...appointmentProcess.stages.map((stg) => ({
+                  label: `${stg.name} (${statsSource.filter((a) => a.currentStageId === stg.id || a.status === stg.systemCategory).length})`,
+                  value: stg.id,
+                })),
               ],
-              value: listViewTab,
-              onChange: (v) => setListViewTab(v as typeof listViewTab),
+              value: stageFilter,
+              onChange: (v) => setStageFilter(v),
             },
             ...(devUserRole !== "provider"
               ? [
@@ -920,16 +851,18 @@ export default function Appointments() {
             view !== "availability" ? (
               <div className="flex items-center gap-2">
                 <select
-                  value={listViewTab}
-                  onChange={(e) => setListViewTab(e.target.value as typeof listViewTab)}
+                  value={stageFilter}
+                  onChange={(e) => setStageFilter(e.target.value)}
                   className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
                   style={{ fontFamily: "Outfit, sans-serif" }}
-                  title="Filter by Status"
+                  title="Filter by Stage"
                 >
-                  <option value="all">All ({statsSource.length})</option>
-                  <option value="upcoming">Upcoming ({statsSource.filter((a) => a.status === "scheduled").length})</option>
-                  <option value="pending">Pending ({statsSource.filter((a) => a.status === "pending-accept").length})</option>
-                  <option value="done">Done ({statsSource.filter((a) => a.status === "completed").length})</option>
+                  <option value="all">All Stages ({statsSource.length})</option>
+                  {appointmentProcess.stages.map((stg) => (
+                    <option key={stg.id} value={stg.id}>
+                      {stg.name} ({statsSource.filter((a) => a.currentStageId === stg.id || a.status === stg.systemCategory).length})
+                    </option>
+                  ))}
                 </select>
 
                 {devUserRole !== "provider" && (
@@ -1529,6 +1462,14 @@ export default function Appointments() {
           "Reschedule or cancel directly from a card",
         ]}
         guideUrl="/guide/appointments"
+      />
+
+      <StageMovementTimelineModal
+        isOpen={showTimelineModal}
+        onClose={() => setShowTimelineModal(false)}
+        entityType="appointment"
+        moves={stageMoves}
+        title="Appointment Stage Movement History"
       />
     </div>
   );

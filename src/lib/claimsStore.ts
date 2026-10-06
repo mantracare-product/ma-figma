@@ -73,6 +73,8 @@ export interface Claim {
 
   // Lifecycle
   status: ClaimStatus;
+  currentStageId?: string;
+  statusLabel?: string;
   submissionMethod?: "clearinghouse" | "manual_cms1500";
   clearinghouseTrackingId?: string;
   clearinghouseBatchId?: string;

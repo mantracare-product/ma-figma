@@ -10,6 +10,7 @@ import CallLogs from "./pages/CallLogs";
 import CallDetails from "./pages/CallDetails";
 import Deals from "./pages/Deals";
 import Process from "./pages/Process";
+import Automation from "./pages/Automation";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import WebForms from "./pages/WebForms";
 import NewFormTemplate from "./pages/NewFormTemplate";
@@ -67,6 +68,7 @@ export const router = createBrowserRouter([
           { path: "call-logs/:id", Component: CallDetails },
           { path: "deals", Component: Deals },
           { path: "process", Component: Process },
+          { path: "automation", Component: Automation },
           { path: "knowledge-base", Component: KnowledgeBase },
           { path: "web-forms", Component: WebForms },
           { path: "web-forms/new", Component: NewFormTemplate },

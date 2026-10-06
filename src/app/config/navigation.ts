@@ -107,10 +107,10 @@ export const navigationConfig: NavGroup[] = [
     ],
   },
 
-  // AUTOMATIONS
+  // CUSTOMIZATIONS
   {
     id: "automation",
-    label: "AUTOMATIONS",
+    label: "CUSTOMIZATIONS",
     items: [
       {
         id: "workflows",

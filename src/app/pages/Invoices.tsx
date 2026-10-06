@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
@@ -33,7 +33,12 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  History,
 } from "lucide-react";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses } from "../../lib/useProcessStore";
+import { getStoredStageMoves, StageMove } from "../../lib/useAutomationStore";
+import { invoiceService } from "../../lib/invoiceService";
+import StageMovementTimelineModal from "../components/automation/StageMovementTimelineModal";
 
 export default function Invoices() {
   const { invoices, updateInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, voidInvoice } = useInvoices();
@@ -125,7 +130,7 @@ export default function Invoices() {
       inv.clientName.toLowerCase().includes(query) ||
       (inv.appointmentTitle && inv.appointmentTitle.toLowerCase().includes(query));
 
-    const matchesStatus = statusFilter === "all" || inv.status === statusFilter;
+    const matchesStatus = statusFilter === "all" || inv.currentStageId === statusFilter || inv.status === statusFilter;
     const matchesClient = clientFilter === "all" || inv.clientId === clientFilter;
 
     return matchesSearch && matchesStatus && matchesClient;
@@ -201,35 +206,53 @@ export default function Invoices() {
     setOpenCardMenuId(null);
   };
 
-  const getStatusBadge = (status: InvoiceStatus) => {
-    switch (status) {
-      case "paid":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Paid</span>;
-      case "partial":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 font-bold whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Partial</span>;
-      case "sent":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Sent</span>;
-      case "viewed":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Viewed</span>;
-      case "overdue":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 font-bold whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Overdue</span>;
-      case "void":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 line-through whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Void</span>;
-      default:
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Draft</span>;
-    }
+  const invoiceProcess = React.useMemo(() => {
+    const processes = getStoredProcesses();
+    return processes.find((p) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
+  }, []);
+
+  const [showTimelineModal, setShowTimelineModal] = useState(false);
+  const [stageMoves, setStageMoves] = useState<StageMove[]>(() => getStoredStageMoves());
+
+  useEffect(() => {
+    const handleMovesUpdate = () => setStageMoves(getStoredStageMoves());
+    window.addEventListener("mantra_stage_moves_store_updated", handleMovesUpdate);
+    return () => window.removeEventListener("mantra_stage_moves_store_updated", handleMovesUpdate);
+  }, []);
+
+  const getStatusBadge = (invOrStatus: ClientInvoice | InvoiceStatus) => {
+    const isObj = typeof invOrStatus === "object" && invOrStatus !== null;
+    const invoice = isObj ? (invOrStatus as ClientInvoice) : undefined;
+    const stageId = invoice ? invoice.currentStageId : undefined;
+    const statusVal = invoice ? invoice.status : (invOrStatus as InvoiceStatus);
+    const stage = invoiceProcess.stages.find((s) => s.id === stageId || s.systemCategory === statusVal);
+    const label: string = (invoice && invoice.statusLabel) ? invoice.statusLabel : (stage?.name || (typeof statusVal === "string" ? statusVal : "Draft"));
+    const color = stage?.color || "#64748B";
+
+    return (
+      <span
+        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
+        style={{
+          fontFamily: "Outfit, sans-serif",
+          backgroundColor: `${color}15`,
+          color: color,
+          border: `1px solid ${color}35`,
+        }}
+      >
+        {label}
+      </span>
+    );
   };
 
-  const kanbanColumns: { id: InvoiceStatus; title: string; headerBg: string; badgeColor: string }[] = [
-    { id: "draft", title: "Draft", headerBg: "#181e25", badgeColor: "bg-slate-100 text-slate-800" },
-    { id: "sent", title: "Sent", headerBg: "#181e25", badgeColor: "bg-blue-50 text-[#1456f0]" },
-    { id: "viewed", title: "Viewed", headerBg: "#181e25", badgeColor: "bg-purple-50 text-purple-700" },
-    { id: "partial", title: "Partial", headerBg: "#f59e0b", badgeColor: "bg-amber-50 text-amber-800" },
-    { id: "paid", title: "Paid", headerBg: "#10b981", badgeColor: "bg-emerald-50 text-emerald-800" },
-    { id: "overdue", title: "Overdue", headerBg: "#ef4444", badgeColor: "bg-rose-50 text-rose-800" },
-    { id: "void", title: "Void", headerBg: "#64748b", badgeColor: "bg-slate-100 text-slate-600" },
-  ];
-
+  const kanbanColumns = useMemo(() => {
+    return invoiceProcess.stages.map((stg) => ({
+      id: stg.id,
+      category: stg.systemCategory || "draft",
+      title: stg.name,
+      headerBg: stg.color || "#181e25",
+      badgeColor: "bg-slate-100 text-slate-800",
+    }));
+  }, [invoiceProcess]);
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
@@ -239,6 +262,15 @@ export default function Invoices() {
           subtitle="Manage client billing, view automated call-flow invoices, and collect payments"
         >
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowTimelineModal(true)}
+              className="h-8 px-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Audit trail of stage movements and 1-click Undo"
+            >
+              <History className="w-3.5 h-3.5 text-blue-600" />
+              <span>Stage History</span>
+            </button>
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Invoices Works" />
           </div>
         </PageHeader>
@@ -323,39 +355,34 @@ export default function Invoices() {
             },
             {
               id: "status",
-              label: "Invoice Status",
+              label: "Invoice Stage",
               type: "select",
               value: statusFilter,
               onChange: (val) => setStatusFilter(val || "all"),
               options: [
-                { label: "All Statuses", value: "all" },
-                { label: "Draft", value: "draft" },
-                { label: "Sent", value: "sent" },
-                { label: "Viewed", value: "viewed" },
-                { label: "Partial", value: "partial" },
-                { label: "Paid", value: "paid" },
-                { label: "Overdue", value: "overdue" },
-                { label: "Void", value: "void" },
+                { label: "All Stages", value: "all" },
+                ...invoiceProcess.stages.map((stg) => ({
+                  label: stg.name,
+                  value: stg.id,
+                })),
               ],
             },
           ]}
           secondaryActions={
             <div className="flex items-center gap-2">
-              {/* Status Filter Dropdown */}
+              {/* Stage Filter Dropdown */}
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <option value="all">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="sent">Sent</option>
-                <option value="viewed">Viewed</option>
-                <option value="partial">Partial</option>
-                <option value="paid">Paid</option>
-                <option value="overdue">Overdue</option>
-                <option value="void">Void</option>
+                <option value="all">All Stages</option>
+                {invoiceProcess.stages.map((stg) => (
+                  <option key={stg.id} value={stg.id}>
+                    {stg.name}
+                  </option>
+                ))}
               </select>
 
               {/* Client Filter Dropdown */}
@@ -596,7 +623,7 @@ export default function Invoices() {
               }}
             >
               {kanbanColumns.map((col) => {
-                const columnInvoices = filteredInvoices.filter((inv) => inv.status === col.id);
+                const columnInvoices = filteredInvoices.filter((inv) => inv.currentStageId === col.id || inv.status === col.category);
                 const columnTotal = columnInvoices.reduce((sum, i) => sum + i.total, 0);
 
                 return (
@@ -622,36 +649,26 @@ export default function Invoices() {
                       const targetInv = invoices.find((i) => i.id === draggedInvoiceId);
                       if (!targetInv) return;
 
-                      if (col.id === "overdue") {
+                      if (col.category === "overdue") {
                         toast.error("Overdue status is system-derived from due date and cannot be set manually.");
                         setDraggedInvoiceId(null);
                         return;
                       }
 
-                      if (col.id === "sent") {
+                      if (col.category === "sent") {
                         sendInvoice(targetInv.id, "whatsapp");
                         toast.success(`Invoice ${targetInv.id} sent via WhatsApp`);
-                      } else if (col.id === "paid") {
+                      } else if (col.category === "paid") {
                         const remaining = Math.max(0, targetInv.total - (targetInv.amountPaid || 0));
-                        recordPayment([
-                          {
-                            invoiceId: targetInv.id,
-                            clientId: targetInv.clientId,
-                            amount: remaining,
-                            method: "cash",
-                            paymentType: "self_pay",
-                            paymentDate: new Date().toISOString().split("T")[0],
-                            note: "Settled via Kanban drag-to-Paid",
-                          },
-                        ]);
-                        toast.success(`Invoice ${targetInv.id} remaining balance ($${remaining.toFixed(2)}) paid`);
-                      } else if (col.id === "partial") {
+                        invoiceService.recordPayment(targetInv.id, remaining, "cash", "Settled via Kanban drag-to-Paid");
+                        toast.success(`Invoice ${targetInv.id} balance ($${remaining.toFixed(2)}) paid`);
+                      } else if (col.category === "partially_paid") {
                         setPaymentModalInvoice(targetInv);
-                      } else if (col.id === "void") {
+                      } else if (col.category === "void") {
                         voidInvoice(targetInv.id);
                         toast.success(`Invoice ${targetInv.id} voided`);
                       } else {
-                        updateInvoiceStatus(targetInv.id, col.id);
+                        invoiceService.moveToStage(targetInv.id, col.id, { type: "manual", ruleName: `Kanban drag to ${col.title}` });
                         toast.success(`Invoice moved to ${col.title}`);
                       }
 
@@ -885,6 +902,14 @@ export default function Invoices() {
           preSelectedInvoiceId={paymentModalInvoice?.id || null}
         />
       )}
+
+      <StageMovementTimelineModal
+        isOpen={showTimelineModal}
+        onClose={() => setShowTimelineModal(false)}
+        entityType="invoice"
+        moves={stageMoves}
+        title="Invoice Stage Movement History"
+      />
     </div>
   );
 }

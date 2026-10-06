@@ -2,6 +2,21 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { ClientInvoice, InvoiceLineItem, InvoiceStatus, ReportDefinition, ReportDataSource, InvoiceFieldRule, InvoiceFieldRulesMap, Payment } from "../types/invoiceTypes";
 import { addActivityEntry } from "../../lib/activityLog";
 import { useFieldRegistry } from "./FieldRegistryContext";
+import { DEFAULT_ENTITY_PROCESSES } from "../../lib/useProcessStore";
+import { mapInvoiceStatusToCategory, findStageForCategory } from "../../lib/entityMigration";
+import { invoiceService } from "../../lib/invoiceService";
+
+export function ensureInvoiceStage(inv: ClientInvoice): ClientInvoice {
+  if (inv.currentStageId && inv.statusLabel) return inv;
+  const invProc = DEFAULT_ENTITY_PROCESSES.invoice;
+  const cat = mapInvoiceStatusToCategory(inv.status || "draft");
+  const stage = findStageForCategory(invProc, cat);
+  return {
+    ...inv,
+    currentStageId: inv.currentStageId || stage?.id || "inv-1",
+    statusLabel: inv.statusLabel || stage?.name || "Draft",
+  };
+}
 
 interface CreateInvoiceOptions {
   appointmentId?: string;
@@ -562,14 +577,16 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { getAllFields } = useFieldRegistry();
 
   const [invoices, setInvoices] = useState<ClientInvoice[]>(() => {
-    const saved = localStorage.getItem("mantra_invoices_v1");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {}
-    }
-    return INITIAL_INVOICES;
+    return invoiceService.getInvoices().map(ensureInvoiceStage);
   });
+
+  useEffect(() => {
+    // Check overdue on mount
+    invoiceService.checkOverdueInvoices();
+    return invoiceService.subscribe((updated) => {
+      setInvoices(updated.map(ensureInvoiceStage));
+    });
+  }, []);
 
   const [fieldRules, setFieldRules] = useState<InvoiceFieldRulesMap>(() => {
     const saved = localStorage.getItem("mantra_invoice_field_rules_v1");
@@ -739,125 +756,31 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     lineItems: InvoiceLineItem[],
     options?: CreateInvoiceOptions
   ): ClientInvoice => {
-    const subtotal = lineItems.reduce(
-      (acc, item) => acc + (item.unitPrice * item.quantity - (item.discountAmount || 0)),
-      0
-    );
-
-    let discount = options?.discountAmount || 0;
-    if (options?.discountType === "percent" && options.discountValue !== undefined) {
-      discount = (subtotal * options.discountValue) / 100;
-    } else if (options?.discountValue !== undefined && options?.discountAmount === undefined) {
-      discount = options.discountValue;
-    }
-
-    discount = Math.round(discount * 100) / 100;
-    const taxSum = lineItems.reduce((acc, item) => {
-      const itemSub = Math.max(0, item.unitPrice * item.quantity - (item.discountAmount || 0));
-      const effectiveDisc = subtotal > 0 ? (discount * (itemSub / subtotal)) : 0;
-      const taxableItem = Math.max(0, itemSub - effectiveDisc);
-      const taxRate = item.taxPercent !== undefined ? item.taxPercent : 8;
-      return acc + (taxableItem * taxRate) / 100;
-    }, 0);
-    const tax = Math.round(taxSum * 100) / 100;
-    const total = Math.round((Math.max(0, subtotal - discount) + tax) * 100) / 100;
-
-    const nextIdNumber = 1050 + invoices.length;
-    const newInvoice: ClientInvoice = {
-      id: `INV-CL-${nextIdNumber}`,
-      clientId: String(appointment.clientId || "c-1"),
-      clientName: appointment.clientName || "Client",
-      clientEmail: appointment.clientEmail || "",
-      clientPhone: appointment.clientPhone || "",
-      appointmentId: appointment.id ? String(appointment.id) : undefined,
-      appointmentTitle: appointment.title || "Appointment",
-      status: "draft",
-      currency: "$",
-      lineItems,
-      subtotal,
-      discountType: options?.discountType || "amount",
-      discountValue: options?.discountValue || discount,
-      discountAmount: discount,
-      taxAmount: tax,
-      total,
-      amountPaid: 0,
-      createdAt: new Date().toISOString(),
-      createdBy: options?.createdBy || "Admin User",
-      dueDate: options?.dueDate || new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
-      paymentMode: options?.paymentMode,
-      paymentLinkUrl: `https://pay.mantraassist.mock/inv-${nextIdNumber}`,
-    };
-
-    setInvoices((prev) => [newInvoice, ...prev]);
-
-    // Log to activity engine
-    if (newInvoice.clientId) {
-      addActivityEntry({
-        clientId: newInvoice.clientId,
-        processId: "billing",
-        processName: "Billing & Invoicing",
-        type: "field_update",
-        status: "success",
-        refId: newInvoice.id,
-        details: {
-          primary: `Invoice ${newInvoice.id} created`,
-          secondary: `Total: $${newInvoice.total.toFixed(2)} (${newInvoice.createdBy === "system" ? "Automated" : "Manual"})`,
-        },
-      });
-    }
-
-    return newInvoice;
+    const { invoice } = invoiceService.createInvoiceFromAppointment(appointment, lineItems, options);
+    return invoice;
   };
 
   const updateInvoice = (invoiceId: string, patch: Partial<ClientInvoice>) => {
-    setInvoices((prev) =>
-      prev.map((inv) => (inv.id === invoiceId ? { ...inv, ...patch } : inv))
-    );
+    const all = invoiceService.getInvoices();
+    const updated = all.map((inv) => (inv.id === invoiceId ? { ...inv, ...patch } : inv));
+    invoiceService.saveInvoices(updated);
   };
 
   const deleteInvoice = (invoiceId: string) => {
-    setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
+    invoiceService.deleteInvoice(invoiceId);
   };
 
   const updateInvoiceStatus = (invoiceId: string, status: InvoiceStatus) => {
-    setInvoices((prev) =>
-      prev.map((inv) => (inv.id === invoiceId ? { ...inv, status } : inv))
-    );
+    const invProc = DEFAULT_ENTITY_PROCESSES.invoice;
+    const cat = mapInvoiceStatusToCategory(status);
+    const stage = findStageForCategory(invProc, cat);
+    if (stage) {
+      invoiceService.moveToStage(invoiceId, stage.id, { type: "manual", ruleName: `Status set to ${status}` });
+    }
   };
 
   const sendInvoice = (invoiceId: string, channel: "whatsapp" | "sms" | "email" = "whatsapp") => {
-    const now = new Date().toISOString();
-    setInvoices((prev) =>
-      prev.map((inv) => {
-        if (inv.id === invoiceId) {
-          const updated: ClientInvoice = {
-            ...inv,
-            status: inv.status === "draft" ? "sent" : inv.status,
-            sentAt: now,
-            sentVia: channel,
-          };
-
-          if (updated.clientId) {
-            addActivityEntry({
-              clientId: updated.clientId,
-              processId: "billing",
-              processName: "Billing & Invoicing",
-              type: channel,
-              status: "success",
-              refId: updated.id,
-              direction: "outbound",
-              details: {
-                primary: `Invoice ${updated.id} sent via ${channel.toUpperCase()}`,
-                secondary: `Payment link: ${updated.paymentLinkUrl}`,
-              },
-            });
-          }
-
-          return updated;
-        }
-        return inv;
-      })
-    );
+    invoiceService.sendInvoice(invoiceId, channel);
   };
 
   const simulatePayment = (invoiceId: string) => {
@@ -1026,29 +949,7 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const voidInvoice = (invoiceId: string) => {
-    setInvoices((prev) =>
-      prev.map((inv) => {
-        if (inv.id === invoiceId) {
-          const updated = { ...inv, status: "void" as InvoiceStatus };
-          if (updated.clientId) {
-            addActivityEntry({
-              clientId: updated.clientId,
-              processId: "billing",
-              processName: "Billing & Invoicing",
-              type: "field_update",
-              status: "success",
-              refId: updated.id,
-              details: {
-                primary: `Invoice ${updated.id} voided`,
-                secondary: `Status updated to VOID`,
-              },
-            });
-          }
-          return updated;
-        }
-        return inv;
-      })
-    );
+    invoiceService.voidInvoice(invoiceId);
   };
 
   const getInvoiceById = (invoiceId: string) => {

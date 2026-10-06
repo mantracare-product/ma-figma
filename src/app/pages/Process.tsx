@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
-import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, CreditCard } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -22,6 +22,8 @@ import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorks
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { useDrag, useDrop } from "react-dnd";
 import FlowBuilderTab from "../components/process/FlowBuilderTab";
+import FlowBuilderDrawer from "../components/process/FlowBuilderDrawer";
+import StageAutomationCards from "../components/process/StageAutomationCards";
 import { WorkflowStep } from "../types/workflow";
 import { SelectFieldsModal } from "../components/help/FieldManager";
 import StepParametersFields from "../components/process/StepParametersFields";
@@ -42,9 +44,14 @@ import {
   ProcessPermissions,
   isProcessMatchingOrg,
   ProcessTransitionTarget,
+  EntityType,
+  isRequiredSystemCategory,
+  isStageDeletable,
+  DEFAULT_ENTITY_PROCESSES,
 } from "../../lib/useProcessStore";
 import { getStoredVoices, VoiceConfigItem, VOICE_STORE_EVENT } from "../../lib/useVoiceStore";
 import { getActiveAIModels, AI_MODELS_STORE_EVENT, AIModelConfig } from "../../lib/aiModelsStore";
+import { getStagesTargetedByAutomation, AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
 
 interface AISettings {
   platform: string;
@@ -66,6 +73,8 @@ export interface Stage {
   description: string;
   status: string;
   color?: string;
+  systemCategory?: string;
+  isSystemCategoryRequired?: boolean;
   isInitial?: boolean;
   isFinal?: boolean;
   isFinalStage?: boolean;
@@ -102,6 +111,7 @@ export interface Process {
   assignedToUserId: number;
   stages: Stage[];
   aiSettings: AISettings;
+  entityType?: EntityType;
   // Scoping & Tenant Permissions
   industryCategory?: string;
   industry?: string;
@@ -246,6 +256,166 @@ const FORM_TEMPLATES = [
   }
 ];
 
+const CHEVRON_PALETTE = [
+  "#5A6578", // Slate
+  "#EF4444", // Coral Red
+  "#22C55E", // Emerald Green
+  "#8B5CF6", // Purple / Violet
+  "#3B82F6", // Royal Blue
+  "#2563EB", // Cobalt Blue
+  "#0284C7", // Sky Blue
+  "#6366F1", // Indigo
+];
+
+interface ChevronStageItemProps {
+  stage: Stage;
+  index: number;
+  totalStages: number;
+  moveStage: (dragIndex: number, hoverIndex: number) => void;
+  onRemove: (stageId: string) => void;
+  onEdit: (stage: Stage) => void;
+  onSelect: (stage: Stage) => void;
+  isSelected?: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  color?: string;
+  isLastStage?: boolean;
+}
+
+const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
+  stage,
+  index,
+  totalStages,
+  moveStage,
+  onRemove,
+  onEdit,
+  onSelect,
+  isSelected,
+  isFirst,
+  isLast,
+  color,
+  isLastStage,
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+
+  const [{ isDragging }, drag] = useDrag({
+    type: "STAGE",
+    item: () => ({ index }),
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  });
+
+  const [{ isOver }, drop] = useDrop({
+    accept: "STAGE",
+    hover(item: { index: number }, monitor) {
+      if (!ref.current) return;
+      const dragIndex = item.index;
+      const hoverIndex = index;
+      if (dragIndex === hoverIndex) return;
+
+      const hoverBoundingRect = ref.current.getBoundingClientRect();
+      const hoverMiddleX = (hoverBoundingRect.right - hoverBoundingRect.left) / 2;
+      const clientOffset = monitor.getClientOffset();
+      if (!clientOffset) return;
+      const hoverClientX = clientOffset.x - hoverBoundingRect.left;
+
+      if (dragIndex < hoverIndex && hoverClientX < hoverMiddleX) return;
+      if (dragIndex > hoverIndex && hoverClientX > hoverMiddleX) return;
+
+      moveStage(dragIndex, hoverIndex);
+      item.index = hoverIndex;
+    },
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+    }),
+  });
+
+  drag(drop(ref));
+
+  const chevronClip = isFirst
+    ? "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)"
+    : "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 14px 50%)";
+
+  return (
+    <div
+      ref={ref}
+      onClick={() => onSelect(stage)}
+      onDoubleClick={() => onEdit(stage)}
+      className={`relative group flex items-center h-10 select-none cursor-pointer transition-all flex-shrink-0 ${
+        isFirst ? "rounded-l-md" : "-ml-3.5"
+      } ${isDragging ? "opacity-35 scale-95" : "opacity-100"} ${
+        isOver ? "ring-2 ring-white scale-105 z-20" : ""
+      } ${isSelected ? "brightness-110 shadow-md ring-2 ring-blue-500/50" : ""}`}
+      style={{
+        backgroundColor: color || stage.color || "#3B82F6",
+        clipPath: chevronClip,
+        minWidth: "140px",
+        paddingLeft: isFirst ? "14px" : "24px",
+        paddingRight: "24px",
+      }}
+      title={`Stage: ${stage.name} (Drag to reorder, click to view, double click to edit)`}
+    >
+      {!isLast && (
+        <svg
+          className="absolute right-0 top-0 h-full w-[15px] pointer-events-none z-10"
+          viewBox="0 0 15 40"
+          preserveAspectRatio="none"
+          fill="none"
+        >
+          <path
+            d="M 1 0 L 14 20 L 1 40"
+            stroke="white"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+
+      <div
+        className="cursor-grab active:cursor-grabbing p-0.5 -ml-1 mr-1 text-white/70 group-hover:text-white shrink-0 transition-colors"
+        title="Drag to reorder"
+      >
+        <GripVertical className="w-3.5 h-3.5" />
+      </div>
+
+      <span
+        className="text-xs font-semibold text-white tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1"
+        style={{ fontFamily: "Outfit, sans-serif" }}
+      >
+        {isLastStage && <span className="text-[10px] opacity-90">🏁</span>}
+        <span className="truncate">{stage.name}</span>
+      </span>
+
+      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 -mr-2">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit(stage);
+          }}
+          className="p-1 text-white/80 hover:text-white hover:bg-black/20 rounded transition-all"
+          title="Edit stage"
+        >
+          <Edit className="w-3 h-3" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(stage.id);
+          }}
+          className="p-1 text-white/80 hover:text-white hover:bg-black/20 rounded transition-all"
+          title="Delete stage"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 interface DraggableStageProps {
   stage: Stage;
   index: number;
@@ -298,9 +468,8 @@ const DraggableStage = ({ stage, index, totalStages = 1, moveStage, onRemove, on
     <div className="relative flex-shrink-0 group">
       <div
         ref={ref}
-        className={`relative flex items-center gap-2 px-4 py-3 cursor-grab active:cursor-grabbing transition-all shadow-md hover:shadow-lg select-none ${
-          isOver ? "ring-2 ring-white scale-105" : ""
-        }`}
+        className={`relative flex items-center gap-2 px-4 py-3 cursor-grab active:cursor-grabbing transition-all shadow-md hover:shadow-lg select-none ${isOver ? "ring-2 ring-white scale-105" : ""
+          }`}
         style={{
           backgroundColor: stage.color || (isFinal ? "#EC4899" : "#22D3EE"),
           opacity: isDragging ? 0.35 : 1,
@@ -410,13 +579,12 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
         e.stopPropagation();
         onSelect();
       }}
-      className={`group/stage w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all cursor-grab active:cursor-grabbing select-none ${
-        isOver
-          ? "bg-blue-100 ring-2 ring-blue-400 scale-[1.02]"
-          : isSelected
+      className={`group/stage w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all cursor-grab active:cursor-grabbing select-none ${isOver
+        ? "bg-blue-100 ring-2 ring-blue-400 scale-[1.02]"
+        : isSelected
           ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200 shadow-xs"
           : "text-gray-700 hover:bg-gray-50 border border-transparent"
-      } ${isDragging ? "opacity-30 scale-95" : ""}`}
+        } ${isDragging ? "opacity-30 scale-95" : ""}`}
       title="Drag to reorder stage or click to view details"
     >
       <GripVertical className="w-3.5 h-3.5 text-gray-400 group-hover/stage:text-gray-600 transition-colors shrink-0 cursor-grab" />
@@ -430,6 +598,15 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
       {isFinal && (
         <span className="text-[10px] font-bold bg-pink-50 text-pink-600 border border-pink-200 px-1.5 py-0.5 rounded-full shrink-0">
           Final
+        </span>
+      )}
+      {(stage.intentTrigger || (stage.nextProcessTransitions && stage.nextProcessTransitions.length > 0)) && (
+        <span
+          className="text-[9px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full shrink-0 flex items-center gap-0.5"
+          title="Moves here via Automation / Intent"
+        >
+          <Zap className="w-2.5 h-2.5 text-indigo-500" />
+          <span>Auto</span>
         </span>
       )}
     </div>
@@ -617,11 +794,13 @@ const INTENT_CONDITION_OPTIONS: Record<string, string[]> = {
   ],
 };
 
-const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "inchat" | "postcall">> = {
+const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   "whatsapp": ["stage", "incall", "inchat", "postcall"],
   "sms": ["stage", "incall", "inchat", "postcall"],
   "email": ["stage", "incall", "inchat", "postcall"],
   "send-invoice": ["stage", "incall", "inchat", "postcall"],
+  "generate_invoice": ["stage", "postcall"],
+  "send_payment": ["stage", "incall", "inchat", "postcall"],
   "processmovement": ["inchat", "postcall"],
   "movetonewprocess": ["stage", "inchat", "postcall"],
   "endworkflow": ["stage", "inchat", "postcall"],
@@ -646,7 +825,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "inchat" 
   "managecalendar": ["incall", "postcall"],
 };
 
-const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "incall" | "inchat" | "postcall", excludeId?: string) => {
+const buildAvailablePredecessors = (steps: WorkflowStep[], lane: string, excludeId?: string) => {
   const laneSteps = steps.filter(s => (s.trigger ?? "stage") === lane && s.id !== excludeId);
   // Identify which step ids belong to a parallel group (>=2 consecutive parallel steps)
   const parallelMemberIds = new Set<string>();
@@ -690,13 +869,55 @@ export default function Process() {
 
   const [searchQuery, setSearchQuery] = useState("");
 
+  const [selectedProcess, setSelectedProcess] = useState<string | null>(null);
+  const [selectedEntity, setSelectedEntity] = useState<EntityType>("client");
+  const [replacementStageId, setReplacementStageId] = useState<string>("");
+  const [isEditingProcessInfo, setIsEditingProcessInfo] = useState(false);
+  const [draftProcessName, setDraftProcessName] = useState("");
+  const [draftProcessDescription, setDraftProcessDescription] = useState("");
+
+  useEffect(() => {
+    setIsEditingProcessInfo(false);
+  }, [selectedProcess]);
+
+  const ENTITY_TABS: Array<{ id: EntityType; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+    { id: "client", label: "Clients", icon: Users },
+    { id: "appointment", label: "Appointments", icon: Calendar },
+    { id: "invoice", label: "Invoices", icon: FileText },
+    { id: "insurance", label: "Insurance", icon: Shield },
+    { id: "claim", label: "Claims", icon: ClipboardList },
+  ];
+
+  // Filtered by selected entity
+  const entityFilteredProcesses = useMemo(() => {
+    return processes.filter((p) => {
+      const pEntity = p.entityType || "client";
+      return pEntity === selectedEntity;
+    });
+  }, [processes, selectedEntity]);
+
   // Client-visible processes filtered by organization's industry category, industry, and location
   const clientVisibleProcesses = useMemo(() => {
-    return processes.filter((p) => {
+    return entityFilteredProcesses.filter((p) => {
+      if (selectedEntity !== "client") return true;
       if (p.permissions?.canHide === false) return false;
       return isProcessMatchingOrg(p, organization);
     });
-  }, [processes, organization]);
+  }, [entityFilteredProcesses, selectedEntity, organization]);
+
+  // Auto-select first process if none selected or selected belongs to another entity
+  useEffect(() => {
+    if (clientVisibleProcesses.length > 0) {
+      const currentExists = clientVisibleProcesses.some((p) => p.id === selectedProcess);
+      if (!currentExists) {
+        setSelectedProcess(clientVisibleProcesses[0].id);
+        setViewMode("process");
+        setExpandedStage(null);
+      }
+    } else {
+      setSelectedProcess(null);
+    }
+  }, [clientVisibleProcesses, selectedProcess]);
 
   // Filter client-visible processes by search query
   const filteredProcesses = useMemo(() => {
@@ -710,15 +931,6 @@ export default function Process() {
       );
     });
   }, [clientVisibleProcesses, searchQuery]);
-
-  const [selectedProcess, setSelectedProcess] = useState<string | null>(null);
-  const [isEditingProcessInfo, setIsEditingProcessInfo] = useState(false);
-  const [draftProcessName, setDraftProcessName] = useState("");
-  const [draftProcessDescription, setDraftProcessDescription] = useState("");
-
-  useEffect(() => {
-    setIsEditingProcessInfo(false);
-  }, [selectedProcess]);
 
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [customApiIntegrations, setCustomApiIntegrations] = useState<any[]>([]);
@@ -929,6 +1141,7 @@ export default function Process() {
   // CHANGE 1: Collapsible sections state
   const [workflowStepsExpanded, setWorkflowStepsExpanded] = useState(true);
   const [workflowStepsDrawerOpen, setWorkflowStepsDrawerOpen] = useState(false);
+  const [automationDrawerView, setAutomationDrawerView] = useState<"library" | "flowbuilder">("library");
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
   const [workflowStepCategory, setWorkflowStepCategory] = useState("all");
   const [workflowStepSearch, setWorkflowStepSearch] = useState("");
@@ -989,17 +1202,17 @@ export default function Process() {
 
   // Auto-persist workflowSteps immediately (only discrete drawer-save changes, safe to auto-save)
   useEffect(() => {
-    if (!selectedProcess || !expandedStage || viewMode !== "stage") return;
+    if (!selectedProcess || !expandedStage) return;
     setProcesses((prev) =>
       prev.map((p) =>
         p.id !== selectedProcess
           ? p
           : {
-              ...p,
-              stages: p.stages.map((s) =>
-                s.id !== expandedStage ? s : { ...s, workflowSteps }
-              ),
-            }
+            ...p,
+            stages: p.stages.map((s) =>
+              s.id !== expandedStage ? s : { ...s, workflowSteps }
+            ),
+          }
       )
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1205,7 +1418,7 @@ export default function Process() {
   const [expandedConditionIndex, setExpandedConditionIndex] = useState<number | null>(0);
   const [conditionPreview, setConditionPreview] = useState("");
 
-  const [stepTrigger, setStepTrigger] = useState<"stage" | "incall" | "inchat" | "postcall">("stage");
+  const [stepTrigger, setStepTrigger] = useState<string>("stage");
   const [connectAfterId, setConnectAfterId] = useState<string | undefined>(undefined);
   const [stepActionName, setStepActionName] = useState("");
   const [stepActionReason, setStepActionReason] = useState("");
@@ -1665,6 +1878,18 @@ export default function Process() {
   const greetingIntroRef = useRef<HTMLTextAreaElement>(null);
   const objectiveTextRef = useRef<HTMLTextAreaElement>(null);
 
+  const handleEditWorkflowStep = (step: WorkflowStep) => {
+    resetStepDetailState();
+    setCurrentEditingStep(step);
+    setIsCreatingNewStep(false);
+    setStepTrigger(step.trigger ?? "stage");
+    setExecutionType(step.executionType ?? "wait");
+    setDelayValue(step.delayValue ?? 5);
+    setDelayUnit(step.delayUnit ?? "Minute");
+    restoreStepParams(step.stepKey, step.params);
+    setStepDetailDrawerOpen(true);
+  };
+
   const webhookIntDropdownRef = useRef<HTMLDivElement>(null);
   const webhookActionDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -1933,6 +2158,8 @@ export default function Process() {
     id: string;
     name: string;
     color: string;
+    systemCategory?: string;
+    isSystemCategoryRequired?: boolean;
     isFinalStage?: boolean;
     nextProcessTransitions?: ProcessTransitionTarget[];
   } | null>(null);
@@ -1944,6 +2171,16 @@ export default function Process() {
   const [isColorGridExpanded, setIsColorGridExpanded] = useState(false);
   const [isEditColorGridExpanded, setIsEditColorGridExpanded] = useState(false);
   const [hasInteractedWithColor, setHasInteractedWithColor] = useState(false);
+  const [isFlowBuilderDrawerOpen, setIsFlowBuilderDrawerOpen] = useState(false);
+  const [targetedStages, setTargetedStages] = useState<Set<string>>(() => getStagesTargetedByAutomation());
+
+  useEffect(() => {
+    const handleAutoRulesUpdated = () => {
+      setTargetedStages(getStagesTargetedByAutomation());
+    };
+    window.addEventListener(AUTOMATION_STORE_EVENT, handleAutoRulesUpdated);
+    return () => window.removeEventListener(AUTOMATION_STORE_EVENT, handleAutoRulesUpdated);
+  }, []);
 
   // Last Stage & Intent Routing Modal States
   const [showLastStageModal, setShowLastStageModal] = useState(false);
@@ -2197,6 +2434,11 @@ export default function Process() {
   };
 
   const handleDeleteProcess = (processId: string) => {
+    const target = processes.find((p) => p.id === processId);
+    if (target?.entityType && target.entityType !== "client") {
+      toast.error("Standard entity processes cannot be deleted.");
+      return;
+    }
     setProcesses(processes.filter((p) => p.id !== processId));
     if (selectedProcess === processId) {
       setSelectedProcess(null);
@@ -2239,6 +2481,14 @@ export default function Process() {
 
   const handleRemoveStage = (stageId: string) => {
     if (!selectedProcess) return;
+    const proc = processes.find((p) => p.id === selectedProcess);
+    if (!proc) return;
+
+    const check = isStageDeletable(proc, stageId);
+    if (!check.deletable) {
+      toast.error(check.reason || "This stage fulfills a required system category and cannot be deleted.");
+      return;
+    }
 
     setProcesses(
       processes.map((p) =>
@@ -2255,6 +2505,8 @@ export default function Process() {
       id: stage.id,
       name: stage.name,
       color: stage.color || "#22D3EE",
+      systemCategory: stage.systemCategory,
+      isSystemCategoryRequired: stage.isSystemCategoryRequired,
       isFinalStage: stage.isFinalStage || stage.isFinal || false,
       nextProcessTransitions: stage.nextProcessTransitions ? [...stage.nextProcessTransitions] : [],
     });
@@ -2272,13 +2524,13 @@ export default function Process() {
             stages: p.stages.map((s) =>
               s.id === editingStage.id
                 ? {
-                    ...s,
-                    name: editingStage.name,
-                    color: editingStage.color,
-                    isFinalStage: editingStage.isFinalStage,
-                    isFinal: editingStage.isFinalStage,
-                    nextProcessTransitions: editingStage.nextProcessTransitions || [],
-                  }
+                  ...s,
+                  name: editingStage.name,
+                  color: editingStage.color,
+                  isFinalStage: editingStage.isFinalStage,
+                  isFinal: editingStage.isFinalStage,
+                  nextProcessTransitions: editingStage.nextProcessTransitions || [],
+                }
                 : s
             ),
           }
@@ -2344,18 +2596,18 @@ export default function Process() {
       prev.map((p) =>
         p.id === selectedProcess
           ? {
-              ...p,
-              stages: p.stages.map((s) =>
-                s.id === transitionSourceStageId
-                  ? {
-                      ...s,
-                      isFinalStage: true,
-                      isFinal: true,
-                      nextProcessTransitions: [...(s.nextProcessTransitions || []), newTransition],
-                    }
-                  : s
-              ),
-            }
+            ...p,
+            stages: p.stages.map((s) =>
+              s.id === transitionSourceStageId
+                ? {
+                  ...s,
+                  isFinalStage: true,
+                  isFinal: true,
+                  nextProcessTransitions: [...(s.nextProcessTransitions || []), newTransition],
+                }
+                : s
+            ),
+          }
           : p
       )
     );
@@ -2370,16 +2622,16 @@ export default function Process() {
       prev.map((p) =>
         p.id === selectedProcess
           ? {
-              ...p,
-              stages: p.stages.map((s) =>
-                s.id === sourceStageId
-                  ? {
-                      ...s,
-                      nextProcessTransitions: (s.nextProcessTransitions || []).filter((_, idx) => idx !== transitionIndex),
-                    }
-                  : s
-              ),
-            }
+            ...p,
+            stages: p.stages.map((s) =>
+              s.id === sourceStageId
+                ? {
+                  ...s,
+                  nextProcessTransitions: (s.nextProcessTransitions || []).filter((_, idx) => idx !== transitionIndex),
+                }
+                : s
+            ),
+          }
           : p
       )
     );
@@ -2454,25 +2706,25 @@ export default function Process() {
         prev.map((p) =>
           p.id === selectedProcess
             ? {
-                ...p,
-                stages: p.stages.map((s) =>
-                  s.id === lastStageForm.id
-                    ? {
-                        ...s,
-                        name: lastStageForm.name.trim(),
-                        description: lastStageForm.description.trim(),
-                        color: lastStageForm.color,
-                        isFinalStage: true,
-                        isFinal: true,
-                        intentTrigger: lastStageForm.intentTrigger,
-                        intentLabel: lastStageForm.intentLabel,
-                        intentDescription: lastStageForm.intentDescription,
-                        endPipelineOnReach: lastStageForm.endPipelineOnReach,
-                        nextProcessTransitions: transitions,
-                      }
-                    : s
-                ),
-              }
+              ...p,
+              stages: p.stages.map((s) =>
+                s.id === lastStageForm.id
+                  ? {
+                    ...s,
+                    name: lastStageForm.name.trim(),
+                    description: lastStageForm.description.trim(),
+                    color: lastStageForm.color,
+                    isFinalStage: true,
+                    isFinal: true,
+                    intentTrigger: lastStageForm.intentTrigger,
+                    intentLabel: lastStageForm.intentLabel,
+                    intentDescription: lastStageForm.intentDescription,
+                    endPipelineOnReach: lastStageForm.endPipelineOnReach,
+                    nextProcessTransitions: transitions,
+                  }
+                  : s
+              ),
+            }
             : p
         )
       );
@@ -2500,9 +2752,9 @@ export default function Process() {
         prev.map((p) =>
           p.id === selectedProcess
             ? {
-                ...p,
-                stages: [...p.stages, newStageObj],
-              }
+              ...p,
+              stages: [...p.stages, newStageObj],
+            }
             : p
         )
       );
@@ -2566,7 +2818,9 @@ export default function Process() {
       callTriggerSettings: getDefaultCallTriggerSettings(),
     };
 
-    const updatedStages = [...selectedProc.stages, stage];
+    const updatedStages = newStagePosition === "initial"
+      ? [stage, ...selectedProc.stages]
+      : [...selectedProc.stages, stage];
 
     setProcesses(
       processes.map((p) =>
@@ -2595,6 +2849,64 @@ export default function Process() {
 
   const handleDeleteStage = () => {
     if (!stageToDelete || !selectedProcess) return;
+    const proc = processes.find((p) => p.id === selectedProcess);
+    if (!proc) return;
+
+    const check = isStageDeletable(proc, stageToDelete.id);
+    if (!check.deletable) {
+      toast.error(check.reason || "This stage fulfills a required system category and cannot be deleted.");
+      setShowDeleteStageModal(false);
+      setStageToDelete(null);
+      return;
+    }
+
+    // Migrate existing records if a replacement stage was chosen
+    if (replacementStageId && replacementStageId !== stageToDelete.id) {
+      try {
+        // Invoices
+        const rawInv = localStorage.getItem("mantra_invoices_v1");
+        if (rawInv) {
+          const invList = JSON.parse(rawInv);
+          if (Array.isArray(invList)) {
+            const updated = invList.map((inv: any) =>
+              inv.currentStageId === stageToDelete.id
+                ? { ...inv, currentStageId: replacementStageId }
+                : inv
+            );
+            localStorage.setItem("mantra_invoices_v1", JSON.stringify(updated));
+          }
+        }
+        // Appointments
+        const rawAppts = sessionStorage.getItem("appointments_v1") || localStorage.getItem("appointments_v1");
+        if (rawAppts) {
+          const apptList = JSON.parse(rawAppts);
+          if (Array.isArray(apptList)) {
+            const updated = apptList.map((appt: any) =>
+              appt.currentStageId === stageToDelete.id
+                ? { ...appt, currentStageId: replacementStageId }
+                : appt
+            );
+            sessionStorage.setItem("appointments_v1", JSON.stringify(updated));
+            localStorage.setItem("appointments_v1", JSON.stringify(updated));
+          }
+        }
+        // Claims
+        const rawClaims = localStorage.getItem("mantra_claims_v1");
+        if (rawClaims) {
+          const claimList = JSON.parse(rawClaims);
+          if (Array.isArray(claimList)) {
+            const updated = claimList.map((clm: any) =>
+              clm.currentStageId === stageToDelete.id
+                ? { ...clm, currentStageId: replacementStageId }
+                : clm
+            );
+            localStorage.setItem("mantra_claims_v1", JSON.stringify(updated));
+          }
+        }
+      } catch (err) {
+        console.warn("Record migration on stage delete:", err);
+      }
+    }
 
     setProcesses(
       processes.map((p) =>
@@ -2606,8 +2918,9 @@ export default function Process() {
 
     setShowDeleteStageModal(false);
     setStageToDelete(null);
+    setReplacementStageId("");
     setExpandedStage(null);
-    setViewMode("process"); // Go back to process view after deleting stage
+    setViewMode("process");
     toast.success("Stage deleted successfully");
   };
 
@@ -2660,7 +2973,7 @@ export default function Process() {
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
-          title="Process Settings"
+          title="Workflow"
           subtitle="Design how your AI receptionist behaves at every step, from greeting to hand-off"
           badge={
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
@@ -2670,39 +2983,80 @@ export default function Process() {
           actions={
             <>
               <Button variant="outline" onClick={() => setShowTestProcessDrawer(true)}>Test Process</Button>
-              <HowItWorksButton label="How Process Settings Works" onClick={() => setShowHelp(true)} />
+              <HowItWorksButton label="How Workflow Works" onClick={() => setShowHelp(true)} />
             </>
           }
         />
+
+        {/* Entity Filter Segmented Pill Bar */}
+        <div className="flex items-center gap-1.5 p-1 bg-gray-100/90 rounded-xl border border-gray-200/80 w-fit">
+          {ENTITY_TABS.map((tab) => {
+            const isActive = selectedEntity === tab.id;
+            const Icon = tab.icon;
+            const count = processes.filter((p) => (p.entityType || "client") === tab.id).length;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setSelectedEntity(tab.id);
+                  const firstOfEntity = processes.find((p) => (p.entityType || "client") === tab.id);
+                  if (firstOfEntity) {
+                    setSelectedProcess(firstOfEntity.id);
+                    setViewMode("process");
+                    setExpandedStage(null);
+                  }
+                }}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${isActive
+                  ? "bg-white text-gray-900 shadow-xs border border-gray-200/80"
+                  : "text-gray-500 hover:text-gray-900 hover:bg-white/50"
+                  }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <Icon className={`w-3.5 h-3.5 ${isActive ? "text-blue-600" : "text-gray-400"}`} />
+                <span>{tab.label}</span>
+                {tab.id === "client" && count > 1 && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${isActive ? "bg-blue-50 text-blue-700" : "bg-gray-200 text-gray-600"}`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
         {/* Top Control Bar: PageTopBar with Search + Add New Process */}
         <PageTopBar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search processes..."
-          filterPresets={[
-            {
-              id: "all",
-              label: "All Processes",
-              count: clientVisibleProcesses.length,
-              isActive: !searchQuery,
-              onClick: () => setSearchQuery(""),
-            },
-            {
-              id: "active",
-              label: "Active Processes",
-              count: clientVisibleProcesses.filter(p => !p.draft).length,
-              isActive: false,
-              onClick: () => setSearchQuery(""),
-            },
-            {
-              id: "drafts",
-              label: "Draft Processes",
-              count: clientVisibleProcesses.filter(p => p.draft).length,
-              isActive: false,
-              onClick: () => setSearchQuery(""),
-            },
-          ]}
+          filterPresets={
+            selectedEntity === "client"
+              ? [
+                {
+                  id: "all",
+                  label: "All Processes",
+                  count: clientVisibleProcesses.length,
+                  isActive: !searchQuery,
+                  onClick: () => setSearchQuery(""),
+                },
+                {
+                  id: "active",
+                  label: "Active Processes",
+                  count: clientVisibleProcesses.filter((p) => !p.draft).length,
+                  isActive: false,
+                  onClick: () => setSearchQuery(""),
+                },
+                {
+                  id: "drafts",
+                  label: "Draft Processes",
+                  count: clientVisibleProcesses.filter((p) => p.draft).length,
+                  isActive: false,
+                  onClick: () => setSearchQuery(""),
+                },
+              ]
+              : undefined
+          }
           filterFields={[
             {
               id: "name",
@@ -2713,11 +3067,15 @@ export default function Process() {
               onChange: (val) => setSearchQuery(val || ""),
             },
           ]}
-          primaryAction={{
-            label: "Add New Process",
-            icon: <Plus className="w-3.5 h-3.5" />,
-            onClick: () => setShowAddProcessModal(true),
-          }}
+          primaryAction={
+            selectedEntity === "client"
+              ? {
+                label: "Add New Process",
+                icon: <Plus className="w-3.5 h-3.5" />,
+                onClick: () => setShowAddProcessModal(true),
+              }
+              : undefined
+          }
         />
 
         <div className="flex gap-6 min-h-[calc(100vh-270px)]">
@@ -2753,13 +3111,12 @@ export default function Process() {
                         setExpandedProcesses((prev) => [...prev, process.id]);
                       }
                     }}
-                    className={`bg-white rounded-2xl p-4 border transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-md cursor-pointer ${
-                      isProcessSelected && viewMode === "process"
-                        ? "border-blue-400 ring-2 ring-blue-500/20 shadow-md"
-                        : isProcessSelected
+                    className={`bg-white rounded-2xl p-4 border transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-md cursor-pointer ${isProcessSelected && viewMode === "process"
+                      ? "border-blue-400 ring-2 ring-blue-500/20 shadow-md"
+                      : isProcessSelected
                         ? "border-blue-200 bg-blue-50/20 shadow-sm"
                         : "border-gray-200/80 hover:border-gray-300"
-                    }`}
+                      }`}
                   >
                     {/* Process Header Row */}
                     <div className="flex items-center justify-between gap-2.5">
@@ -2778,9 +3135,8 @@ export default function Process() {
                           aria-label="Toggle stages"
                         >
                           <ChevronRight
-                            className={`w-4 h-4 transition-transform duration-200 ${
-                              isExpanded ? "rotate-90" : ""
-                            }`}
+                            className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""
+                              }`}
                           />
                         </button>
                         <span
@@ -2809,7 +3165,7 @@ export default function Process() {
 
                     {/* Stages (when expanded) */}
                     {isExpanded && (
-                      <div className="mt-3 pt-3 border-t border-gray-100 pl-6 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                      <div className="mt-3 pt-3 border-t border-gray-100 pl-6 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
                         {process.stages.length === 0 ? (
                           <div
                             className="px-3 py-2 text-xs italic text-gray-400 bg-gray-50 rounded-lg"
@@ -2817,19 +3173,27 @@ export default function Process() {
                           >
                             No stages yet
                           </div>
-                        ) : (
-                          process.stages.map((stage, sIdx) => {
+                        ) : (() => {
+                          const journeyStages = process.stages.filter(
+                            (s) => !s.isFinalStage && !s.isFinal && s.stagePosition !== "final"
+                          );
+                          const lastStages = process.stages.filter(
+                            (s) => s.isFinalStage || s.isFinal || s.stagePosition === "final"
+                          );
+
+                          const renderStageItem = (stage: Stage) => {
                             const isStageSelected =
                               selectedProcess === process.id &&
                               expandedStage === stage.id &&
                               viewMode === "stage";
+                            const originalIdx = process.stages.findIndex((s) => s.id === stage.id);
 
                             return (
                               <SidebarDraggableStage
                                 key={stage.id}
                                 processId={process.id}
                                 stage={stage}
-                                index={sIdx}
+                                index={originalIdx >= 0 ? originalIdx : 0}
                                 totalStages={process.stages.length}
                                 isSelected={isStageSelected}
                                 onSelect={() => {
@@ -2840,8 +3204,41 @@ export default function Process() {
                                 onMoveStage={moveStageForProcess}
                               />
                             );
-                          })
-                        )}
+                          };
+
+                          return (
+                            <div className="space-y-1">
+                              {/* 1. Journey / Sequential Stages */}
+                              {journeyStages.map(renderStageItem)}
+
+                              {/* 2. Partition Line (if last stages exist) */}
+                              {lastStages.length > 0 && (
+                                <div className="pt-2.5 pb-1.5 select-none">
+                                  <div className="relative flex items-center justify-between">
+                                    <div className="flex-grow border-t border-dashed border-gray-300" />
+                                    <div className="flex items-center gap-1.5 px-2 bg-transparent text-slate-500">
+                                      <span className="text-[11px] uppercase tracking-wider font-semibold">
+                                        Possible last stages
+                                      </span>
+                                      <Tooltip
+                                        text="Last stages represent terminal pipeline outcomes (e.g. Interested, Not Interested, Paid, Void) where records complete their journey or trigger cross-process transitions."
+                                        placement="top"
+                                      >
+                                        <span className="cursor-help inline-flex items-center text-slate-400 hover:text-slate-600">
+                                          <Info className="w-3 h-3" />
+                                        </span>
+                                      </Tooltip>
+                                    </div>
+                                    <div className="flex-grow border-t border-dashed border-gray-300" />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* 3. Terminal / Last Stages */}
+                              {lastStages.map(renderStageItem)}
+                            </div>
+                          );
+                        })()}
 
                         <button
                           type="button"
@@ -2971,63 +3368,8 @@ export default function Process() {
 
                 <div className="flex-1 overflow-y-auto">
                   <div className="p-8 space-y-6">
-                    {/* Stage Management & Intent Routing */}
-                    <div className="bg-gradient-to-br from-gray-50 via-white to-blue-50/20 rounded-2xl p-6 border border-gray-200 shadow-sm space-y-4">
-                      {/* Header row with counts and actions */}
-                      <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
-                        <div>
-                          <div className="flex items-center gap-2.5">
-                            <h3 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                              Pipeline Stages &amp; Intent Routing
-                            </h3>
-                            <span className="text-xs bg-blue-50 text-blue-700 font-semibold px-2.5 py-0.5 rounded-full border border-blue-200">
-                              {selectedProcessData.stages.length} Total Stages
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-500 mt-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            Conversation stages evaluate customer intent to select the concluding stage, end the pipeline, and auto-route to the next process.
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const seqStages = selectedProcessData.stages.filter((s) => !s.isFinalStage && !s.isFinal);
-                              const defaultSource = seqStages[seqStages.length - 1]?.id || selectedProcessData.stages[0]?.id || "";
-                              setSimSourceStageId(defaultSource);
-                              setSimSelectedScenario("interested");
-                              setSimUtterance("Yes, I'm very interested in scheduling an appointment for tomorrow!");
-                              setSimResolvedData(null);
-                              setShowIntentSimulatorModal(true);
-                            }}
-                            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs hover:shadow transition-all cursor-pointer"
-                            style={{ fontFamily: 'DM Sans, sans-serif' }}
-                          >
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span>Test Intent Routing</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleOpenAddLastStageModal}
-                            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl text-xs font-semibold shadow-2xs hover:shadow-xs transition-all cursor-pointer"
-                            style={{ fontFamily: 'DM Sans, sans-serif' }}
-                          >
-                            <GitBranch className="w-3.5 h-3.5" />
-                            <span>+ Add Last Stage Option</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleQuickAddStage}
-                            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-2xs hover:shadow-xs transition-all cursor-pointer"
-                            style={{ fontFamily: 'DM Sans, sans-serif' }}
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>Add Sequential Stage</span>
-                          </button>
-                        </div>
-                      </div>
-
+                    {/* Clean Pipeline Stages Ribbon & Last Stage Options */}
+                    <div className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-200/90 shadow-2xs space-y-4">
                       {/* Main Horizontal Stages Strip */}
                       {(() => {
                         const allStages = selectedProcessData.stages;
@@ -3041,210 +3383,97 @@ export default function Process() {
                         const lastSeqStage = sequentialStages[sequentialStages.length - 1];
 
                         return (
-                          <div className="flex items-center gap-3 overflow-x-auto pb-4 pt-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                            {/* 1. Sequential Pipeline Stages */}
-                            <div className="flex items-center gap-2.5 flex-shrink-0">
+                          <div className="flex items-center gap-2 overflow-x-auto py-1 px-0.5 scrollbar-thin scrollbar-thumb-gray-200">
+                            {/* Sequential Stages */}
+                            <div className="flex items-center flex-shrink-0">
                               {sequentialStages.map((stage, sIdx) => {
                                 const originalIndex = allStages.findIndex((s) => s.id === stage.id);
                                 return (
-                                  <React.Fragment key={stage.id}>
-                                    <div className="flex flex-col gap-1 flex-shrink-0">
-                                      <div className="flex items-center justify-between px-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                                        <span>Step #{sIdx + 1}</span>
-                                        {stage.stageType && (
-                                          <span className="text-[9px] bg-gray-100 text-gray-600 px-1.5 py-0.2 rounded">
-                                            {stage.stageType === "AI Receives Calls" ? "Inbound" : stage.stageType === "AI Makes Calls" ? "Outbound" : "Action"}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <DraggableStage
-                                        stage={stage}
-                                        index={originalIndex >= 0 ? originalIndex : sIdx}
+                                  <ChevronStageItem
+                                    key={stage.id}
+                                    stage={stage}
+                                    index={originalIndex >= 0 ? originalIndex : sIdx}
+                                    totalStages={allStages.length}
+                                    moveStage={moveStage}
+                                    onRemove={handleRemoveStage}
+                                    onEdit={handleEditStage}
+                                    onSelect={(s) => {
+                                      setExpandedStage(s.id);
+                                      setViewMode("stage");
+                                    }}
+                                    isSelected={expandedStage === stage.id}
+                                    isFirst={sIdx === 0}
+                                    isLast={sIdx === sequentialStages.length - 1}
+                                    color={stage.color || CHEVRON_PALETTE[sIdx % CHEVRON_PALETTE.length]}
+                                  />
+                                );
+                              })}
+                            </div>
+
+                            {/* + Icon to Add Sequential Stage */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewStagePosition("final");
+                                setShowAddStageModal(true);
+                              }}
+                              className="flex items-center justify-center w-8 h-10 rounded-md bg-gray-50 hover:bg-blue-50 text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-300 transition-all shadow-2xs hover:shadow-xs flex-shrink-0 cursor-pointer"
+                              title="Add sequential stage"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+
+                            {/* Last Stages in the exact same chevron style */}
+                            {finalStageOptions.length > 0 ? (
+                              <>
+                                <div className="flex items-center flex-shrink-0 ml-1">
+                                  {finalStageOptions.map((fStage, fIdx) => {
+                                    const originalIndex = allStages.findIndex((s) => s.id === fStage.id);
+                                    return (
+                                      <ChevronStageItem
+                                        key={fStage.id}
+                                        stage={fStage}
+                                        index={originalIndex >= 0 ? originalIndex : sequentialStages.length + fIdx}
                                         totalStages={allStages.length}
                                         moveStage={moveStage}
                                         onRemove={handleRemoveStage}
-                                        onEdit={handleEditStage}
+                                        onEdit={handleOpenEditLastStageModal}
+                                        onSelect={(s) => {
+                                          setExpandedStage(s.id);
+                                          setViewMode("stage");
+                                        }}
+                                        isSelected={expandedStage === fStage.id}
+                                        isFirst={fIdx === 0}
+                                        isLast={fIdx === finalStageOptions.length - 1}
+                                        color={fStage.color || "#EC4899"}
+                                        isLastStage={true}
                                       />
-                                    </div>
-
-                                    {/* Arrow connector between sequential stages */}
-                                    {sIdx < sequentialStages.length - 1 && (
-                                      <div className="flex items-center justify-center text-gray-400 font-bold px-0.5 select-none pt-4">
-                                        <ChevronRight className="w-4 h-4 text-gray-400" />
-                                      </div>
-                                    )}
-                                  </React.Fragment>
-                                );
-                              })}
-
-                              {/* Quick Add Stage in Sequential Flow */}
-                              <div className="pt-4 flex-shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={handleQuickAddStage}
-                                  className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 transition-all shadow-xs hover:shadow cursor-pointer"
-                                  title="Add new sequential stage"
-                                >
-                                  <Plus className="w-4.5 h-4.5" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* 2. Visual Intent Decision Fork Divider */}
-                            <div className="flex items-center gap-2 flex-shrink-0 px-2 pt-4">
-                              <div className="flex flex-col items-center justify-center bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-indigo-200/90 rounded-2xl px-4 py-3 shadow-xs min-w-[200px] select-none">
-                                <div className="flex items-center gap-1.5 text-indigo-700 font-bold text-xs uppercase tracking-wider mb-1">
-                                  <GitBranch className="w-3.5 h-3.5 text-indigo-600" />
-                                  <span>Intent Decision Fork</span>
-                                </div>
-                                <span className="text-[11px] text-gray-600 text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                  Evaluates intent from <strong className="text-gray-900 font-bold">"{lastSeqStage ? lastSeqStage.name : 'Previous Stage'}"</strong>
-                                </span>
-                              </div>
-                              <div className="text-indigo-400 font-extrabold text-base select-none">→</div>
-                            </div>
-
-                            {/* 3. Last Stage Options (Intent-Mapped Outcomes) */}
-                            <div className="flex flex-col gap-2 p-3 bg-gradient-to-br from-slate-50 to-purple-50/40 border-2 border-dashed border-purple-200 rounded-2xl flex-shrink-0 min-w-[340px]">
-                              <div className="flex items-center justify-between gap-2 px-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1">
-                                    <span>🎯 Last Stage Options</span>
-                                  </span>
-                                  <span className="text-[10px] bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded-full">
-                                    {finalStageOptions.length} Outcomes
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={handleOpenAddLastStageModal}
-                                  className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Plus className="w-3 h-3" /> Add Outcome
-                                </button>
-                              </div>
-
-                              <div className="flex items-stretch gap-3 overflow-x-auto pb-1">
-                                {finalStageOptions.length === 0 ? (
-                                  <div className="p-4 text-center rounded-xl bg-white border border-dashed border-purple-200 min-w-[240px]">
-                                    <p className="text-xs text-purple-700 font-medium">No last stage outcomes configured</p>
-                                    <button
-                                      type="button"
-                                      onClick={handleOpenAddLastStageModal}
-                                      className="mt-1.5 text-xs font-bold text-purple-600 underline cursor-pointer"
-                                    >
-                                      + Add Interested / Not Interested
-                                    </button>
-                                  </div>
-                                ) : (
-                                  finalStageOptions.map((fStage) => {
-                                    const transition = fStage.nextProcessTransitions?.[0];
-                                    const intentColorConfig =
-                                      fStage.intentTrigger === "interested"
-                                        ? { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", dot: "bg-emerald-500", label: fStage.intentLabel || "Interested" }
-                                        : fStage.intentTrigger === "not_interested"
-                                        ? { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200", dot: "bg-rose-500", label: fStage.intentLabel || "Not Interested" }
-                                        : fStage.intentTrigger === "call_back"
-                                        ? { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", dot: "bg-amber-500", label: fStage.intentLabel || "Call Back Later" }
-                                        : { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200", dot: "bg-blue-500", label: fStage.intentLabel || fStage.name };
-
-                                    return (
-                                      <div
-                                        key={fStage.id}
-                                        className="flex flex-col justify-between bg-white rounded-xl border border-gray-200/90 p-3 shadow-xs hover:shadow-md transition-all min-w-[240px] max-w-[280px] flex-shrink-0 group"
-                                      >
-                                        {/* Top: Intent Condition Chip */}
-                                        <div className="flex items-center justify-between gap-1.5 mb-2">
-                                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold border ${intentColorConfig.bg} ${intentColorConfig.text} ${intentColorConfig.border}`}>
-                                            <span className={`w-1.5 h-1.5 rounded-full ${intentColorConfig.dot}`} />
-                                            <span>Intent: {intentColorConfig.label}</span>
-                                          </span>
-                                          <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
-                                            <button
-                                              type="button"
-                                              onClick={() => handleOpenEditLastStageModal(fStage)}
-                                              className="p-1 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-900 transition-colors"
-                                              title="Edit Last Stage & Intent"
-                                            >
-                                              <Edit className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => handleRemoveStage(fStage.id)}
-                                              className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-600 transition-colors"
-                                              title="Delete Stage"
-                                            >
-                                              <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                          </div>
-                                        </div>
-
-                                        {/* Middle: Stage Tag */}
-                                        <div
-                                          className="flex items-center justify-between px-3 py-2 rounded-lg text-white font-bold text-xs shadow-2xs mb-2.5"
-                                          style={{ backgroundColor: fStage.color || "#22C55E" }}
-                                        >
-                                          <span className="truncate pr-1">{fStage.name}</span>
-                                          <span className="text-[10px] bg-black/30 text-white font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                                            🏁 Last Stage
-                                          </span>
-                                        </div>
-
-                                        {/* Bottom: Next Pipeline Assignment System Setting */}
-                                        <div className="pt-2 border-t border-gray-100 mt-auto">
-                                          <div className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-1 flex items-center justify-between">
-                                            <span>Next Pipeline Action:</span>
-                                            <span className="text-purple-600 font-semibold lowercase">end &amp; move</span>
-                                          </div>
-                                          {transition ? (
-                                            <div
-                                              onClick={() => handleOpenEditLastStageModal(fStage)}
-                                              className="bg-purple-50/70 hover:bg-purple-100/70 border border-purple-200 rounded-lg p-2 cursor-pointer transition-colors"
-                                              title="Click to change next process routing"
-                                            >
-                                              <div className="flex items-center gap-1.5 font-bold text-xs text-purple-900 truncate">
-                                                <span className="text-purple-600">➡️</span>
-                                                <span className="truncate">{transition.targetProcessName}</span>
-                                              </div>
-                                              <div className="flex items-center justify-between text-[11px] text-purple-700 mt-1">
-                                                <span className="font-medium truncate">Stage: {transition.targetStageName}</span>
-                                                {transition.autoMove && (
-                                                  <span className="text-[9px] bg-purple-200/80 text-purple-800 font-bold px-1.5 py-0.5 rounded">
-                                                    Auto-Move
-                                                  </span>
-                                                )}
-                                              </div>
-                                            </div>
-                                          ) : (
-                                            <button
-                                              type="button"
-                                              onClick={() => handleOpenEditLastStageModal(fStage)}
-                                              className="w-full py-1.5 px-2 bg-gray-50 hover:bg-purple-50 text-gray-600 hover:text-purple-700 border border-dashed border-gray-300 hover:border-purple-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
-                                            >
-                                              <Plus className="w-3 h-3 text-purple-600" />
-                                              <span>Assign Next Pipeline</span>
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
                                     );
-                                  })
-                                )}
+                                  })}
+                                </div>
 
-                                {/* Add Outcome Card */}
+                                {/* + Icon to Add another Last Stage Option */}
                                 <button
                                   type="button"
                                   onClick={handleOpenAddLastStageModal}
-                                  className="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-dashed border-purple-300 bg-white/70 hover:bg-purple-50/80 hover:border-purple-400 text-purple-700 transition-all min-w-[170px] cursor-pointer shadow-2xs group"
+                                  className="flex items-center justify-center w-8 h-10 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-600 hover:text-purple-700 border border-purple-200 hover:border-purple-300 transition-all shadow-2xs hover:shadow-xs flex-shrink-0 cursor-pointer"
+                                  title="Add last stage option"
                                 >
-                                  <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center mb-1.5 group-hover:scale-110 transition-transform">
-                                    <Plus className="w-4 h-4 text-purple-700" />
-                                  </div>
-                                  <span className="text-xs font-bold text-center">Add Last Stage Option</span>
-                                  <span className="text-[10px] text-gray-500 text-center mt-0.5">Map intent &amp; next pipeline</span>
+                                  <Plus className="w-4 h-4" />
                                 </button>
-                              </div>
-                            </div>
+                              </>
+                            ) : (
+                              /* When NO last stage is added: + Add Last Stage button */
+                              <button
+                                type="button"
+                                onClick={handleOpenAddLastStageModal}
+                                className="flex items-center gap-1.5 px-3 h-10 rounded-md border border-dashed border-purple-300 hover:border-purple-400 bg-purple-50/50 hover:bg-purple-100/50 text-purple-700 text-xs font-semibold transition-all shadow-2xs flex-shrink-0 cursor-pointer ml-1"
+                                title="Add last stage option"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Add Last Stage</span>
+                              </button>
+                            )}
                           </div>
                         );
                       })()}
@@ -4189,6 +4418,17 @@ export default function Process() {
                             <span className="text-sm px-3 py-1 bg-secondary/10 text-secondary rounded-full" style={{ fontFamily: 'Outfit, sans-serif' }}>
                               Stage
                             </span>
+                            {targetedStages.has(stage.id) && (
+                              <Tooltip text="Records transition into this stage automatically via Global Automation rules.">
+                                <Link
+                                  to="/automation"
+                                  className="text-xs px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-full font-semibold flex items-center gap-1 transition-colors"
+                                >
+                                  <Zap className="w-3 h-3 text-blue-600" />
+                                  <span>Moves here via Automation</span>
+                                </Link>
+                              </Tooltip>
+                            )}
                           </div>
                           <p className="text-sm mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{stage.description}</p>
                         </div>
@@ -4208,36 +4448,51 @@ export default function Process() {
                             </label>
                           </Tooltip>
                           <HowItWorksButton label="How Stage Works" onClick={() => setShowStageHowItWorksModal(true)} />
-                          <Tooltip text="Delete Stage">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setStageToDelete(stage);
-                                setShowDeleteStageModal(true);
-                              }}
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          </Tooltip>
+                          {stage.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stage.systemCategory) ? (
+                            <Tooltip text="Required stage cannot be deleted">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled
+                                className="opacity-50 cursor-not-allowed text-gray-400"
+                              >
+                                <Lock className="w-4 h-4 text-gray-400" />
+                              </Button>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip text="Delete Stage">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setStageToDelete(stage);
+                                  const others = selectedProcessData?.stages.filter((s) => s.id !== stage.id) || [];
+                                  if (others.length > 0) {
+                                    setReplacementStageId(others[0].id);
+                                  }
+                                  setShowDeleteStageModal(true);
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </Tooltip>
+                          )}
                         </div>
                       </div>
 
                       {/* Stage Tabs */}
-                      <div className="flex gap-2 mt-4">
+                      <div className="flex items-center gap-2 mt-4">
                         {[
                           { id: "general", label: "General" },
                           { id: "ai-agent", label: "AI Agent" },
                           { id: "automation", label: "Automation" },
-                          { id: "flowbuilder", label: "Flow Builder" },
                         ].map((tab) => (
                           <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                              (activeTab === tab.id || (tab.id === "general" && activeTab === "basic"))
-                                ? "bg-primary text-primary-foreground"
-                                : "text-muted-foreground hover:bg-muted"
+                            className={`px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer ${(activeTab === tab.id || (tab.id === "general" && activeTab === "basic") || (tab.id === "ai-agent" && activeTab === "advanced"))
+                              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                              : "text-muted-foreground hover:bg-muted"
                               }`}
                           >
                             {tab.label}
@@ -4601,13 +4856,13 @@ export default function Process() {
                                                 p.id !== selectedProcess
                                                   ? p
                                                   : {
-                                                      ...p,
-                                                      stages: p.stages.map((s) =>
-                                                        s.id !== expandedStage
-                                                          ? s
-                                                          : { ...s, enableCalling: newVal }
-                                                      ),
-                                                    }
+                                                    ...p,
+                                                    stages: p.stages.map((s) =>
+                                                      s.id !== expandedStage
+                                                        ? s
+                                                        : { ...s, enableCalling: newVal }
+                                                    ),
+                                                  }
                                               )
                                             );
                                           }
@@ -4648,117 +4903,117 @@ export default function Process() {
                                 {/* AI Model */}
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-1.5">
-                                      <span className="text-blue-500 font-mono font-bold text-sm leading-none">&gt;_</span>
-                                      <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                        AI Model
-                                      </span>
-                                      <Tooltip text="Select the underlying LLM that powers the conversational logic.">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
-                                      </Tooltip>
-                                    </div>
-                                    <div className="relative">
-                                      <select
-                                        value={selectedAIModel}
-                                        onChange={(e) => {
-                                          if (e.target.value === "__view_more_models__") {
-                                            navigate('/settings?tab=voice-config&sub=models');
-                                            return;
-                                          }
-                                          setSelectedAIModel(e.target.value);
-                                          toast.success(`AI Model updated to ${e.target.value}`);
-                                        }}
-                                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-10 cursor-pointer shadow-2xs"
-                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                      >
-                                        {activeAIModels.map((m) => (
-                                          <option key={m.id} value={m.name}>
-                                            {m.name} ({m.provider})
-                                          </option>
-                                        ))}
-                                        <option disabled value="">──────────</option>
-                                        <option value="__view_more_models__" className="text-blue-600 font-semibold">
-                                          Choose from library →
-                                        </option>
-                                      </select>
-                                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                    </div>
+                                    <span className="text-blue-500 font-mono font-bold text-sm leading-none">&gt;_</span>
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      AI Model
+                                    </span>
+                                    <Tooltip text="Select the underlying LLM that powers the conversational logic.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
                                   </div>
-
-                                  {/* Speech Speed */}
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-1.5">
-                                        <Volume2 className="w-4 h-4 text-amber-500" />
-                                        <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                          Speech Speed
-                                        </span>
-                                        <Tooltip text="Adjust how fast the AI speaks to ensure a natural conversational rhythm. Speech speed significantly affects naturalness — 1.0x (Natural) is highly recommended.">
-                                          <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
-                                        </Tooltip>
-                                      </div>
-                                      <span className="text-xs font-semibold text-gray-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                        {stageVoiceSpeed.toFixed(1)}x
-                                      </span>
-                                    </div>
-                                    <div className="space-y-2 pt-1">
-                                      <input
-                                        type="range"
-                                        min="0.5"
-                                        max="1.5"
-                                        step="0.1"
-                                        value={stageVoiceSpeed}
-                                        onChange={(e) => setStageVoiceSpeed(parseFloat(e.target.value))}
-                                        className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                                      />
-                                      <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 tracking-wider">
-                                        <span>SLOW</span>
-                                        <span>NATURAL</span>
-                                        <span>FAST</span>
-                                      </div>
-                                    </div>
+                                  <div className="relative">
+                                    <select
+                                      value={selectedAIModel}
+                                      onChange={(e) => {
+                                        if (e.target.value === "__view_more_models__") {
+                                          navigate('/settings?tab=voice-config&sub=models');
+                                          return;
+                                        }
+                                        setSelectedAIModel(e.target.value);
+                                        toast.success(`AI Model updated to ${e.target.value}`);
+                                      }}
+                                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-10 cursor-pointer shadow-2xs"
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      {activeAIModels.map((m) => (
+                                        <option key={m.id} value={m.name}>
+                                          {m.name} ({m.provider})
+                                        </option>
+                                      ))}
+                                      <option disabled value="">──────────</option>
+                                      <option value="__view_more_models__" className="text-blue-600 font-semibold">
+                                        Choose from library →
+                                      </option>
+                                    </select>
+                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                                   </div>
                                 </div>
 
-                                {/* Row 2: Voice Engine, Tone, Style in same row */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100 items-start">
-                                  {/* Voice Engine */}
-                                  <div className="space-y-2">
+                                {/* Speech Speed */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-1.5">
-                                      <Mic className="w-4 h-4 text-emerald-500" />
+                                      <Volume2 className="w-4 h-4 text-amber-500" />
                                       <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                        Voice Engine
+                                        Speech Speed
                                       </span>
-                                      <Tooltip text="Choose the vocal personality that best represents your brand's tone.">
+                                      <Tooltip text="Adjust how fast the AI speaks to ensure a natural conversational rhythm. Speech speed significantly affects naturalness — 1.0x (Natural) is highly recommended.">
                                         <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
                                       </Tooltip>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      <div className="relative flex-1">
-                                        <select
-                                          value={stageVoice}
-                                          onChange={(e) => {
-                                            if (e.target.value === "__view_more_voices__") {
-                                              navigate('/settings?tab=voice-config&sub=voices');
-                                              return;
-                                            }
-                                            setStageVoice(e.target.value);
-                                            toast.success(`Voice updated to ${e.target.value}`);
-                                          }}
-                                          className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-7 cursor-pointer shadow-2xs"
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          {activeConfiguredVoices.map((v) => (
-                                            <option key={v.id || v.name} value={v.name}>
-                                              {v.name} ({v.country}, {v.gender})
-                                            </option>
-                                          ))}
-                                          <option disabled value="">──────────</option>
-                                          <option value="__view_more_voices__" className="text-blue-600 font-semibold">
-                                            Choose from library →
+                                    <span className="text-xs font-semibold text-gray-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      {stageVoiceSpeed.toFixed(1)}x
+                                    </span>
+                                  </div>
+                                  <div className="space-y-2 pt-1">
+                                    <input
+                                      type="range"
+                                      min="0.5"
+                                      max="1.5"
+                                      step="0.1"
+                                      value={stageVoiceSpeed}
+                                      onChange={(e) => setStageVoiceSpeed(parseFloat(e.target.value))}
+                                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                    />
+                                    <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 tracking-wider">
+                                      <span>SLOW</span>
+                                      <span>NATURAL</span>
+                                      <span>FAST</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Row 2: Voice Engine, Tone, Style in same row */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100 items-start">
+                                {/* Voice Engine */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <Mic className="w-4 h-4 text-emerald-500" />
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      Voice Engine
+                                    </span>
+                                    <Tooltip text="Choose the vocal personality that best represents your brand's tone.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="relative flex-1">
+                                      <select
+                                        value={stageVoice}
+                                        onChange={(e) => {
+                                          if (e.target.value === "__view_more_voices__") {
+                                            navigate('/settings?tab=voice-config&sub=voices');
+                                            return;
+                                          }
+                                          setStageVoice(e.target.value);
+                                          toast.success(`Voice updated to ${e.target.value}`);
+                                        }}
+                                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-7 cursor-pointer shadow-2xs"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      >
+                                        {activeConfiguredVoices.map((v) => (
+                                          <option key={v.id || v.name} value={v.name}>
+                                            {v.name} ({v.country}, {v.gender})
                                           </option>
-                                        </select>
-                                        <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                      </div>
+                                        ))}
+                                        <option disabled value="">──────────</option>
+                                        <option value="__view_more_voices__" className="text-blue-600 font-semibold">
+                                          Choose from library →
+                                        </option>
+                                      </select>
+                                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                    </div>
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -5362,419 +5617,8 @@ export default function Process() {
                         </div>
                       )}
 
-                      {/* Automation Tab */}
-                      {activeTab === "automation" && (
-                        <div className="space-y-6">
-                          {/* Automation - Collapsible */}
-                          <div className="mt-8 rounded-lg border border-border overflow-hidden">
-                            <button
-                              onClick={() => setWorkflowStepsExpanded(!workflowStepsExpanded)}
-                              className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-                            >
-                              <div className="flex flex-col items-start gap-1">
-                                <div className="flex items-center gap-2">
-                                  <Zap className="w-4 h-4" style={{ color: '#020817' }} />
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Automation
-                                  </span>
-                                </div>
-                                <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                  Configure the automated steps that run for this stage.
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span onClick={(e) => e.stopPropagation()}>
-                                  <HowItWorksButton
-                                    label="How Automations Works"
-                                    onClick={() => setShowAutomationHowItWorksModal(true)}
-                                  />
-                                </span>
-                                <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${workflowStepsExpanded ? "rotate-180" : ""}`} />
-                              </div>
-                            </button>
-
-                            {workflowStepsExpanded && (
-                              <div className="border-t border-border p-4 space-y-3">
-                                {workflowSteps.length === 0 ? (
-                                  <div className="text-center py-6">
-                                    <p className="text-sm" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>No workflow steps added yet.</p>
-                                  </div>
-                                ) : (() => {
-                                  const stageSteps = workflowSteps.filter(s => !s.trigger || s.trigger === "stage");
-                                  const inCallSteps = workflowSteps.filter(s => s.trigger === "incall");
-                                  const inChatSteps = workflowSteps.filter(s => s.trigger === "inchat");
-                                  const postCallSteps = workflowSteps.filter(s => s.trigger === "postcall");
-                                  const isBlockedCallType = stageType === "No Call Activity" || stageType === "Transfer to Human";
-
-                                  const StepIcon = ({ iconKey }: { iconKey: string }) => {
-                                    const map: Record<string, React.ReactNode> = {
-                                      clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
-                                      chevronright: <ChevronRight className="w-4 h-4 text-white" />, zap: <Zap className="w-4 h-4 text-white" />,
-                                      edit: <Edit className="w-4 h-4 text-white" />, usercheck: <UserCheck className="w-4 h-4 text-white" />,
-                                      phonecall: <PhoneCall className="w-4 h-4 text-white" />, messagecircle: <MessageCircle className="w-4 h-4 text-white" />,
-                                      messagesquare: <MessageSquare className="w-4 h-4 text-white" />, mail: <Mail className="w-4 h-4 text-white" />,
-                                      filetext: <FileText className="w-4 h-4 text-white" />, clipboardlist: <ClipboardList className="w-4 h-4 text-white" />,
-                                      globe: <Globe className="w-4 h-4 text-white" />, calendar: <Calendar className="w-4 h-4 text-white" />,
-                                      refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
-                                      lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
-                                      layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
-                                      gitbranch: <GitBranch className="w-4 h-4 text-white" />,
-                                      volume2: <Volume2 className="w-4 h-4 text-white" />,
-                                    };
-                                    return <>{map[iconKey]}</>;
-                                  };
-
-                                  const moveStageStep = (dragIndex: number, hoverIndex: number) => {
-                                    const updatedStageSteps = [...stageSteps];
-                                    const [removed] = updatedStageSteps.splice(dragIndex, 1);
-                                    updatedStageSteps.splice(hoverIndex, 0, removed);
-
-                                    let stageIdx = 0;
-                                    const newWorkflowSteps = workflowSteps.map(s => {
-                                      if (!s.trigger || s.trigger === "stage") {
-                                        return updatedStageSteps[stageIdx++];
-                                      }
-                                      return s;
-                                    });
-                                    setWorkflowSteps(newWorkflowSteps);
-                                  };
-
-                                  return (
-                                    <div className="space-y-4">
-                                      {/* On Stage Entry List */}
-                                      {stageSteps.length > 0 && (
-                                        <div className="space-y-2">
-                                          <div className="flex items-center gap-1.5">
-                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                              On Stage Entry
-                                            </p>
-                                            <InfoTooltip text="These steps run automatically the moment a client enters this stage, before any call starts." />
-                                          </div>
-                                          <div className="space-y-2">
-                                            {stageSteps.map((step, idx) => (
-                                              <DraggableWorkflowStep
-                                                key={step.id}
-                                                step={step}
-                                                index={idx}
-                                                moveStep={moveStageStep}
-                                                onEdit={() => {
-                                                  resetStepDetailState();
-                                                  setCurrentEditingStep(step);
-                                                  setIsCreatingNewStep(false);
-                                                  setStepTrigger(step.trigger ?? "stage");
-                                                  setExecutionType(step.executionType ?? "wait");
-                                                  setDelayValue(step.delayValue ?? 5);
-                                                  setDelayUnit(step.delayUnit ?? "Minute");
-                                                  restoreStepParams(step.stepKey, step.params);
-                                                  setStepDetailDrawerOpen(true);
-                                                }}
-                                                onDuplicate={() => {
-                                                  const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                  const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                  if (fullIdx !== -1) {
-                                                    setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                  }
-                                                  toast.success("Step duplicated successfully");
-                                                }}
-                                                onDelete={() => {
-                                                  setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                  toast.success("Step removed successfully");
-                                                }}
-                                                StepIcon={StepIcon}
-                                                connectAfterLabel={(() => {
-                                                  if (!step.connectAfterId || step.connectAfterId === 'start') return 'from Start';
-                                                  const pred = workflowSteps.find(s => s.id === step.connectAfterId);
-                                                  return pred ? `after ${pred.name}` : undefined;
-                                                })()}
-                                              />
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {/* In Call List */}
-                                      {inCallSteps.length > 0 && (
-                                        <div className="relative">
-                                          <div className={`space-y-2 ${isBlockedCallType ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                                            <div className="flex items-center gap-1.5">
-                                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                                In Call
-                                              </p>
-                                              <InfoTooltip text="These steps run live during the conversation, based on what the caller says." />
-                                            </div>
-                                            <div className="space-y-2">
-                                              {inCallSteps.map((step) => (
-                                                <div
-                                                  key={step.id}
-                                                  className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-muted/10 transition-colors"
-                                                  onClick={(e) => {
-                                                    if ((e.target as HTMLElement).closest('button')) {
-                                                      return;
-                                                    }
-                                                    resetStepDetailState();
-                                                    setCurrentEditingStep(step);
-                                                    setIsCreatingNewStep(false);
-                                                    setStepTrigger(step.trigger ?? "stage");
-                                                    setExecutionType(step.executionType ?? "wait");
-                                                    setDelayValue(step.delayValue ?? 5);
-                                                    setDelayUnit(step.delayUnit ?? "Minute");
-                                                    restoreStepParams(step.stepKey, step.params);
-                                                    setStepDetailDrawerOpen(true);
-                                                  }}
-                                                >
-                                                  <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#2563EB' }}>
-                                                    <StepIcon iconKey={step.iconKey} />
-                                                  </div>
-                                                  <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
-                                                    <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Event Driven</p>
-                                                  </div>
-                                                  <div className="flex items-center gap-1 flex-shrink-0">
-                                                    <button
-                                                      className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                      title="Duplicate"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                        const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                        if (fullIdx !== -1) {
-                                                          setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                        }
-                                                        toast.success("Step duplicated successfully");
-                                                      }}
-                                                    >
-                                                      <Copy className="w-4 h-4 text-muted-foreground" />
-                                                    </button>
-                                                    <button
-                                                      className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                      title="Edit"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        resetStepDetailState();
-                                                        setCurrentEditingStep(step);
-                                                        setIsCreatingNewStep(false);
-                                                        setConnectAfterId(step.connectAfterId);
-                                                        setStepTrigger(step.trigger ?? "stage");
-                                                        setExecutionType(step.executionType ?? "wait");
-                                                        setDelayValue(step.delayValue ?? 5);
-                                                        setDelayUnit(step.delayUnit ?? "Minute");
-                                                        restoreStepParams(step.stepKey, step.params);
-                                                        setStepDetailDrawerOpen(true);
-                                                      }}
-                                                    >
-                                                      <Pencil className="w-4 h-4 text-muted-foreground" />
-                                                    </button>
-                                                    <button
-                                                      className="p-1.5 rounded hover:bg-red-50 transition-colors"
-                                                      title="Delete"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                        toast.success("Step removed successfully");
-                                                      }}
-                                                    >
-                                                      <Trash2 className="w-4 h-4 text-red-500" />
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                          {isBlockedCallType && (
-                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                              <span className="px-3 py-1.5 rounded-full text-xs font-medium border border-border shadow-sm flex items-center gap-1.5" style={{ backgroundColor: '#F1F5F9', color: '#64748B', borderColor: '#E2E8F0', fontFamily: 'DM Sans, sans-serif' }}>
-                                                <Ban className="w-3.5 h-3.5" />
-                                                Not available for this call type
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* In Chat List */}
-                                      {inChatSteps.length > 0 && (
-                                        <div className="space-y-2">
-                                          <div className="flex items-center gap-1.5">
-                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                              In Chat
-                                            </p>
-                                            <InfoTooltip text="These steps fire when the client sends a message in a chat channel (WhatsApp, SMS, or Website) during this stage." />
-                                          </div>
-                                          <div className="space-y-2">
-                                            {inChatSteps.map((step) => (
-                                              <div
-                                                key={step.id}
-                                                className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-muted/10 transition-colors"
-                                                onClick={(e) => {
-                                                  if ((e.target as HTMLElement).closest('button')) return;
-                                                  resetStepDetailState();
-                                                  setCurrentEditingStep(step);
-                                                  setIsCreatingNewStep(false);
-                                                  setStepTrigger(step.trigger ?? "stage");
-                                                  setExecutionType(step.executionType ?? "wait");
-                                                  setDelayValue(step.delayValue ?? 5);
-                                                  setDelayUnit(step.delayUnit ?? "Minute");
-                                                  restoreStepParams(step.stepKey, step.params);
-                                                  setStepDetailDrawerOpen(true);
-                                                }}
-                                              >
-                                                <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#7C3AED' }}>
-                                                  <StepIcon iconKey={step.iconKey} />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
-                                                  <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Message Driven</p>
-                                                </div>
-                                                <div className="flex items-center gap-1 flex-shrink-0">
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                    title="Duplicate"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                      const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                      if (fullIdx !== -1) setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                      toast.success("Step duplicated successfully");
-                                                    }}
-                                                  >
-                                                    <Copy className="w-4 h-4 text-muted-foreground" />
-                                                  </button>
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                    title="Edit"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      resetStepDetailState();
-                                                      setCurrentEditingStep(step);
-                                                      setIsCreatingNewStep(false);
-                                                      setConnectAfterId(step.connectAfterId);
-                                                      setStepTrigger(step.trigger ?? "stage");
-                                                      setExecutionType(step.executionType ?? "wait");
-                                                      setDelayValue(step.delayValue ?? 5);
-                                                      setDelayUnit(step.delayUnit ?? "Minute");
-                                                      restoreStepParams(step.stepKey, step.params);
-                                                      setStepDetailDrawerOpen(true);
-                                                    }}
-                                                  >
-                                                    <Pencil className="w-4 h-4 text-muted-foreground" />
-                                                  </button>
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-red-50 transition-colors"
-                                                    title="Delete"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                      toast.success("Step removed successfully");
-                                                    }}
-                                                  >
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                  </button>
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {/* Post Call List */}
-                                      {postCallSteps.length > 0 && (() => {
-                                        const movePostCallStep = (dragIndex: number, hoverIndex: number) => {
-                                          const updatedPostCallSteps = [...postCallSteps];
-                                          const [removed] = updatedPostCallSteps.splice(dragIndex, 1);
-                                          updatedPostCallSteps.splice(hoverIndex, 0, removed);
-
-                                          let pcIdx = 0;
-                                          const newWorkflowSteps = workflowSteps.map(s => {
-                                            if (s.trigger === "postcall") {
-                                              return updatedPostCallSteps[pcIdx++];
-                                            }
-                                            return s;
-                                          });
-                                          setWorkflowSteps(newWorkflowSteps);
-                                        };
-
-                                        return (
-                                          <div className="relative">
-                                            <div className={`space-y-2 ${isBlockedCallType ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                                              <div className="flex items-center gap-1.5">
-                                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                                  Post Call
-                                                </p>
-                                                <InfoTooltip text="These steps run after the call ends — send a follow-up text, update a field, or move the client to the next stage." />
-                                              </div>
-                                              <div className="space-y-2">
-                                                {postCallSteps.map((step, idx) => (
-                                                  <DraggableWorkflowStep
-                                                    key={step.id}
-                                                    step={step}
-                                                    index={idx}
-                                                    moveStep={movePostCallStep}
-                                                    onEdit={() => {
-                                                      resetStepDetailState();
-                                                      setCurrentEditingStep(step);
-                                                      setIsCreatingNewStep(false);
-                                                      setStepTrigger(step.trigger ?? "stage");
-                                                      setExecutionType(step.executionType ?? "wait");
-                                                      setDelayValue(step.delayValue ?? 5);
-                                                      setDelayUnit(step.delayUnit ?? "Minute");
-                                                      restoreStepParams(step.stepKey, step.params);
-                                                      setStepDetailDrawerOpen(true);
-                                                    }}
-                                                    onDuplicate={() => {
-                                                      const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                      const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                      if (fullIdx !== -1) {
-                                                        setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                      }
-                                                      toast.success("Step duplicated successfully");
-                                                    }}
-                                                    onDelete={() => {
-                                                      setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                      toast.success("Step removed successfully");
-                                                    }}
-                                                    StepIcon={StepIcon}
-                                                    connectAfterLabel={(() => {
-                                                      if (!step.connectAfterId || step.connectAfterId === "start") return "from Start";
-                                                      const pred = workflowSteps.find(s => s.id === step.connectAfterId);
-                                                      return pred ? `after ${pred.name}` : undefined;
-                                                    })()}
-                                                  />
-                                                ))}
-                                              </div>
-                                            </div>
-                                            {isBlockedCallType && (
-                                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                <span className="px-3 py-1.5 rounded-full text-xs font-medium border border-border shadow-sm flex items-center gap-1.5" style={{ backgroundColor: '#F1F5F9', color: '#64748B', borderColor: '#E2E8F0', fontFamily: 'DM Sans, sans-serif' }}>
-                                                  <Ban className="w-3.5 h-3.5" />
-                                                  Not available for this call type
-                                                </span>
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })()}
-                                    </div>
-                                  );
-                                })()}
-                                <Button
-                                  variant="primary"
-                                  onClick={() => {
-                                    setSelectedWorkflowStepCard(null);
-                                    setWorkflowStepsDrawerOpen(true);
-                                  }}
-                                  className="w-full mt-3"
-                                >
-                                  <Plus className="w-4 h-4 mr-2" />
-                                  Add Step
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Advanced Tab */}
-                      {activeTab === "advanced" && (
+                      {/* AI Agent / Advanced Tab */}
+                      {(activeTab === "ai-agent" || activeTab === "advanced") && (
                         <div className="space-y-4">
                           {/* AI Model */}
                           <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
@@ -6636,18 +6480,111 @@ export default function Process() {
                         </div>
                       )}
 
+                      {/* Automation Tab */}
+                      {activeTab === "automation" && (
+                        <div className="space-y-4">
+                          {/* Toolbar Row */}
+                          <div className="flex items-center justify-between gap-3">
+                            {/* Left: Help Icon with Tooltip */}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                Automations
+                              </span>
+                              <Tooltip text="Triggers, delays, conditions, and actions executing automatically during this stage.">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAutomationHowItWorksModal(true)}
+                                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                                  aria-label="How Automations Works"
+                                >
+                                  <Info className="w-3.5 h-3.5" />
+                                </button>
+                              </Tooltip>
+                            </div>
 
-                      {/* Flow Builder Tab */}
-                      {activeTab === "flowbuilder" && (
-                        <div className="-m-6 h-[calc(100%+3rem)]">
-                          <FlowBuilderTab
-                            processName={selectedProcessData?.name ?? "Current Process"}
+                            {/* Right: Primary Dark Button "+ Add automation" */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedWorkflowStepCard(null);
+                                setAutomationDrawerView("library");
+                                setWorkflowStepsDrawerOpen(true);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-900/40"
+                              style={{ fontFamily: 'DM Sans, sans-serif' }}
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add automation</span>
+                            </button>
+                          </div>
+
+                          {/* ONE list of automation cards */}
+                          <StageAutomationCards
+                            stageId={stage.id}
                             stageName={stage.name}
-                            processes={processes}
-                            currentProcessId={selectedProcess ?? undefined}
-                            workflowSteps={workflowSteps}
-                            onWorkflowStepsChange={setWorkflowSteps}
-                            stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
+                            steps={workflowSteps}
+                            onStepsChange={(newSteps) => {
+                              setWorkflowSteps(newSteps);
+                              setProcesses((prev) =>
+                                prev.map((p) =>
+                                  p.id !== selectedProcess
+                                    ? p
+                                    : {
+                                        ...p,
+                                        stages: p.stages.map((s) =>
+                                          s.id !== stage.id ? s : { ...s, workflowSteps: newSteps }
+                                        ),
+                                      }
+                                )
+                              );
+                            }}
+                            onAddAutomation={() => {
+                              setSelectedWorkflowStepCard(null);
+                              setAutomationDrawerView("library");
+                              setWorkflowStepsDrawerOpen(true);
+                            }}
+                            onEditStep={(step) => {
+                              handleEditWorkflowStep(step);
+                            }}
+                            onDuplicateStep={(step) => {
+                              const duplicated = {
+                                ...step,
+                                id: `ws-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                                name: `${step.name} (Copy)`,
+                              };
+                              const updated = [...workflowSteps, duplicated];
+                              setWorkflowSteps(updated);
+                              setProcesses((prev) =>
+                                prev.map((p) =>
+                                  p.id !== selectedProcess
+                                    ? p
+                                    : {
+                                        ...p,
+                                        stages: p.stages.map((s) =>
+                                          s.id !== stage.id ? s : { ...s, workflowSteps: updated }
+                                        ),
+                                      }
+                                )
+                              );
+                              toast.success("Automation duplicated");
+                            }}
+                            onDeleteStep={(stepId) => {
+                              const updated = workflowSteps.filter((s) => s.id !== stepId);
+                              setWorkflowSteps(updated);
+                              setProcesses((prev) =>
+                                prev.map((p) =>
+                                  p.id !== selectedProcess
+                                    ? p
+                                    : {
+                                        ...p,
+                                        stages: p.stages.map((s) =>
+                                          s.id !== stage.id ? s : { ...s, workflowSteps: updated }
+                                        ),
+                                      }
+                                )
+                              );
+                              toast.success("Automation step removed");
+                            }}
                           />
                         </div>
                       )}
@@ -6663,39 +6600,132 @@ export default function Process() {
                           />
                           {/* Drawer panel — 75vw, full height, anchored right */}
                           <div
-                            className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border"
-                            style={{ width: '55vw', minWidth: '55vw', maxWidth: '55vw', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)' }}
+                            className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border shadow-2xl transition-all"
+                            style={{ width: '75vw', minWidth: '75vw', maxWidth: '75vw', boxShadow: '-4px 0 24px rgba(0,0,0,0.14)' }}
                           >
                             {/* Header */}
-                            <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border">
-                              <div className="flex items-start justify-between mb-1">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <Zap className="w-5 h-5" style={{ color: '#020817' }} />
-                                    <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Add Automation</h2>
+                            <div className="flex-shrink-0 px-6 pt-5 pb-4 border-b border-border bg-white">
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0">
+                                    {automationDrawerView === "flowbuilder" ? (
+                                      <GitBranch className="w-5 h-5" />
+                                    ) : (
+                                      <Zap className="w-5 h-5" />
+                                    )}
                                   </div>
-                                  <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Choose and configure the step before adding it to this stage.</p>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                        {automationDrawerView === "flowbuilder" ? "Automation Flow Builder" : "Add Automation"}
+                                      </h2>
+                                      {(() => {
+                                        const currentStageObj = selectedProcessData?.stages.find((s) => s.id === expandedStage);
+                                        return currentStageObj ? (
+                                          <span
+                                            className="text-[11px] font-semibold px-2 py-0.5 rounded-full text-white"
+                                            style={{ backgroundColor: currentStageObj.color || "#2563EB" }}
+                                          >
+                                            {currentStageObj.name}
+                                          </span>
+                                        ) : null;
+                                      })()}
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      {automationDrawerView === "flowbuilder"
+                                        ? "Visual canvas for stage triggers, conditions, delays, and action nodes."
+                                        : "Choose and configure the workflow step before adding it to this stage."}
+                                    </p>
+                                  </div>
                                 </div>
-                                <button onClick={() => setWorkflowStepsDrawerOpen(false)} className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0">
-                                  <X className="w-5 h-5 text-muted-foreground" />
-                                </button>
+
+                                {/* Center / Right: View Mode Toggle [ Step Library | Flow Builder ] */}
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center p-1 bg-gray-100 rounded-xl border border-gray-200/80">
+                                    <button
+                                      type="button"
+                                      onClick={() => setAutomationDrawerView("library")}
+                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                        automationDrawerView === "library"
+                                          ? "bg-white text-blue-700 shadow-xs border border-gray-200/60 font-bold"
+                                          : "text-gray-600 hover:text-gray-900"
+                                      }`}
+                                    >
+                                      <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                                      <span>Step Library</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setAutomationDrawerView("flowbuilder")}
+                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                        automationDrawerView === "flowbuilder"
+                                          ? "bg-white text-blue-700 shadow-xs border border-gray-200/60 font-bold"
+                                          : "text-gray-600 hover:text-gray-900"
+                                      }`}
+                                    >
+                                      <GitBranch className="w-3.5 h-3.5 text-blue-600" />
+                                      <span>Flow Builder</span>
+                                    </button>
+                                  </div>
+
+                                  <button
+                                    onClick={() => setWorkflowStepsDrawerOpen(false)}
+                                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 cursor-pointer ml-2"
+                                    title="Close Drawer"
+                                  >
+                                    <X className="w-5 h-5 text-muted-foreground" />
+                                  </button>
+                                </div>
                               </div>
-                              {/* Search */}
-                              <div className="relative mt-4">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                <input
-                                  type="text"
-                                  value={workflowStepSearch}
-                                  onChange={e => setWorkflowStepSearch(e.target.value)}
-                                  placeholder="Search workflow steps..."
-                                  className="w-full pl-9 pr-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                />
-                              </div>
+
+                              {/* Search — only in library view */}
+                              {automationDrawerView === "library" && (
+                                <div className="relative mt-3.5">
+                                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                  <input
+                                    type="text"
+                                    value={workflowStepSearch}
+                                    onChange={e => setWorkflowStepSearch(e.target.value)}
+                                    placeholder="Search workflow steps..."
+                                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                  />
+                                </div>
+                              )}
                             </div>
 
-                            {/* Body — two column layout */}
-                            <div className="flex flex-1 overflow-hidden">
+                            {/* Body */}
+                            {automationDrawerView === "flowbuilder" ? (
+                              <div className="flex-1 overflow-hidden relative bg-[#FAFBFD]">
+                                <FlowBuilderTab
+                                  processName={selectedProcessData?.name}
+                                  stageName={selectedProcessData?.stages.find((s) => s.id === expandedStage)?.name}
+                                  processes={processes}
+                                  currentProcessId={selectedProcess || undefined}
+                                  workflowSteps={workflowSteps}
+                                  onWorkflowStepsChange={(newSteps) => {
+                                    setWorkflowSteps(newSteps);
+                                    if (selectedProcess && expandedStage) {
+                                      setProcesses((prev) =>
+                                        prev.map((p) =>
+                                          p.id !== selectedProcess
+                                            ? p
+                                            : {
+                                                ...p,
+                                                stages: p.stages.map((s) =>
+                                                  s.id !== expandedStage ? s : { ...s, workflowSteps: newSteps }
+                                                ),
+                                              }
+                                        )
+                                      );
+                                    }
+                                  }}
+                                  stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
+                                />
+                              </div>
+                            ) : (
+                              /* Body — two column layout for Step Library */
+                              <div className="flex flex-1 overflow-hidden">
                               {/* Left Sidebar */}
                               <div className="w-[220px] flex-shrink-0 border-r border-border overflow-y-auto py-2 flex flex-col gap-1">
                                 {[
@@ -6705,6 +6735,7 @@ export default function Process() {
                                   { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
                                   { key: "data", icon: <Database className="w-4 h-4" />, name: "Data & Assignment" },
                                   { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
+                                  { key: "records", icon: <FileText className="w-4 h-4" />, name: "Records" },
                                 ].map((cat) => {
                                   const active = workflowStepCategory === cat.key;
                                   return (
@@ -6759,6 +6790,8 @@ export default function Process() {
                                     { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
                                     { key: "wh_trigger", name: "API Automation", desc: "Trigger actions in external systems using your connected API integrations.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
                                     { key: "webhook_trigger", name: "Webhook Automation", desc: "Send an event payload to a connected webhook when this step runs.", iconKey: "webhook", cats: ["all", "webhook"], popular: false },
+                                    { key: "generate_invoice", name: "Generate Invoice", desc: "Generate invoice for appointment (idempotent per appointment).", iconKey: "filetext", cats: ["all", "records"], popular: true },
+                                    { key: "send_payment", name: "Send Payment", desc: "Send payment link to client via preferred channel.", iconKey: "creditcard", cats: ["all", "records", "communication"], popular: false },
                                   ];
                                   const iconMap: Record<string, React.ReactNode> = {
                                     clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
@@ -6775,6 +6808,7 @@ export default function Process() {
                                     volume2: <Volume2 className="w-4 h-4 text-white" />,
                                     webhook: <Webhook className="w-4 h-4 text-white" />,
                                     phoneoff: <PhoneOff className="w-4 h-4 text-white" />,
+                                    creditcard: <CreditCard className="w-4 h-4 text-white" />,
                                   };
                                   const filtered = allSteps.filter(s =>
                                     s.cats.includes(workflowStepCategory) &&
@@ -6839,9 +6873,10 @@ export default function Process() {
                                 })()}
                               </div>
                             </div>
-                          </div>
-                        </>
-                      )}
+                          )}
+                        </div>
+                      </>
+                    )}
 
                       {/* Step Detail Drawer */}
                       <StepDetailDrawer
@@ -6877,6 +6912,10 @@ export default function Process() {
                         onClose={() => {
                           setStepDetailDrawerOpen(false);
                           setIsCreatingNewStep(false);
+                        }}
+                        onShowInFlowBuilder={() => {
+                          setStepDetailDrawerOpen(false);
+                          setIsFlowBuilderDrawerOpen(true);
                         }}
                         onSave={() => {
                           const pendingIntent = intentInput.trim();
@@ -6942,36 +6981,36 @@ export default function Process() {
                                 p.id !== selectedProcess
                                   ? p
                                   : {
-                                      ...p,
-                                      stages: p.stages.map((s) =>
-                                        s.id !== expandedStage
-                                          ? s
-                                          : {
-                                              ...s,
-                                              stageType,
-                                              selectedInboundNumbers,
-                                              selectedStageChannels,
-                                              channelSources,
-                                              responsiblePerson,
-                                              whenToMove,
-                                              callerPitchMode,
-                                              callerPitch,
-                                              greetingIntroMessage,
-                                              objectiveText,
-                                              businessInfoItems,
-                                              primaryLanguage,
-                                              secondaryLanguages,
-                                              enableCalling,
-                                              aiSettings: {
-                                                platform: selectedAIModel,
-                                                voiceSpeed: stageVoiceSpeed,
-                                                voice: stageVoice,
-                                                tone: stageTone,
-                                                style: stageStyle,
-                                              },
-                                            }
-                                      ),
-                                    }
+                                    ...p,
+                                    stages: p.stages.map((s) =>
+                                      s.id !== expandedStage
+                                        ? s
+                                        : {
+                                          ...s,
+                                          stageType,
+                                          selectedInboundNumbers,
+                                          selectedStageChannels,
+                                          channelSources,
+                                          responsiblePerson,
+                                          whenToMove,
+                                          callerPitchMode,
+                                          callerPitch,
+                                          greetingIntroMessage,
+                                          objectiveText,
+                                          businessInfoItems,
+                                          primaryLanguage,
+                                          secondaryLanguages,
+                                          enableCalling,
+                                          aiSettings: {
+                                            platform: selectedAIModel,
+                                            voiceSpeed: stageVoiceSpeed,
+                                            voice: stageVoice,
+                                            tone: stageTone,
+                                            style: stageStyle,
+                                          },
+                                        }
+                                    ),
+                                  }
                               )
                             );
                             toast.success("Stage configuration saved");
@@ -7125,9 +7164,8 @@ export default function Process() {
                       key={color}
                       type="button"
                       onClick={() => setNewStage({ ...newStage, color })}
-                      className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-110 ${
-                        isSelected ? "ring-2 ring-offset-2 ring-slate-400 scale-105" : ""
-                      }`}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-110 ${isSelected ? "ring-2 ring-offset-2 ring-slate-400 scale-105" : ""
+                        }`}
                       style={{ backgroundColor: color }}
                       title={color}
                     >
@@ -7146,60 +7184,122 @@ export default function Process() {
           onClose={() => {
             setShowDeleteStageModal(false);
             setStageToDelete(null);
+            setReplacementStageId("");
           }}
           title="Delete Stage"
           footer={
-            <>
+            stageToDelete && (stageToDelete.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stageToDelete.systemCategory)) ? (
               <Button
                 variant="outline"
                 onClick={() => {
                   setShowDeleteStageModal(false);
                   setStageToDelete(null);
+                  setReplacementStageId("");
                 }}
               >
-                Cancel
+                Close
               </Button>
-              <Button variant="destructive" onClick={handleDeleteStage}>
-                Delete Stage
-              </Button>
-            </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeleteStageModal(false);
+                    setStageToDelete(null);
+                    setReplacementStageId("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleDeleteStage}>
+                  Delete Stage
+                </Button>
+              </>
+            )
           }
         >
-          <div className="space-y-4">
-            {/* Warning Icon */}
-            <div className="flex items-center justify-center">
-              <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
-                <AlertCircle className="w-8 h-8 text-destructive" />
+          {stageToDelete && (stageToDelete.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stageToDelete.systemCategory)) ? (
+            <div className="space-y-4 text-center py-2">
+              <div className="flex items-center justify-center">
+                <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center border border-amber-200">
+                  <Lock className="w-8 h-8 text-amber-600" />
+                </div>
               </div>
-            </div>
-
-            {/* Main Message */}
-            <div className="text-center space-y-2">
-              <p className="text-base" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                Are you sure you want to delete this stage?
-              </p>
-              <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4">
-                <p className="font-semibold text-destructive" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                  {stageToDelete?.name}
+              <div className="space-y-2">
+                <h4 className="text-base font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  Required System Stage
+                </h4>
+                <p className="text-xs text-gray-500 max-w-sm mx-auto leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  The stage <span className="font-semibold text-gray-800">"{stageToDelete.name}"</span> fulfills the required system category
+                  {stageToDelete.systemCategory ? ` "${stageToDelete.systemCategory}"` : ""} for {selectedProcessData?.entityType || "this"} workflows and cannot be deleted.
+                </p>
+                <p className="text-[11px] text-gray-400">
+                  You can rename, recolor, or reorder this stage at any time.
                 </p>
               </div>
             </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Warning Icon */}
+              <div className="flex items-center justify-center">
+                <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-8 h-8 text-destructive" />
+                </div>
+              </div>
 
-            {/* Warning Details */}
-            <div className="bg-warning/5 border border-warning/20 rounded-xl p-4">
-              <div className="flex gap-3">
-                <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                    This action cannot be undone
-                  </p>
-                  <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                    Deleting this stage will permanently remove it from the process. All associated configurations, webhooks, and settings will be lost.
+              {/* Main Message */}
+              <div className="text-center space-y-2">
+                <p className="text-base" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                  Are you sure you want to delete this stage?
+                </p>
+                <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4">
+                  <p className="font-semibold text-destructive" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    {stageToDelete?.name}
                   </p>
                 </div>
               </div>
+
+              {/* Replacement Stage Selection */}
+              {selectedProcessData && (
+                <div className="space-y-1.5 pt-1 text-left">
+                  <label className="text-xs font-semibold text-gray-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    Replacement stage for existing records:
+                  </label>
+                  <select
+                    value={replacementStageId || (selectedProcessData.stages.find(s => s.id !== stageToDelete?.id)?.id || "")}
+                    onChange={(e) => setReplacementStageId(e.target.value)}
+                    className="w-full text-xs border border-gray-300 rounded-lg p-2 bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    {selectedProcessData.stages
+                      .filter((s) => s.id !== stageToDelete?.id)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} {s.systemCategory ? `(${s.systemCategory})` : ""}
+                        </option>
+                      ))}
+                  </select>
+                  <p className="text-[11px] text-gray-500">
+                    Active records in this stage will be transitioned to the replacement stage automatically.
+                  </p>
+                </div>
+              )}
+
+              {/* Warning Details */}
+              <div className="bg-warning/5 border border-warning/20 rounded-xl p-4">
+                <div className="flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                      This action cannot be undone
+                    </p>
+                    <p className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                      Deleting this stage will remove it from the workflow pipeline.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </Modal>
 
         {/* How Process Works Modal — shared component */}
@@ -7252,8 +7352,8 @@ export default function Process() {
         <HowItWorksModal
           isOpen={showHelp}
           onClose={() => setShowHelp(false)}
-          title="How Process Settings Works"
-          summary="Process Settings is where you design the full behaviour of your AI receptionist — from how it greets callers to which actions fire after a call ends."
+          title="How Workflow Works"
+          summary="Workflow is where you design the full behaviour of your AI receptionist — from how it greets callers to which actions fire after a call ends."
           bullets={[
             "Create processes (workflows) and add stages to each one",
             "Set AI voice, model, and tone globally or per stage",
@@ -7355,20 +7455,27 @@ export default function Process() {
             </div>
 
             <div className="flex items-center justify-between pt-4">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (editingStage) {
-                    handleRemoveStage(editingStage.id);
-                    setShowEditStageModal(false);
-                    setEditingStage(null);
-                  }
-                }}
-                className="border-red-500 text-red-500 hover:bg-red-50"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
-              </Button>
+              {editingStage && (editingStage.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, editingStage.systemCategory)) ? (
+                <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200" title="Required system stage cannot be deleted">
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Required Stage</span>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (editingStage) {
+                      handleRemoveStage(editingStage.id);
+                      setShowEditStageModal(false);
+                      setEditingStage(null);
+                    }
+                  }}
+                  className="border-red-500 text-red-500 hover:bg-red-50"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </Button>
+              )}
               <div className="flex items-center gap-3">
                 <Button
                   variant="outline"
@@ -7570,11 +7677,10 @@ export default function Process() {
                           color: intent.id === "interested" ? "#22C55E" : intent.id === "not_interested" ? "#EF4444" : intent.id === "call_back" ? "#F59E0B" : lastStageForm.color,
                         })
                       }
-                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                        isSelected
-                          ? "bg-white border-purple-500 ring-2 ring-purple-500/20 shadow-xs"
-                          : "bg-white/60 border-gray-200 hover:border-gray-300 hover:bg-white"
-                      }`}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${isSelected
+                        ? "bg-white border-purple-500 ring-2 ring-purple-500/20 shadow-xs"
+                        : "bg-white/60 border-gray-200 hover:border-gray-300 hover:bg-white"
+                        }`}
                     >
                       <div className="flex items-center gap-1.5 font-bold text-xs text-gray-900 mb-0.5">
                         <span>{intent.icon}</span>
@@ -8987,12 +9093,12 @@ export default function Process() {
                   p.id !== selectedProcess
                     ? p
                     : {
-                        ...p,
-                        stages: p.stages.map((s) => ({
-                          ...s,
-                          callTriggerSettings: { ...updatedSettings },
-                        })),
-                      }
+                      ...p,
+                      stages: p.stages.map((s) => ({
+                        ...s,
+                        callTriggerSettings: { ...updatedSettings },
+                      })),
+                    }
                 )
               );
               toast.success(`Applied trigger settings to all stages in "${procName}"`);
@@ -9003,18 +9109,32 @@ export default function Process() {
                   p.id !== selectedProcess
                     ? p
                     : {
-                        ...p,
-                        stages: p.stages.map((s) =>
-                          s.id !== expandedStage
-                            ? s
-                            : { ...s, callTriggerSettings: updatedSettings }
-                        ),
-                      }
+                      ...p,
+                      stages: p.stages.map((s) =>
+                        s.id !== expandedStage
+                          ? s
+                          : { ...s, callTriggerSettings: updatedSettings }
+                      ),
+                    }
                 )
               );
               toast.success("Call trigger settings saved for this stage");
             }
           }}
+        />
+
+        <FlowBuilderDrawer
+          isOpen={isFlowBuilderDrawerOpen}
+          onClose={() => setIsFlowBuilderDrawerOpen(false)}
+          processName={processes.find((p) => p.id === selectedProcess)?.name ?? "Current Process"}
+          stageName={
+            processes.find((p) => p.id === selectedProcess)?.stages.find((s) => s.id === expandedStage)?.name ?? "Stage"
+          }
+          processes={processes}
+          currentProcessId={selectedProcess ?? undefined}
+          workflowSteps={workflowSteps}
+          onWorkflowStepsChange={setWorkflowSteps}
+          stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
         />
 
       </div>

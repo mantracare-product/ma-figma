@@ -36,6 +36,7 @@ import {
   Link as LinkIcon,
   ScrollText,
   Lock,
+  Zap,
 } from "lucide-react";
 import { useSidebarMenu, NavSectionConfig, NavItemConfig } from "../../context/SidebarMenuContext";
 import { toast } from "sonner";
@@ -50,6 +51,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Calendar,
   Stethoscope,
   SlidersHorizontal,
+  Zap,
   Database,
   FileText,
   Package,

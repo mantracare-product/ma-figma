@@ -20,7 +20,9 @@ export interface ClientInvoice {
   clientPhone?: string;
   appointmentId?: string;     // null if standalone/manual invoice
   appointmentTitle?: string;
-  status: InvoiceStatus;
+  currentStageId?: string;    // Links to invoice process stage
+  statusLabel?: string;       // Computed/read-only status label for display and reports
+  status?: InvoiceStatus;     // Deprecated in favor of currentStageId and stage.systemCategory
   currency: string;           // default "$"
   lineItems: InvoiceLineItem[];
   subtotal: number;

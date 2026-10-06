@@ -91,7 +91,7 @@ interface FlowBuilderTabProps {
   currentProcessId?: string;
   workflowSteps?: WorkflowStep[];
   onWorkflowStepsChange?: (steps: WorkflowStep[]) => void;
-  stepAllowedTriggers?: Record<string, Array<"stage" | "incall" | "inchat" | "postcall">>;
+  stepAllowedTriggers?: Record<string, Array<string>>;
 }
 
 // ─── Node Library Definition ──────────────────────────────────────────────────
@@ -986,7 +986,7 @@ export default function FlowBuilderTab({
 
     const stepKey = NODE_TYPE_TO_STEP_KEY[type];
     if (stepKey && onWorkflowStepsChange) {
-      const allowed: Array<"stage" | "incall" | "inchat" | "postcall"> = stepAllowedTriggers[stepKey] ?? ["stage", "incall", "inchat", "postcall"];
+      const allowed: Array<string> = stepAllowedTriggers[stepKey] ?? ["stage", "incall", "inchat", "postcall"];
       const catalogEntry = NODE_CATEGORIES
         .flatMap(c => c.nodes)
         .find(n => n.type === type);

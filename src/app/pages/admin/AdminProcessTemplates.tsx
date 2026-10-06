@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
-import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, Eye } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, Eye, CreditCard } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Modal } from "../../components/ui/Modal";
@@ -51,6 +51,7 @@ import {
   ProcessPermissions,
   isProcessMatchingScope,
   ProcessTransitionTarget,
+  EntityType,
 } from "../../../lib/useProcessStore";
 
 interface AISettings {
@@ -73,6 +74,8 @@ export interface Stage {
   description: string;
   status: string;
   color?: string;
+  systemCategory?: string;
+  isSystemCategoryRequired?: boolean;
   isInitial?: boolean;
   isFinal?: boolean;
   isFinalStage?: boolean;
@@ -105,6 +108,7 @@ export interface Process {
   assignedToUserId: number;
   stages: Stage[];
   aiSettings: AISettings;
+  entityType?: EntityType;
   // Scoping & Tenant Permissions
   industryCategory?: string;
   industry?: string;
@@ -619,10 +623,12 @@ const INTENT_CONDITION_OPTIONS: Record<string, string[]> = {
   ],
 };
 
-const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "inchat" | "postcall">> = {
+const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   "whatsapp": ["stage", "incall", "inchat", "postcall"],
   "sms": ["stage", "incall", "inchat", "postcall"],
   "email": ["stage", "incall", "inchat", "postcall"],
+  "generate_invoice": ["stage", "postcall"],
+  "send_payment": ["stage", "postcall"],
   "send-invoice": ["stage", "incall", "inchat", "postcall"],
   "processmovement": ["inchat", "postcall"],
   "movetonewprocess": ["stage", "inchat", "postcall"],
@@ -648,7 +654,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "inchat" 
   "managecalendar": ["incall", "postcall"],
 };
 
-const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "incall" | "inchat" | "postcall", excludeId?: string) => {
+const buildAvailablePredecessors = (steps: WorkflowStep[], lane: string, excludeId?: string) => {
   const laneSteps = steps.filter(s => (s.trigger ?? "stage") === lane && s.id !== excludeId);
   // Identify which step ids belong to a parallel group (>=2 consecutive parallel steps)
   const parallelMemberIds = new Set<string>();
@@ -1318,7 +1324,7 @@ export default function AdminProcessTemplates() {
   const [expandedConditionIndex, setExpandedConditionIndex] = useState<number | null>(0);
   const [conditionPreview, setConditionPreview] = useState("");
 
-  const [stepTrigger, setStepTrigger] = useState<"stage" | "incall" | "inchat" | "postcall">("stage");
+  const [stepTrigger, setStepTrigger] = useState<string>("stage");
   const [connectAfterId, setConnectAfterId] = useState<string | undefined>(undefined);
   const [stepActionName, setStepActionName] = useState("");
   const [stepActionReason, setStepActionReason] = useState("");
@@ -2526,7 +2532,7 @@ export default function AdminProcessTemplates() {
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
-          title="Process Settings"
+          title="Workflow"
           subtitle="Design how your AI receptionist behaves at every step, from greeting to hand-off"
           badge={
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
@@ -2536,7 +2542,7 @@ export default function AdminProcessTemplates() {
           actions={
             <>
               <Button variant="outline" onClick={() => setShowTestProcessDrawer(true)}>Test Process</Button>
-              <HowItWorksButton label="How Process Settings Works" onClick={() => setShowHelp(true)} />
+              <HowItWorksButton label="How Workflow Works" onClick={() => setShowHelp(true)} />
             </>
           }
         />
@@ -6256,6 +6262,7 @@ export default function AdminProcessTemplates() {
                                   { key: "workflow", icon: <GitBranch className="w-4 h-4" />, name: "Workflow Logic" },
                                   { key: "callerengagement", icon: <Phone className="w-4 h-4" />, name: "Caller Engagement" },
                                   { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
+                                  { key: "records", icon: <FileText className="w-4 h-4" />, name: "Records" },
                                   { key: "data", icon: <Database className="w-4 h-4" />, name: "Data & Assignment" },
                                   { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
                                 ].map((cat) => {
@@ -6307,6 +6314,8 @@ export default function AdminProcessTemplates() {
                                     { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
                                     { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
                                     { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
+                                    { key: "generate_invoice", name: "Generate Invoice", desc: "Automatically generate an invoice in Draft for this appointment or record.", iconKey: "filetext", cats: ["all", "records"], popular: true },
+                                    { key: "send_payment", name: "Send Payment", desc: "Dispatch a payment request or checkout link to the client.", iconKey: "creditcard", cats: ["all", "records"], popular: false },
                                     { key: "send-invoice", name: "Send Invoice", desc: "Send the generated invoice to the client via WhatsApp, SMS, or Email.", iconKey: "filetext", cats: ["all", "communication"], popular: false },
                                     { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "data"], popular: false },
                                     { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
@@ -6320,6 +6329,7 @@ export default function AdminProcessTemplates() {
                                     phonecall: <PhoneCall className="w-4 h-4 text-white" />, messagecircle: <MessageCircle className="w-4 h-4 text-white" />,
                                     messagesquare: <MessageSquare className="w-4 h-4 text-white" />, mail: <Mail className="w-4 h-4 text-white" />,
                                     filetext: <FileText className="w-4 h-4 text-white" />, clipboardlist: <ClipboardList className="w-4 h-4 text-white" />,
+                                    creditcard: <CreditCard className="w-4 h-4 text-white" />,
                                     globe: <Globe className="w-4 h-4 text-white" />, calendar: <Calendar className="w-4 h-4 text-white" />,
                                     refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
                                     lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
@@ -6921,8 +6931,8 @@ export default function AdminProcessTemplates() {
         <HowItWorksModal
           isOpen={showHelp}
           onClose={() => setShowHelp(false)}
-          title="How Process Settings Works"
-          summary="Process Settings is where you design the full behaviour of your AI receptionist — from how it greets callers to which actions fire after a call ends."
+          title="How Workflow Works"
+          summary="Workflow is where you design the full behaviour of your AI receptionist — from how it greets callers to which actions fire after a call ends."
           bullets={[
             "Create processes (workflows) and add stages to each one",
             "Set AI voice, model, and tone globally or per stage",

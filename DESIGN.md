@@ -264,6 +264,8 @@ In AI Agent configuration steps:
 - [x] **Table Row Height**: Strictly `h-[32px]` with `px-3.5 py-1` padding.
 - [x] **Table Headers**: Dark Navy Slate gradient (`from-[#181e25] to-[#2c3e50]`) with uppercase white text.
 - [x] **Sidebar Section**: Named `REVENUE & INSIGHTS` (never Billing & Insights).
+- [x] **Sidebar Section**: Named `CUSTOMIZATIONS` (never Automations).
+- [x] **Workflow Page Header**: Named `Workflow` (never Process Settings).
 - [x] **Add Field Buttons**: Always subtle greyish text buttons (`text-slate-500 hover:text-slate-700 hover:underline`), never blue pill buttons.
 - [x] **Add Section Buttons**: Always subtle greyish text buttons (`text-slate-500 hover:text-slate-700 hover:underline`).
 - [x] **Voice & Model Top Bar**: Clean toggle with `Models` and `Voices` tabs; no numbers/badges.
