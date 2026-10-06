@@ -33,16 +33,29 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  History,
 } from "lucide-react";
-import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses } from "../../lib/useProcessStore";
-import { getStoredStageMoves, StageMove } from "../../lib/useAutomationStore";
+import { useNavigate } from "react-router";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import { invoiceService } from "../../lib/invoiceService";
-import StageMovementTimelineModal from "../components/automation/StageMovementTimelineModal";
 
 export default function Invoices() {
+  const navigate = useNavigate();
   const { invoices, updateInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, voidInvoice } = useInvoices();
   const allClients = getClientList();
+
+  const [storedProcesses, setStoredProcesses] = useState<Process[]>(getStoredProcesses);
+
+  useEffect(() => {
+    const handleProcessesUpdate = () => {
+      setStoredProcesses(getStoredProcesses());
+    };
+    window.addEventListener(PROCESS_STORE_EVENT, handleProcessesUpdate);
+    window.addEventListener("storage", handleProcessesUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, handleProcessesUpdate);
+      window.removeEventListener("storage", handleProcessesUpdate);
+    };
+  }, []);
 
   // Metrics calculations
   const totalInvoiced = invoices.reduce((sum, i) => sum + i.total, 0);
@@ -207,18 +220,18 @@ export default function Invoices() {
   };
 
   const invoiceProcess = React.useMemo(() => {
-    const processes = getStoredProcesses();
-    return processes.find((p) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
-  }, []);
+    return storedProcesses.find((p) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
+  }, [storedProcesses]);
 
-  const [showTimelineModal, setShowTimelineModal] = useState(false);
-  const [stageMoves, setStageMoves] = useState<StageMove[]>(() => getStoredStageMoves());
-
-  useEffect(() => {
-    const handleMovesUpdate = () => setStageMoves(getStoredStageMoves());
-    window.addEventListener("mantra_stage_moves_store_updated", handleMovesUpdate);
-    return () => window.removeEventListener("mantra_stage_moves_store_updated", handleMovesUpdate);
-  }, []);
+  const handleUpdateInvoiceStatus = (invoiceId: string, newStatusOrStageId: InvoiceStatus | string) => {
+    const stage = invoiceProcess.stages.find((s) => s.id === newStatusOrStageId || s.systemCategory === newStatusOrStageId);
+    if (stage) {
+      invoiceService.moveToStage(invoiceId, stage.id, { type: "manual", ruleName: `Stage changed to ${stage.name}` });
+      toast.success(`Invoice moved to ${stage.name} ✓`);
+    } else {
+      updateInvoiceStatus(invoiceId, newStatusOrStageId as InvoiceStatus);
+    }
+  };
 
   const getStatusBadge = (invOrStatus: ClientInvoice | InvoiceStatus) => {
     const isObj = typeof invOrStatus === "object" && invOrStatus !== null;
@@ -262,15 +275,6 @@ export default function Invoices() {
           subtitle="Manage client billing, view automated call-flow invoices, and collect payments"
         >
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowTimelineModal(true)}
-              className="h-8 px-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Audit trail of stage movements and 1-click Undo"
-            >
-              <History className="w-3.5 h-3.5 text-blue-600" />
-              <span>Stage History</span>
-            </button>
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Invoices Works" />
           </div>
         </PageHeader>
@@ -353,53 +357,9 @@ export default function Invoices() {
               value: searchQuery,
               onChange: (val) => setSearchQuery(val || ""),
             },
-            {
-              id: "status",
-              label: "Invoice Stage",
-              type: "select",
-              value: statusFilter,
-              onChange: (val) => setStatusFilter(val || "all"),
-              options: [
-                { label: "All Stages", value: "all" },
-                ...invoiceProcess.stages.map((stg) => ({
-                  label: stg.name,
-                  value: stg.id,
-                })),
-              ],
-            },
           ]}
           secondaryActions={
             <div className="flex items-center gap-2">
-              {/* Stage Filter Dropdown */}
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="all">All Stages</option>
-                {invoiceProcess.stages.map((stg) => (
-                  <option key={stg.id} value={stg.id}>
-                    {stg.name}
-                  </option>
-                ))}
-              </select>
-
-              {/* Client Filter Dropdown */}
-              <select
-                value={clientFilter}
-                onChange={(e) => setClientFilter(e.target.value)}
-                className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none max-w-[150px] truncate cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="all">All Clients</option>
-                {allClients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-
               {/* Record Payment Button */}
               <button
                 type="button"
@@ -413,6 +373,20 @@ export default function Invoices() {
               >
                 <Wallet className="w-3.5 h-3.5 text-slate-600" />
                 <span>Record Payment</span>
+              </button>
+
+              {/* Gear Settings Icon to open Invoice Workflow */}
+              <button
+                type="button"
+                onClick={() => {
+                  navigate("/process?entity=invoice&processId=process-invoice-default", {
+                    state: { processId: "process-invoice-default", processName: invoiceProcess.name },
+                  });
+                }}
+                className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+                title="Configure Invoice Workflow"
+              >
+                <SettingsIcon className="w-4 h-4" />
               </button>
             </div>
           }
@@ -481,7 +455,9 @@ export default function Invoices() {
                   <div className="flex items-center justify-center">
                     <InvoiceProgressBar
                       status={inv.status}
-                      onStatusChange={(newSt) => updateInvoiceStatus(inv.id, newSt)}
+                      currentStageId={inv.currentStageId}
+                      stages={invoiceProcess.stages}
+                      onStatusChange={(newSt) => handleUpdateInvoiceStatus(inv.id, newSt)}
                       interactive={true}
                       logId={inv.id}
                     />
@@ -817,7 +793,9 @@ export default function Invoices() {
                                 <span style={{ fontSize: "11px", color: "#94A3B8", fontFamily: "Outfit, sans-serif" }}>Stage</span>
                                 <InvoiceProgressBar
                                   status={inv.status}
-                                  onStatusChange={(newSt) => updateInvoiceStatus(inv.id, newSt)}
+                                  currentStageId={inv.currentStageId}
+                                  stages={invoiceProcess.stages}
+                                  onStatusChange={(newSt) => handleUpdateInvoiceStatus(inv.id, newSt)}
                                   interactive={true}
                                   logId={inv.id}
                                 />
@@ -903,13 +881,6 @@ export default function Invoices() {
         />
       )}
 
-      <StageMovementTimelineModal
-        isOpen={showTimelineModal}
-        onClose={() => setShowTimelineModal(false)}
-        entityType="invoice"
-        moves={stageMoves}
-        title="Invoice Stage Movement History"
-      />
     </div>
   );
 }

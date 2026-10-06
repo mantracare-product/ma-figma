@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { Search, Filter, Download, Upload, Phone, FileText, Play, Calendar, StopCircle, Settings as SettingsIcon, Eye, ChevronLeft, ChevronRight, ChevronDown, ChevronsLeft, ChevronsRight, AlertCircle, AlertTriangle, X, Pause, TrendingUp, Clock, GitBranch, RefreshCw, Zap, Star, Headphones, User, CheckCircle2, Volume2, Users, Target, Award, Brain, Shield, MessageSquare, Sparkles, ThumbsUp, ThumbsDown, Info, List, LayoutGrid, MoreVertical, Trash2, Pencil, Building2, CalendarClock, Package, CheckCircle, Plus, Globe, Copy } from "lucide-react";
+import { Search, Filter, Download, Upload, Phone, FileText, Play, Calendar, StopCircle, Settings as SettingsIcon, Eye, ChevronLeft, ChevronRight, ChevronDown, ChevronsLeft, ChevronsRight, AlertCircle, AlertTriangle, X, Pause, TrendingUp, Clock, GitBranch, RefreshCw, Zap, Star, Headphones, User, CheckCircle2, Volume2, Users, Target, Award, Brain, Shield, MessageSquare, Sparkles, ThumbsUp, ThumbsDown, Info, List, LayoutGrid, MoreVertical, Trash2, Pencil, Building2, CalendarClock, Package, CheckCircle, Plus, Globe, Copy, Check } from "lucide-react";
 import { PiArrowSquareOutBold, PiArrowSquareInBold, PiPhoneIncoming, PiPhoneOutgoing } from "react-icons/pi";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -84,51 +84,51 @@ interface Deal {
 }
 
 const initialDeals: Deal[] = [
-  { id: "DEAL-001", dealName: "Patient Intake Package", clientName: "Sarah Johnson", amount: 25000, currency: "₹", createdDate: "2024-05-18", status: "In Progress", responsible: "John Smith", stage: "Patient Intake: Initial Contact" },
-  { id: "DEAL-002", dealName: "Insurance Verification Bundle", clientName: "Michael Chen", amount: 0, currency: "₹", createdDate: "2024-05-17", status: "In Progress", responsible: "Emily Davis", stage: "Patient Intake: Initial Contact" },
-  { id: "DEAL-003", dealName: "Wellness Program", clientName: "Priya Sharma", amount: 15000, currency: "₹", createdDate: "2024-05-16", status: "In Progress", responsible: "Sarah Johnson", stage: "Patient Intake: Initial Contact" },
-  { id: "DEAL-004", dealName: "Billing Support Plan", clientName: "Emily Davis", amount: 8500, currency: "₹", createdDate: "2024-05-15", status: "In Progress", responsible: "Robert Wilson", stage: "Patient Intake: Schedule Appointment" },
-  { id: "DEAL-005", dealName: "Follow-up Package", clientName: "Robert Wilson", amount: 12000, currency: "₹", createdDate: "2024-05-14", status: "In Progress", responsible: "Michael Chen", stage: "Patient Intake: Schedule Appointment" },
-  { id: "DEAL-006", dealName: "Annual Health Check", clientName: "James Taylor", amount: 32000, currency: "₹", createdDate: "2024-05-13", status: "In Progress", responsible: "Amanda Taylor", stage: "Payment Reminder: Billing Inquiry" },
-  { id: "DEAL-007", dealName: "Medication Management", clientName: "Rahul Patel", amount: 7500, currency: "₹", createdDate: "2024-05-12", status: "In Progress", responsible: "David Martinez", stage: "Payment Reminder: Issue Resolution" },
-  { id: "DEAL-008", dealName: "Post-Op Care Plan", clientName: "Amanda Clark", amount: 18000, currency: "₹", createdDate: "2024-05-11", status: "In Progress", responsible: "Jessica Brown", stage: "Payment Reminder: Payment Notice" },
-  { id: "DEAL-009", dealName: "Corporate Wellness", clientName: "Lisa Anderson", amount: 85000, currency: "₹", createdDate: "2024-05-10", status: "In Progress", responsible: "John Smith", stage: "Appointment Scheduling: Slot Selection" },
-  { id: "DEAL-010", dealName: "Dental Care Package", clientName: "David Martinez", amount: 22000, currency: "₹", createdDate: "2024-05-09", status: "In Progress", responsible: "Emily Davis", stage: "Appointment Scheduling: Slot Selection" },
-  { id: "DEAL-011", dealName: "Physiotherapy Bundle", clientName: "Arjun Desai", amount: 35000, currency: "₹", createdDate: "2024-05-08", status: "In Progress", responsible: "Michael Chen", stage: "Appointment Scheduling: Confirmation" },
-  { id: "DEAL-012", dealName: "Enterprise Health Plan", clientName: "Vikram Singh", amount: 150000, currency: "₹", createdDate: "2024-05-07", status: "In Progress", responsible: "Robert Wilson", stage: "Insurance Verification: Document Check" },
-  { id: "DEAL-013", dealName: "Mental Health Support", clientName: "Deepika Nair", amount: 45000, currency: "₹", createdDate: "2024-05-06", status: "In Progress", responsible: "Sarah Johnson", stage: "Insurance Verification: Document Check" },
-  { id: "DEAL-014", dealName: "Premium Care Plan", clientName: "Charlotte Evans", amount: 95000, currency: "₹", createdDate: "2024-05-05", status: "Won", responsible: "Amanda Taylor", stage: "Appointment Scheduling: Confirmation" },
-  { id: "DEAL-015", dealName: "Specialist Consultation", clientName: "Oliver Thompson", amount: 28000, currency: "₹", createdDate: "2024-05-04", status: "Won", responsible: "David Martinez", stage: "Payment Reminder: Issue Resolution" },
-  { id: "DEAL-016", dealName: "Lab Test Bundle", clientName: "Kavya Iyer", amount: 12500, currency: "₹", createdDate: "2024-05-03", status: "Won", responsible: "John Smith", stage: "Follow-up Calls: Post-Visit Check" },
-  { id: "DEAL-017", dealName: "Ortho Care Package", clientName: "Fatima Hassan", amount: 55000, currency: "₹", createdDate: "2024-05-02", status: "Lost", responsible: "Emily Davis", stage: "Insurance Verification: Verification" },
-  { id: "DEAL-018", dealName: "Nutrition Counseling", clientName: "Youssef Said", amount: 9000, currency: "₹", createdDate: "2024-05-01", status: "Lost", responsible: "Michael Chen", stage: "Follow-up Calls: Medication Reminder" },
+  { id: "DEAL-001", dealName: "Client Intake Package", clientName: "Sarah Johnson", amount: 25000, currency: "₹", createdDate: "2024-05-18", status: "In Progress", responsible: "John Smith", stage: "Client Intake: Initial Contact" },
+  { id: "DEAL-002", dealName: "Intake Evaluation Bundle", clientName: "Michael Chen", amount: 0, currency: "₹", createdDate: "2024-05-17", status: "In Progress", responsible: "Emily Davis", stage: "Client Intake: Initial Contact" },
+  { id: "DEAL-003", dealName: "Wellness Program Intake", clientName: "Priya Sharma", amount: 15000, currency: "₹", createdDate: "2024-05-16", status: "In Progress", responsible: "Sarah Johnson", stage: "Client Intake: Contacted" },
+  { id: "DEAL-004", dealName: "Client Reactivation Plan", clientName: "Emily Davis", amount: 8500, currency: "₹", createdDate: "2024-05-15", status: "In Progress", responsible: "Robert Wilson", stage: "Client Reactivation: Outreach" },
+  { id: "DEAL-005", dealName: "Reactivation Outreach", clientName: "Robert Wilson", amount: 12000, currency: "₹", createdDate: "2024-05-14", status: "In Progress", responsible: "Michael Chen", stage: "Client Reactivation: Contacted" },
+  { id: "DEAL-006", dealName: "Annual Intake Check", clientName: "James Taylor", amount: 32000, currency: "₹", createdDate: "2024-05-13", status: "In Progress", responsible: "Amanda Taylor", stage: "Client Intake: Interested" },
+  { id: "DEAL-007", dealName: "Client Care Intake", clientName: "Rahul Patel", amount: 7500, currency: "₹", createdDate: "2024-05-12", status: "In Progress", responsible: "David Martinez", stage: "Client Intake: Contacted" },
+  { id: "DEAL-008", dealName: "Post-Discharge Reactivation", clientName: "Amanda Clark", amount: 18000, currency: "₹", createdDate: "2024-05-11", status: "In Progress", responsible: "Jessica Brown", stage: "Client Reactivation: Outreach" },
+  { id: "DEAL-009", dealName: "Corporate Intake", clientName: "Lisa Anderson", amount: 85000, currency: "₹", createdDate: "2024-05-10", status: "In Progress", responsible: "John Smith", stage: "Client Intake: Interested" },
+  { id: "DEAL-010", dealName: "Dental Intake Package", clientName: "David Martinez", amount: 22000, currency: "₹", createdDate: "2024-05-09", status: "In Progress", responsible: "Emily Davis", stage: "Client Intake: Initial Contact" },
+  { id: "DEAL-011", dealName: "Re-engagement Consultation", clientName: "Arjun Desai", amount: 35000, currency: "₹", createdDate: "2024-05-08", status: "In Progress", responsible: "Michael Chen", stage: "Client Reactivation: Contacted" },
+  { id: "DEAL-012", dealName: "Enterprise Intake Plan", clientName: "Vikram Singh", amount: 150000, currency: "₹", createdDate: "2024-05-07", status: "In Progress", responsible: "Robert Wilson", stage: "Client Intake: Interested" },
+  { id: "DEAL-013", dealName: "Reactivation Support", clientName: "Deepika Nair", amount: 45000, currency: "₹", createdDate: "2024-05-06", status: "In Progress", responsible: "Sarah Johnson", stage: "Client Reactivation: Outreach" },
+  { id: "DEAL-014", dealName: "Premium Intake Plan", clientName: "Charlotte Evans", amount: 95000, currency: "₹", createdDate: "2024-05-05", status: "Won", responsible: "Amanda Taylor", stage: "Client Intake: Interested" },
+  { id: "DEAL-015", dealName: "Specialist Reactivation", clientName: "Oliver Thompson", amount: 28000, currency: "₹", createdDate: "2024-05-04", status: "Won", responsible: "David Martinez", stage: "Client Reactivation: Reactivated" },
+  { id: "DEAL-016", dealName: "Intake Assessment", clientName: "Kavya Iyer", amount: 12500, currency: "₹", createdDate: "2024-05-03", status: "Won", responsible: "John Smith", stage: "Client Intake: Interested" },
+  { id: "DEAL-017", dealName: "Ortho Reactivation Package", clientName: "Fatima Hassan", amount: 55000, currency: "₹", createdDate: "2024-05-02", status: "Lost", responsible: "Emily Davis", stage: "Client Reactivation: Lost" },
+  { id: "DEAL-018", dealName: "Nutrition Intake", clientName: "Youssef Said", amount: 9000, currency: "₹", createdDate: "2024-05-01", status: "Lost", responsible: "Michael Chen", stage: "Client Intake: Not Interested" },
 ];
 
 // Mock client data for profile drawer
 const mockClients: { [key: string]: Client } = {
-  "CL-001": { id: "CL-001", name: "Sarah Johnson", email: "sarah.j@email.com", phone: "5551234567", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake", "Follow-up Calls"], stage: "Insurance Verification", responsible: "John Smith", lastContact: "2024-04-10", status: "Active", companyName: "TechCorp Inc.", jobPosition: "Senior Manager", numberOfEmployees: "101-250" },
-  "CL-002": { id: "CL-002", name: "Michael Chen", email: "mchen@email.com", phone: "5552345678", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Initial Contact", responsible: "Sarah Johnson", lastContact: "2024-04-09", status: "Active", companyName: "Innovate Solutions", jobPosition: "Product Manager", numberOfEmployees: "51-100" },
-  "CL-003": { id: "CL-003", name: "Emily Davis", email: "emily.d@email.com", phone: "5553456789", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active", companyName: "Healthcare Plus", jobPosition: "Director of Operations", numberOfEmployees: "251-500" },
-  "CL-004": { id: "CL-004", name: "Robert Wilson", email: "rwilson@email.com", phone: "5554567890", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
-  "CL-006": { id: "CL-006", name: "David Martinez", email: "d.martinez@email.com", phone: "5556789012", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls"], stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-04-12", status: "Active" },
-  "CL-007": { id: "CL-007", name: "Lisa Anderson", email: "l.anderson@email.com", phone: "5557890123", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Billing Support", "Follow-up Calls"], stage: "Payment Reminder", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active", companyName: "MediCare Group", jobPosition: "CFO", numberOfEmployees: "501-1000" },
-  "CL-008": { id: "CL-008", name: "James Taylor", email: "jtaylor@email.com", phone: "5558901234", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Schedule Appointment", responsible: "Amanda Taylor", lastContact: "2024-04-11", status: "Active" },
-  "CL-009": { id: "CL-009", name: "Amanda Clark", email: "a.clark@email.com", phone: "5559012345", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling", "Follow-up Calls"], stage: "Confirmation", responsible: "John Smith", lastContact: "2024-04-09", status: "Active" },
-  "CL-011": { id: "CL-011", name: "Jennifer White", email: "j.white@email.com", phone: "5551234568", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support", "Patient Intake"], stage: "Initial Contact", responsible: "Michael Chen", lastContact: "2024-04-13", status: "Active" },
-  "CL-012": { id: "CL-012", name: "Matthew Lewis", email: "m.lewis@email.com", phone: "5552345679", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Insurance Verification"], stage: "Approval", responsible: "Emily Davis", lastContact: "2024-04-06", status: "Active" },
-  "CL-013": { id: "CL-013", name: "Priya Sharma", email: "priya.sharma@email.com", phone: "9820172818", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake", "Follow-up Calls"], stage: "Insurance Verification", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
-  "CL-014": { id: "CL-014", name: "Rahul Patel", email: "rahul.p@email.com", phone: "9876543210", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls"], stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-04-11", status: "Active" },
-  "CL-015": { id: "CL-015", name: "Ananya Reddy", email: "ananya.r@email.com", phone: "9123456789", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Billing Support", "Patient Intake"], stage: "Issue Resolution", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active" },
-  "CL-016": { id: "CL-016", name: "Vikram Singh", email: "vikram.s@email.com", phone: "9234567890", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "Amanda Taylor", lastContact: "2024-04-09", status: "Active" },
-  "CL-018": { id: "CL-018", name: "Arjun Desai", email: "arjun.d@email.com", phone: "9456789012", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Sarah Johnson", lastContact: "2024-04-13", status: "Active" },
-  "CL-019": { id: "CL-019", name: "Kavya Iyer", email: "kavya.i@email.com", phone: "9567890123", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Insurance Verification", "Patient Intake"], stage: "Document Check", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active" },
-  "CL-020": { id: "CL-020", name: "Rohan Kumar", email: "rohan.k@email.com", phone: "9678901234", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake"], stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
-  "CL-021": { id: "CL-021", name: "Deepika Nair", email: "deepika.n@email.com", phone: "9789012345", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Appointment Scheduling", "Follow-up Calls"], stage: "Confirmation", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
-  "CL-023": { id: "CL-023", name: "Ahmed Al-Mansoori", email: "ahmed.am@email.com", phone: "501234567", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Patient Intake", "Insurance Verification"], stage: "Insurance Verification", responsible: "David Martinez", lastContact: "2024-04-13", status: "Active" },
-  "CL-024": { id: "CL-024", name: "Fatima Hassan", email: "fatima.h@email.com", phone: "502345678", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Amanda Taylor", lastContact: "2024-04-10", status: "Active" },
-  "CL-025": { id: "CL-025", name: "Omar Al-Rashid", email: "omar.ar@email.com", phone: "503456789", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "John Smith", lastContact: "2024-04-11", status: "Active" },
-  "CL-027": { id: "CL-027", name: "Youssef Said", email: "youssef.s@email.com", phone: "505678901", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Patient Intake", "Billing Support"], stage: "Follow-up", responsible: "Michael Chen", lastContact: "2024-04-12", status: "Active" },
-  "CL-028": { id: "CL-028", name: "Oliver Thompson", email: "oliver.t@email.com", phone: "7412345678", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Patient Intake", "Follow-up Calls"], stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-09", status: "Active" },
+  "CL-001": { id: "CL-001", name: "Sarah Johnson", email: "sarah.j@email.com", phone: "5551234567", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Client Intake", "Client Reactivation"], stage: "Contacted", responsible: "John Smith", lastContact: "2024-04-10", status: "Active", companyName: "TechCorp Inc.", jobPosition: "Senior Manager", numberOfEmployees: "101-250" },
+  "CL-002": { id: "CL-002", name: "Michael Chen", email: "mchen@email.com", phone: "5552345678", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Client Intake"], stage: "Initial Contact", responsible: "Sarah Johnson", lastContact: "2024-04-09", status: "Active", companyName: "Innovate Solutions", jobPosition: "Product Manager", numberOfEmployees: "51-100" },
+  "CL-003": { id: "CL-003", name: "Emily Davis", email: "emily.d@email.com", phone: "5553456789", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Client Reactivation"], stage: "Contacted", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active", companyName: "Healthcare Plus", jobPosition: "Director of Operations", numberOfEmployees: "251-500" },
+  "CL-004": { id: "CL-004", name: "Robert Wilson", email: "rwilson@email.com", phone: "5554567890", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Client Intake"], stage: "Interested", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
+  "CL-006": { id: "CL-006", name: "David Martinez", email: "d.martinez@email.com", phone: "5556789012", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Client Reactivation"], stage: "Outreach", responsible: "Jessica Brown", lastContact: "2024-04-12", status: "Active" },
+  "CL-007": { id: "CL-007", name: "Lisa Anderson", email: "l.anderson@email.com", phone: "5557890123", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Client Reactivation"], stage: "Call Back Later", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active", companyName: "MediCare Group", jobPosition: "CFO", numberOfEmployees: "501-1000" },
+  "CL-008": { id: "CL-008", name: "James Taylor", email: "jtaylor@email.com", phone: "5558901234", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Client Intake"], stage: "Initial Contact", responsible: "Amanda Taylor", lastContact: "2024-04-11", status: "Active" },
+  "CL-009": { id: "CL-009", name: "Amanda Clark", email: "a.clark@email.com", phone: "5559012345", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Client Intake"], stage: "Initial Contact", responsible: "John Smith", lastContact: "2024-04-09", status: "Active" },
+  "CL-011": { id: "CL-011", name: "Jennifer White", email: "j.white@email.com", phone: "5551234568", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Client Intake"], stage: "Initial Contact", responsible: "Michael Chen", lastContact: "2024-04-13", status: "Active" },
+  "CL-012": { id: "CL-012", name: "Matthew Lewis", email: "m.lewis@email.com", phone: "5552345679", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Client Intake"], stage: "Interested", responsible: "Emily Davis", lastContact: "2024-04-06", status: "Active" },
+  "CL-013": { id: "CL-013", name: "Priya Sharma", email: "priya.sharma@email.com", phone: "9820172818", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Client Intake", "Client Reactivation"], stage: "Contacted", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
+  "CL-014": { id: "CL-014", name: "Rahul Patel", email: "rahul.p@email.com", phone: "9876543210", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Client Intake"], stage: "Interested", responsible: "Jessica Brown", lastContact: "2024-04-11", status: "Active" },
+  "CL-015": { id: "CL-015", name: "Ananya Reddy", email: "ananya.r@email.com", phone: "9123456789", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Client Reactivation"], stage: "Reactivated", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active" },
+  "CL-016": { id: "CL-016", name: "Vikram Singh", email: "vikram.s@email.com", phone: "9234567890", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Client Intake"], stage: "Interested", responsible: "Amanda Taylor", lastContact: "2024-04-09", status: "Active" },
+  "CL-018": { id: "CL-018", name: "Arjun Desai", email: "arjun.d@email.com", phone: "9456789012", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Client Reactivation"], stage: "Contacted", responsible: "Sarah Johnson", lastContact: "2024-04-13", status: "Active" },
+  "CL-019": { id: "CL-019", name: "Kavya Iyer", email: "kavya.i@email.com", phone: "9567890123", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Client Reactivation"], stage: "Outreach", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active" },
+  "CL-020": { id: "CL-020", name: "Rohan Kumar", email: "rohan.k@email.com", phone: "9678901234", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Client Intake"], stage: "Initial Contact", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
+  "CL-021": { id: "CL-021", name: "Deepika Nair", email: "deepika.n@email.com", phone: "9789012345", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Client Intake"], stage: "Contacted", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
+  "CL-023": { id: "CL-023", name: "Ahmed Al-Mansoori", email: "ahmed.am@email.com", phone: "501234567", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Client Intake"], stage: "Initial Contact", responsible: "David Martinez", lastContact: "2024-04-13", status: "Active" },
+  "CL-024": { id: "CL-024", name: "Fatima Hassan", email: "fatima.h@email.com", phone: "502345678", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Client Reactivation"], stage: "Lost", responsible: "Amanda Taylor", lastContact: "2024-04-10", status: "Active" },
+  "CL-025": { id: "CL-025", name: "Omar Al-Rashid", email: "omar.ar@email.com", phone: "503456789", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Client Intake"], stage: "Call Back Later", responsible: "John Smith", lastContact: "2024-04-11", status: "Active" },
+  "CL-027": { id: "CL-027", name: "Youssef Said", email: "youssef.s@email.com", phone: "505678901", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Client Reactivation"], stage: "Reactivated", responsible: "Michael Chen", lastContact: "2024-04-12", status: "Active" },
+  "CL-028": { id: "CL-028", name: "Oliver Thompson", email: "oliver.t@email.com", phone: "7412345678", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Client Reactivation"], stage: "Reactivated", responsible: "Emily Davis", lastContact: "2024-04-09", status: "Active" },
 };
 
 const getClientIdByName = (name: string): string => {
@@ -160,48 +160,41 @@ const getClientObj = (clientId?: string, clientName?: string): Client | undefine
 // All calls mapped to valid clients with correct process assignments
 const initialCallLogs: CallLog[] = [
   // Latest calls first (Apr 13-14)
-  { id: "CALL-001", client: "Sarah Johnson", clientId: "CL-001", type: "Outbound", status: "Completed", process: "Patient Intake", currentStage: "Insurance Verification", duration: "4:32", date: "2024-04-13 14:30", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
-  { id: "CALL-002", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "3:45", date: "2024-04-13 13:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-003", client: "Ahmed Al-Mansoori", clientId: "CL-023", type: "Inbound", status: "Completed", process: "Insurance Verification", currentStage: "Document Check", duration: "5:20", date: "2024-04-13 11:40", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-004", client: "Jennifer White", clientId: "CL-011", type: "Outbound", status: "Completed", process: "Patient Intake", currentStage: "Initial Contact", duration: "2:15", date: "2024-04-13 10:00", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
-  { id: "CALL-005", client: "Arjun Desai", clientId: "CL-018", type: "Outbound", status: "Pending", process: "Billing Support", currentStage: "Billing Inquiry", duration: "", date: "2024-04-13 09:30", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
-  { id: "CALL-006", client: "Charlotte Evans", clientId: "CL-029", type: "Outbound", status: "Completed", process: "Insurance Verification", currentStage: "Approval", duration: "6:10", date: "2024-04-13 08:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-007", client: "David Martinez", clientId: "CL-006", type: "Inbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "3:55", date: "2024-04-12 16:45", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-008", client: "Deepika Nair", clientId: "CL-021", type: "Outbound", status: "Completed", process: "Appointment Scheduling", currentStage: "Confirmation", duration: "2:30", date: "2024-04-12 15:20", hasRecording: true, hasTranscript: false, hasScheduledCall: true },
-  { id: "CALL-009", client: "Youssef Said", clientId: "CL-027", type: "Outbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "4:48", date: "2024-04-12 14:10", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-010", client: "Michael Chen", clientId: "CL-002", type: "Outbound", status: "Failed", process: "Appointment Scheduling", currentStage: "Initial Contact", duration: "0:00", date: "2024-04-12 13:00", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
-  { id: "CALL-011", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Patient Intake", currentStage: "Insurance Verification", duration: "5:15", date: "2024-04-12 11:30", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-012", client: "Lisa Anderson", clientId: "CL-007", type: "Inbound", status: "Completed", process: "Billing Support", currentStage: "Payment Reminder", duration: "3:20", date: "2024-04-12 10:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-013", client: "Emily Davis", clientId: "CL-003", type: "Outbound", status: "Completed", process: "Billing Support", currentStage: "Billing Inquiry", duration: "4:05", date: "2024-04-11 16:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-014", client: "Rahul Patel", clientId: "CL-014", type: "Inbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "2:45", date: "2024-04-11 15:30", hasRecording: true, hasTranscript: false, hasScheduledCall: false },
-  { id: "CALL-015", client: "James Taylor", clientId: "CL-008", type: "Outbound", status: "Completed", process: "Patient Intake", currentStage: "Schedule Appointment", duration: "3:35", date: "2024-04-11 14:20", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
-  { id: "CALL-016", client: "Kavya Iyer", clientId: "CL-019", type: "Outbound", status: "Completed", process: "Insurance Verification", currentStage: "Document Check", duration: "5:50", date: "2024-04-11 13:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-017", client: "Omar Al-Rashid", clientId: "CL-025", type: "Outbound", status: "Pending", process: "Appointment Scheduling", currentStage: "Slot Selection", duration: "", date: "2024-04-11 11:45", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
-  { id: "CALL-018", client: "Ananya Reddy", clientId: "CL-015", type: "Outbound", status: "Completed", process: "Billing Support", currentStage: "Issue Resolution", duration: "6:25", date: "2024-04-11 10:30", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-019", client: "Fatima Hassan", clientId: "CL-024", type: "Inbound", status: "Completed", process: "Billing Support", currentStage: "Billing Inquiry", duration: "4:18", date: "2024-04-10 16:40", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-020", client: "Amanda Clark", clientId: "CL-009", type: "Outbound", status: "Failed", process: "Appointment Scheduling", currentStage: "Confirmation", duration: "0:00", date: "2024-04-10 15:15", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
-  { id: "CALL-021", client: "Sarah Johnson", clientId: "CL-001", type: "Inbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "5:05", date: "2024-04-10 14:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-001", client: "Sarah Johnson", clientId: "CL-001", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Contacted", duration: "4:32", date: "2024-04-13 14:30", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
+  { id: "CALL-002", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Client Reactivation", currentStage: "Outreach", duration: "3:45", date: "2024-04-13 13:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-003", client: "Ahmed Al-Mansoori", clientId: "CL-023", type: "Inbound", status: "Completed", process: "Client Intake", currentStage: "Initial Contact", duration: "5:20", date: "2024-04-13 11:40", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-004", client: "Jennifer White", clientId: "CL-011", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Initial Contact", duration: "2:15", date: "2024-04-13 10:00", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
+  { id: "CALL-005", client: "Arjun Desai", clientId: "CL-018", type: "Outbound", status: "Pending", process: "Client Reactivation", currentStage: "Contacted", duration: "", date: "2024-04-13 09:30", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
+  { id: "CALL-006", client: "Charlotte Evans", clientId: "CL-029", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Interested", duration: "6:10", date: "2024-04-13 08:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-007", client: "David Martinez", clientId: "CL-006", type: "Inbound", status: "Completed", process: "Client Reactivation", currentStage: "Outreach", duration: "3:55", date: "2024-04-12 16:45", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-008", client: "Deepika Nair", clientId: "CL-021", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Contacted", duration: "2:30", date: "2024-04-12 15:20", hasRecording: true, hasTranscript: false, hasScheduledCall: true },
+  { id: "CALL-009", client: "Youssef Said", clientId: "CL-027", type: "Outbound", status: "Completed", process: "Client Reactivation", currentStage: "Reactivated", duration: "4:48", date: "2024-04-12 14:10", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-010", client: "Michael Chen", clientId: "CL-002", type: "Outbound", status: "Failed", process: "Client Intake", currentStage: "Initial Contact", duration: "0:00", date: "2024-04-12 13:00", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
+  { id: "CALL-011", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Contacted", duration: "5:15", date: "2024-04-12 11:30", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-012", client: "Lisa Anderson", clientId: "CL-007", type: "Inbound", status: "Completed", process: "Client Reactivation", currentStage: "Call Back Later", duration: "3:20", date: "2024-04-12 10:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-013", client: "Emily Davis", clientId: "CL-003", type: "Outbound", status: "Completed", process: "Client Reactivation", currentStage: "Contacted", duration: "4:05", date: "2024-04-11 16:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-014", client: "Rahul Patel", clientId: "CL-014", type: "Inbound", status: "Completed", process: "Client Intake", currentStage: "Interested", duration: "2:45", date: "2024-04-11 15:30", hasRecording: true, hasTranscript: false, hasScheduledCall: false },
+  { id: "CALL-015", client: "James Taylor", clientId: "CL-008", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Initial Contact", duration: "3:35", date: "2024-04-11 14:20", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
+  { id: "CALL-016", client: "Kavya Iyer", clientId: "CL-019", type: "Outbound", status: "Completed", process: "Client Reactivation", currentStage: "Outreach", duration: "5:50", date: "2024-04-11 13:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-017", client: "Omar Al-Rashid", clientId: "CL-025", type: "Outbound", status: "Pending", process: "Client Intake", currentStage: "Call Back Later", duration: "", date: "2024-04-11 11:45", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
+  { id: "CALL-018", client: "Ananya Reddy", clientId: "CL-015", type: "Outbound", status: "Completed", process: "Client Reactivation", currentStage: "Reactivated", duration: "6:25", date: "2024-04-11 10:30", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-019", client: "Fatima Hassan", clientId: "CL-024", type: "Inbound", status: "Completed", process: "Client Reactivation", currentStage: "Lost", duration: "4:18", date: "2024-04-10 16:40", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-020", client: "Amanda Clark", clientId: "CL-009", type: "Outbound", status: "Failed", process: "Client Intake", currentStage: "Initial Contact", duration: "0:00", date: "2024-04-10 15:15", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
+  { id: "CALL-021", client: "Sarah Johnson", clientId: "CL-001", type: "Inbound", status: "Completed", process: "Client Reactivation", currentStage: "Outreach", duration: "5:05", date: "2024-04-10 14:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
 ];
 
 // Helper function to derive process from stage
 const getProcessFromStage = (stage: string): string => {
   const stageToProcessMap: Record<string, string> = {
-    'Insurance Verification': 'Patient Intake',
-    'Insurance Verify': 'Patient Intake',
-    'Schedule Appointment': 'Patient Intake',
-    'Follow-up': 'Follow-up Calls',
-    'Post-Visit Check': 'Follow-up Calls',
-    'Medication Reminder': 'Follow-up Calls',
-    'Billing Inquiry': 'Billing Support',
-    'Issue Resolution': 'Billing Support',
-    'Payment Reminder': 'Billing Support',
-    'Slot Selection': 'Appointment Scheduling',
-    'Confirmation': 'Appointment Scheduling',
-    'Document Check': 'Insurance Verification',
-    'Verification': 'Insurance Verification',
-    'Approval': 'Insurance Verification',
+    'Initial Contact': 'Client Intake',
+    'Contacted': 'Client Intake',
+    'Interested': 'Client Intake',
+    'Not Interested': 'Client Intake',
+    'Outreach': 'Client Reactivation',
+    'Reactivated': 'Client Reactivation',
+    'Lost': 'Client Reactivation',
   };
-  return stageToProcessMap[stage] || 'Patient Intake'; // default to Patient Intake
+  return stageToProcessMap[stage] || 'Client Intake'; // default to Client Intake
 };
 
 type MetricTone = "success" | "warning" | "neutral";
@@ -523,18 +516,53 @@ export default function Deals() {
     "currency": "₹",
     "status": "In Progress",
     "responsible": "John Smith",
-    "stage": "Patient Intake: Initial Contact"
+    "stage": "Client Intake: Initial Contact"
   }, null, 2);
   const [isDragging, setIsDragging] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [showProcessesDropdown, setShowProcessesDropdown] = useState(false);
-  const [selectedProcessFilter, setSelectedProcessFilter] = useState<string | null>(null);
+  const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>(() => {
+    try {
+      const saved = sessionStorage.getItem("deals_selected_process");
+      if (saved && saved !== "All Processes" && saved !== "null" && saved !== "undefined") {
+        return saved;
+      }
+    } catch {}
+    return "Client Intake";
+  });
+
+  useEffect(() => {
+    if (selectedProcessFilter) {
+      sessionStorage.setItem("deals_selected_process", selectedProcessFilter);
+    }
+  }, [selectedProcessFilter]);
   const [stageDropdownCallId, setStageDropdownCallId] = useState<string | null>(null);
   const [draggedCallId, setDraggedCallId] = useState<string | null>(null);
   const [deals, setDeals] = useState<Deal[]>(() => {
     try {
       const raw = sessionStorage.getItem("deals");
-      return raw ? JSON.parse(raw) : initialDeals;
+      let list: Deal[] = raw ? JSON.parse(raw) : initialDeals;
+      if (!Array.isArray(list) || list.length === 0) list = initialDeals;
+      const legacyProcesses = ["Patient Intake", "Follow-up Calls", "Billing Support", "Appointment Scheduling", "Insurance Verification", "Payment Reminder", "Nurture Campaign"];
+      let changed = false;
+      list = list.map((d) => {
+        if (legacyProcesses.some(leg => d.stage?.includes(leg) || d.dealName?.includes(leg))) {
+          changed = true;
+          const isReactivation = ["Follow-up Calls", "Billing Support", "Payment Reminder", "Nurture Campaign"].some(r => d.stage?.includes(r));
+          const newProc = isReactivation ? "Client Reactivation" : "Client Intake";
+          const newStage = isReactivation ? (d.status === "Won" ? "Reactivated" : d.status === "Lost" ? "Lost" : "Contacted") : (d.status === "Won" ? "Interested" : "Contacted");
+          return {
+            ...d,
+            dealName: d.dealName.replace(/Patient Intake|Follow-up Calls|Billing Support|Appointment Scheduling|Insurance Verification/gi, newProc),
+            stage: `${newProc}: ${newStage}`,
+          };
+        }
+        return d;
+      });
+      if (changed) {
+        sessionStorage.setItem("deals", JSON.stringify(list));
+      }
+      return list;
     } catch {
       return initialDeals;
     }
@@ -671,14 +699,46 @@ export default function Deals() {
     notes: false,
   });
 
-  // Available processes
-  const availableProcesses = [
-    "Patient Intake",
-    "Follow-up Calls",
-    "Insurance Verification",
-    "Appointment Scheduling",
-    "Payment Reminder"
-  ];
+  // Processes belonging to the "Processes" (client) entity
+  const clientProcesses = useMemo(() => {
+    return storedProcesses.filter((p) => !p.entityType || p.entityType === "client");
+  }, [storedProcesses]);
+
+  // Available processes dynamically populated from all processes built in this entity
+  const availableProcesses = useMemo(() => {
+    const fromStore = clientProcesses.map((p) => p.name).filter(Boolean);
+    const defaults = [
+      "Client Intake",
+      "Client Reactivation"
+    ];
+    return Array.from(new Set([...fromStore, ...defaults]));
+  }, [clientProcesses]);
+
+  // Ensure selectedProcessFilter is always a valid specific process
+  useEffect(() => {
+    if (availableProcesses.length > 0 && (!selectedProcessFilter || !availableProcesses.includes(selectedProcessFilter))) {
+      setSelectedProcessFilter(availableProcesses[0]);
+    }
+  }, [availableProcesses, selectedProcessFilter]);
+
+  const handleOpenProcessInWorkflow = (processName?: string) => {
+    const targetName = processName || selectedProcessFilter || (availableProcesses[0] || "Client Intake");
+    const targetProcess = storedProcesses.find(
+      (p) => p.name.trim().toLowerCase() === targetName.trim().toLowerCase()
+    );
+    const params = new URLSearchParams();
+    if (targetProcess?.id) {
+      params.set("processId", targetProcess.id);
+    }
+    params.set("processName", targetName);
+
+    navigate(`/process?${params.toString()}`, {
+      state: {
+        processId: targetProcess?.id,
+        processName: targetName,
+      },
+    });
+  };
 
   const allAvailableFields = [
     { id: "name", label: "Name", category: "Call" },
@@ -785,35 +845,49 @@ export default function Deals() {
 
   const stages = [
     "Initial Contact",
-    "Insurance Verification",
-    "Schedule Appointment",
-    "Post-Visit Check",
-    "Medication Reminder",
-    "Billing Inquiry",
-    "Follow-up",
-    "Deal in progress",
-    "Closed deal",
-    "Test deal",
+    "Contacted",
+    "Interested",
+    "Call Back Later",
+    "Not Interested",
+    "Outreach",
+    "Reactivated",
+    "Lost",
   ];
 
-  // Comprehensive stage pipeline (for progress visualization)
-  const stagePipeline = [
-    { id: 1, label: "Initial Contact", fullLabel: "Patient Intake: Initial Contact", category: "Patient Intake" },
-    { id: 2, label: "Insurance Verify", fullLabel: "Patient Intake: Insurance Verify", category: "Patient Intake" },
-    { id: 3, label: "Schedule Appointment", fullLabel: "Patient Intake: Schedule Appointment", category: "Patient Intake" },
-    { id: 4, label: "Post-Visit Check", fullLabel: "Follow-up Calls: Post-Visit Check", category: "Follow-up Calls" },
-    { id: 5, label: "Medication Reminder", fullLabel: "Follow-up Calls: Medication Reminder", category: "Follow-up Calls" },
-    { id: 6, label: "Billing Inquiry", fullLabel: "Payment Reminder: Billing Inquiry", category: "Payment Reminder" },
-    { id: 7, label: "Issue Resolution", fullLabel: "Payment Reminder: Issue Resolution", category: "Payment Reminder" },
-    { id: 8, label: "Payment Notice", fullLabel: "Payment Reminder: Payment Notice", category: "Payment Reminder" },
-    { id: 9, label: "Payment Collected", fullLabel: "Payment Reminder: Payment Collected", category: "Payment Reminder" },
-    { id: 10, label: "Initial Contact", fullLabel: "Appointment Scheduling: Initial Contact", category: "Appointment Scheduling" },
-    { id: 11, label: "Slot Selection", fullLabel: "Appointment Scheduling: Slot Selection", category: "Appointment Scheduling" },
-    { id: 12, label: "Confirmation", fullLabel: "Appointment Scheduling: Confirmation", category: "Appointment Scheduling" },
-    { id: 13, label: "Initial Contact", fullLabel: "Insurance Verification: Initial Contact", category: "Insurance Verification" },
-    { id: 14, label: "Document Check", fullLabel: "Insurance Verification: Document Check", category: "Insurance Verification" },
-    { id: 15, label: "Verification", fullLabel: "Insurance Verification: Verification", category: "Insurance Verification" },
-  ];
+  // Comprehensive stage pipeline (dynamically including all processes built in the Processes / client entity)
+  const stagePipeline = useMemo(() => {
+    const dynamicItems: Array<{ id: number | string; label: string; fullLabel: string; category: string }> = [];
+    let counter = 1;
+
+    clientProcesses.forEach((proc) => {
+      if (proc.stages && proc.stages.length > 0) {
+        proc.stages.forEach((stg) => {
+          dynamicItems.push({
+            id: stg.id || `stg-${counter++}`,
+            label: stg.name,
+            fullLabel: `${proc.name}: ${stg.name}`,
+            category: proc.name,
+          });
+        });
+      }
+    });
+
+    const categoriesWithStages = new Set(dynamicItems.map((d) => d.category));
+    const fallbackDefaults = [
+      { id: 101, label: "Initial Contact", fullLabel: "Client Intake: Initial Contact", category: "Client Intake" },
+      { id: 102, label: "Contacted", fullLabel: "Client Intake: Contacted", category: "Client Intake" },
+      { id: 103, label: "Interested", fullLabel: "Client Intake: Interested", category: "Client Intake" },
+      { id: 104, label: "Call Back Later", fullLabel: "Client Intake: Call Back Later", category: "Client Intake" },
+      { id: 105, label: "Not Interested", fullLabel: "Client Intake: Not Interested", category: "Client Intake" },
+      { id: 201, label: "Outreach", fullLabel: "Client Reactivation: Outreach", category: "Client Reactivation" },
+      { id: 202, label: "Contacted", fullLabel: "Client Reactivation: Contacted", category: "Client Reactivation" },
+      { id: 203, label: "Reactivated", fullLabel: "Client Reactivation: Reactivated", category: "Client Reactivation" },
+      { id: 204, label: "Call Back Later", fullLabel: "Client Reactivation: Call Back Later", category: "Client Reactivation" },
+      { id: 205, label: "Lost", fullLabel: "Client Reactivation: Lost", category: "Client Reactivation" },
+    ].filter((item) => !categoriesWithStages.has(item.category));
+
+    return [...dynamicItems, ...fallbackDefaults];
+  }, [clientProcesses]);
 
   const dealKanbanStages = [
     { id: 1, label: "New" },
@@ -828,14 +902,14 @@ export default function Deals() {
   // Helper to get stage position (1-15) from current stage name
   const getStagePosition = (stageName: string): number => {
     // Try to find exact match in pipeline
-    const exactMatch = stagePipeline.find(s => s.label === stageName);
-    if (exactMatch) return exactMatch.id;
+    const exactIndex = stagePipeline.findIndex(s => s.label === stageName);
+    if (exactIndex !== -1) return exactIndex + 1;
 
     // Try to find partial match for legacy stage names
-    const partialMatch = stagePipeline.find(s =>
+    const partialIndex = stagePipeline.findIndex(s =>
       s.label.toLowerCase().includes(stageName.toLowerCase())
     );
-    if (partialMatch) return partialMatch.id;
+    if (partialIndex !== -1) return partialIndex + 1;
 
     // Default to position 1 if no match
     return 1;
@@ -843,24 +917,21 @@ export default function Deals() {
 
   // Helper to get category from stage name
   const getCategoryFromStage = (stageName: string): string => {
+    // Check if matches a stage in stored client processes
+    for (const proc of clientProcesses) {
+      if (proc.stages?.some((s) => s.name.toLowerCase() === stageName.toLowerCase())) {
+        return proc.name;
+      }
+    }
+
     // Direct category mapping for common stage names
     const stageToCategory: { [key: string]: string } = {
-      "Initial Contact": "Patient Intake",
-      "Insurance Verification": "Insurance Verification",
-      "Insurance Verify": "Patient Intake",
-      "Schedule Appointment": "Patient Intake",
-      "Post-Visit Check": "Follow-up Calls",
-      "Medication Reminder": "Follow-up Calls",
-      "Follow-up": "Follow-up Calls",
-      "Billing Inquiry": "Payment Reminder",
-      "Issue Resolution": "Payment Reminder",
-      "Payment Notice": "Payment Reminder",
-      "Payment Collected": "Payment Reminder",
-      "Slot Selection": "Appointment Scheduling",
-      "Confirmation": "Appointment Scheduling",
-      "Document Check": "Insurance Verification",
-      "Verification": "Insurance Verification",
-      "Approval": "Insurance Verification",
+      "Initial Contact": "Client Intake",
+      "Interested": "Client Intake",
+      "Not Interested": "Client Intake",
+      "Outreach": "Client Reactivation",
+      "Reactivated": "Client Reactivation",
+      "Lost": "Client Reactivation",
     };
 
     // Try direct mapping first
@@ -877,7 +948,7 @@ export default function Deals() {
     }
 
     // Default to first category
-    return "Patient Intake";
+    return "Client Intake";
   };
 
   const dealStageLabels = ["New", "Can't Contact", "Follow-up Later", "Interested", "Close Deal"];
@@ -1469,15 +1540,6 @@ export default function Deals() {
       )
     },
     {
-      key: "process",
-      header: "Process",
-      render: (log) => (
-        <span className="text-xs text-slate-500" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-          {log.process}
-        </span>
-      )
-    },
-    {
       key: "currentStage",
       header: "Stage",
       render: (log) => {
@@ -1769,7 +1831,7 @@ export default function Deals() {
         {/* Unified Search & Control Bar powered by PageTopBar */}
         <PageTopBar
           leftElement={
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {/* Process Filter Dropdown */}
               <div className="relative shrink-0">
                 <button
@@ -1778,7 +1840,7 @@ export default function Deals() {
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors"
                   style={{ fontFamily: 'Outfit, sans-serif' }}
                 >
-                  <span className="truncate max-w-[130px]">{selectedProcessFilter ? selectedProcessFilter : "Appointments"}</span>
+                  <span className="truncate max-w-[140px] font-semibold text-gray-800">{selectedProcessFilter}</span>
                   <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 </button>
 
@@ -1789,37 +1851,23 @@ export default function Deals() {
                       className="fixed inset-0 z-40"
                       onClick={() => setShowProcessesDropdown(false)}
                     />
-                    <div className="absolute top-full left-0 mt-1.5 w-56 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
-                      <button
-                        onClick={() => {
-                          setSelectedProcessFilter(null);
-                          setShowProcessesDropdown(false);
-                        }}
-                        className={`w-full text-left px-3.5 py-1.5 text-xs transition-colors ${!selectedProcessFilter ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
-                          }`}
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      >
-                        All Processes
-                      </button>
-                      {[
-                        'Appointments',
-                        'Patient Intake',
-                        'Follow-up Calls',
-                        'Insurance Verification',
-                        'Appointment Scheduling',
-                        'Payment Reminder'
-                      ].map((process) => (
+                    <div className="absolute top-full left-0 mt-1.5 w-60 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                      {availableProcesses.map((process) => (
                         <button
                           key={process}
                           onClick={() => {
                             setSelectedProcessFilter(process);
                             setShowProcessesDropdown(false);
                           }}
-                          className={`w-full text-left px-3.5 py-1.5 text-xs transition-colors ${selectedProcessFilter === process ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
-                            }`}
+                          className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between ${
+                            selectedProcessFilter === process ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
+                          }`}
                           style={{ fontFamily: 'Outfit, sans-serif' }}
                         >
-                          {process}
+                          <span className="truncate">{process}</span>
+                          {selectedProcessFilter === process && (
+                            <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />
+                          )}
                         </button>
                       ))}
                     </div>
@@ -1862,13 +1910,14 @@ export default function Deals() {
               </div>
 
               {/* Gear Settings Icon */}
-              <Link
-                to="/process"
-                className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors shrink-0"
-                title="Process Configuration"
+              <button
+                type="button"
+                onClick={() => handleOpenProcessInWorkflow(selectedProcessFilter)}
+                className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors shrink-0 cursor-pointer"
+                title={`Open "${selectedProcessFilter}" in workflow`}
               >
                 <SettingsIcon className="w-4 h-4" />
-              </Link>
+              </button>
             </div>
           }
           customFilterModalContent={
@@ -2519,7 +2568,7 @@ export default function Deals() {
                       if (draggedDealId) {
                         const targetDeal = deals.find((d) => d.id === draggedDealId);
                         if (targetDeal) {
-                          const procName = stage.category || targetDeal.stage.split(":")[0]?.trim() || "Patient Intake";
+                          const procName = stage.category || targetDeal.stage.split(":")[0]?.trim() || "Client Intake";
                           const stageClean = stage.label || stage.fullLabel.split(":")[1]?.trim() || stage.fullLabel;
                           const clientId = getClientIdByName(targetDeal.clientName);
                           const clientObj = getClientObj(clientId, targetDeal.clientName);

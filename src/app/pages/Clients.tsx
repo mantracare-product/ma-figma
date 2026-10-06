@@ -900,7 +900,7 @@ export default function Clients() {
     // Automatically create process log entries for each assigned process & stage so it appears in /deals
     newClient.stage.forEach((selectedStage, idx) => {
       const parts = selectedStage.split(":");
-      const pName = parts[0]?.trim() || "Patient Intake";
+      const pName = parts[0]?.trim() || "Client Intake";
       const sName = parts[1]?.trim() || parts[0]?.trim() || "Initial Contact";
 
       addProcessCallLog({

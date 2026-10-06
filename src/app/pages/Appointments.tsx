@@ -27,15 +27,12 @@ import {
   LayoutGrid,
   List,
   CalendarClock,
-  History,
-  Undo2,
 } from "lucide-react";
 import { appointmentService } from "../../lib/appointmentService";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses } from "../../lib/useProcessStore";
-import { getStoredStageMoves, undoStageMove, StageMove } from "../../lib/useAutomationStore";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
-import StageMovementTimelineModal from "../components/automation/StageMovementTimelineModal";
+
 import AppointmentCard from "../components/appointments/AppointmentCard";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
@@ -134,14 +131,6 @@ export default function Appointments() {
 
   const [appointments, setAppointments] = useState<Appointment[]>(() => appointmentService.getAppointments() as any);
   const [stageFilter, setStageFilter] = useState<string>("all");
-  const [showTimelineModal, setShowTimelineModal] = useState(false);
-  const [stageMoves, setStageMoves] = useState<StageMove[]>(() => getStoredStageMoves());
-
-  useEffect(() => {
-    const handleMovesUpdate = () => setStageMoves(getStoredStageMoves());
-    window.addEventListener("mantra_stage_moves_store_updated", handleMovesUpdate);
-    return () => window.removeEventListener("mantra_stage_moves_store_updated", handleMovesUpdate);
-  }, []);
 
   useEffect(() => {
     return appointmentService.subscribe((updated) => {
@@ -775,15 +764,6 @@ export default function Appointments() {
           }
         >
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowTimelineModal(true)}
-              className="h-8 px-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Audit trail of stage movements and 1-click Undo"
-            >
-              <History className="w-3.5 h-3.5 text-blue-600" />
-              <span>Stage History</span>
-            </button>
             <HowItWorksButton label="How Appointments Works" onClick={() => setShowHelp(true)} />
           </div>
         </PageHeader>
@@ -1464,13 +1444,6 @@ export default function Appointments() {
         guideUrl="/guide/appointments"
       />
 
-      <StageMovementTimelineModal
-        isOpen={showTimelineModal}
-        onClose={() => setShowTimelineModal(false)}
-        entityType="appointment"
-        moves={stageMoves}
-        title="Appointment Stage Movement History"
-      />
     </div>
   );
 }

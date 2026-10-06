@@ -384,10 +384,11 @@ export function getEntityProcess(processes: Process[], entityType: EntityType): 
 export const DEFAULT_INITIAL_PROCESSES: Process[] = [
   {
     id: "1",
-    name: "Patient Intake",
-    description: "Initial patient onboarding, qualification and intent triage workflow",
+    name: "Client Intake",
+    description: "Initial client onboarding, qualification and intent triage workflow",
     assignedToUserId: 1,
     entityType: "client",
+    source: "system",
     aiSettings: {
       platform: "OpenAI - GPT-4o",
       voiceSpeed: 1.0,
@@ -396,8 +397,8 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
       style: "Balanced",
     },
     stages: [
-      { id: "1-1", name: "Initial Contact", description: "First outreach to contact for basic info gathering", status: "active", color: "#3B82F6" },
-      { id: "1-2", name: "Contacted", description: "Conversation in progress; AI listens to customer needs and determines intent", status: "active", color: "#06B6D4" },
+      { id: "1-1", name: "Initial Contact", description: "First outreach to contact for basic info gathering", status: "active", color: "#3B82F6", isInitial: true, stagePosition: "initial" },
+      { id: "1-2", name: "Contacted", description: "Conversation in progress; AI listens to customer needs and determines intent", status: "active", color: "#06B6D4", stagePosition: "intermediate" },
       {
         id: "1-3",
         name: "Interested",
@@ -405,22 +406,11 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
         status: "active",
         color: "#22C55E",
         isFinalStage: true,
+        stagePosition: "final",
         intentTrigger: "interested",
         intentLabel: "Interested",
         intentDescription: "Caller agrees to schedule consultation or requests more info to proceed",
         endPipelineOnReach: true,
-        nextProcessTransitions: [
-          {
-            id: "trans-1",
-            targetProcessId: "2",
-            targetProcessName: "Follow-up Calls",
-            targetStageId: "2-1",
-            targetStageName: "Post-Visit Check",
-            autoMove: true,
-            condition: "When intent is Interested",
-            endCurrentProcess: true,
-          },
-        ],
       },
       {
         id: "1-4",
@@ -429,17 +419,18 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
         status: "active",
         color: "#EF4444",
         isFinalStage: true,
+        stagePosition: "final",
         intentTrigger: "not_interested",
         intentLabel: "Not Interested",
         intentDescription: "Caller politely declines or indicates no current need",
         endPipelineOnReach: true,
         nextProcessTransitions: [
           {
-            id: "trans-2",
-            targetProcessId: "3",
-            targetProcessName: "Nurture Campaign",
-            targetStageId: "3-1",
-            targetStageName: "30-Day Nurture Drip",
+            id: "trans-reactivate",
+            targetProcessId: "2",
+            targetProcessName: "Client Reactivation",
+            targetStageId: "2-1",
+            targetStageName: "Outreach",
             autoMove: true,
             condition: "When intent is Not Interested",
             endCurrentProcess: true,
@@ -453,60 +444,21 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
         status: "active",
         color: "#F59E0B",
         isFinalStage: true,
+        stagePosition: "final",
         intentTrigger: "call_back",
         intentLabel: "Call Back Later",
         intentDescription: "Caller requests follow-up at a convenient time",
         endPipelineOnReach: true,
-        nextProcessTransitions: [
-          {
-            id: "trans-3",
-            targetProcessId: "2",
-            targetProcessName: "Follow-up Calls",
-            targetStageId: "2-2",
-            targetStageName: "Medication Reminder",
-            autoMove: true,
-            condition: "When intent is Call Back Later",
-            endCurrentProcess: true,
-          },
-        ],
       },
     ],
   },
   {
     id: "2",
-    name: "Follow-up Calls",
-    description: "Post-visit follow-up, consultation onboarding, and reminders",
+    name: "Client Reactivation",
+    description: "Re-engagement outreach and reactivation for dormant or disengaged clients",
     assignedToUserId: 2,
     entityType: "client",
-    aiSettings: {
-      platform: "Anthropic Claude",
-      voiceSpeed: 1.2,
-      voice: "Eva",
-      tone: "Friendly",
-      style: "Balanced",
-    },
-    stages: [
-      { id: "2-1", name: "Post-Visit Check", description: "Check on patient after their visit or consultation", status: "active", color: "#3B82F6" },
-      { id: "2-2", name: "Medication Reminder", description: "Remind patient to take their medication or confirm next step", status: "active", color: "#8B5CF6" },
-      {
-        id: "2-3",
-        name: "Completed & Discharged",
-        description: "Patient workflow fully completed",
-        status: "active",
-        color: "#10B981",
-        isFinalStage: true,
-        intentTrigger: "interested",
-        intentLabel: "Completed Successfully",
-        endPipelineOnReach: true,
-      },
-    ],
-  },
-  {
-    id: "3",
-    name: "Nurture Campaign",
-    description: "Long-term patient re-engagement and educational newsletter outreach",
-    assignedToUserId: 3,
-    entityType: "client",
+    source: "system",
     aiSettings: {
       platform: "OpenAI - GPT-4o",
       voiceSpeed: 1.0,
@@ -515,8 +467,47 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
       style: "Balanced",
     },
     stages: [
-      { id: "3-1", name: "30-Day Nurture Drip", description: "Periodic educational check-ins", status: "active", color: "#6366F1" },
-      { id: "3-2", name: "Re-engagement Call", description: "Follow up to see if healthcare needs have changed", status: "active", color: "#EC4899" },
+      { id: "2-1", name: "Outreach", description: "First outreach to dormant or previously disengaged client", status: "active", color: "#3B82F6", isInitial: true, stagePosition: "initial" },
+      { id: "2-2", name: "Contacted", description: "Conversation in progress to explore renewed interest", status: "active", color: "#06B6D4", stagePosition: "intermediate" },
+      {
+        id: "2-3",
+        name: "Reactivated",
+        description: "Client agreed to re-engage, book appointment, or resume services",
+        status: "active",
+        color: "#22C55E",
+        isFinalStage: true,
+        stagePosition: "final",
+        intentTrigger: "interested",
+        intentLabel: "Reactivated",
+        intentDescription: "Client confirms desire to resume care or services",
+        endPipelineOnReach: true,
+      },
+      {
+        id: "2-4",
+        name: "Call Back Later",
+        description: "Client requested follow-up at a future date",
+        status: "active",
+        color: "#F59E0B",
+        isFinalStage: true,
+        stagePosition: "final",
+        intentTrigger: "call_back",
+        intentLabel: "Call Back Later",
+        intentDescription: "Client asks for a follow-up at a later time",
+        endPipelineOnReach: true,
+      },
+      {
+        id: "2-5",
+        name: "Lost",
+        description: "Client declined re-engagement or unreachable",
+        status: "active",
+        color: "#EF4444",
+        isFinalStage: true,
+        stagePosition: "final",
+        intentTrigger: "not_interested",
+        intentLabel: "Lost",
+        intentDescription: "Client not interested or opted out of communications",
+        endPipelineOnReach: true,
+      },
     ],
   },
   DEFAULT_ENTITY_PROCESSES.appointment,
@@ -554,6 +545,28 @@ export function getStoredProcesses(): Process[] {
   }
 
   let changed = false;
+
+  // Migration: Ensure only Client Intake and Client Reactivation exist as standard client workflow processes
+  const legacyClientNames = ["Patient Intake", "Follow-up Calls", "Nurture Campaign", "Billing Support", "Payment Reminder", "Insurance Verification", "Appointment Scheduling"];
+  const hasLegacyClient = list.some(
+    (p) => (!p.entityType || p.entityType === "client") && legacyClientNames.some((legacy) => p.name?.toLowerCase().includes(legacy.toLowerCase()))
+  );
+  if (hasLegacyClient) {
+    const nonLegacy = list.filter((p) => {
+      const isClient = !p.entityType || p.entityType === "client";
+      if (!isClient) return true;
+      return !legacyClientNames.some((legacy) => p.name?.toLowerCase().includes(legacy.toLowerCase()));
+    });
+    const defaultClientProcs = DEFAULT_INITIAL_PROCESSES.filter((p) => !p.entityType || p.entityType === "client");
+    for (const dcp of [...defaultClientProcs].reverse()) {
+      if (!nonLegacy.some((p) => p.name?.toLowerCase() === dcp.name?.toLowerCase())) {
+        nonLegacy.unshift(dcp);
+      }
+    }
+    list = nonLegacy;
+    changed = true;
+  }
+
   // Ensure existing client processes have entityType assigned
   list = list.map((p) => {
     if (!p.entityType) {

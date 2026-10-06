@@ -705,33 +705,29 @@ export default function CallLogs() {
 
   // Comprehensive stage pipeline (for progress visualization) - matching /deals exactly
   const stagePipeline = [
-    { id: 1, label: "Initial Contact", fullLabel: "Patient Intake: Initial Contact", category: "Patient Intake" },
-    { id: 2, label: "Insurance Verify", fullLabel: "Patient Intake: Insurance Verify", category: "Patient Intake" },
-    { id: 3, label: "Schedule Appointment", fullLabel: "Patient Intake: Schedule Appointment", category: "Patient Intake" },
-    { id: 4, label: "Post-Visit Check", fullLabel: "Follow-up Calls: Post-Visit Check", category: "Follow-up Calls" },
-    { id: 5, label: "Medication Reminder", fullLabel: "Follow-up Calls: Medication Reminder", category: "Follow-up Calls" },
-    { id: 6, label: "Billing Inquiry", fullLabel: "Payment Reminder: Billing Inquiry", category: "Payment Reminder" },
-    { id: 7, label: "Issue Resolution", fullLabel: "Payment Reminder: Issue Resolution", category: "Payment Reminder" },
-    { id: 8, label: "Payment Notice", fullLabel: "Payment Reminder: Payment Notice", category: "Payment Reminder" },
-    { id: 9, label: "Payment Collected", fullLabel: "Payment Reminder: Payment Collected", category: "Payment Reminder" },
-    { id: 10, label: "Slot Selection", fullLabel: "Appointment Scheduling: Slot Selection", category: "Appointment Scheduling" },
-    { id: 11, label: "Confirmation", fullLabel: "Appointment Scheduling: Confirmation", category: "Appointment Scheduling" },
-    { id: 12, label: "Document Check", fullLabel: "Insurance Verification: Document Check", category: "Insurance Verification" },
-    { id: 13, label: "Verification", fullLabel: "Insurance Verification: Verification", category: "Insurance Verification" },
-    { id: 14, label: "Approval", fullLabel: "Insurance Verification: Approval", category: "Insurance Verification" },
+    { id: 1, label: "Initial Contact", fullLabel: "Client Intake: Initial Contact", category: "Client Intake" },
+    { id: 2, label: "Contacted", fullLabel: "Client Intake: Contacted", category: "Client Intake" },
+    { id: 3, label: "Interested", fullLabel: "Client Intake: Interested", category: "Client Intake" },
+    { id: 4, label: "Call Back Later", fullLabel: "Client Intake: Call Back Later", category: "Client Intake" },
+    { id: 5, label: "Not Interested", fullLabel: "Client Intake: Not Interested", category: "Client Intake" },
+    { id: 6, label: "Outreach", fullLabel: "Client Reactivation: Outreach", category: "Client Reactivation" },
+    { id: 7, label: "Contacted", fullLabel: "Client Reactivation: Contacted", category: "Client Reactivation" },
+    { id: 8, label: "Reactivated", fullLabel: "Client Reactivation: Reactivated", category: "Client Reactivation" },
+    { id: 9, label: "Call Back Later", fullLabel: "Client Reactivation: Call Back Later", category: "Client Reactivation" },
+    { id: 10, label: "Lost", fullLabel: "Client Reactivation: Lost", category: "Client Reactivation" },
   ];
 
-  // Helper to get stage position (1-14) from current stage name
+  // Helper to get stage position from current stage name
   const getStagePosition = (stageName: string): number => {
     // Try to find exact match in pipeline
-    const exactMatch = stagePipeline.find(s => s.label === stageName);
-    if (exactMatch) return exactMatch.id;
+    const exactIndex = stagePipeline.findIndex(s => s.label === stageName);
+    if (exactIndex !== -1) return exactIndex + 1;
 
     // Try to find partial match for legacy stage names
-    const partialMatch = stagePipeline.find(s =>
+    const partialIndex = stagePipeline.findIndex(s =>
       s.label.toLowerCase().includes(stageName.toLowerCase())
     );
-    if (partialMatch) return partialMatch.id;
+    if (partialIndex !== -1) return partialIndex + 1;
 
     // Default to position 1 if no match
     return 1;
@@ -741,21 +737,12 @@ export default function CallLogs() {
   const getCategoryFromStage = (stageName: string): string => {
     // Direct category mapping for common stage names
     const stageToCategory: { [key: string]: string } = {
-      "Initial Contact": "Patient Intake",
-      "Insurance Verification": "Insurance Verification",
-      "Insurance Verify": "Patient Intake",
-      "Schedule Appointment": "Patient Intake",
-      "Post-Visit Check": "Follow-up Calls",
-      "Medication Reminder": "Follow-up Calls",
-      "Follow-up": "Follow-up Calls",
-      "Billing Inquiry": "Billing Support",
-      "Issue Resolution": "Billing Support",
-      "Payment Reminder": "Billing Support",
-      "Slot Selection": "Appointment Scheduling",
-      "Confirmation": "Appointment Scheduling",
-      "Document Check": "Insurance Verification",
-      "Verification": "Insurance Verification",
-      "Approval": "Insurance Verification",
+      "Initial Contact": "Client Intake",
+      "Interested": "Client Intake",
+      "Not Interested": "Client Intake",
+      "Outreach": "Client Reactivation",
+      "Reactivated": "Client Reactivation",
+      "Lost": "Client Reactivation",
     };
 
     // Try direct mapping first
@@ -772,7 +759,7 @@ export default function CallLogs() {
     }
 
     // Default to first category
-    return "Patient Intake";
+    return "Client Intake";
   };
 
   // Selection state

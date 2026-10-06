@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useLocation } from "react-router";
 import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, CreditCard } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -843,6 +843,7 @@ export default function Process() {
   const activeProviders = getActiveProviders();
   const { setCollapsed } = useSidebar();
   const navigate = useNavigate();
+  const location = useLocation();
   const { activeOrganization: organization } = useOrganization();
   const { templates: adminProcessTemplates, instantiateProcessFromTemplate } = useProcessTemplates();
 
@@ -855,8 +856,34 @@ export default function Process() {
 
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [selectedProcess, setSelectedProcess] = useState<string | null>(null);
-  const [selectedEntity, setSelectedEntity] = useState<EntityType>("client");
+  const targetProcessFromNav = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const targetEntity = params.get("entity") || (location.state as any)?.entity;
+    const targetProcessId = params.get("processId") || params.get("process") || (location.state as any)?.processId;
+    const targetProcessName = params.get("processName") || params.get("name") || (location.state as any)?.processName;
+    if (!targetProcessId && !targetProcessName && !targetEntity) return null;
+    return processes.find((p) => {
+      if (targetProcessId && (p.id === targetProcessId || p.id.toLowerCase() === targetProcessId.toLowerCase())) {
+        return true;
+      }
+      if (targetProcessName && p.name.trim().toLowerCase() === targetProcessName.trim().toLowerCase()) {
+        return true;
+      }
+      if (targetEntity && p.entityType === targetEntity) {
+        return true;
+      }
+      return false;
+    }) || null;
+  }, [location.search, location.state, processes]);
+
+  const [selectedProcess, setSelectedProcess] = useState<string | null>(() => {
+    if (targetProcessFromNav) return targetProcessFromNav.id;
+    return null;
+  });
+  const [selectedEntity, setSelectedEntity] = useState<EntityType>(() => {
+    if (targetProcessFromNav?.entityType) return targetProcessFromNav.entityType;
+    return "client";
+  });
   const [replacementStageId, setReplacementStageId] = useState<string>("");
   const [isEditingProcessInfo, setIsEditingProcessInfo] = useState(false);
   const [draftProcessName, setDraftProcessName] = useState("");
@@ -866,13 +893,46 @@ export default function Process() {
     setIsEditingProcessInfo(false);
   }, [selectedProcess]);
 
+  useEffect(() => {
+    if (targetProcessFromNav) {
+      setSelectedEntity(targetProcessFromNav.entityType || "client");
+      setSelectedProcess(targetProcessFromNav.id);
+      setViewMode("process");
+      setExpandedStage(null);
+    }
+  }, [targetProcessFromNav]);
+
   const ENTITY_TABS: Array<{ id: EntityType; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-    { id: "client", label: "Clients", icon: Users },
+    { id: "client", label: "Processes", icon: GitBranch },
     { id: "appointment", label: "Appointments", icon: Calendar },
     { id: "invoice", label: "Invoices", icon: FileText },
     { id: "insurance", label: "Insurance", icon: Shield },
     { id: "claim", label: "Claims", icon: ClipboardList },
   ];
+
+  const entityModes = useMemo(() => {
+    return ENTITY_TABS.map((tab) => {
+      const Icon = tab.icon;
+      const count = processes.filter((p) => (p.entityType || "client") === tab.id).length;
+      return {
+        id: tab.id,
+        label: tab.label,
+        icon: <Icon className="w-3.5 h-3.5" />,
+        badge: tab.id === "client" && count > 1 ? count : undefined,
+      };
+    });
+  }, [processes]);
+
+  const handleEntityModeChange = (modeId: string) => {
+    const nextEntity = modeId as EntityType;
+    setSelectedEntity(nextEntity);
+    const firstOfEntity = processes.find((p) => (p.entityType || "client") === nextEntity);
+    if (firstOfEntity) {
+      setSelectedProcess(firstOfEntity.id);
+      setViewMode("process");
+      setExpandedStage(null);
+    }
+  };
 
   // Filtered by selected entity
   const entityFilteredProcesses = useMemo(() => {
@@ -893,6 +953,7 @@ export default function Process() {
 
   // Auto-select first process if none selected or selected belongs to another entity
   useEffect(() => {
+    if (targetProcessFromNav) return;
     if (clientVisibleProcesses.length > 0) {
       const currentExists = clientVisibleProcesses.some((p) => p.id === selectedProcess);
       if (!currentExists) {
@@ -903,7 +964,7 @@ export default function Process() {
     } else {
       setSelectedProcess(null);
     }
-  }, [clientVisibleProcesses, selectedProcess]);
+  }, [clientVisibleProcesses, selectedProcess, targetProcessFromNav]);
 
   // Filter client-visible processes by search query
   const filteredProcesses = useMemo(() => {
@@ -2973,46 +3034,11 @@ export default function Process() {
             </>
           }
         />
-
-        {/* Entity Filter Segmented Pill Bar */}
-        <div className="flex items-center gap-1.5 p-1 bg-gray-100/90 rounded-xl border border-gray-200/80 w-fit">
-          {ENTITY_TABS.map((tab) => {
-            const isActive = selectedEntity === tab.id;
-            const Icon = tab.icon;
-            const count = processes.filter((p) => (p.entityType || "client") === tab.id).length;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  setSelectedEntity(tab.id);
-                  const firstOfEntity = processes.find((p) => (p.entityType || "client") === tab.id);
-                  if (firstOfEntity) {
-                    setSelectedProcess(firstOfEntity.id);
-                    setViewMode("process");
-                    setExpandedStage(null);
-                  }
-                }}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${isActive
-                  ? "bg-white text-gray-900 shadow-xs border border-gray-200/80"
-                  : "text-gray-500 hover:text-gray-900 hover:bg-white/50"
-                  }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? "text-blue-600" : "text-gray-400"}`} />
-                <span>{tab.label}</span>
-                {tab.id === "client" && count > 1 && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${isActive ? "bg-blue-50 text-blue-700" : "bg-gray-200 text-gray-600"}`}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Top Control Bar: PageTopBar with Search + Add New Process */}
+        {/* Top Control Bar: PageTopBar with Entity Modes + Search + Add New Process */}
         <PageTopBar
+          modes={entityModes}
+          activeMode={selectedEntity}
+          onModeChange={handleEntityModeChange}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search processes..."
