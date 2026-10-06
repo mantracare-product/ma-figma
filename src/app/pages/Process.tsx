@@ -4677,7 +4677,7 @@ export default function Process() {
                                         ))}
                                         <option disabled value="">──────────</option>
                                         <option value="__view_more_models__" className="text-blue-600 font-semibold">
-                                          View more in Settings →
+                                          Choose from library →
                                         </option>
                                       </select>
                                       <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -4754,7 +4754,7 @@ export default function Process() {
                                           ))}
                                           <option disabled value="">──────────</option>
                                           <option value="__view_more_voices__" className="text-blue-600 font-semibold">
-                                            View more in Settings →
+                                            Choose from library →
                                           </option>
                                         </select>
                                         <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -5841,7 +5841,7 @@ export default function Process() {
                                     ))}
                                     <option disabled value="">──────────</option>
                                     <option value="__view_more_models__" className="text-blue-600 font-semibold">
-                                      View more in Settings →
+                                      Choose from library →
                                     </option>
                                   </select>
                                 </div>
@@ -5902,7 +5902,7 @@ export default function Process() {
                                       ))}
                                       <option disabled value="">──────────</option>
                                       <option value="__view_more_voices__" className="text-blue-600 font-semibold">
-                                        View more in Settings →
+                                        Choose from library →
                                       </option>
                                     </select>
                                   </div>
