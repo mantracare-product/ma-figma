@@ -448,7 +448,7 @@ function SubmissionsTab({ submissions, forms, onViewSubmission, mainTab, setMain
           {
             id: "form",
             header: "Form",
-            align: "center",
+            align: "left",
             render: (sub) => (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-none bg-slate-100 text-[11px] font-medium text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
                 {formName(sub.formId)}
@@ -458,7 +458,7 @@ function SubmissionsTab({ submissions, forms, onViewSubmission, mainTab, setMain
           {
             id: "date",
             header: "Date submitted",
-            align: "center",
+            align: "left",
             render: (sub) => (
               <span className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
                 {sub.date}

@@ -348,7 +348,7 @@ export default function Claims() {
             {
               id: "payer",
               header: "Insurance Payer",
-              align: "center",
+              align: "left",
               render: (claim) => (
                 <span className="font-medium text-slate-700 text-xs truncate max-w-[180px] inline-block" title={claim.payer.name} style={{ fontFamily: "Outfit, sans-serif" }}>
                   {claim.payer.name}
@@ -379,7 +379,7 @@ export default function Claims() {
             {
               id: "serviceDate",
               header: "Service Date",
-              align: "center",
+              align: "left",
               render: (claim) => (
                 <span className="text-slate-600 font-medium text-xs font-mono">
                   {claim.serviceDate}
@@ -389,7 +389,7 @@ export default function Claims() {
             {
               id: "totalCharge",
               header: "Billed Amount",
-              align: "center",
+              align: "right",
               render: (claim) => (
                 <span className="font-mono font-bold text-slate-900 text-xs">
                   ${claim.totalCharge.toFixed(2)}

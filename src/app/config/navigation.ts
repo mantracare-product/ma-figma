@@ -133,10 +133,10 @@ export const navigationConfig: NavGroup[] = [
     ],
   },
 
-  // BILLING & INSIGHTS
+  // REVENUE & INSIGHTS
   {
     id: "billing-insights",
-    label: "BILLING & INSIGHTS",
+    label: "REVENUE & INSIGHTS",
     items: [
       {
         id: "product-services",

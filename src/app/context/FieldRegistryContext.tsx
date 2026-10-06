@@ -524,6 +524,9 @@ const SYSTEM_SECTION_IDS = new Set([
   "sec-company-details",
   "sec-company-role",
   "sec-process-pipeline",
+  "sec-service-info",
+  "sec-service-pricing",
+  "sec-service-assignment",
 ]);
 
 /**
@@ -1338,8 +1341,57 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
     { key: "responsible", label: "Responsible Person", module: "call", inputType: "select", placeholder: "Unassigned", showAlways: true },
   ],
   service: [
-    { key: "service_name", label: "Service Name", module: "service", inputType: "text", placeholder: "Service name", showAlways: true },
-    { key: "price", label: "Price", module: "service", inputType: "number", placeholder: "Price", showAlways: true },
+    { key: "name", label: "Service Name", module: "service", sectionId: "sec-service-info", inputType: "text", placeholder: "e.g. Initial Consultation", required: true, showAlways: true },
+    {
+      key: "category",
+      label: "Category",
+      module: "service",
+      sectionId: "sec-service-info",
+      inputType: "new_list",
+      placeholder: "Select or add category...",
+      newListConfig: {
+        sourceMode: "basic_list",
+        allowSearch: true,
+        allowCustomOptions: true,
+      },
+      options: [
+        { id: 1, label: "Consultation", value: "Consultation" },
+        { id: 2, label: "Dental", value: "Dental" },
+        { id: 3, label: "Diagnostics", value: "Diagnostics" },
+        { id: 4, label: "Treatment", value: "Treatment" },
+        { id: 5, label: "Surgical", value: "Surgical" },
+        { id: 6, label: "General", value: "General" },
+      ],
+      showAlways: true,
+    },
+    {
+      key: "cptCode",
+      label: "CPT / Service Code",
+      module: "service",
+      sectionId: "sec-service-info",
+      inputType: "new_list",
+      placeholder: "Search or enter CPT code...",
+      newListConfig: {
+        sourceMode: "basic_list",
+        allowSearch: true,
+        allowCustomOptions: true,
+      },
+      options: [
+        { id: 1, label: "99204 - Comprehensive Office Visit", value: "99204" },
+        { id: 2, label: "99213 - Established Patient 15 min", value: "99213" },
+        { id: 3, label: "99214 - Detailed Established Visit", value: "99214" },
+        { id: 4, label: "D1110 - Dental Prophylaxis Adult", value: "D1110" },
+        { id: 5, label: "70450 - CT Head / Brain without contrast", value: "70450" },
+        { id: 6, label: "99203 - Office Outpatient Visit 30 min", value: "99203" },
+      ],
+      showAlways: true,
+    },
+    { key: "description", label: "Description", module: "service", sectionId: "sec-service-info", inputType: "textarea", placeholder: "Brief description of the service...", showAlways: true },
+    { key: "duration", label: "Duration (min)", module: "service", sectionId: "sec-service-pricing", inputType: "number", placeholder: "30", defaultValue: 30, showAlways: true },
+    { key: "price", label: "Pricing & Currency", module: "service", sectionId: "sec-service-pricing", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "tax", label: "Tax (%)", module: "service", sectionId: "sec-service-pricing", inputType: "number", placeholder: "5", defaultValue: 0, showAlways: true },
+    { key: "assignedEmployees", label: "Assigned Employees", module: "service", sectionId: "sec-service-assignment", inputType: "user", placeholder: "Select employees...", showAlways: true },
+    { key: "isActive", label: "Active Service", module: "service", sectionId: "sec-service-assignment", inputType: "yes_no", defaultValue: true, showAlways: true },
   ],
   organization: [
     { key: "org_name", label: "Organization Name", module: "organization", inputType: "text", placeholder: "Organization name", showAlways: true },
@@ -1659,19 +1711,28 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
     {
       id: "sec-service-info",
       title: "Service Details",
-      description: "Service name, category, and description",
+      description: "Service name, category, CPT code, and description",
       module: "service",
       source: "system",
-      fieldKeys: ["name", "category", "price", "duration"],
+      fieldKeys: ["name", "category", "cptCode", "description"],
       createdAt: 0,
     },
     {
-      id: "sec-service-custom",
-      title: "Custom Fields",
-      description: "Additional service attributes",
+      id: "sec-service-pricing",
+      title: "Pricing & Duration",
+      description: "Duration, pricing, currency, and taxes",
       module: "service",
       source: "system",
-      fieldKeys: [],
+      fieldKeys: ["duration", "price", "tax"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-service-assignment",
+      title: "Staff & Availability",
+      description: "Responsible team members and booking availability",
+      module: "service",
+      source: "system",
+      fieldKeys: ["assignedEmployees", "isActive"],
       createdAt: 0,
     },
   ],
@@ -1971,6 +2032,25 @@ function ensureScribeSeeds(registry: Record<Exclude<FieldModule, "deal">, FieldD
   });
 }
 
+function ensureServiceSeeds(registry: Record<Exclude<FieldModule, "deal">, FieldDefinition[]>) {
+  if (!Array.isArray(registry.service)) {
+    registry.service = [];
+  }
+  const serviceSeeds = SYSTEM_SEEDS.service || [];
+  const existingServiceKeys = new Set(registry.service.map((f) => f.key));
+  serviceSeeds.forEach((seed, idx) => {
+    if (!existingServiceKeys.has(seed.key)) {
+      registry.service.push({
+        ...seed,
+        id: -(idx + 1),
+        source: "system",
+        createdAt: 0,
+      } as FieldDefinition);
+      existingServiceKeys.add(seed.key);
+    }
+  });
+}
+
 function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, FieldDefinition[]> {
   const defaultRegistry: Record<Exclude<FieldModule, "deal">, FieldDefinition[]> = {
     client: [],
@@ -2025,6 +2105,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
       }
 
       ensureScribeSeeds(registry);
+      ensureServiceSeeds(registry);
 
       // Save the sanitized canonical object to localStorage
       try {

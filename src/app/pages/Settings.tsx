@@ -1401,7 +1401,7 @@ export default function Settings() {
     deleteCustomSection,
   } = useFieldRegistry();
 
-  const tabToModule: Record<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe", FieldModule> = {
+  const tabToModule: Record<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe" | "services", FieldModule> = {
     "organization": "organization",
     "clients": "client",
     "call-logs": "call",
@@ -1410,6 +1410,7 @@ export default function Settings() {
     "forms": "appointment",
     "team": "teamMember",
     "scribe": "scribe",
+    "services": "service",
   };
 
   const FIELD_TYPE_MAP: Record<string, any> = {
@@ -1522,7 +1523,7 @@ export default function Settings() {
   const [tablePreviewRows, setTablePreviewRows] = useState<Record<string, string>[]>([{}]);
 
   // Module filter tab
-  const [customFieldsTab, setCustomFieldsTab] = useState<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe">("clients");
+  const [customFieldsTab, setCustomFieldsTab] = useState<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe" | "services">("clients");
 
   const currentModule = tabToModule[customFieldsTab || "clients"];
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
@@ -6534,6 +6535,41 @@ export default function Settings() {
             {/* Layout Tab (Custom Fields & Custom Sections) */}
             {(activeTab === "custom-fields" || activeTab === "layout" || activeTab === "sections-fields") && (
               <div className="space-y-4">
+                {/* Horizontal Entity Tabs Bar */}
+                <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-xl overflow-x-auto border border-slate-200/70 shadow-2xs">
+                  {[
+                    { id: "organization", label: "Organizations" },
+                    { id: "clients", label: "Clients" },
+                    { id: "services", label: "Services" },
+                    { id: "appointments", label: "Appointments" },
+                    { id: "processes", label: "Processes" },
+                    { id: "call-logs", label: "Call Logs" },
+                    { id: "forms", label: "Forms" },
+                    { id: "team", label: "Team" },
+                    { id: "scribe", label: "AI Scribe" },
+                  ].map((entity) => {
+                    const isActive = customFieldsTab === entity.id;
+                    return (
+                      <button
+                        key={entity.id}
+                        type="button"
+                        onClick={() => {
+                          setCustomFieldsTab(entity.id as any);
+                          setLayoutCurrentPage(1);
+                        }}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                          isActive
+                            ? "bg-white text-blue-600 shadow-xs font-bold"
+                            : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
+                        }`}
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {entity.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
                 {/* Top Toolbar using standard PageTopBar */}
                 <PageTopBar
                   modes={[
@@ -6560,6 +6596,7 @@ export default function Settings() {
                       <option value="call-logs">Call Logs</option>
                       <option value="processes">Processes</option>
                       <option value="appointments">Appointments</option>
+                      <option value="services">Services</option>
                       <option value="forms">Forms</option>
                       <option value="team">Team</option>
                       <option value="scribe">AI Scribe</option>
@@ -6631,6 +6668,7 @@ export default function Settings() {
                               { label: "Call Logs", value: "call-logs" },
                               { label: "Processes", value: "processes" },
                               { label: "Appointments", value: "appointments" },
+                              { label: "Services", value: "services" },
                               { label: "Forms", value: "forms" },
                               { label: "Team", value: "team" },
                               { label: "AI Scribe", value: "scribe" },

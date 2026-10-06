@@ -78,7 +78,7 @@ export interface OverviewSection {
 }
 
 export interface DraggableOverviewSectionsProps {
-  mode: "client" | "process" | "scribe";
+  mode: "client" | "process" | "scribe" | "service";
   client?: any;
   log?: any;
   sections: OverviewSection[];
@@ -321,7 +321,8 @@ export default function DraggableOverviewSections({
   const SYSTEM_FIELD_KEYS = useMemo(() => new Set([
     "name", "email", "phone", "location", "country",
     "company", "role", "status", "processes", "stage",
-    "responsible", "lastContact", "companyName", "jobPosition"
+    "responsible", "lastContact", "companyName", "jobPosition",
+    "category", "cptCode", "description", "duration", "price", "tax", "assignedEmployees", "isActive"
   ]), []);
 
   const SYSTEM_SEC_IDS = useMemo(() => new Set([
@@ -330,6 +331,9 @@ export default function DraggableOverviewSections({
     "sec-company-details",
     "sec-company-role",
     "sec-process-pipeline",
+    "sec-service-info",
+    "sec-service-pricing",
+    "sec-service-assignment",
   ]), []);
 
   // All custom field definitions filtered by organization scope and process context
@@ -777,17 +781,24 @@ export default function DraggableOverviewSections({
         </div>
 
         {/* Input Rendering by Key / Type */}
-        {key === "name" || key === "client_name" ? (
+        {regField && (regField.inputType === "new_list" || regField.inputType === "money" || regField.inputType === "user" || regField.inputType === "yes_no" || regField.inputType === "table" || regField.inputType === "group" || regField.inputType === "multiselect" || regField.inputType === "crm_bind") ? (
+          <FieldInputRenderer
+            field={regField}
+            value={effectiveVal !== undefined ? effectiveVal : regField.defaultValue}
+            onChange={(val) => setVal(val)}
+            mode="runtime"
+          />
+        ) : key === "name" || key === "client_name" ? (
           <div className="flex items-center gap-2">
             <input
               type="text"
               value={rawVal || ""}
               onChange={(e) => setVal(e.target.value)}
-              placeholder="Enter full name"
+              placeholder={mode === "service" ? (regField?.placeholder || "e.g. Initial Consultation") : "Enter full name"}
               className="w-full px-3 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
               style={{ fontFamily: "Outfit, sans-serif" }}
             />
-            {onNavigateToClient && client?.id && (
+            {mode !== "service" && onNavigateToClient && client?.id && (
               <button
                 type="button"
                 onClick={() => onNavigateToClient(client.id)}
@@ -1643,7 +1654,7 @@ export default function DraggableOverviewSections({
                       <button
                         type="button"
                         onClick={() => handleOpenSelectFieldForSection(section.id)}
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer"
+                        className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer"
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       >
                         <Plus className="w-3 h-3" /> Add Field
@@ -1658,7 +1669,7 @@ export default function DraggableOverviewSections({
                         <button
                           type="button"
                           onClick={() => handleOpenSelectFieldForSection(section.id)}
-                          className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer bg-transparent p-0"
+                          className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer bg-transparent p-0"
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
                           <Plus className="w-3 h-3" />
@@ -1679,7 +1690,7 @@ export default function DraggableOverviewSections({
         <button
           type="button"
           onClick={() => setAddSectionModalOpen(true)}
-          className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer bg-transparent p-0"
+          className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer bg-transparent p-0"
           style={{ fontFamily: "Outfit, sans-serif" }}
         >
           <Plus className="w-3.5 h-3.5" />

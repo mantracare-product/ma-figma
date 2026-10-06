@@ -1602,7 +1602,7 @@ export default function Deals() {
       key: "activity",
       header: "Activity",
       render: (log) => (
-        <div className="flex items-center justify-center gap-1.5 text-xs whitespace-nowrap">
+        <div className="flex items-center justify-start gap-1.5 text-xs whitespace-nowrap">
           <span style={{ color: log.status === "Pending" ? '#DC2626' : '#64748B', fontFamily: 'Outfit, sans-serif' }}>
             {log.status === "Pending" ? "Scheduled call" : "Last contact"} - {new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
           </span>

@@ -1154,7 +1154,7 @@ export function TeamMemberDrawer({
                           <button
                             type="button"
                             onClick={() => handleOpenAddField(section.id)}
-                            className="text-xs font-semibold text-[#2563EB] hover:text-blue-700 flex items-center gap-1 cursor-pointer transition-colors"
+                            className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 cursor-pointer transition-colors"
                           >
                             <Plus className="w-3.5 h-3.5" />
                             Add Field
@@ -1172,7 +1172,7 @@ export function TeamMemberDrawer({
                         setEditingSectionDef(null);
                         setAddSectionDrawerOpen(true);
                       }}
-                      className="text-xs font-semibold text-[#2563EB] hover:text-blue-700 flex items-center gap-1 cursor-pointer transition-colors"
+                      className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 cursor-pointer transition-colors"
                     >
                       <Plus className="w-4 h-4" />
                       Add Section

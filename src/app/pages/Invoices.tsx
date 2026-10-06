@@ -464,7 +464,7 @@ export default function Invoices() {
               {
                 id: "dueDate",
                 header: "Due Date",
-                align: "center",
+                align: "left",
                 render: (inv) => (
                   <span
                     className="text-xs font-semibold"
@@ -477,7 +477,7 @@ export default function Invoices() {
               {
                 id: "created",
                 header: "Created",
-                align: "center",
+                align: "left",
                 render: (inv) => (
                   <span className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
                     {inv.createdAt.replace("T", " ").substring(0, 16)}
@@ -487,7 +487,7 @@ export default function Invoices() {
               {
                 id: "lastActivity",
                 header: "Last Activity",
-                align: "center",
+                align: "left",
                 render: (inv) => (
                   <span
                     className="text-xs font-medium"
@@ -500,7 +500,7 @@ export default function Invoices() {
               {
                 id: "responsible",
                 header: "Responsible",
-                align: "center",
+                align: "left",
                 render: (inv) => (
                   <span className="text-xs font-medium text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
                     {inv.createdBy === "system" ? "Automated Flow" : inv.createdBy}

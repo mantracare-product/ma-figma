@@ -1616,15 +1616,15 @@ export default function KnowledgeBase() {
               {
                 id: "type",
                 header: "Type",
-                align: "center",
+                align: "left",
                 render: (src) => <TypeBadge type={src.type} />,
               },
               {
                 id: "scope",
                 header: "Scope",
-                align: "center",
+                align: "left",
                 render: (src) => (
-                  <div className="max-w-[260px] inline-flex items-center justify-center">
+                  <div className="max-w-[260px] inline-flex items-center justify-start">
                     <ScopeChipList
                       scopes={src.scopes}
                       allProcesses={src.allProcesses}
@@ -1636,9 +1636,9 @@ export default function KnowledgeBase() {
               {
                 id: "tags",
                 header: "Tags",
-                align: "center",
+                align: "left",
                 render: (src) => (
-                  <div className="flex flex-wrap gap-1 items-center justify-center">
+                  <div className="flex flex-wrap gap-1 items-center justify-start">
                     {src.tags.slice(0, 2).map((t) => (
                       <span
                         key={t}
@@ -1671,7 +1671,7 @@ export default function KnowledgeBase() {
               {
                 id: "createdAt",
                 header: "Created",
-                align: "center",
+                align: "left",
                 render: (src) => (
                   <span className="text-xs whitespace-nowrap text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
                     {formatDate(src.createdAt)}

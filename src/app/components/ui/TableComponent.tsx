@@ -202,6 +202,34 @@ export function TableComponent<T>({
 
   const hasLeadingControls = enableSelection || enableColumnCustomization || Boolean(rowActions);
 
+  const getColumnAlign = (col: TableColumn<T>): "left" | "center" | "right" => {
+    if (col.align) return col.align;
+    const headerLower = (col.header || "").toLowerCase();
+    const keyLower = String(col.id || col.key || col.accessorKey || "").toLowerCase();
+    if (
+      headerLower === "status" ||
+      keyLower === "status"
+    ) {
+      return "center";
+    }
+    if (
+      headerLower.includes("amount") ||
+      headerLower.includes("price") ||
+      headerLower.includes("total") ||
+      headerLower.includes("balance") ||
+      headerLower.includes("cost") ||
+      headerLower.includes("fee") ||
+      headerLower.includes("rate") ||
+      keyLower.includes("amount") ||
+      keyLower.includes("price") ||
+      keyLower.includes("total") ||
+      keyLower.includes("balance")
+    ) {
+      return "right";
+    }
+    return "left";
+  };
+
   return (
     <div className={`bg-white border border-gray-200 shadow-2xs overflow-hidden rounded-none ${className}`}>
       {/* ── Selection Action Banner ── */}
@@ -226,11 +254,10 @@ export function TableComponent<T>({
                   key={i}
                   type="button"
                   onClick={() => action.onClick(selectedIds)}
-                  className={`px-2.5 py-1 text-xs rounded-none flex items-center gap-1.5 cursor-pointer font-medium transition-colors ${
-                    action.isDanger || action.variant === "danger"
+                  className={`px-2.5 py-1 text-xs rounded-none flex items-center gap-1.5 cursor-pointer font-medium transition-colors ${action.isDanger || action.variant === "danger"
                       ? "bg-red-600 hover:bg-red-700 text-white"
                       : "bg-[#181e25] hover:bg-[#2c3e50] text-white"
-                  }`}
+                    }`}
                 >
                   {action.icon}
                   <span>{action.label}</span>
@@ -391,14 +418,22 @@ export function TableComponent<T>({
                 </th>
               )}
 
-              {/* Data Column Headers (Center-Aligned by Default) */}
+              {/* Data Column Headers */}
               {orderedVisibleColumns.map((col) => {
+                const align = getColumnAlign(col);
                 const alignClass =
-                  col.align === "left"
-                    ? "text-left"
-                    : col.align === "right"
+                  align === "center"
+                    ? "text-center"
+                    : align === "right"
                     ? "text-right"
-                    : "text-center";
+                    : "text-left";
+                const justifyClass =
+                  align === "center"
+                    ? "justify-center"
+                    : align === "right"
+                    ? "justify-end"
+                    : "justify-start";
+
                 return (
                   <th
                     key={getColId(col)}
@@ -410,7 +445,9 @@ export function TableComponent<T>({
                       maxWidth: col.maxWidth,
                     }}
                   >
-                    {col.header}
+                    <div className={`w-full flex items-center ${justifyClass}`}>
+                      {col.header}
+                    </div>
                   </th>
                 );
               })}
@@ -457,9 +494,8 @@ export function TableComponent<T>({
                   <tr
                     key={String(rowId)}
                     onClick={() => onRowClick && onRowClick(row)}
-                    className={`border-b border-border/60 transition-colors h-[32px] rounded-none ${
-                      onRowClick ? "cursor-pointer" : ""
-                    } ${isSelected ? "bg-[#E8F0FE]" : "hover:bg-[#F1F5F9]"}`}
+                    className={`border-b border-border/60 transition-colors h-[32px] rounded-none ${onRowClick ? "cursor-pointer" : ""
+                      } ${isSelected ? "bg-[#E8F0FE]" : "hover:bg-[#F1F5F9]"}`}
                   >
                     {/* Column 1: Row Checkbox */}
                     {enableSelection && (
@@ -518,13 +554,12 @@ export function TableComponent<T>({
                                         setOpenActionRowId(null);
                                         action.onClick(row);
                                       }}
-                                      className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors rounded-none ${
-                                        isDisabled
+                                      className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors rounded-none ${isDisabled
                                           ? "opacity-40 cursor-not-allowed text-gray-400"
                                           : action.isDanger
-                                          ? "text-red-600 hover:bg-red-50 cursor-pointer"
-                                          : "text-gray-700 hover:bg-gray-50 cursor-pointer"
-                                      }`}
+                                            ? "text-red-600 hover:bg-red-50 cursor-pointer"
+                                            : "text-gray-700 hover:bg-gray-50 cursor-pointer"
+                                        }`}
                                     >
                                       {action.icon}
                                       <span>{action.label}</span>
@@ -540,20 +575,21 @@ export function TableComponent<T>({
                       </td>
                     )}
 
-                    {/* Data Cells (Center-Aligned by Default) */}
+                    {/* Data Cells */}
                     {orderedVisibleColumns.map((col) => {
+                      const align = getColumnAlign(col);
                       const alignClass =
-                        col.align === "left"
-                          ? "text-left"
-                          : col.align === "right"
+                        align === "center"
+                          ? "text-center"
+                          : align === "right"
                           ? "text-right"
-                          : "text-center";
+                          : "text-left";
                       const justifyClass =
-                        col.align === "left"
-                          ? "justify-start"
-                          : col.align === "right"
+                        align === "center"
+                          ? "justify-center"
+                          : align === "right"
                           ? "justify-end"
-                          : "justify-center";
+                          : "justify-start";
 
                       let content: React.ReactNode;
                       if (col.render) {

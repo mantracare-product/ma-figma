@@ -54,7 +54,7 @@ export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
     },
     {
       id: "billing",
-      title: "BILLING & INSIGHTS",
+      title: "REVENUE & INSIGHTS",
       defaultExpanded: false,
       items: [
         { id: "product-services", label: "Product & Services", iconName: "Package", path: "/services", visible: true },

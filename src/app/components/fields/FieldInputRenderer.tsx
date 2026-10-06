@@ -40,6 +40,7 @@ import { useDynamicListOptions } from "./useDynamicListOptions";
 import { RichTextEditor } from "./RichTextEditor";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 import { AdminSelect } from "../ui/AdminSelect";
+import { getStoredTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 
 export type FieldRendererMode = "runtime" | "admin_default";
 
@@ -2462,6 +2463,19 @@ export function FieldInputRenderer({
     );
   }
 
+  if (effectiveType === "user") {
+    return (
+      <UserInputRenderer
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        placeholder={effectivePlaceholder}
+        isAdminDefault={isAdminDefault}
+        borderClass={borderClass}
+      />
+    );
+  }
+
   // Fallback: standard Text input
   return (
     <input
@@ -2472,6 +2486,105 @@ export function FieldInputRenderer({
       placeholder={effectivePlaceholder}
       className={`w-full px-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 transition-all ${borderClass}`}
     />
+  );
+}
+
+// ─── User / Member Dedicated Input Helper ────────────────────────────────────
+function UserInputRenderer({
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  isAdminDefault,
+  borderClass,
+}: {
+  value: any;
+  onChange: (val: any) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  isAdminDefault?: boolean;
+  borderClass?: string;
+}) {
+  const [teamMembers, setTeamMembers] = useState<any[]>(() => {
+    try {
+      return getStoredTeamMembers();
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      try {
+        setTeamMembers(getStoredTeamMembers());
+      } catch {}
+    };
+    window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
+  const selectedIds: string[] = Array.isArray(value)
+    ? value.map((v: any) => String(v))
+    : value !== undefined && value !== null && value !== ""
+    ? [String(value)]
+    : [];
+
+  const handleToggle = (id: string | number) => {
+    if (disabled) return;
+    const strId = String(id);
+    if (selectedIds.includes(strId)) {
+      onChange(selectedIds.filter((item) => item !== strId));
+    } else {
+      onChange([...selectedIds, strId]);
+    }
+  };
+
+  const selectedMembers = teamMembers.filter((m) => selectedIds.includes(String(m.id)));
+
+  return (
+    <div className="space-y-2">
+      {selectedMembers.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selectedMembers.map((emp) => (
+            <span
+              key={emp.id}
+              onClick={() => handleToggle(emp.id)}
+              title="Click to remove"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-50 text-slate-800 border border-slate-200 shadow-2xs cursor-pointer hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all select-none"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <div className="w-4 h-4 rounded-full bg-slate-700 text-white text-[9px] font-bold flex items-center justify-center shrink-0">
+                {(emp.name || "U").charAt(0)}
+              </div>
+              <span>{emp.name}</span>
+              {!disabled && <X className="w-3 h-3 text-slate-400 hover:text-rose-600" />}
+            </span>
+          ))}
+        </div>
+      )}
+      <AdminSelect
+        value=""
+        disabled={disabled}
+        onChange={(val) => {
+          if (val) handleToggle(val);
+        }}
+        placeholder={selectedIds.length === 0 ? (placeholder || "Select employees...") : `${selectedIds.length} selected`}
+        options={[
+          { value: "", label: "+ Add employee..." },
+          ...teamMembers.map((m) => ({
+            value: String(m.id),
+            label: `${m.name}${m.role ? ` (${m.role})` : ""}`,
+          })),
+        ]}
+        size="sm"
+        triggerClassName={borderClass}
+        allowSearch={true}
+      />
+    </div>
   );
 }
 

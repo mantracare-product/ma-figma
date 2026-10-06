@@ -436,7 +436,7 @@ export function AdminIndustries() {
             {
               key: "category",
               header: "Industry Category",
-              align: "center",
+              align: "left",
               render: (ind) => (
                 <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700">
                   {ind.category}
@@ -561,7 +561,7 @@ export function AdminIndustries() {
             {
               key: "industries",
               header: "Attached Industries",
-              align: "center",
+              align: "left",
               width: "42%",
               render: (cat) => {
                 const isExpanded = expandedCategories[cat.id];
@@ -571,7 +571,7 @@ export function AdminIndustries() {
                 const remainingCount = cat.industries.length - 2;
 
                 return (
-                  <div className="flex flex-wrap items-center justify-center gap-1.5">
+                  <div className="flex flex-wrap items-center justify-start gap-1.5">
                     {cat.industries && cat.industries.length > 0 ? (
                       <>
                         {visibleIndustries.map((indName) => (

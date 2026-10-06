@@ -409,15 +409,15 @@ export default function Organizations() {
               {
                 id: "email",
                 header: "Email",
-                align: "center",
+                align: "left",
                 render: (org) => <span className="text-[#45515e]">{org.email}</span>,
               },
               {
                 id: "industry",
                 header: "Industry",
-                align: "center",
+                align: "left",
                 render: (org) => (
-                  <div className="flex items-center justify-center gap-1.5">
+                  <div className="flex items-center justify-start gap-1.5">
                     <span className="font-semibold text-[#222222]">{org.industry}</span>
                     {org.industryCategory && (
                       <span className="text-[10px] text-[#64748b]">({org.industryCategory})</span>
@@ -428,7 +428,7 @@ export default function Organizations() {
               {
                 id: "location",
                 header: "Location",
-                align: "center",
+                align: "left",
                 render: (org) => (
                   <span className="text-[#45515e]">
                     {org.location || (org.locations && org.locations.length > 0 ? org.locations.join(", ") : "—")}
@@ -438,7 +438,7 @@ export default function Organizations() {
               {
                 id: "preferredTime",
                 header: "Preferred Time",
-                align: "center",
+                align: "left",
                 render: (org) => <span className="text-[#45515e]">{org.preferredTime}</span>,
               },
               {
@@ -471,7 +471,7 @@ export default function Organizations() {
               {
                 id: "createdDate",
                 header: "Created On",
-                align: "center",
+                align: "left",
                 render: (org) => <span className="text-[#64748b] text-[11px]">{org.createdDate}</span>,
               },
             ];
