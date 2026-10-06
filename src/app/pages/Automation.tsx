@@ -382,10 +382,11 @@ export default function Automation() {
         />
       </div>
 
-      {/* Add Automation Drawer (Same drawer as Process stage tab, opens Flow Builder view by default) */}
+      {/* Add Automation Drawer (Refactored scope-aware drawer: Global Scope) */}
       <AddAutomationDrawer
         isOpen={isAddAutomationDrawerOpen && !!activeRule}
         onClose={() => setIsAddAutomationDrawerOpen(false)}
+        scope="global"
         defaultView="flowbuilder"
         processName={activeProcess?.name || activeRule?.name}
         stageName={activeStage?.name || activeRule?.action.stageName || "Initial Stage"}

@@ -5,6 +5,7 @@ import {
   Zap, Webhook, Search, ChevronDown, ChevronRight, Plus, Trash2, X,
   ZoomIn, ZoomOut, Maximize2, Undo2, Redo2, CheckCircle2, AlertCircle,
   Code2, Activity, Layers, PhoneCall, Save, AlignCenter, Hand,
+  CreditCard, FileText, Receipt, ShieldCheck,
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import VariableSelectorModal from "./VariableSelectorModal";
@@ -64,6 +65,7 @@ type NodeType =
   | "send-email" | "send-sms" | "send-whatsapp"
   | "field-update" | "assign-responsible" | "move-stage" | "move-process" | "move-new-process"
   | "book-appointment" | "reschedule-appointment" | "cancel-appointment"
+  | "generate-invoice" | "send-payment" | "send-invoice"
   | "webhook" | "api"
   | "idle-messages";
 
@@ -92,6 +94,12 @@ interface FlowBuilderTabProps {
   workflowSteps?: WorkflowStep[];
   onWorkflowStepsChange?: (steps: WorkflowStep[]) => void;
   stepAllowedTriggers?: Record<string, Array<string>>;
+  scope?: "stage" | "global";
+  triggerType?: string;
+  triggerEvent?: string;
+  triggerLabel?: string;
+  triggerDescription?: string;
+  triggerIconKey?: string;
 }
 
 // ─── Node Library Definition ──────────────────────────────────────────────────
@@ -115,6 +123,9 @@ const NODE_TYPE_TO_STEP_KEY: Partial<Record<NodeType, string>> = {
   "book-appointment": "scheduleappointment",
   "reschedule-appointment": "scheduleappointment",
   "cancel-appointment": "scheduleappointment",
+  "generate-invoice": "generate_invoice",
+  "send-payment": "send_payment",
+  "send-invoice": "send-invoice",
   "webhook": "webhook_trigger",
   "api": "wh_trigger",
   "end": "endworkflow",
@@ -139,6 +150,9 @@ const NODE_TYPE_TO_ICON_KEY: Record<string, string> = {
   "book-appointment": "calendar",
   "reschedule-appointment": "calendar",
   "cancel-appointment": "x",
+  "generate-invoice": "filetext",
+  "send-payment": "creditcard",
+  "send-invoice": "filetext",
   "webhook": "webhook",
   "api": "globe",
   "end": "x",
@@ -148,15 +162,25 @@ const NODE_TYPE_TO_ICON_KEY: Record<string, string> = {
 const NODE_CATEGORIES = [
   {
     id: "logic",
-    label: "Logic",
+    label: "Logic & Routing",
     icon: <GitBranch className="w-3.5 h-3.5" />,
     nodes: [
       { type: "condition" as NodeType, label: "Condition", icon: <Split className="w-4 h-4" />, desc: "Gate this step behind field or intent conditions" },
       { type: "wait" as NodeType, label: "Wait / Delay", icon: <Clock className="w-4 h-4" />, desc: "Delay this step before it runs" },
       { type: "parallel" as NodeType, label: "Parallel Branches", icon: <Layers className="w-4 h-4" />, desc: "Run this step alongside adjacent steps" },
-      { type: "move-process" as NodeType, label: "Assign Process / Stage", icon: <Workflow className="w-4 h-4" />, desc: "Move the contact to a specific process and stage" },
-      { type: "move-new-process" as NodeType, label: "Move to New Process", icon: <GitBranch className="w-4 h-4" />, desc: "Move user to a new process and start at its initial stage so the pipeline continues" },
-      { type: "end" as NodeType, label: "End Workflow", icon: <XCircle className="w-4 h-4" />, desc: "Terminate the workflow" },
+      { type: "move-process" as NodeType, label: "Assign Process / Stage", icon: <Workflow className="w-4 h-4" />, desc: "Move record to a specific process and stage" },
+      { type: "move-new-process" as NodeType, label: "Move to New Process", icon: <GitBranch className="w-4 h-4" />, desc: "Move record to another process to continue the pipeline" },
+      { type: "end" as NodeType, label: "End Workflow", icon: <XCircle className="w-4 h-4" />, desc: "Terminate workflow execution" },
+    ],
+  },
+  {
+    id: "records",
+    label: "Records & Billing",
+    icon: <CreditCard className="w-3.5 h-3.5" />,
+    nodes: [
+      { type: "generate-invoice" as NodeType, label: "Generate Invoice", icon: <FileText className="w-4 h-4" />, desc: "Generate draft invoice for appointment (strictly idempotent)" },
+      { type: "send-payment" as NodeType, label: "Send Payment", icon: <CreditCard className="w-4 h-4" />, desc: "Send payment link or invoice checkout request" },
+      { type: "send-invoice" as NodeType, label: "Send Invoice", icon: <FileText className="w-4 h-4" />, desc: "Send invoice link to client via preferred channel" },
     ],
   },
   {
@@ -164,9 +188,9 @@ const NODE_CATEGORIES = [
     label: "Caller Engagement",
     icon: <Phone className="w-3.5 h-3.5" />,
     nodes: [
-      { type: "call-transfer" as NodeType, label: "Transfer Call", icon: <PhoneCall className="w-4 h-4" />, desc: "Transfer the active call to a human agent or another AI agent" },
+      { type: "call-transfer" as NodeType, label: "Transfer Call", icon: <PhoneCall className="w-4 h-4" />, desc: "Transfer active call to a human agent or queue" },
       { type: "call-hangup" as NodeType, label: "Call Hangup", icon: <PhoneOff className="w-4 h-4" />, desc: "End the active call" },
-      { type: "idle-messages" as NodeType, label: "Idle Messages", icon: <MessageSquare className="w-4 h-4" />, desc: "Speak a message if the caller goes idle" },
+      { type: "idle-messages" as NodeType, label: "Idle Messages", icon: <MessageSquare className="w-4 h-4" />, desc: "Speak a message if caller remains idle" },
     ],
   },
   {
@@ -175,8 +199,8 @@ const NODE_CATEGORIES = [
     icon: <MessageSquare className="w-3.5 h-3.5" />,
     nodes: [
       { type: "send-email" as NodeType, label: "Send Email", icon: <Mail className="w-4 h-4" />, desc: "Send an email" },
-      { type: "send-sms" as NodeType, label: "Send SMS", icon: <MessageSquare className="w-4 h-4" />, desc: "Send an SMS" },
-      { type: "send-whatsapp" as NodeType, label: "Send WhatsApp", icon: <MessageSquare className="w-4 h-4" />, desc: "Send a WhatsApp message" },
+      { type: "send-sms" as NodeType, label: "Send SMS", icon: <MessageSquare className="w-4 h-4" />, desc: "Send an SMS notification" },
+      { type: "send-whatsapp" as NodeType, label: "Send WhatsApp", icon: <MessageSquare className="w-4 h-4" />, desc: "Send a pre-configured WhatsApp message" },
     ],
   },
   {
@@ -184,8 +208,8 @@ const NODE_CATEGORIES = [
     label: "Data & Assignment",
     icon: <Settings2 className="w-3.5 h-3.5" />,
     nodes: [
-      { type: "field-update" as NodeType, label: "Field Update", icon: <Settings2 className="w-4 h-4" />, desc: "Update a field value" },
-      { type: "assign-responsible" as NodeType, label: "Assign Responsible", icon: <User className="w-4 h-4" />, desc: "Assign a team member" },
+      { type: "field-update" as NodeType, label: "Field Update", icon: <Settings2 className="w-4 h-4" />, desc: "Update record attributes or custom field values" },
+      { type: "assign-responsible" as NodeType, label: "Assign Responsible", icon: <User className="w-4 h-4" />, desc: "Assign a team member to handle this record" },
     ],
   },
   {
@@ -193,8 +217,8 @@ const NODE_CATEGORIES = [
     label: "Integrations",
     icon: <Webhook className="w-3.5 h-3.5" />,
     nodes: [
-      { type: "webhook" as NodeType, label: "Webhook", icon: <Webhook className="w-4 h-4" />, desc: "Send data via webhook" },
-      { type: "api" as NodeType, label: "API", icon: <Zap className="w-4 h-4" />, desc: "Make an HTTP API call" },
+      { type: "webhook" as NodeType, label: "Webhook", icon: <Webhook className="w-4 h-4" />, desc: "Send data payload via webhook" },
+      { type: "api" as NodeType, label: "API", icon: <Zap className="w-4 h-4" />, desc: "Execute external HTTP REST API request" },
     ],
   },
 ];
@@ -224,12 +248,18 @@ const NODE_STYLE: Record<string, { bg: string; border: string; text: string; ico
   "book-appointment":    { bg: "bg-teal-50 dark:bg-teal-900/20",     border: "border-teal-400",   text: "text-teal-700 dark:text-teal-400" },
   "reschedule-appointment": { bg: "bg-teal-50 dark:bg-teal-900/20", border: "border-teal-400",   text: "text-teal-700 dark:text-teal-400" },
   "cancel-appointment":  { bg: "bg-rose-50 dark:bg-rose-900/20",     border: "border-rose-400",   text: "text-rose-700 dark:text-rose-400" },
+  "generate-invoice":    { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
+  "send-payment":        { bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-400", text: "text-emerald-700 dark:text-emerald-400" },
+  "send-invoice":        { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
   webhook:               { bg: "bg-orange-50 dark:bg-orange-900/20", border: "border-orange-400", text: "text-orange-700 dark:text-orange-400" },
   api:                   { bg: "bg-orange-50 dark:bg-orange-900/20", border: "border-orange-400", text: "text-orange-700 dark:text-orange-400" },
   "idle-messages":       { bg: "bg-sky-50 dark:bg-sky-900/20", border: "border-sky-400", text: "text-sky-700 dark:text-sky-400" },
 };
 
 function getNodeIcon(type: NodeType) {
+  if (type === "generate-invoice") return <FileText className="w-4 h-4" />;
+  if (type === "send-payment") return <CreditCard className="w-4 h-4" />;
+  if (type === "send-invoice") return <FileText className="w-4 h-4" />;
   const all = NODE_CATEGORIES.flatMap((c) => c.nodes);
   return all.find((n) => n.type === type)?.icon ?? <GitBranch className="w-4 h-4" />;
 }
@@ -237,6 +267,16 @@ function getNodeIcon(type: NodeType) {
 function getNodeLabel(type: NodeType) {
   const all = NODE_CATEGORIES.flatMap((c) => c.nodes);
   return all.find((n) => n.type === type)?.label ?? type;
+}
+
+function getTriggerIconComponent(triggerIconKey?: string, triggerType?: string) {
+  if (triggerIconKey === "calendar" || triggerType === "appointment") return <Calendar className="w-4 h-4 text-emerald-600" />;
+  if (triggerIconKey === "receipt" || triggerType === "invoice") return <Receipt className="w-4 h-4 text-purple-600" />;
+  if (triggerIconKey === "phone" || triggerType === "call") return <Phone className="w-4 h-4 text-sky-600" />;
+  if (triggerIconKey === "user" || triggerType === "client") return <User className="w-4 h-4 text-blue-600" />;
+  if (triggerIconKey === "shieldcheck" || triggerType === "insurance") return <ShieldCheck className="w-4 h-4 text-rose-600" />;
+  if (triggerIconKey === "filetext" || triggerType === "document") return <FileText className="w-4 h-4 text-amber-600" />;
+  return <GitBranch className="w-4 h-4 text-indigo-600" />;
 }
 
 // Connection line colors by port
@@ -257,6 +297,9 @@ const STEP_KEY_TO_NODE_TYPE: Record<string, NodeType> = {
   whatsapp: "send-whatsapp",
   sms: "send-sms",
   email: "send-email",
+  "send-invoice": "send-invoice",
+  generate_invoice: "generate-invoice",
+  send_payment: "send-payment",
   fieldupdate: "field-update",
   assignhuman: "assign-responsible",
   processmovement: "move-process",
@@ -315,6 +358,12 @@ export default function FlowBuilderTab({
   workflowSteps = [],
   onWorkflowStepsChange,
   stepAllowedTriggers = {},
+  scope = "stage",
+  triggerType,
+  triggerEvent,
+  triggerLabel,
+  triggerDescription,
+  triggerIconKey,
 }: FlowBuilderTabProps) {
   // Drawer execution/timing controls (seeded on openConfig)
   const [drawerTrigger, setDrawerTrigger] = useState<"stage" | "incall" | "inchat" | "postcall">("stage");
@@ -323,8 +372,29 @@ export default function FlowBuilderTab({
   const [drawerDelayUnit, setDrawerDelayUnit] = useState<string>("Minute");
   const [drawerConnectAfterId, setDrawerConnectAfterId] = useState<string | undefined>(undefined);
   // Canvas state
+  const isGlobalScope = scope === "global";
+  const defaultStartLabel = isGlobalScope
+    ? (triggerLabel || "Event Trigger")
+    : `When entering "${stageName}"`;
+
   const [nodes, setNodes] = useState<FlowNode[]>([
-    { id: "start", type: "start", label: "Start", x: 400, y: 80, config: {} },
+    {
+      id: "start",
+      type: "start",
+      label: defaultStartLabel,
+      x: 300,
+      y: 80,
+      config: {
+        scope,
+        triggerType,
+        triggerEvent,
+        triggerLabel,
+        triggerDescription,
+        triggerIconKey,
+        processName,
+        stageName,
+      },
+    },
   ]);
   const [connections, setConnections] = useState<FlowConnection[]>([]);
   const [zoom, setZoom] = useState(1);
@@ -396,8 +466,28 @@ export default function FlowBuilderTab({
   useEffect(() => {
     setNodes(prevNodes => {
       const prevById = new Map(prevNodes.map(n => [n.id, n]));
+      const startNode = prevById.get("start");
+      const updatedStartNode: FlowNode = {
+        id: "start",
+        type: "start",
+        label: defaultStartLabel,
+        x: startNode?.x ?? 300,
+        y: startNode?.y ?? 80,
+        config: {
+          ...(startNode?.config || {}),
+          scope,
+          triggerType,
+          triggerEvent,
+          triggerLabel,
+          triggerDescription,
+          triggerIconKey,
+          processName,
+          stageName,
+        },
+      };
+
       const manualNodes = prevNodes.filter(
-        n => n.id === "start" ||
+        n => n.id !== "start" &&
              (!n.config?.autoGenerated && !n.config?.syntheticFor &&
               !n.id.startsWith("cond-") && !n.id.startsWith("parallel-") && !n.id.startsWith("wait-"))
       );
@@ -662,7 +752,7 @@ export default function FlowBuilderTab({
         });
       });
 
-      return [...manualNodes, ...generatedNodes];
+      return [updatedStartNode, ...manualNodes, ...generatedNodes];
     });
 
     setConnections(prevConnections => {
@@ -746,9 +836,10 @@ export default function FlowBuilderTab({
         return c;
       });
 
-      // 3. Initialize start connections on the very first render if manualConnections is empty
+      // 3. Initialize start connections if no manual connection from start currently exists
       const initialConnections: FlowConnection[] = [];
-      if (manualConnections.length === 0 && isFirstRender.current) {
+      const hasStartConnection = manualConnections.some(c => c.fromId === "start");
+      if (!hasStartConnection) {
         (["stage", "incall", "inchat", "postcall"] as const).forEach(laneKey => {
           const stepsInLane = lanes[laneKey] || [];
           if (stepsInLane.length > 0) {
@@ -763,7 +854,6 @@ export default function FlowBuilderTab({
             });
           }
         });
-        isFirstRender.current = false;
       }
 
       // 4. Generate structural connections (Wait, Cond, Parallel) inside each step
@@ -1596,7 +1686,7 @@ export default function FlowBuilderTab({
                   left: BASE_X + laneIndex * LANE_X_SPACING + NODE_W / 2,
                   top: BASE_Y - 50,
                   transform: "translateX(-50%)",
-                  width: "120px",
+                  width: "140px",
                   textAlign: "center",
                   fontSize: 10,
                   fontWeight: 700,
@@ -1605,7 +1695,13 @@ export default function FlowBuilderTab({
                   color: "#94A3B8",
                 }}
               >
-                {laneKey === "stage" ? "On Stage Entry" : laneKey === "incall" ? "In Call" : laneKey === "inchat" ? "In Chat" : "Post Call"}
+                {laneKey === "stage"
+                  ? (scope === "global" ? "Actions on Trigger" : "On Stage Entry")
+                  : laneKey === "incall"
+                  ? "In Call"
+                  : laneKey === "inchat"
+                  ? "In Chat"
+                  : "Post Call"}
               </div>
             ))}
 
@@ -1657,14 +1753,31 @@ export default function FlowBuilderTab({
                     }`}
                     style={{ minHeight: NODE_H }}
                   >
-                    <div className="px-3 py-2.5 flex items-center gap-2.5">
-                      <div className={`flex-shrink-0 ${style.text}`}>
-                        {isStart ? <Activity className="w-4 h-4" /> : isEnd ? <XCircle className="w-4 h-4" /> : getNodeIcon(node.type)}
+                    <div className="px-3 py-2.5 flex items-start gap-2.5">
+                      <div className={`flex-shrink-0 mt-0.5 ${style.text}`}>
+                        {isStart ? (
+                          getTriggerIconComponent(node.config?.triggerIconKey || triggerIconKey, node.config?.triggerType || triggerType)
+                        ) : isEnd ? (
+                          <XCircle className="w-4 h-4" />
+                        ) : (
+                          getNodeIcon(node.type)
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
+                        {isStart && (
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 uppercase tracking-wider leading-none">
+                              {node.config?.scope === "global" ? "Global Trigger" : "Stage Trigger"}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-1.5">
                           <p className={`text-xs font-semibold truncate ${style.text}`}>
-                            {isStart ? "START" : isEnd ? "END" : node.label}
+                            {isStart
+                              ? (node.label || (node.config?.scope === "global" ? (node.config?.triggerLabel || "Event Trigger") : `When entering "${stageName}"`))
+                              : isEnd
+                              ? "END"
+                              : node.label}
                           </p>
                           {node.config?.conditionsEnabled && (
                             <span
@@ -1675,6 +1788,33 @@ export default function FlowBuilderTab({
                             </span>
                           )}
                         </div>
+
+                        {/* Subtitle / context description */}
+                        {isStart && (
+                          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                            {node.config?.triggerDescription || (node.config?.scope === "global" ? (node.config?.triggerEvent || "Rule entry point") : `Process: ${processName}`)}
+                          </p>
+                        )}
+                        {node.type === "generate-invoice" && (
+                          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                            Draft invoice per appointment
+                          </p>
+                        )}
+                        {node.type === "send-payment" && (
+                          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                            Payment link & checkout
+                          </p>
+                        )}
+                        {node.type === "send-invoice" && (
+                          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                            Send invoice statement
+                          </p>
+                        )}
+                        {(node.type === "move-process" || node.type === "move-stage" || node.type === "move-new-process") && (
+                          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                            {node.config?.stageName ? `Move to: ${node.config.stageName}` : node.config?.processName ? `Move to: ${node.config.processName}` : "Assign process/stage"}
+                          </p>
+                        )}
                         {node.type === "condition" && (node.config.conditionSummary || node.config.value) && (
                           <p className="text-[10px] text-muted-foreground truncate">
                             {node.config.conditionSummary || `${node.config.fieldSource} · ${node.config.operator} · ${node.config.value}`}

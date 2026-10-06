@@ -198,7 +198,7 @@ export default function InvoiceDetailDrawer({
                   </span>
                   <InvoiceProgressBar
                     status={invoice.status}
-                    onStatusChange={(newSt) => updateInvoiceStatus(invoice.id, newSt)}
+                    onStatusChange={(newSt) => updateInvoiceStatus(invoice.id, newSt as any)}
                     interactive={true}
                     size="sm"
                   />

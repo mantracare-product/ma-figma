@@ -23,6 +23,7 @@ import { InfoTooltip } from "../components/help/InfoTooltip";
 import { useDrag, useDrop } from "react-dnd";
 import FlowBuilderTab from "../components/process/FlowBuilderTab";
 import FlowBuilderDrawer from "../components/process/FlowBuilderDrawer";
+import AddAutomationDrawer from "../components/process/AddAutomationDrawer";
 import StageAutomationCards from "../components/process/StageAutomationCards";
 import { WorkflowStep } from "../types/workflow";
 import { SelectFieldsModal } from "../components/help/FieldManager";
@@ -6563,293 +6564,43 @@ export default function Process() {
                       )}
 
                       {/* Automation Side Drawer */}
-                      {workflowStepsDrawerOpen && (
-                        <>
-                          {/* Backdrop */}
-                          <div
-                            className="fixed inset-0 z-40"
-                            style={{ backgroundColor: 'rgba(0,0,0,0.30)' }}
-                            onClick={() => setWorkflowStepsDrawerOpen(false)}
-                          />
-                          {/* Drawer panel — 75vw, full height, anchored right */}
-                          <div
-                            className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border shadow-2xl transition-all"
-                            style={{ width: '75vw', minWidth: '75vw', maxWidth: '75vw', boxShadow: '-4px 0 24px rgba(0,0,0,0.14)' }}
-                          >
-                            {/* Header */}
-                            <div className="flex-shrink-0 px-6 pt-5 pb-4 border-b border-border bg-white">
-                              <div className="flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0">
-                                    {automationDrawerView === "flowbuilder" ? (
-                                      <GitBranch className="w-5 h-5" />
-                                    ) : (
-                                      <Zap className="w-5 h-5" />
-                                    )}
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                        {automationDrawerView === "flowbuilder" ? "Automation Flow Builder" : "Add Automation"}
-                                      </h2>
-                                      {(() => {
-                                        const currentStageObj = selectedProcessData?.stages.find((s) => s.id === expandedStage);
-                                        return currentStageObj ? (
-                                          <span
-                                            className="text-[11px] font-semibold px-2 py-0.5 rounded-full text-white"
-                                            style={{ backgroundColor: currentStageObj.color || "#2563EB" }}
-                                          >
-                                            {currentStageObj.name}
-                                          </span>
-                                        ) : null;
-                                      })()}
-                                    </div>
-                                    <p className="text-xs text-gray-500 mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                      {automationDrawerView === "flowbuilder"
-                                        ? "Visual canvas for stage triggers, conditions, delays, and action nodes."
-                                        : "Choose and configure the workflow step before adding it to this stage."}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {/* Center / Right: View Mode Toggle [ Step Library | Flow Builder ] */}
-                                <div className="flex items-center gap-2">
-                                  <div className="flex items-center p-1 bg-gray-100 rounded-xl border border-gray-200/80">
-                                    <button
-                                      type="button"
-                                      onClick={() => setAutomationDrawerView("library")}
-                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                        automationDrawerView === "library"
-                                          ? "bg-white text-blue-700 shadow-xs border border-gray-200/60 font-bold"
-                                          : "text-gray-600 hover:text-gray-900"
-                                      }`}
-                                    >
-                                      <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                                      <span>Step Library</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setAutomationDrawerView("flowbuilder")}
-                                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                                        automationDrawerView === "flowbuilder"
-                                          ? "bg-white text-blue-700 shadow-xs border border-gray-200/60 font-bold"
-                                          : "text-gray-600 hover:text-gray-900"
-                                      }`}
-                                    >
-                                      <GitBranch className="w-3.5 h-3.5 text-blue-600" />
-                                      <span>Flow Builder</span>
-                                    </button>
-                                  </div>
-
-                                  <button
-                                    onClick={() => setWorkflowStepsDrawerOpen(false)}
-                                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 cursor-pointer ml-2"
-                                    title="Close Drawer"
-                                  >
-                                    <X className="w-5 h-5 text-muted-foreground" />
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Search — only in library view */}
-                              {automationDrawerView === "library" && (
-                                <div className="relative mt-3.5">
-                                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                  <input
-                                    type="text"
-                                    value={workflowStepSearch}
-                                    onChange={e => setWorkflowStepSearch(e.target.value)}
-                                    placeholder="Search workflow steps..."
-                                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  />
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Body */}
-                            {automationDrawerView === "flowbuilder" ? (
-                              <div className="flex-1 overflow-hidden relative bg-[#FAFBFD]">
-                                <FlowBuilderTab
-                                  processName={selectedProcessData?.name}
-                                  stageName={selectedProcessData?.stages.find((s) => s.id === expandedStage)?.name}
-                                  processes={processes}
-                                  currentProcessId={selectedProcess || undefined}
-                                  workflowSteps={workflowSteps}
-                                  onWorkflowStepsChange={(newSteps) => {
-                                    setWorkflowSteps(newSteps);
-                                    if (selectedProcess && expandedStage) {
-                                      setProcesses((prev) =>
-                                        prev.map((p) =>
-                                          p.id !== selectedProcess
-                                            ? p
-                                            : {
-                                                ...p,
-                                                stages: p.stages.map((s) =>
-                                                  s.id !== expandedStage ? s : { ...s, workflowSteps: newSteps }
-                                                ),
-                                              }
-                                        )
-                                      );
+                      {/* Refactored Scope-Aware Automation Drawer (Stage Scope) */}
+                      <AddAutomationDrawer
+                        isOpen={workflowStepsDrawerOpen}
+                        onClose={() => setWorkflowStepsDrawerOpen(false)}
+                        scope="stage"
+                        stageRef={{
+                          processId: selectedProcess || "",
+                          stageId: expandedStage || "",
+                          stageName: selectedProcessData?.stages.find((s) => s.id === expandedStage)?.name,
+                          processName: selectedProcessData?.name,
+                        }}
+                        processName={selectedProcessData?.name}
+                        stageName={selectedProcessData?.stages.find((s) => s.id === expandedStage)?.name}
+                        stageColor={selectedProcessData?.stages.find((s) => s.id === expandedStage)?.color}
+                        stageType={selectedProcessData?.stages.find((s) => s.id === expandedStage)?.stageType}
+                        processes={processes}
+                        currentProcessId={selectedProcess || undefined}
+                        workflowSteps={workflowSteps}
+                        onWorkflowStepsChange={(newSteps) => {
+                          setWorkflowSteps(newSteps);
+                          if (selectedProcess && expandedStage) {
+                            setProcesses((prev) =>
+                              prev.map((p) =>
+                                p.id !== selectedProcess
+                                  ? p
+                                  : {
+                                      ...p,
+                                      stages: p.stages.map((s) =>
+                                        s.id !== expandedStage ? s : { ...s, workflowSteps: newSteps }
+                                      ),
                                     }
-                                  }}
-                                  stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
-                                />
-                              </div>
-                            ) : (
-                              /* Body — two column layout for Step Library */
-                              <div className="flex flex-1 overflow-hidden">
-                              {/* Left Sidebar */}
-                              <div className="w-[220px] flex-shrink-0 border-r border-border overflow-y-auto py-2 flex flex-col gap-1">
-                                {[
-                                  { key: "all", icon: <Sparkles className="w-4 h-4" />, name: "All" },
-                                  { key: "workflow", icon: <GitBranch className="w-4 h-4" />, name: "Workflow Logic" },
-                                  { key: "callerengagement", icon: <Phone className="w-4 h-4" />, name: "Caller Engagement" },
-                                  { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
-                                  { key: "data", icon: <Database className="w-4 h-4" />, name: "Data & Assignment" },
-                                  { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
-                                  { key: "records", icon: <FileText className="w-4 h-4" />, name: "Records" },
-                                ].map((cat) => {
-                                  const active = workflowStepCategory === cat.key;
-                                  return (
-                                    <button
-                                      key={cat.key}
-                                      onClick={() => setWorkflowStepCategory(cat.key)}
-                                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-l-2 hover:bg-muted/40"
-                                      style={{
-                                        borderLeftColor: active ? '#2563EB' : 'transparent',
-                                        backgroundColor: active ? '#EFF6FF' : 'transparent',
-                                      }}
-                                    >
-                                      <span className="flex-shrink-0" style={{ color: active ? '#2563EB' : '#64748B' }}>
-                                        {cat.icon}
-                                      </span>
-                                      <span
-                                        className="text-sm font-semibold"
-                                        style={{
-                                          color: active ? '#2563EB' : '#020817',
-                                          fontFamily: 'DM Sans, sans-serif'
-                                        }}
-                                      >
-                                        {cat.name}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-
-                              {/* Right Steps List */}
-                              <div className="flex-1 overflow-y-auto">
-                                {(() => {
-                                  const currentStage = selectedProcessData?.stages.find((s) => s.id === expandedStage);
-                                  const currentStageIndex = selectedProcessData?.stages.findIndex((s) => s.id === expandedStage);
-                                  const isCurrentStageLast = Boolean(
-                                    currentStage?.isFinal ||
-                                    (selectedProcessData && currentStageIndex !== undefined && currentStageIndex !== -1 && currentStageIndex === selectedProcessData.stages.length - 1)
-                                  );
-
-                                  const allSteps = [
-                                    { key: "processmovement", name: "Assign Process / Stage", desc: "Move the contact to a specific process and stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
-                                    { key: "movetonewprocess", name: "Move to New Process", desc: "Move user to a new process and stage to continue the pipeline.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
-                                    { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
-                                    { key: "callhangup", name: "Auto Hangup", desc: "Automatically end the call after the AI completes its interaction, with an optional closing message.", iconKey: "phoneoff", cats: ["all", "callerengagement"], popular: false },
-                                    { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "callerengagement"], popular: false },
-                                    { key: "idlemessages", name: "Idle Messages", desc: "Configure messages the AI speaks when the caller has not responded.", iconKey: "messagesquare", cats: ["all", "callerengagement"], popular: false },
-                                    { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
-                                    { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
-                                    { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
-                                    { key: "send-invoice", name: "Send Invoice", desc: "Send the generated invoice to the client via WhatsApp, SMS, or Email.", iconKey: "filetext", cats: ["all", "communication"], popular: false },
-                                    { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "data"], popular: false },
-                                    { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
-                                    { key: "wh_trigger", name: "API Automation", desc: "Trigger actions in external systems using your connected API integrations.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
-                                    { key: "webhook_trigger", name: "Webhook Automation", desc: "Send an event payload to a connected webhook when this step runs.", iconKey: "webhook", cats: ["all", "webhook"], popular: false },
-                                    { key: "generate_invoice", name: "Generate Invoice", desc: "Generate invoice for appointment (idempotent per appointment).", iconKey: "filetext", cats: ["all", "records"], popular: true },
-                                    { key: "send_payment", name: "Send Payment", desc: "Send payment link to client via preferred channel.", iconKey: "creditcard", cats: ["all", "records", "communication"], popular: false },
-                                  ];
-                                  const iconMap: Record<string, React.ReactNode> = {
-                                    clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
-                                    chevronright: <ChevronRight className="w-4 h-4 text-white" />, zap: <Zap className="w-4 h-4 text-white" />,
-                                    edit: <Edit className="w-4 h-4 text-white" />, usercheck: <UserCheck className="w-4 h-4 text-white" />,
-                                    phonecall: <PhoneCall className="w-4 h-4 text-white" />, messagecircle: <MessageCircle className="w-4 h-4 text-white" />,
-                                    messagesquare: <MessageSquare className="w-4 h-4 text-white" />, mail: <Mail className="w-4 h-4 text-white" />,
-                                    filetext: <FileText className="w-4 h-4 text-white" />, clipboardlist: <ClipboardList className="w-4 h-4 text-white" />,
-                                    globe: <Globe className="w-4 h-4 text-white" />, calendar: <Calendar className="w-4 h-4 text-white" />,
-                                    refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
-                                    lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
-                                    layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
-                                    gitbranch: <GitBranch className="w-4 h-4 text-white" />,
-                                    volume2: <Volume2 className="w-4 h-4 text-white" />,
-                                    webhook: <Webhook className="w-4 h-4 text-white" />,
-                                    phoneoff: <PhoneOff className="w-4 h-4 text-white" />,
-                                    creditcard: <CreditCard className="w-4 h-4 text-white" />,
-                                  };
-                                  const filtered = allSteps.filter(s =>
-                                    s.cats.includes(workflowStepCategory) &&
-                                    (workflowStepSearch === "" || s.name.toLowerCase().includes(workflowStepSearch.toLowerCase()) || s.desc.toLowerCase().includes(workflowStepSearch.toLowerCase()))
-                                  );
-
-                                  return filtered.map((step, i) => {
-                                    const isSelected = selectedWorkflowStepCard === step.key;
-                                    const allowedTriggers = STEP_ALLOWED_TRIGGERS[step.key] || [];
-                                    const isOnlyInCall = allowedTriggers.length === 1 && allowedTriggers[0] === "incall";
-                                    const isUnavailable = isOnlyInCall && (stageType === "No Call Activity" || stageType === "Transfer to Human");
-
-                                    const buttonElement = (
-                                      <button
-                                        key={step.key}
-                                        onClick={isUnavailable ? undefined : () => {
-                                          resetStepDetailState();
-                                          setCurrentEditingStep({ id: `${step.key}-${Date.now()}`, name: step.name, description: step.desc, iconKey: step.iconKey, stepKey: step.key });
-                                          setIsCreatingNewStep(true);
-                                          setWorkflowStepsDrawerOpen(false);
-                                          setStepDetailDrawerOpen(true);
-                                        }}
-                                        className={`w-full flex items-start gap-4 px-5 py-4 text-left transition-colors ${isUnavailable ? "opacity-40 pointer-events-none cursor-not-allowed select-none" : ""}`}
-                                        style={{
-                                          borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none',
-                                          outline: isSelected ? '2px solid #2563EB' : 'none',
-                                          outlineOffset: '-2px',
-                                          backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
-                                        }}
-                                        onMouseEnter={e => { if (!isUnavailable && !isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFF'; }}
-                                        onMouseLeave={e => { if (!isUnavailable) (e.currentTarget as HTMLElement).style.backgroundColor = isSelected ? '#EFF6FF' : 'transparent'; }}
-                                      >
-                                        <div className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: '#2563EB' }}>
-                                          {iconMap[step.iconKey]}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</span>
-                                            {step.popular && (
-                                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold text-white" style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Popular</span>
-                                            )}
-                                            {isUnavailable && (
-                                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-600 border border-red-100" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                                In-Call only — unavailable
-                                              </span>
-                                            )}
-                                          </div>
-                                          <p className="text-sm mt-0.5 leading-snug" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{step.desc}</p>
-                                        </div>
-                                        <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
-                                      </button>
-                                    );
-
-                                    return isUnavailable ? (
-                                      <Tooltip key={step.key} text="In-Call only — unavailable" placement="top">
-                                        <div className="w-full pointer-events-auto">
-                                          {buttonElement}
-                                        </div>
-                                      </Tooltip>
-                                    ) : buttonElement;
-                                  });
-                                })()}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
+                              )
+                            );
+                          }
+                        }}
+                        stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
+                      />
 
                       {/* Step Detail Drawer */}
                       <StepDetailDrawer

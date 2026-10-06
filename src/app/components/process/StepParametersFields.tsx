@@ -2112,6 +2112,115 @@ export default function StepParametersFields({
               </div>
             )}
 
+            {(stepKey === "generate_invoice" || stepKey === "generate-invoice") && (
+              <div className="space-y-4">
+                <div className="p-3 bg-purple-50/70 border border-purple-200/80 rounded-xl text-xs text-purple-800 space-y-1">
+                  <span className="font-bold flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-purple-600" />
+                    Idempotent Billing Generation
+                  </span>
+                  <p className="text-[11px] text-purple-700 leading-relaxed">
+                    Automatically creates an invoice in draft status associated with the active appointment. Exactly one invoice is generated per record to prevent duplicate billing.
+                  </p>
+                </div>
+                {renderField("Invoice Initial Status",
+                  <select
+                    value={params.initialStatus || "draft"}
+                    onChange={(e) => onChange({ initialStatus: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                  >
+                    <option value="draft">Draft (Requires clinic review)</option>
+                    <option value="sent">Sent (Instantly ready for dispatch)</option>
+                  </select>
+                )}
+                {renderField("Line Item Source",
+                  <select
+                    value={params.itemSource || "appointment_service"}
+                    onChange={(e) => onChange({ itemSource: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                  >
+                    <option value="appointment_service">Auto-pull from Scheduled Appointment Service</option>
+                    <option value="custom">Standard Clinical Consultation Fee</option>
+                  </select>
+                )}
+                {renderField("Payment Terms",
+                  <select
+                    value={params.paymentTerms || "receipt"}
+                    onChange={(e) => onChange({ paymentTerms: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                  >
+                    <option value="receipt">Due on Receipt</option>
+                    <option value="net15">Net 15 Days</option>
+                    <option value="net30">Net 30 Days</option>
+                  </select>
+                )}
+              </div>
+            )}
+
+            {(stepKey === "send_payment" || stepKey === "send-payment") && (
+              <div className="space-y-4">
+                {renderField("Payment Provider / Link Type",
+                  <select
+                    value={params.paymentProvider || "stripe"}
+                    onChange={(e) => onChange({ paymentProvider: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                  >
+                    <option value="stripe">Online Payment Link (Stripe Hosted)</option>
+                    <option value="clinic_portal">Patient Portal Direct Pay</option>
+                  </select>
+                )}
+                {renderField("Dispatch Notification Channel",
+                  <select
+                    value={params.deliveryChannel || "whatsapp_sms"}
+                    onChange={(e) => onChange({ deliveryChannel: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                  >
+                    <option value="whatsapp_sms">WhatsApp & SMS Notification</option>
+                    <option value="whatsapp">WhatsApp Only</option>
+                    <option value="sms">SMS Text Message Only</option>
+                    <option value="email">Email Notification Only</option>
+                  </select>
+                )}
+                {renderField("Custom Payment Message (Optional)",
+                  <textarea
+                    value={params.customMessage || ""}
+                    onChange={(e) => onChange({ customMessage: e.target.value })}
+                    placeholder="Hi {client_name}, here is your secure checkout link for your session..."
+                    rows={2}
+                    className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                  />
+                )}
+              </div>
+            )}
+
+            {(stepKey === "send-invoice" || stepKey === "send_invoice") && (
+              <div className="space-y-4">
+                {renderField("Delivery Channel",
+                  <select
+                    value={params.channel || "whatsapp"}
+                    onChange={(e) => onChange({ channel: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                  >
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="email">Email</option>
+                    <option value="sms">SMS</option>
+                  </select>
+                )}
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="includePdfAttachment"
+                    checked={params.includePdf !== false}
+                    onChange={(e) => onChange({ includePdf: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="includePdfAttachment" className="text-xs text-gray-700 font-medium">
+                    Attach downloadable PDF invoice statement
+                  </label>
+                </div>
+              </div>
+            )}
+
             {/* ───────────── GENERIC NodeType FALLBACKS ───────────── */}
             {stepKey === "condition" && (
               <div className="space-y-4">

@@ -6,6 +6,14 @@ import {
   DEFAULT_ENTITY_PROCESSES,
 } from "./useProcessStore";
 import type { WorkflowStep } from "../app/types/workflow";
+export type {
+  Automation,
+  AutomationStep,
+  StageTrigger,
+  EventTrigger,
+  AutomationScope,
+  RunContext,
+} from "../app/types/automation";
 
 export const AUTOMATION_STORE_EVENT = "mantra_automation_rules_updated";
 export const STAGE_MOVES_STORE_EVENT = "mantra_stage_moves_updated";
