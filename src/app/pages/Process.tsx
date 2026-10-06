@@ -595,20 +595,6 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
       <span className="flex-1 truncate font-medium">
         {stage.name}
       </span>
-      {isFinal && (
-        <span className="text-[10px] font-bold bg-pink-50 text-pink-600 border border-pink-200 px-1.5 py-0.5 rounded-full shrink-0">
-          Final
-        </span>
-      )}
-      {(stage.intentTrigger || (stage.nextProcessTransitions && stage.nextProcessTransitions.length > 0)) && (
-        <span
-          className="text-[9px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full shrink-0 flex items-center gap-0.5"
-          title="Moves here via Automation / Intent"
-        >
-          <Zap className="w-2.5 h-2.5 text-indigo-500" />
-          <span>Auto</span>
-        </span>
-      )}
     </div>
   );
 };
@@ -3173,72 +3159,33 @@ export default function Process() {
                           >
                             No stages yet
                           </div>
-                        ) : (() => {
-                          const journeyStages = process.stages.filter(
-                            (s) => !s.isFinalStage && !s.isFinal && s.stagePosition !== "final"
-                          );
-                          const lastStages = process.stages.filter(
-                            (s) => s.isFinalStage || s.isFinal || s.stagePosition === "final"
-                          );
+                        ) : (
+                          <div className="space-y-1">
+                            {process.stages.map((stage, originalIdx) => {
+                              const isStageSelected =
+                                selectedProcess === process.id &&
+                                expandedStage === stage.id &&
+                                viewMode === "stage";
 
-                          const renderStageItem = (stage: Stage) => {
-                            const isStageSelected =
-                              selectedProcess === process.id &&
-                              expandedStage === stage.id &&
-                              viewMode === "stage";
-                            const originalIdx = process.stages.findIndex((s) => s.id === stage.id);
-
-                            return (
-                              <SidebarDraggableStage
-                                key={stage.id}
-                                processId={process.id}
-                                stage={stage}
-                                index={originalIdx >= 0 ? originalIdx : 0}
-                                totalStages={process.stages.length}
-                                isSelected={isStageSelected}
-                                onSelect={() => {
-                                  setSelectedProcess(process.id);
-                                  setExpandedStage(stage.id);
-                                  setViewMode("stage");
-                                }}
-                                onMoveStage={moveStageForProcess}
-                              />
-                            );
-                          };
-
-                          return (
-                            <div className="space-y-1">
-                              {/* 1. Journey / Sequential Stages */}
-                              {journeyStages.map(renderStageItem)}
-
-                              {/* 2. Partition Line (if last stages exist) */}
-                              {lastStages.length > 0 && (
-                                <div className="pt-2.5 pb-1.5 select-none">
-                                  <div className="relative flex items-center justify-between">
-                                    <div className="flex-grow border-t border-dashed border-gray-300" />
-                                    <div className="flex items-center gap-1.5 px-2 bg-transparent text-slate-500">
-                                      <span className="text-[11px] uppercase tracking-wider font-semibold">
-                                        Possible last stages
-                                      </span>
-                                      <Tooltip
-                                        text="Last stages represent terminal pipeline outcomes (e.g. Interested, Not Interested, Paid, Void) where records complete their journey or trigger cross-process transitions."
-                                        placement="top"
-                                      >
-                                        <span className="cursor-help inline-flex items-center text-slate-400 hover:text-slate-600">
-                                          <Info className="w-3 h-3" />
-                                        </span>
-                                      </Tooltip>
-                                    </div>
-                                    <div className="flex-grow border-t border-dashed border-gray-300" />
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* 3. Terminal / Last Stages */}
-                              {lastStages.map(renderStageItem)}
-                            </div>
-                          );
-                        })()}
+                              return (
+                                <SidebarDraggableStage
+                                  key={stage.id}
+                                  processId={process.id}
+                                  stage={stage}
+                                  index={originalIdx}
+                                  totalStages={process.stages.length}
+                                  isSelected={isStageSelected}
+                                  onSelect={() => {
+                                    setSelectedProcess(process.id);
+                                    setExpandedStage(stage.id);
+                                    setViewMode("stage");
+                                  }}
+                                  onMoveStage={moveStageForProcess}
+                                />
+                              );
+                            })}
+                          </div>
+                        )}
 
                         <button
                           type="button"

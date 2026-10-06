@@ -433,11 +433,6 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
       <span className="flex-1 truncate font-medium">
         {stage.name}
       </span>
-      {isFinal && (
-        <span className="text-[10px] font-bold bg-pink-50 text-pink-600 border border-pink-200 px-1.5 py-0.5 rounded-full shrink-0">
-          Final
-        </span>
-      )}
     </div>
   );
 };
