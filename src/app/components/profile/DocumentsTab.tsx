@@ -22,6 +22,7 @@ import {
 import GenerateDocumentDrawer from "./GenerateDocumentDrawer";
 import DocumentPreviewDrawer from "./DocumentPreviewDrawer";
 import AddDocumentTemplateDrawer from "./AddDocumentTemplateDrawer";
+import { TableComponent, TableColumn } from "../ui/TableComponent";
 
 export interface DocumentsTabProps {
   client: {
@@ -57,6 +58,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
   const [showGenerateDocDrawer, setShowGenerateDocDrawer] = useState(false);
   const [activeMenuDoc, setActiveMenuDoc] = useState<StoredClientDocument | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<any>>(new Set());
 
   // Upload & Template Dropdown State
   const [showActionDropdown, setShowActionDropdown] = useState(false);
@@ -527,184 +529,108 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       </div>
 
       {/* Available Documents Table */}
-      <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-xs">
-        <table className="w-full table-fixed">
-          <thead>
-            <tr style={{ backgroundColor: "#1F2937", height: "44px" }}>
-              <th style={{ width: "48px" }} className="px-3 text-center align-middle">
-                <input type="checkbox" className="w-4 h-4 rounded border-gray-300" />
-              </th>
-              <th style={{ width: "26%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                <div className="flex items-center gap-1">
-                  <span>Document Name</span>
-                  <TabFieldTooltip text="Official file title and document format" />
-                </div>
-              </th>
-              <th style={{ width: "16%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                <div className="flex items-center gap-1">
-                  <span>Category</span>
-                  <TabFieldTooltip text="Functional category classification assigned to this document" />
-                </div>
-              </th>
-              <th style={{ width: "18%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                <div className="flex items-center gap-1">
-                  <span>Value By</span>
-                  <TabFieldTooltip text="The source from which field values and placeholders were filled" />
-                </div>
-              </th>
-              <th style={{ width: "15%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                <div className="flex items-center gap-1">
-                  <span>Uploaded By</span>
-                  <TabFieldTooltip text="Staff member, client, or system service that generated this file" />
-                </div>
-              </th>
-              <th style={{ width: "13%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                <div className="flex items-center gap-1">
-                  <span>Date</span>
-                  <TabFieldTooltip text="Creation and upload timestamp" />
-                </div>
-              </th>
-              <th style={{ width: "8%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                <div className="flex items-center gap-1">
-                  <span>Size</span>
-                  <TabFieldTooltip text="Document file size on storage" />
-                </div>
-              </th>
-              <th style={{ width: "48px" }} className="px-3 text-center text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredDocuments.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="text-center py-12 text-gray-400 italic text-sm">
-                  No documents found for this client.
-                </td>
-              </tr>
-            ) : (
-              filteredDocuments.map((doc, i) => {
-                return (
-                  <tr
-                    key={doc.id}
-                    style={{
-                      height: "52px",
-                      backgroundColor: i % 2 === 0 ? "#fff" : "#FAFAFA",
-                      borderBottom: "1px solid #EEEEEE",
-                    }}
-                    className="hover:bg-[#F5F8FF] transition-colors"
-                  >
-                    <td style={{ width: "48px" }} className="px-3 text-center align-middle">
-                      <input type="checkbox" className="w-4 h-4 rounded border-gray-300" />
-                    </td>
-                    <td style={{ width: "26%" }} className="px-3 align-middle">
-                      <button
-                        onClick={() => setPreviewDoc(doc)}
-                        className="text-left font-medium text-sm text-gray-900 hover:text-blue-600 transition-colors truncate cursor-pointer w-full block"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                        title={doc.name}
-                      >
-                        {doc.name}
-                      </button>
-                    </td>
-
-                    {/* Category Column */}
-                    <td style={{ width: "16%", fontFamily: "DM Sans, sans-serif" }} className="px-3 text-xs truncate text-slate-800 font-medium align-middle">
-                      {doc.category || "General"}
-                    </td>
-
-                    {/* Value By Column */}
-                    <td style={{ width: "18%", fontFamily: "DM Sans, sans-serif" }} className="px-3 text-xs truncate text-slate-700 font-medium align-middle">
-                      {doc.valueBy || (doc.templateId ? "Client Profile Data" : doc.uploadedBy.includes("WebForm") ? "WebForm Submission" : "Manual Upload")}
-                    </td>
-
-                    <td style={{ width: "15%", fontFamily: "DM Sans, sans-serif", color: "#424242" }} className="px-3 text-xs truncate align-middle">
-                      {doc.uploadedBy}
-                    </td>
-                    <td style={{ width: "13%", fontFamily: "Outfit, sans-serif" }} className="px-3 text-xs text-gray-500 whitespace-nowrap align-middle">
-                      {doc.uploadedDate}
-                    </td>
-                    <td style={{ width: "8%", fontFamily: "Outfit, sans-serif" }} className="px-3 text-xs text-gray-500 whitespace-nowrap align-middle">
-                      {doc.fileSize}
-                    </td>
-                    <td style={{ width: "48px" }} className="px-3 text-center align-middle">
-                      <div className="flex items-center justify-center">
-                        <button
-                          onClick={(e) => handleOpenDocMenu(e, doc)}
-                          className={`w-7 h-7 flex items-center justify-center rounded transition-colors cursor-pointer ${
-                            activeMenuDoc?.id === doc.id ? "bg-slate-200 text-slate-900" : "hover:bg-gray-200 text-gray-500"
-                          }`}
-                          title="Actions"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Fixed Positioning Action Dropdown (Z-Index Relative to Whole Screen & Drawer) */}
-      {activeMenuDoc && menuPos && (
-        <>
-          <div
-            className="fixed inset-0 z-[9998]"
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveMenuDoc(null);
-              setMenuPos(null);
-            }}
-          />
-          <div
-            className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-2xl py-1 min-w-[150px] animate-in fade-in-50 zoom-in-95 duration-100"
-            style={{
-              top: `${menuPos.top}px`,
-              right: `${menuPos.right}px`,
-              fontFamily: "Outfit, sans-serif",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => {
-                setPreviewDoc(activeMenuDoc);
-                setActiveMenuDoc(null);
-                setMenuPos(null);
-              }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer text-left"
-            >
-              <Eye className="w-3.5 h-3.5 text-slate-500" />
-              <span>Preview</span>
-            </button>
-            <button
-              onClick={() => {
-                handleDownloadDoc(activeMenuDoc);
-                setActiveMenuDoc(null);
-                setMenuPos(null);
-              }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer text-left"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
-              <span>Download</span>
-            </button>
-            <div className="border-t border-slate-100 my-1" />
-            <button
-              onClick={() => {
-                handleDeleteDoc(activeMenuDoc.id, activeMenuDoc.name);
-                setActiveMenuDoc(null);
-                setMenuPos(null);
-              }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer text-left font-medium"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-              <span>Delete</span>
-            </button>
-          </div>
-        </>
-      )}
+      <TableComponent
+        columns={[
+          {
+            id: "name",
+            key: "name",
+            header: "Document Name",
+            accessorKey: "name",
+            render: (doc) => (
+              <button
+                onClick={() => setPreviewDoc(doc)}
+                className="text-left font-medium text-sm text-gray-900 hover:text-blue-600 transition-colors truncate cursor-pointer w-full block"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+                title={doc.name}
+              >
+                {doc.name}
+              </button>
+            ),
+          },
+          {
+            id: "category",
+            key: "category",
+            header: "Category",
+            accessorKey: "category",
+            render: (doc) => (
+              <span className="text-xs truncate text-slate-800 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                {doc.category || "General"}
+              </span>
+            ),
+          },
+          {
+            id: "valueBy",
+            key: "valueBy",
+            header: "Value By",
+            render: (doc) => (
+              <span className="text-xs truncate text-slate-700 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                {doc.valueBy || (doc.templateId ? "Client Profile Data" : doc.uploadedBy.includes("WebForm") ? "WebForm Submission" : "Manual Upload")}
+              </span>
+            ),
+          },
+          {
+            id: "uploadedBy",
+            key: "uploadedBy",
+            header: "Uploaded By",
+            accessorKey: "uploadedBy",
+            render: (doc) => (
+              <span className="text-xs truncate" style={{ fontFamily: "DM Sans, sans-serif", color: "#424242" }}>
+                {doc.uploadedBy}
+              </span>
+            ),
+          },
+          {
+            id: "uploadedDate",
+            key: "uploadedDate",
+            header: "Date",
+            accessorKey: "uploadedDate",
+            render: (doc) => (
+              <span className="text-xs text-gray-500 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+                {doc.uploadedDate}
+              </span>
+            ),
+          },
+          {
+            id: "fileSize",
+            key: "fileSize",
+            header: "Size",
+            accessorKey: "fileSize",
+            render: (doc) => (
+              <span className="text-xs text-gray-500 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+                {doc.fileSize}
+              </span>
+            ),
+          },
+        ]}
+        data={filteredDocuments}
+        getRowId={(doc) => doc.id}
+        enableSelection={true}
+        selectedIds={selectedDocIds}
+        onSelectionChange={setSelectedDocIds}
+        enableColumnCustomization={true}
+        tableId="client-profile-documents"
+        emptyMessage="No documents found for this client."
+        rowActions={[
+          {
+            label: "Preview",
+            icon: <Eye className="w-3.5 h-3.5 text-slate-500" />,
+            onClick: (doc) => setPreviewDoc(doc),
+          },
+          {
+            label: "Download",
+            icon: <Download className="w-3.5 h-3.5 text-slate-500" />,
+            onClick: (doc) => handleDownloadDoc(doc),
+          },
+          {
+            label: "Delete",
+            icon: <Trash2 className="w-3.5 h-3.5 text-rose-500" />,
+            onClick: (doc) => handleDeleteDoc(doc.id, doc.name),
+            isDanger: true,
+          },
+        ]}
+        pagination={true}
+        defaultRowsPerPage={10}
+      />
 
       {/* Document Preview Drawer (Right-side drawer) */}
       {previewDoc && (

@@ -24,6 +24,7 @@ import {
   RefreshCw,
   SlidersHorizontal,
 } from "lucide-react";
+import { TableComponent, TableColumn } from "../ui/TableComponent";
 import {
   ResponsiveContainer,
   BarChart,
@@ -700,93 +701,95 @@ export default function ReportViewerModal({
                   </div>
                 </div>
               ) : (
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
-                    <tr>
-                      {columnsToDisplay.map((head) => (
-                        <th key={head} className="py-3 px-4">
-                          {head.replace(/([A-Z])/g, " $1").toUpperCase()}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-                    {displayRows.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                        {columnsToDisplay.map((colKey) => {
-                          const val = row[colKey];
-                          return (
-                            <td key={colKey} className="py-3 px-4">
-                              {colKey === "status" ? (
-                                getStatusBadge(val)
-                              ) : colKey === "id" ? (
-                                <span className="font-bold text-blue-600">{val}</span>
-                              ) : colKey === "amount" || colKey === "cost" || colKey === "value" ? (
-                                <span className="font-bold text-slate-900">
-                                  {typeof val === "number" ? `$${val.toFixed(2)}` : val}
-                                </span>
-                              ) : colKey === "timeInStage" ? (
-                                <span className="font-bold text-blue-700">{val} days</span>
-                              ) : (
-                                String(val ?? "")
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                  {report.fieldCalculations && Object.keys(report.fieldCalculations).length > 0 && (
-                    <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300 text-slate-800 text-[11px] sticky bottom-0 z-10 shadow-xs">
-                      <tr>
-                        {columnsToDisplay.map((colKey, colIdx) => {
-                          const func = report.fieldCalculations?.[colKey];
-                          if (!func) {
-                            return (
-                              <td key={colKey} className="py-2.5 px-4 text-slate-400 font-normal">
-                                {colIdx === 0 ? "Totals / Summary" : "—"}
-                              </td>
-                            );
-                          }
-                          const values = displayRows.map((r) => r[colKey]).filter((v) => v !== undefined && v !== null);
-                          const numVals = values
-                            .map((v) => (typeof v === "number" ? v : parseFloat(String(v).replace(/[^0-9.-]+/g, ""))))
-                            .filter((n) => !isNaN(n));
+                (() => {
+                  const reportColumns: TableColumn<Record<string, any>>[] = columnsToDisplay.map((colKey) => ({
+                    id: colKey,
+                    key: colKey,
+                    header: colKey.replace(/([A-Z])/g, " $1").toUpperCase(),
+                    render: (row) => {
+                      const val = row[colKey];
+                      return colKey === "status" ? (
+                        getStatusBadge(val)
+                      ) : colKey === "id" ? (
+                        <span className="font-bold text-blue-600">{val}</span>
+                      ) : colKey === "amount" || colKey === "cost" || colKey === "value" ? (
+                        <span className="font-bold text-slate-900">
+                          {typeof val === "number" ? `$${val.toFixed(2)}` : val}
+                        </span>
+                      ) : colKey === "timeInStage" ? (
+                        <span className="font-bold text-blue-700">{val} days</span>
+                      ) : (
+                        <span>{String(val ?? "")}</span>
+                      );
+                    },
+                  }));
 
-                          let label = "";
-                          if (func === "sum" && numVals.length > 0) {
-                            const sum = numVals.reduce((a, b) => a + b, 0);
-                            label = colKey === "amount" || colKey === "cost" || colKey === "value"
-                              ? `$${sum.toFixed(2)}`
-                              : `${Math.round(sum * 10) / 10}`;
-                          } else if (func === "avg" && numVals.length > 0) {
-                            const avg = numVals.reduce((a, b) => a + b, 0) / numVals.length;
-                            label = colKey === "amount" || colKey === "cost" || colKey === "value"
-                              ? `$${avg.toFixed(2)}`
-                              : `${avg.toFixed(1)}${colKey === "timeInStage" ? " days" : ""}`;
-                          } else if (func === "count") {
-                            label = `${values.length} records`;
-                          } else if (func === "max" && numVals.length > 0) {
-                            label = `Max: ${Math.max(...numVals)}`;
-                          } else if (func === "min" && numVals.length > 0) {
-                            label = `Min: ${Math.min(...numVals)}`;
-                          } else {
-                            label = `${values.length}`;
-                          }
+                  return (
+                    <TableComponent
+                      columns={reportColumns}
+                      data={displayRows}
+                      getRowId={(row, idx) => row.id ? String(row.id) : `row-${idx}`}
+                      enableSelection={false}
+                      enableColumnCustomization={true}
+                      tableId={`report-${report.id}`}
+                      emptyMessage="No records match the configured filter criteria"
+                      pagination={true}
+                      defaultRowsPerPage={20}
+                      renderFooter={(orderedCols) => {
+                        if (!report.fieldCalculations || Object.keys(report.fieldCalculations).length === 0) return null;
+                        return (
+                          <tr>
+                            {orderedCols.map((col, colIdx) => {
+                              const colKey = col.id || col.key || col.header;
+                              const func = report.fieldCalculations?.[colKey];
+                              if (!func) {
+                                return (
+                                  <td key={colKey} className="py-2.5 px-3.5 text-slate-400 font-normal">
+                                    {colIdx === 0 ? "Totals / Summary" : "—"}
+                                  </td>
+                                );
+                              }
+                              const values = displayRows.map((r) => r[colKey]).filter((v) => v !== undefined && v !== null);
+                              const numVals = values
+                                .map((v) => (typeof v === "number" ? v : parseFloat(String(v).replace(/[^0-9.-]+/g, ""))))
+                                .filter((n) => !isNaN(n));
 
-                          return (
-                            <td key={colKey} className="py-2.5 px-4 text-blue-700">
-                              <span className="text-[9px] uppercase tracking-wider text-slate-500 font-bold block">
-                                {func}:
-                              </span>
-                              {label}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
+                              let label = "";
+                              if (func === "sum" && numVals.length > 0) {
+                                const sum = numVals.reduce((a, b) => a + b, 0);
+                                label = colKey === "amount" || colKey === "cost" || colKey === "value"
+                                  ? `$${sum.toFixed(2)}`
+                                  : `${Math.round(sum * 10) / 10}`;
+                              } else if (func === "avg" && numVals.length > 0) {
+                                const avg = numVals.reduce((a, b) => a + b, 0) / numVals.length;
+                                label = colKey === "amount" || colKey === "cost" || colKey === "value"
+                                  ? `$${avg.toFixed(2)}`
+                                  : `${avg.toFixed(1)}${colKey === "timeInStage" ? " days" : ""}`;
+                              } else if (func === "count") {
+                                label = `${values.length} records`;
+                              } else if (func === "max" && numVals.length > 0) {
+                                label = `Max: ${Math.max(...numVals)}`;
+                              } else if (func === "min" && numVals.length > 0) {
+                                label = `Min: ${Math.min(...numVals)}`;
+                              } else {
+                                label = `${values.length}`;
+                              }
+
+                              return (
+                                <td key={colKey} className="py-2.5 px-3.5 text-blue-700">
+                                  <span className="text-[9px] uppercase tracking-wider text-slate-500 font-bold block">
+                                    {func}:
+                                  </span>
+                                  {label}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      }}
+                    />
+                  );
+                })()
               )}
             </div>
           </div>

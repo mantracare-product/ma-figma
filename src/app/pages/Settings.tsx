@@ -6347,259 +6347,183 @@ export default function Settings() {
                     )}
 
                     {/* Voice Table */}
-                    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-                      <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
-                        <table className="w-full min-w-[1200px]">
-                          <thead className="border-b border-border" style={{ backgroundColor: '#1F2937' }}>
-                            <tr>
-                              {/* Settings icon for column visibility */}
-                              <th className="px-2 py-2.5 text-center relative" style={{ width: '32px' }}>
-                                <div className="relative inline-block">
+                    {(() => {
+                      const voiceColumns: TableColumn<VoiceConfigItem>[] = [
+                        {
+                          id: "voiceName",
+                          key: "voiceName",
+                          header: "Voice Name",
+                          accessorKey: "name",
+                          render: (voice) => (
+                            <span className="text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              {voice.name}
+                            </span>
+                          ),
+                        },
+                        {
+                          id: "gender",
+                          key: "gender",
+                          header: "Gender",
+                          accessorKey: "gender",
+                          render: (voice) => (
+                            <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              {voice.gender}
+                            </span>
+                          ),
+                        },
+                        {
+                          id: "country",
+                          key: "country",
+                          header: "Country",
+                          accessorKey: "country",
+                          render: (voice) => (
+                            <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              {voice.country}
+                            </span>
+                          ),
+                        },
+                        {
+                          id: "process",
+                          key: "process",
+                          header: "Process",
+                          render: (voice) => (
+                            <div className="flex flex-wrap items-center gap-1">
+                              {voice.processes.map((proc) => (
+                                <span
+                                  key={proc}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                >
+                                  {proc}
                                   <button
                                     onClick={() => {
-                                      setShowVoiceColumnToggle(!showVoiceColumnToggle);
+                                      updateVoiceTableData((prev) =>
+                                        prev.map((v) =>
+                                          v.id === voice.id
+                                            ? { ...v, processes: v.processes.filter((p) => p !== proc) }
+                                            : v
+                                        )
+                                      );
                                     }}
-                                    className="inline-flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
-                                    aria-label="Customize Columns"
+                                    className="ml-0.5 hover:text-primary/70 cursor-pointer"
+                                    title={`Remove ${proc}`}
                                   >
-                                    <SettingsIcon className="w-4 h-4 text-[#E5E7EB] hover:text-white transition-colors" />
+                                    <X className="w-2.5 h-2.5" />
                                   </button>
-                                  {showVoiceColumnToggle && (
-                                    <div className="absolute left-0 top-full mt-2 w-56 bg-card border border-border rounded-xl shadow-lg p-4 z-50">
-                                      <h3 className="font-semibold mb-3" style={{ color: '#1F2937', fontFamily: 'DM Sans, sans-serif' }}>Visible Columns</h3>
-                                      <div className="space-y-2">
-                                        {Object.keys(voiceVisibleColumns).map((col) => (
-                                          <label key={col} className="flex items-center gap-2 cursor-pointer">
+                                </span>
+                              ))}
+                              {/* + button to add a process */}
+                              <div className="relative">
+                                <button
+                                  onClick={() => setAddProcessVoiceId(addProcessVoiceId === voice.id ? null : voice.id)}
+                                  className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-dashed border-primary/50 text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                                  title="Add Process"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                                {addProcessVoiceId === voice.id && (
+                                  <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-3 min-w-[220px]">
+                                    <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Assign Process</p>
+                                    <div className="space-y-1">
+                                      {AVAILABLE_PROCESSES.map((proc) => {
+                                        const assigned = voice.processes.includes(proc);
+                                        return (
+                                          <label key={proc} className="flex items-center gap-2 cursor-pointer px-1 py-1 rounded hover:bg-gray-50">
                                             <input
                                               type="checkbox"
-                                              checked={voiceVisibleColumns[col as keyof typeof voiceVisibleColumns]}
-                                              onChange={(e) =>
-                                                setVoiceVisibleColumns({
-                                                  ...voiceVisibleColumns,
-                                                  [col]: e.target.checked,
-                                                })
-                                              }
-                                              className="w-4 h-4"
-                                            />
-                                            <span className="text-sm capitalize" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                              {col === 'status' ? 'Featured' : (col === 'voiceName' ? 'Voice Name' : col)}
-                                            </span>
-                                          </label>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </th>
-                              {voiceColumnOrder.map((columnKey, index) => {
-                                const columnLabels: { [key: string]: string } = {
-                                  voiceName: 'Voice Name',
-                                  gender: 'Gender',
-                                  country: 'Country',
-                                  process: 'Process',
-                                  preview: 'Preview',
-                                  status: 'Featured',
-                                };
-
-                                return voiceVisibleColumns[columnKey as keyof typeof voiceVisibleColumns] ? (
-                                  <DraggableVoiceColumnHeader
-                                    key={columnKey}
-                                    columnKey={columnKey}
-                                    index={index}
-                                    label={columnLabels[columnKey] || columnKey}
-                                    moveColumn={moveVoiceColumn}
-                                  />
-                                ) : null;
-                              })}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filteredVoiceTableData.length === 0 ? (
-                              <tr>
-                                <td colSpan={voiceColumnOrder.length + 1} className="py-12 text-center text-muted-foreground">
-                                  <p className="text-sm font-medium">No voices found matching your filters.</p>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setVoiceFilters({ language: "All Languages", tone: "All Tones", gender: "All Genders", age: "All Ages", country: "All Countries" });
-                                      setVoiceSearchQuery("");
-                                    }}
-                                    className="mt-2 text-xs text-primary hover:underline font-medium cursor-pointer"
-                                  >
-                                    Reset filters
-                                  </button>
-                                </td>
-                              </tr>
-                            ) : (
-                              filteredVoiceTableData.map((voice) => (
-                                <tr key={voice.id} className="border-b border-border hover:bg-muted/10 transition-colors">
-                                  {/* Settings icon column (column visibility toggle) */}
-                                  <td className="px-2 py-3" />
-
-                                  {voiceColumnOrder.map((columnKey) => {
-                                    if (!voiceVisibleColumns[columnKey as keyof typeof voiceVisibleColumns]) return null;
-
-                                    if (columnKey === 'voiceName') {
-                                      return (
-                                        <td key={columnKey} className="px-4 py-3">
-                                          <span className="text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                            {voice.name}
-                                          </span>
-                                        </td>
-                                      );
-                                    }
-
-                                    if (columnKey === 'gender') {
-                                      return (
-                                        <td key={columnKey} className="px-4 py-3">
-                                          <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                            {voice.gender}
-                                          </span>
-                                        </td>
-                                      );
-                                    }
-
-                                    if (columnKey === 'country') {
-                                      return (
-                                        <td key={columnKey} className="px-4 py-3">
-                                          <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                            {voice.country}
-                                          </span>
-                                        </td>
-                                      );
-                                    }
-
-                                    if (columnKey === 'process') {
-                                      return (
-                                        <td key={columnKey} className="px-4 py-3">
-                                          <div className="flex flex-wrap items-center gap-1">
-                                            {voice.processes.map((proc) => (
-                                              <span
-                                                key={proc}
-                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              >
-                                                {proc}
-                                                <button
-                                                  onClick={() => {
-                                                    updateVoiceTableData((prev) =>
-                                                      prev.map((v) =>
-                                                        v.id === voice.id
-                                                          ? { ...v, processes: v.processes.filter((p) => p !== proc) }
-                                                          : v
-                                                      )
-                                                    );
-                                                  }}
-                                                  className="ml-0.5 hover:text-primary/70 cursor-pointer"
-                                                  title={`Remove ${proc}`}
-                                                >
-                                                  <X className="w-2.5 h-2.5" />
-                                                </button>
-                                              </span>
-                                            ))}
-                                            {/* + button to add a process */}
-                                            <div className="relative">
-                                              <button
-                                                onClick={() => setAddProcessVoiceId(addProcessVoiceId === voice.id ? null : voice.id)}
-                                                className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-dashed border-primary/50 text-primary hover:bg-primary/10 transition-colors cursor-pointer"
-                                                title="Add Process"
-                                              >
-                                                <Plus className="w-3 h-3" />
-                                              </button>
-                                              {addProcessVoiceId === voice.id && (
-                                                <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-3 min-w-[220px]">
-                                                  <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Assign Process</p>
-                                                  <div className="space-y-1">
-                                                    {AVAILABLE_PROCESSES.map((proc) => {
-                                                      const assigned = voice.processes.includes(proc);
-                                                      return (
-                                                        <label key={proc} className="flex items-center gap-2 cursor-pointer px-1 py-1 rounded hover:bg-gray-50">
-                                                          <input
-                                                            type="checkbox"
-                                                            checked={assigned}
-                                                            onChange={() => {
-                                                              updateVoiceTableData((prev) =>
-                                                                prev.map((v) =>
-                                                                  v.id === voice.id
-                                                                    ? {
-                                                                      ...v,
-                                                                      processes: assigned
-                                                                        ? v.processes.filter((p) => p !== proc)
-                                                                        : [...v.processes, proc],
-                                                                    }
-                                                                    : v
-                                                                )
-                                                              );
-                                                            }}
-                                                            className="w-4 h-4 accent-primary"
-                                                          />
-                                                          <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{proc}</span>
-                                                        </label>
-                                                      );
-                                                    })}
-                                                  </div>
-                                                  <button
-                                                    onClick={() => setAddProcessVoiceId(null)}
-                                                    className="mt-3 w-full px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors cursor-pointer"
-                                                  >
-                                                    Done
-                                                  </button>
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-                                        </td>
-                                      );
-                                    }
-
-                                    if (columnKey === 'preview') {
-                                      return (
-                                        <td key={columnKey} className="px-4 py-3">
-                                          <button
-                                            onClick={() => {
-                                              setSelectedVoiceForPreview(voice);
-                                              setShowVoicePreviewModal(true);
-                                            }}
-                                            className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-all cursor-pointer"
-                                            title="Preview Voice"
-                                          >
-                                            <Play className="w-4 h-4" />
-                                          </button>
-                                        </td>
-                                      );
-                                    }
-
-                                    if (columnKey === 'status') {
-                                      return (
-                                        <td key={columnKey} className="px-4 py-3">
-                                          <label className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                              type="checkbox"
-                                              className="sr-only peer"
-                                              checked={voice.status}
+                                              checked={assigned}
                                               onChange={() => {
                                                 updateVoiceTableData((prev) =>
                                                   prev.map((v) =>
-                                                    v.id === voice.id ? { ...v, status: !v.status } : v
+                                                    v.id === voice.id
+                                                      ? {
+                                                          ...v,
+                                                          processes: assigned
+                                                            ? v.processes.filter((p) => p !== proc)
+                                                            : [...v.processes, proc],
+                                                        }
+                                                      : v
                                                   )
                                                 );
                                               }}
+                                              className="w-4 h-4 accent-primary"
                                             />
-                                            <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                                            <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{proc}</span>
                                           </label>
-                                        </td>
-                                      );
-                                    }
+                                        );
+                                      })}
+                                    </div>
+                                    <button
+                                      onClick={() => setAddProcessVoiceId(null)}
+                                      className="mt-3 w-full px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors cursor-pointer"
+                                    >
+                                      Done
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ),
+                        },
+                        {
+                          id: "preview",
+                          key: "preview",
+                          header: "Preview",
+                          align: "center",
+                          width: "80px",
+                          render: (voice) => (
+                            <button
+                              onClick={() => {
+                                setSelectedVoiceForPreview(voice);
+                                setShowVoicePreviewModal(true);
+                              }}
+                              className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-all cursor-pointer"
+                              title="Preview Voice"
+                            >
+                              <Play className="w-4 h-4" />
+                            </button>
+                          ),
+                        },
+                        {
+                          id: "status",
+                          key: "status",
+                          header: "Featured",
+                          align: "center",
+                          width: "100px",
+                          render: (voice) => (
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={voice.status}
+                                onChange={() => {
+                                  updateVoiceTableData((prev) =>
+                                    prev.map((v) =>
+                                      v.id === voice.id ? { ...v, status: !v.status } : v
+                                    )
+                                  );
+                                }}
+                              />
+                              <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                            </label>
+                          ),
+                        },
+                      ];
 
-                                    return null;
-                                  })}
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                      return (
+                        <TableComponent
+                          columns={voiceColumns}
+                          data={filteredVoiceTableData}
+                          getRowId={(v) => v.id}
+                          enableSelection={false}
+                          enableColumnCustomization={true}
+                          tableId="settings-voice-agents"
+                          emptyMessage="No voices found matching your filters."
+                          pagination={true}
+                          defaultRowsPerPage={10}
+                        />
+                      );
+                    })()}
                   </div>
 
                 </div>

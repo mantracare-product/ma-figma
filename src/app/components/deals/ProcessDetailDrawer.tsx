@@ -64,6 +64,7 @@ import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { getStagesForProcess } from "../ui/ProcessStageSelect";
 import DocumentsTab from "../profile/DocumentsTab";
+import { TableComponent } from "../ui/TableComponent";
 import { getStoredClientDocuments } from "../../../lib/clientDocumentsStore";
 import {
   appendActivity,
@@ -1256,56 +1257,71 @@ export default function ProcessDetailDrawer({
                 </div>
 
                 {/* History Table */}
-                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-slate-900 text-white text-[11px] font-semibold uppercase tracking-wider">
-                        <th className="px-4 py-3">Date & Time</th>
-                        <th className="px-4 py-3">User / Actor</th>
-                        <th className="px-4 py-3">Event Type</th>
-                        <th className="px-4 py-3">Description</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                      {filteredHistory.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="text-center py-10 text-slate-400 italic">
-                            No history records found
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredHistory.map((h, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="px-4 py-3 font-medium text-slate-500 whitespace-nowrap">
-                              {h.date}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px]">
-                                  {h.createdBy.charAt(0)}
-                                </div>
-                                <span className="font-semibold text-slate-800">{h.createdBy}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${h.eventType === "Stage changed"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : h.eventType === "Activity created"
-                                      ? "bg-emerald-100 text-emerald-700"
-                                      : "bg-slate-100 text-slate-600"
-                                  }`}
-                              >
-                                {h.eventType}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 font-medium text-slate-800">{h.description}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <TableComponent
+                  columns={[
+                    {
+                      id: "date",
+                      key: "date",
+                      header: "Date & Time",
+                      accessorKey: "date",
+                      render: (h) => (
+                        <span className="font-medium text-slate-500 whitespace-nowrap text-xs">
+                          {h.date}
+                        </span>
+                      ),
+                    },
+                    {
+                      id: "createdBy",
+                      key: "createdBy",
+                      header: "User / Actor",
+                      accessorKey: "createdBy",
+                      render: (h) => (
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px]">
+                            {h.createdBy.charAt(0)}
+                          </div>
+                          <span className="font-semibold text-slate-800 text-xs">{h.createdBy}</span>
+                        </div>
+                      ),
+                    },
+                    {
+                      id: "eventType",
+                      key: "eventType",
+                      header: "Event Type",
+                      accessorKey: "eventType",
+                      render: (h) => (
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            h.eventType === "Stage changed"
+                              ? "bg-blue-100 text-blue-700"
+                              : h.eventType === "Activity created"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {h.eventType}
+                        </span>
+                      ),
+                    },
+                    {
+                      id: "description",
+                      key: "description",
+                      header: "Description",
+                      accessorKey: "description",
+                      render: (h) => (
+                        <span className="font-medium text-slate-800 text-xs">{h.description}</span>
+                      ),
+                    },
+                  ]}
+                  data={filteredHistory}
+                  getRowId={(h, idx) => `${h.date}-${idx}`}
+                  emptyMessage="No history records found"
+                  pagination={true}
+                  defaultRowsPerPage={10}
+                  enableSelection={false}
+                  enableColumnCustomization={true}
+                  tableId="deal-process-history"
+                />
               </div>
             )}
 

@@ -62,6 +62,7 @@ export interface TableComponentProps<T> {
   pagination?: boolean;
   onRowClick?: (row: T) => void;
   tableId?: string;
+  renderFooter?: (orderedVisibleColumns: TableColumn<T>[]) => React.ReactNode;
 }
 
 export function TableComponent<T>({
@@ -81,6 +82,7 @@ export function TableComponent<T>({
   className = "",
   pagination = true,
   onRowClick,
+  renderFooter,
 }: TableComponentProps<T>) {
   const getColId = (c: TableColumn<T>): string => c.id || c.key || c.header;
 
@@ -583,6 +585,11 @@ export function TableComponent<T>({
               })
             )}
           </tbody>
+          {renderFooter && (
+            <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300 text-slate-800 text-[11px] sticky bottom-0 z-10 shadow-xs">
+              {renderFooter(orderedVisibleColumns)}
+            </tfoot>
+          )}
         </table>
       </div>
 
