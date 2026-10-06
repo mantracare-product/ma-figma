@@ -419,7 +419,7 @@ export default function Sidebar() {
     return config.sections
       .map((sec) => ({
         id: sec.id,
-        title: sec.title,
+        title: sec.id === "billing" ? "REVENUE & INSIGHTS" : sec.title,
         items: sec.items
           .filter((item) => item.visible)
           .map((item) => ({
@@ -694,7 +694,7 @@ export default function Sidebar() {
             {config.sections.map((section) => (
               <div key={section.id} className="space-y-1.5">
                 <div className="px-1 text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                  <span>{section.title}</span>
+                  <span>{section.id === "billing" ? "REVENUE & INSIGHTS" : section.title}</span>
                 </div>
 
                 <div className="space-y-1">

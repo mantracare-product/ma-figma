@@ -44,6 +44,7 @@ import {
   ProcessTransitionTarget,
 } from "../../lib/useProcessStore";
 import { getStoredVoices, VoiceConfigItem, VOICE_STORE_EVENT } from "../../lib/useVoiceStore";
+import { getActiveAIModels, AI_MODELS_STORE_EVENT, AIModelConfig } from "../../lib/aiModelsStore";
 
 interface AISettings {
   platform: string;
@@ -727,6 +728,7 @@ export default function Process() {
   const [activeTab, setActiveTab] = useState<string>("general");
   const [expandedProcesses, setExpandedProcesses] = useState<string[]>(["1"]); // Expand Patient Intake by default
   const [selectedAIModel, setSelectedAIModel] = useState("Gemini 2.5 Flash");
+  const [activeAIModels, setActiveAIModels] = useState<AIModelConfig[]>(getActiveAIModels);
   const [aiModelExpanded, setAiModelExpanded] = useState(false);
   const [stageVoiceSpeed, setStageVoiceSpeed] = useState<number>(1.0);
   const [stageVoice, setStageVoice] = useState<string>("Nova");
@@ -742,10 +744,32 @@ export default function Process() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleModelUpdate = () => {
+      const active = getActiveAIModels();
+      setActiveAIModels(active);
+      if (!active.some((m) => m.name === selectedAIModel) && active.length > 0) {
+        setSelectedAIModel(active[0].name);
+      }
+    };
+    window.addEventListener(AI_MODELS_STORE_EVENT, handleModelUpdate);
+    window.addEventListener("storage", handleModelUpdate);
+    return () => {
+      window.removeEventListener(AI_MODELS_STORE_EVENT, handleModelUpdate);
+      window.removeEventListener("storage", handleModelUpdate);
+    };
+  }, [selectedAIModel]);
+
   const activeConfiguredVoices = useMemo(() => {
-    const active = configuredVoices.filter((v) => v.status !== false);
+    const active = configuredVoices.filter((v) => v.status === true);
     return active.length > 0 ? active : configuredVoices;
   }, [configuredVoices]);
+
+  useEffect(() => {
+    if (activeConfiguredVoices.length > 0 && !activeConfiguredVoices.some((v) => v.name === stageVoice)) {
+      setStageVoice(activeConfiguredVoices[0].name);
+    }
+  }, [activeConfiguredVoices, stageVoice]);
 
   // Advanced tab section states
   // Retry Rules state
@@ -4624,114 +4648,117 @@ export default function Process() {
                                 {/* AI Model */}
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-blue-500 font-mono font-bold text-sm leading-none">&gt;_</span>
-                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                      AI Model
-                                    </span>
-                                    <Tooltip text="Select the underlying LLM that powers the conversational logic.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="relative">
-                                    <select
-                                      value={selectedAIModel}
-                                      onChange={(e) => {
-                                        setSelectedAIModel(e.target.value);
-                                        toast.success(`AI Model updated to ${e.target.value}`);
-                                      }}
-                                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-10 cursor-pointer shadow-2xs"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      <option value="Deepseek V4 Flash">Deepseek V4 Flash</option>
-                                      <option value="Gemini 2.5 Flash">Gemini 2.5 Flash</option>
-                                      <option value="GPT-4o">GPT-4o</option>
-                                      <option value="GPT-4o Mini">GPT-4o Mini</option>
-                                      <option value="Claude 3.5 Sonnet">Claude 3.5 Sonnet</option>
-                                      <option value="Gemini 1.5 Pro">Gemini 1.5 Pro</option>
-                                      <option value="Llama 3.3 70B">Llama 3.3 70B</option>
-                                    </select>
-                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                  </div>
-                                </div>
-
-                                {/* Speech Speed */}
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-1.5">
-                                      <Volume2 className="w-4 h-4 text-amber-500" />
+                                      <span className="text-blue-500 font-mono font-bold text-sm leading-none">&gt;_</span>
                                       <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                        Speech Speed
+                                        AI Model
                                       </span>
-                                      <Tooltip text="Adjust how fast the AI speaks to ensure a natural conversational rhythm. Speech speed significantly affects naturalness — 1.0x (Natural) is highly recommended.">
+                                      <Tooltip text="Select the underlying LLM that powers the conversational logic.">
                                         <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
                                       </Tooltip>
                                     </div>
-                                    <span className="text-xs font-semibold text-gray-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                      {stageVoiceSpeed.toFixed(1)}x
-                                    </span>
+                                    <div className="relative">
+                                      <select
+                                        value={selectedAIModel}
+                                        onChange={(e) => {
+                                          if (e.target.value === "__view_more_models__") {
+                                            navigate('/settings?tab=voice-config&sub=models');
+                                            return;
+                                          }
+                                          setSelectedAIModel(e.target.value);
+                                          toast.success(`AI Model updated to ${e.target.value}`);
+                                        }}
+                                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-10 cursor-pointer shadow-2xs"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      >
+                                        {activeAIModels.map((m) => (
+                                          <option key={m.id} value={m.name}>
+                                            {m.name} ({m.provider})
+                                          </option>
+                                        ))}
+                                        <option disabled value="">──────────</option>
+                                        <option value="__view_more_models__" className="text-blue-600 font-semibold">
+                                          View more in Settings →
+                                        </option>
+                                      </select>
+                                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                    </div>
                                   </div>
-                                  <div className="space-y-2 pt-1">
-                                    <input
-                                      type="range"
-                                      min="0.5"
-                                      max="1.5"
-                                      step="0.1"
-                                      value={stageVoiceSpeed}
-                                      onChange={(e) => setStageVoiceSpeed(parseFloat(e.target.value))}
-                                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                                    />
-                                    <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 tracking-wider">
-                                      <span>SLOW</span>
-                                      <span>NATURAL</span>
-                                      <span>FAST</span>
+
+                                  {/* Speech Speed */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <Volume2 className="w-4 h-4 text-amber-500" />
+                                        <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                          Speech Speed
+                                        </span>
+                                        <Tooltip text="Adjust how fast the AI speaks to ensure a natural conversational rhythm. Speech speed significantly affects naturalness — 1.0x (Natural) is highly recommended.">
+                                          <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                        </Tooltip>
+                                      </div>
+                                      <span className="text-xs font-semibold text-gray-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                        {stageVoiceSpeed.toFixed(1)}x
+                                      </span>
+                                    </div>
+                                    <div className="space-y-2 pt-1">
+                                      <input
+                                        type="range"
+                                        min="0.5"
+                                        max="1.5"
+                                        step="0.1"
+                                        value={stageVoiceSpeed}
+                                        onChange={(e) => setStageVoiceSpeed(parseFloat(e.target.value))}
+                                        className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                      />
+                                      <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 tracking-wider">
+                                        <span>SLOW</span>
+                                        <span>NATURAL</span>
+                                        <span>FAST</span>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
 
-                              {/* Row 2: Voice Engine, Tone, Style in same row */}
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100 items-start">
-                                {/* Voice Engine */}
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <Mic className="w-4 h-4 text-emerald-500" />
-                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                      Voice Engine
-                                    </span>
-                                    <Tooltip text="Choose the vocal personality that best represents your brand's tone.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="relative flex-1">
-                                      <select
-                                        value={stageVoice}
-                                        onChange={(e) => {
-                                          if (e.target.value === "__settings_redirect__") {
-                                            navigate('/settings?tab=voice-config');
-                                            return;
-                                          }
-                                          setStageVoice(e.target.value);
-                                          toast.success(`Voice updated to ${e.target.value}`);
-                                        }}
-                                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-7 cursor-pointer shadow-2xs"
-                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                      >
-                                        <optgroup label="Default Voices">
+                                {/* Row 2: Voice Engine, Tone, Style in same row */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100 items-start">
+                                  {/* Voice Engine */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-1.5">
+                                      <Mic className="w-4 h-4 text-emerald-500" />
+                                      <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                        Voice Engine
+                                      </span>
+                                      <Tooltip text="Choose the vocal personality that best represents your brand's tone.">
+                                        <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                      </Tooltip>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="relative flex-1">
+                                        <select
+                                          value={stageVoice}
+                                          onChange={(e) => {
+                                            if (e.target.value === "__view_more_voices__") {
+                                              navigate('/settings?tab=voice-config&sub=voices');
+                                              return;
+                                            }
+                                            setStageVoice(e.target.value);
+                                            toast.success(`Voice updated to ${e.target.value}`);
+                                          }}
+                                          className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-7 cursor-pointer shadow-2xs"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        >
                                           {activeConfiguredVoices.map((v) => (
-                                            <option key={v.name} value={v.name}>
+                                            <option key={v.id || v.name} value={v.name}>
                                               {v.name} ({v.country}, {v.gender})
                                             </option>
                                           ))}
-                                        </optgroup>
-                                        <optgroup label="Manage">
-                                          <option value="__settings_redirect__">
-                                            ⚙ Choose another voice in Settings →
+                                          <option disabled value="">──────────</option>
+                                          <option value="__view_more_voices__" className="text-blue-600 font-semibold">
+                                            View more in Settings →
                                           </option>
-                                        </optgroup>
-                                      </select>
-                                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                    </div>
+                                        </select>
+                                        <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                      </div>
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -5791,19 +5818,31 @@ export default function Process() {
                               <div className="border-t border-gray-100 px-5 py-4 space-y-5 bg-gray-50/40">
                                 {/* AI Model Select */}
                                 <div>
-                                  <label className="block text-sm font-semibold mb-2 text-gray-700">AI Model</label>
+                                  <div className="flex items-center gap-1.5 mb-2">
+                                    <label className="text-sm font-semibold text-gray-700">AI Model</label>
+                                  </div>
                                   <select
                                     value={selectedAIModel}
                                     onChange={(e) => {
+                                      if (e.target.value === "__view_more_models__") {
+                                        navigate('/settings?tab=voice-config&sub=models');
+                                        return;
+                                      }
                                       setSelectedAIModel(e.target.value);
                                       toast.success("AI Model updated successfully");
                                     }}
-                                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
+                                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors cursor-pointer"
                                     style={{ fontFamily: 'Outfit, sans-serif' }}
                                   >
-                                    <option value="Gemini 2.5 Flash">Gemini 2.5 Flash</option>
-                                    <option value="GPT-4o Mini">GPT-4o Mini</option>
-                                    <option value="Deepseek V4 Flash">Deepseek V4 Flash</option>
+                                    {activeAIModels.map((m) => (
+                                      <option key={m.id} value={m.name}>
+                                        {m.name} ({m.provider})
+                                      </option>
+                                    ))}
+                                    <option disabled value="">──────────</option>
+                                    <option value="__view_more_models__" className="text-blue-600 font-semibold">
+                                      View more in Settings →
+                                    </option>
                                   </select>
                                 </div>
 
@@ -5846,16 +5885,25 @@ export default function Process() {
                                     </div>
                                     <select
                                       value={stageVoice}
-                                      onChange={(e) => setStageVoice(e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
+                                      onChange={(e) => {
+                                        if (e.target.value === "__view_more_voices__") {
+                                          navigate('/settings?tab=voice-config&sub=voices');
+                                          return;
+                                        }
+                                        setStageVoice(e.target.value);
+                                      }}
+                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm cursor-pointer"
                                       style={{ fontFamily: 'Outfit, sans-serif' }}
                                     >
-                                      <option value="Ava">Ava</option>
-                                      <option value="Eva">Eva</option>
-                                      <option value="Aria">Aria</option>
-                                      <option value="Sam">Sam</option>
-                                      <option value="Jack">Jack</option>
-                                      <option value="Mango">Mango</option>
+                                      {activeConfiguredVoices.map((v) => (
+                                        <option key={v.id || v.name} value={v.name}>
+                                          {v.name} ({v.country}, {v.gender})
+                                        </option>
+                                      ))}
+                                      <option disabled value="">──────────</option>
+                                      <option value="__view_more_voices__" className="text-blue-600 font-semibold">
+                                        View more in Settings →
+                                      </option>
                                     </select>
                                   </div>
                                   <div>

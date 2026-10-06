@@ -104,9 +104,15 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (parsed.sections && Array.isArray(parsed.sections)) {
-        if (!parsed.version || parsed.version < 3) {
-          // Migrate: ensure workspace items default to isFeatured: true, and remove legacy settings-numbers item
+        if (!parsed.version || parsed.version < 4) {
+          // Migrate: ensure workspace items default to isFeatured: true, remove legacy settings-numbers item, and update billing to REVENUE & INSIGHTS
           const migratedSections = parsed.sections.map((sec: NavSectionConfig) => {
+            if (sec.id === "billing") {
+              return {
+                ...sec,
+                title: "REVENUE & INSIGHTS",
+              };
+            }
             if (sec.id === "workspace") {
               return {
                 ...sec,
@@ -124,9 +130,15 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
             }
             return sec;
           });
-          const migrated = { ...parsed, version: 3, sections: migratedSections };
+          const migrated = { ...parsed, version: 4, sections: migratedSections };
           localStorage.setItem(storageKey, JSON.stringify(migrated));
           return migrated;
+        }
+        // Always ensure billing section has REVENUE & INSIGHTS title
+        if (parsed.sections) {
+          parsed.sections = parsed.sections.map((sec: NavSectionConfig) =>
+            sec.id === "billing" ? { ...sec, title: "REVENUE & INSIGHTS" } : sec
+          );
         }
         return parsed;
       }
