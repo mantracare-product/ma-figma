@@ -15,13 +15,16 @@ import { GLOBAL_TRIGGER_CATALOG } from "../types/automation";
 import {
   useAutomationRules,
   AutomationRule,
+  isAutomationRuleMatchingScope,
 } from "../../lib/useAutomationStore";
-import { useProcessStore } from "../../lib/useProcessStore";
+import { useProcessStore, isProcessMatchingOrg } from "../../lib/useProcessStore";
+import { useOrganization } from "../context/OrganizationContext";
 import { toast } from "sonner";
 
 export default function Automation() {
   const { processes } = useProcessStore();
   const { rules, createRule, updateRule, deleteRule, toggleRule } = useAutomationRules();
+  const { activeOrganization } = useOrganization();
 
   // Filter state
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">("all");
@@ -30,11 +33,28 @@ export default function Automation() {
   const [isCreatingNewRule, setIsCreatingNewRule] = useState(false);
   const [isAddAutomationDrawerOpen, setIsAddAutomationDrawerOpen] = useState(false);
 
-  // Filtered rules list (no entities)
+  // Scoped client processes
+  const clientProcesses = useMemo(() => {
+    if (!activeOrganization) return processes;
+    return processes.filter((p) => isProcessMatchingOrg(p, activeOrganization));
+  }, [processes, activeOrganization]);
+
+  // Filtered rules list (filtered by client's active organization scope)
   const filteredRules = useMemo(() => {
     return rules.filter((r) => {
       if (statusFilter === "active" && !r.enabled) return false;
       if (statusFilter === "paused" && r.enabled) return false;
+
+      // Match tenant scope of the active organization
+      if (activeOrganization) {
+        const matchesScope = isAutomationRuleMatchingScope(r, {
+          category: activeOrganization.industryCategory,
+          industry: activeOrganization.industry,
+          location: activeOrganization.location || (activeOrganization.locations && activeOrganization.locations[0]),
+        });
+        if (!matchesScope) return false;
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const nameMatch = r.name.toLowerCase().includes(q);
@@ -44,7 +64,7 @@ export default function Automation() {
       }
       return true;
     });
-  }, [rules, statusFilter, searchQuery]);
+  }, [rules, statusFilter, searchQuery, activeOrganization]);
 
   // Set default active rule
   useEffect(() => {
@@ -251,7 +271,7 @@ export default function Automation() {
         }}
         scope="global"
         defaultView="library"
-        processes={processes}
+        processes={clientProcesses}
         initialAutomation={
           !isCreatingNewRule && activeRule
             ? {

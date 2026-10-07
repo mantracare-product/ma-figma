@@ -280,6 +280,65 @@ async function runTest() {
   }
 
   console.log("✓ Dynamic filtering of processes, appointment, and invoice configurations verified successfully!");
+
+  // Test 5: Verify Automations added in Admin render in respective client automations
+  console.log("\n[Test 5] Testing that automations added in Admin render in respective client automations...");
+  const { createRule, getStoredRules, saveStoredRules } = await import("../lib/useAutomationStore");
+
+  // Admin creates a rule scoped strictly to Healthcare
+  const adminCreatedHealthcareRule = createRule({
+    orgId: "default",
+    name: "Admin Patient Recall Automation",
+    description: "Automated recall for cardiac patients",
+    entityType: "appointment",
+    trigger: {
+      event: "appointment.booked",
+      label: "Appointment booked",
+      source: "any",
+    },
+    action: {
+      type: "moveToStage",
+      processId: "proc-appt-health",
+      stageId: "st-h1",
+      processName: "Clinical Appointment Workflow",
+      stageName: "Consultation Booked",
+    },
+    actions: [],
+    enabled: true,
+    health: "ok",
+    scopingRules: healthcareScopeRules,
+  });
+
+  // Client view with Healthcare Org (e.g. Heart Care Clinic)
+  const allStoredRules = getStoredRules();
+  const healthcareClientVisibleRules = allStoredRules.filter((r) =>
+    isAutomationRuleMatchingScope(r, {
+      category: healthcareOrg.industryCategory,
+      industry: healthcareOrg.industry,
+      location: healthcareOrg.location,
+    })
+  );
+
+  // Client view with Auto Org (e.g. Apex Auto Care)
+  const autoClientVisibleRules = allStoredRules.filter((r) =>
+    isAutomationRuleMatchingScope(r, {
+      category: autoOrg.industryCategory,
+      industry: autoOrg.industry,
+      location: autoOrg.location,
+    })
+  );
+
+  const isVisibleInHealthcare = healthcareClientVisibleRules.some((r) => r.id === adminCreatedHealthcareRule.id);
+  const isVisibleInAuto = autoClientVisibleRules.some((r) => r.id === adminCreatedHealthcareRule.id);
+
+  if (!isVisibleInHealthcare) {
+    throw new Error("Admin-created Healthcare automation rule MUST be visible in Healthcare client automations!");
+  }
+  if (isVisibleInAuto) {
+    throw new Error("Admin-created Healthcare automation rule MUST NOT be visible in Automobile client automations!");
+  }
+
+  console.log("✓ Admin-created automation renders in matching client automations and correctly excludes non-matching tenants!");
   console.log("\n🎉 ALL ADMIN WORKFLOWS & AUTOMATIONS TESTS PASSED! 🎉\n");
 }
 
