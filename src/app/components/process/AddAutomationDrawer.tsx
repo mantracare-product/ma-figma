@@ -69,7 +69,9 @@ import type {
 } from "../../types/automation";
 import { GLOBAL_TRIGGER_CATALOG } from "../../types/automation";
 import { toast } from "sonner";
-import { getStoredProcesses } from "../../../lib/useProcessStore";
+import { getStoredProcesses, isProcessMatchingScopingRules } from "../../../lib/useProcessStore";
+import type { ScopingRule } from "../../context/FieldRegistryContext";
+import { AdminScopingRulesEditor } from "../../pages/admin/components/AdminScopingRulesEditor";
 
 export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   parallel: ["stage", "incall", "inchat", "postcall"],
@@ -315,6 +317,9 @@ function getTriggerIcon(type: EventTriggerType | "stage") {
 export interface AddAutomationDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  isAdmin?: boolean;
+  initialScopingRules?: ScopingRule[];
+  onScopingRulesChange?: (rules: ScopingRule[]) => void;
   scope?: AutomationScope; // "stage" | "global" (default "stage" if stageRef passed, else "global")
   defaultView?: "flowbuilder" | "library";
   stageRef?: {
@@ -337,11 +342,12 @@ export interface AddAutomationDrawerProps {
   initialStepIdToConfigure?: string;
 }
 
-
-
 export default function AddAutomationDrawer({
   isOpen,
   onClose,
+  isAdmin = false,
+  initialScopingRules = [],
+  onScopingRulesChange,
   scope: propScope,
   defaultView = "library",
   stageRef,
@@ -358,8 +364,24 @@ export default function AddAutomationDrawer({
   stepAllowedTriggers = STEP_ALLOWED_TRIGGERS,
   initialStepIdToConfigure,
 }: AddAutomationDrawerProps) {
-  // Determine effective scope
-  const effectiveProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
+  // Scoping rules state (Admin Scope Rule)
+  const [drawerScopingRules, setDrawerScopingRules] = useState<ScopingRule[]>(
+    initialScopingRules && initialScopingRules.length > 0
+      ? initialScopingRules
+      : (initialAutomation as any)?.scopingRules || []
+  );
+
+  // Determine effective scope and scoped processes
+  const allAvailableProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
+  const effectiveProcesses = useMemo(() => {
+    if (!isAdmin || !drawerScopingRules || drawerScopingRules.length === 0) {
+      return allAvailableProcesses;
+    }
+    return allAvailableProcesses.filter((p) =>
+      isProcessMatchingScopingRules(p, drawerScopingRules)
+    );
+  }, [allAvailableProcesses, isAdmin, drawerScopingRules]);
+
   const effectiveScope: AutomationScope =
     propScope || (stageRef ? "stage" : "global");
 
@@ -419,6 +441,11 @@ export default function AddAutomationDrawer({
         setIsCanvasView(defaultView === "flowbuilder");
         setIsAddStepOpen(false);
         setIsChoosingGlobalTrigger(false);
+        const initRules =
+          initialScopingRules && initialScopingRules.length > 0
+            ? initialScopingRules
+            : (initialAutomation as any)?.scopingRules || [];
+        setDrawerScopingRules(initRules);
 
         if (initialAutomation) {
           setAutomationName(initialAutomation.name || "");
@@ -480,7 +507,7 @@ export default function AddAutomationDrawer({
     } else {
       wasOpenRef.current = false;
     }
-  }, [isOpen, defaultView, initialAutomation, effectiveScope, stageName, workflowSteps, initialStepIdToConfigure]);
+  }, [isOpen, defaultView, initialAutomation, effectiveScope, stageName, workflowSteps, initialStepIdToConfigure, initialScopingRules]);
 
   // Synchronize steps back to parent when changed
   const updateSteps = (newSteps: WorkflowStep[]) => {
@@ -708,6 +735,7 @@ export default function AddAutomationDrawer({
             ? { value: s.delayValue, unit: (s.delayUnit as any) || "minutes" }
             : undefined,
       })),
+      scopingRules: drawerScopingRules,
       updatedAt: new Date().toISOString(),
     };
 
@@ -904,6 +932,41 @@ export default function AddAutomationDrawer({
                   className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-gray-900 resize-none"
                 />
               </div>
+
+              {/* 2b. Admin Scope Rule (Admin Only) */}
+              {isAdmin && (
+                <div className="space-y-2 p-4 rounded-xl border border-slate-200 bg-slate-50/70 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-blue-600" />
+                      <label className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
+                        Admin Scope Rule
+                      </label>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+                        Admin Only
+                      </span>
+                    </div>
+                    {drawerScopingRules.length > 0 && (
+                      <span className="text-[11px] font-medium text-blue-600">
+                        {drawerScopingRules.length} scope rule{drawerScopingRules.length > 1 ? "s" : ""} active
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Define tenant scope rules. Configurations below (processes, appointments, invoices, and fields) will automatically adapt to this scope.
+                  </p>
+                  <div className="pt-1">
+                    <AdminScopingRulesEditor
+                      rules={drawerScopingRules}
+                      onChange={(newRules) => {
+                        setDrawerScopingRules(newRules);
+                        onScopingRulesChange?.(newRules);
+                      }}
+                      showHeader={false}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* 3. Trigger Configuration */}
               <div className="space-y-3.5">
@@ -1299,6 +1362,7 @@ export default function AddAutomationDrawer({
             isCreatingNewStep={false}
             stepAllowedTriggers={stepAllowedTriggers}
             processes={effectiveProcesses}
+            scopingRules={drawerScopingRules}
             stepTrigger={stepTrigger}
             onStepTriggerChange={setStepTrigger}
             executionType={executionType}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router";
 import {
   ChevronDown, Plus, Trash2, Info, Sliders, Star, Volume2, Play, ArrowRight,
@@ -9,6 +9,7 @@ import VariablePickerButton, { FETCH_FIELD_SOURCES } from "./VariablePickerButto
 import VariableSelectorModal from "./VariableSelectorModal";
 import SelectFieldsMultiModal from "./SelectFieldsMultiModal";
 import { InfoTooltip } from "../help/InfoTooltip";
+import { useFieldRegistry, isFieldMatchingOrg, ScopingRule } from "../../context/FieldRegistryContext";
 
 import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
 import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES } from "../../../lib/useProcessStore";
@@ -45,6 +46,7 @@ interface StepParametersFieldsProps {
   onChange: (patch: Record<string, any>) => void;
   processes?: ProcessOption[];
   stepTrigger?: string;
+  scopingRules?: ScopingRule[];
 }
 
 export default function StepParametersFields({
@@ -52,9 +54,24 @@ export default function StepParametersFields({
   params,
   onChange,
   processes = [],
-  stepTrigger
+  stepTrigger,
+  scopingRules = [],
 }: StepParametersFieldsProps) {
   const effectiveProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
+
+  const { getAllFields } = useFieldRegistry();
+  const allClientFields = getAllFields("client");
+  const scopedClientFields = useMemo(() => {
+    if (!scopingRules || scopingRules.length === 0) return allClientFields;
+    const firstRule = scopingRules[0];
+    const scopeOrg = {
+      industryCategory: firstRule.industryCategory,
+      industry: firstRule.industries?.[0],
+      location: firstRule.locations?.[0],
+    };
+    return allClientFields.filter((f) => isFieldMatchingOrg(f, scopeOrg));
+  }, [allClientFields, scopingRules]);
+  const customClientFields = scopedClientFields.filter((f) => f.source === "custom");
 
   // Local UI-only states
   const [conditionsSectionExpanded, setConditionsSectionExpanded] = useState(true);
@@ -575,8 +592,18 @@ export default function StepParametersFields({
                           </>
                         ) : (
                           <>
-                            <option value="custom_field_1">Custom Field 1</option>
-                            <option value="custom_field_2">Custom Field 2</option>
+                            {customClientFields.length > 0 ? (
+                              customClientFields.map((cf) => (
+                                <option key={cf.key} value={cf.key}>
+                                  {cf.label || cf.key}
+                                </option>
+                              ))
+                            ) : (
+                              <>
+                                <option value="custom_field_1">Custom Field 1</option>
+                                <option value="custom_field_2">Custom Field 2</option>
+                              </>
+                            )}
                           </>
                         )}
                       </select>
@@ -2942,6 +2969,7 @@ export default function StepParametersFields({
                           onApply={(keys) => onChange({ monitoredFields: keys })}
                           title="Select Fields to Watch"
                           subtitle="Choose fields that will trigger this automation when updated"
+                          scopingRules={scopingRules}
                         />
                       )}
                     </div>

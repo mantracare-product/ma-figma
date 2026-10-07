@@ -38,6 +38,7 @@ import Claims from "./pages/Claims";
 import AdminCustomFields from "./pages/admin/AdminCustomFields";
 import AdminIndustries from "./pages/admin/AdminIndustries";
 import AdminProcessTemplates from "./pages/admin/AdminProcessTemplates";
+import AdminAutomations from "./pages/admin/AdminAutomations";
 
 export const router = createBrowserRouter([
   {
@@ -109,8 +110,12 @@ export const router = createBrowserRouter([
           { path: "industries", Component: AdminIndustries },
           { path: "industry", Component: AdminIndustries },
           { path: "industry-category", Component: AdminIndustries },
+          { path: "workflows", Component: AdminProcessTemplates },
+          { path: "workflow", Component: AdminProcessTemplates },
           { path: "process-templates", Component: AdminProcessTemplates },
           { path: "process-template", Component: AdminProcessTemplates },
+          { path: "automations", Component: AdminAutomations },
+          { path: "automation", Component: AdminAutomations },
           { path: "users", Component: UserManagement },
           { path: "organizations", Component: Organizations },
           { path: "forms", Component: WebForms },

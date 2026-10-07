@@ -52,6 +52,7 @@ import {
   isProcessMatchingScope,
   ProcessTransitionTarget,
   EntityType,
+  DEFAULT_ENTITY_PROCESSES,
 } from "../../../lib/useProcessStore";
 
 interface AISettings {
@@ -691,6 +692,63 @@ export default function AdminProcessTemplates() {
     saveStoredProcesses(processes);
   }, [processes]);
 
+  // Entity Modes and selected entity tab matching Process.tsx
+  const [selectedEntity, setSelectedEntity] = useState<EntityType>("client");
+
+  // Ensure default entity processes exist for all non-client entities
+  useEffect(() => {
+    setProcesses((prev) => {
+      let changed = false;
+      const copy = [...prev];
+      const nonClientEntities: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim"];
+      for (const et of nonClientEntities) {
+        if (!copy.some((p) => p.entityType === et)) {
+          copy.push(DEFAULT_ENTITY_PROCESSES[et]);
+          changed = true;
+        }
+      }
+      return changed ? copy : prev;
+    });
+  }, []);
+
+  const ENTITY_TABS: Array<{ id: EntityType; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+    { id: "client", label: "Processes", icon: GitBranch },
+    { id: "appointment", label: "Appointments", icon: Calendar },
+    { id: "invoice", label: "Invoices", icon: FileText },
+    { id: "insurance", label: "Insurance", icon: Shield },
+    { id: "claim", label: "Claims", icon: ClipboardList },
+  ];
+
+  const entityModes = useMemo(() => {
+    return ENTITY_TABS.map((tab) => {
+      const Icon = tab.icon;
+      const count = processes.filter((p) => (p.entityType || "client") === tab.id).length;
+      return {
+        id: tab.id,
+        label: tab.label,
+        icon: <Icon className="w-3.5 h-3.5" />,
+        badge: count > 0 ? count : undefined,
+      };
+    });
+  }, [processes]);
+
+  const handleEntityModeChange = (modeId: string) => {
+    const nextEntity = modeId as EntityType;
+    setSelectedEntity(nextEntity);
+    const firstOfEntity = processes.find((p) => (p.entityType || "client") === nextEntity);
+    if (firstOfEntity) {
+      setSelectedProcess(firstOfEntity.id);
+      setViewMode("process");
+      setExpandedStage(null);
+    } else {
+      setSelectedProcess(null);
+    }
+  };
+
+  const entityFilteredProcesses = useMemo(() => {
+    return processes.filter((p) => (p.entityType || "client") === selectedEntity);
+  }, [processes, selectedEntity]);
+
   // Scope Filter states for Admin left panel
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string>("All");
@@ -705,9 +763,14 @@ export default function AdminProcessTemplates() {
 
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Filtered processes based on admin category, industry, and location filters + search query
+  // Scope modal for editing existing process
+  const [showProcessScopeModal, setShowProcessScopeModal] = useState(false);
+  const [targetProcessForScope, setTargetProcessForScope] = useState<Process | null>(null);
+  const [editProcessScopingRules, setEditProcessScopingRules] = useState<ScopingRule[]>([]);
+
+  // Filtered processes based on entity, admin category, industry, and location filters + search query
   const filteredProcesses = useMemo(() => {
-    return processes.filter((p) => {
+    return entityFilteredProcesses.filter((p) => {
       const matchesScope = isProcessMatchingScope(p, {
         category: selectedCategoryFilter,
         industry: selectedIndustryFilter,
@@ -722,7 +785,7 @@ export default function AdminProcessTemplates() {
         p.stages.some((s) => s.name.toLowerCase().includes(q))
       );
     });
-  }, [processes, selectedCategoryFilter, selectedIndustryFilter, selectedLocationFilter, searchQuery]);
+  }, [entityFilteredProcesses, selectedCategoryFilter, selectedIndustryFilter, selectedLocationFilter, searchQuery]);
 
   // Modal scoping rules & permissions state
   const [modalScopingRules, setModalScopingRules] = useState<ScopingRule[]>([]);
@@ -891,6 +954,20 @@ export default function AdminProcessTemplates() {
 
 
   const [viewMode, setViewMode] = useState<"process" | "stage" | null>(null); // Track what we're viewing
+
+  // Auto-select first process if none selected or if switching entity tabs
+  useEffect(() => {
+    if (filteredProcesses.length > 0) {
+      const currentExists = filteredProcesses.some((p) => p.id === selectedProcess);
+      if (!currentExists) {
+        setSelectedProcess(filteredProcesses[0].id);
+        setViewMode("process");
+        setExpandedStage(null);
+      }
+    } else {
+      setSelectedProcess(null);
+    }
+  }, [filteredProcesses, selectedProcess]);
   const [activeTab, setActiveTab] = useState<string>("basic");
   const [expandedProcesses, setExpandedProcesses] = useState<string[]>(["1"]); // Expand Patient Intake by default
   const [selectedAIModel, setSelectedAIModel] = useState("Gemini 2.5 Flash");
@@ -2175,11 +2252,18 @@ export default function AdminProcessTemplates() {
       return;
     }
 
+    const entityDefault = selectedEntity !== "client" ? DEFAULT_ENTITY_PROCESSES[selectedEntity as Exclude<EntityType, "client">] : null;
     const process: Process = {
-      id: String(processes.length + 1),
+      id: String(Date.now()),
       ...newProcess,
       assignedToUserId: 1,
-      stages: [],
+      stages: entityDefault
+        ? entityDefault.stages.map((st, sIdx) => ({
+            ...st,
+            id: `${Date.now()}-${sIdx + 1}`,
+          }))
+        : [],
+      entityType: selectedEntity,
       aiSettings: {
         platform: "OpenAI - GPT-4o",
         voiceSpeed: 1.0,
@@ -2188,9 +2272,9 @@ export default function AdminProcessTemplates() {
         style: "Balanced",
       },
       scopingRules: modalScopingRules.length > 0 ? modalScopingRules : undefined,
-      industryCategory: firstRule?.industryCategory || "All",
-      industry: firstRule?.industries && firstRule.industries.length > 0 ? firstRule.industries[0] : "All",
-      locations: firstRule?.locations && firstRule.locations.length > 0 ? firstRule.locations : ["All"],
+      industryCategory: firstRule?.industryCategory || (selectedCategoryFilter !== "All" ? selectedCategoryFilter : "All"),
+      industry: firstRule?.industries && firstRule.industries.length > 0 ? firstRule.industries[0] : (selectedIndustryFilter !== "All" ? selectedIndustryFilter : "All"),
+      locations: firstRule?.locations && firstRule.locations.length > 0 ? firstRule.locations : (selectedLocationFilter !== "All" ? [selectedLocationFilter] : ["All"]),
       permissions: modalPermissions,
       source: "custom",
     };
@@ -2527,11 +2611,11 @@ export default function AdminProcessTemplates() {
     <div className="min-h-screen bg-[#fafafa]">
       <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
-          title="Workflow"
-          subtitle="Design how your AI receptionist behaves at every step, from greeting to hand-off"
+          title="Workflows"
+          subtitle="Design and manage entity processes, pipelines, and stages across tenant organizations"
           badge={
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
-              Workflow Architect
+              Admin Workflow Architect
             </span>
           }
           actions={
@@ -2542,8 +2626,11 @@ export default function AdminProcessTemplates() {
           }
         />
 
-        {/* Top Control Bar using standard PageTopBar */}
+        {/* Top Control Bar using standard PageTopBar with Entity Modes matching Process.tsx */}
         <PageTopBar
+          modes={entityModes}
+          activeMode={selectedEntity}
+          onModeChange={handleEntityModeChange}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search processes..."
@@ -2556,7 +2643,7 @@ export default function AdminProcessTemplates() {
                   setSelectedCategoryFilter(e.target.value);
                   setSelectedIndustryFilter("All");
                 }}
-                className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
                 style={{ fontFamily: 'Outfit, sans-serif' }}
               >
                 <option value="All">All Categories</option>
@@ -2571,7 +2658,7 @@ export default function AdminProcessTemplates() {
               <select
                 value={selectedIndustryFilter}
                 onChange={(e) => setSelectedIndustryFilter(e.target.value)}
-                className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
                 style={{ fontFamily: 'Outfit, sans-serif' }}
               >
                 <option value="All">All Industries</option>
@@ -2586,7 +2673,7 @@ export default function AdminProcessTemplates() {
               <select
                 value={selectedLocationFilter}
                 onChange={(e) => setSelectedLocationFilter(e.target.value)}
-                className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
                 style={{ fontFamily: 'Outfit, sans-serif' }}
               >
                 <option value="All">All Locations</option>
@@ -2601,8 +2688,8 @@ export default function AdminProcessTemplates() {
           filterPresets={[
             {
               id: "all",
-              label: "All Processes",
-              count: adminProcessTemplates.length,
+              label: `All ${selectedEntity === "client" ? "Processes" : selectedEntity.charAt(0).toUpperCase() + selectedEntity.slice(1) + "s"}`,
+              count: entityFilteredProcesses.length,
               isActive: selectedCategoryFilter === "All" && selectedIndustryFilter === "All" && selectedLocationFilter === "All",
               onClick: () => {
                 setSelectedCategoryFilter("All");
@@ -2614,7 +2701,7 @@ export default function AdminProcessTemplates() {
             {
               id: "healthcare",
               label: "Healthcare",
-              count: adminProcessTemplates.filter((p: any) => p.category === "Healthcare" || p.industryCategory === "Healthcare").length,
+              count: entityFilteredProcesses.filter((p: any) => p.category === "Healthcare" || p.industryCategory === "Healthcare").length,
               isActive: selectedCategoryFilter === "Healthcare",
               onClick: () => {
                 setSelectedCategoryFilter("Healthcare");
@@ -2624,7 +2711,7 @@ export default function AdminProcessTemplates() {
             {
               id: "dental",
               label: "Dental Care",
-              count: adminProcessTemplates.filter((p: any) => p.category === "Dental Care" || p.industryCategory === "Dental Care").length,
+              count: entityFilteredProcesses.filter((p: any) => p.category === "Dental Care" || p.industryCategory === "Dental Care").length,
               isActive: selectedCategoryFilter === "Dental Care",
               onClick: () => {
                 setSelectedCategoryFilter("Dental Care");
@@ -2674,7 +2761,7 @@ export default function AdminProcessTemplates() {
             setSearchQuery("");
           }}
           primaryAction={{
-            label: "Add New Process",
+            label: selectedEntity === "client" ? "Add New Process" : `Add New ${selectedEntity.charAt(0).toUpperCase() + selectedEntity.slice(1)} Process`,
             icon: <Plus className="w-3.5 h-3.5" />,
             onClick: () => {
               setModalScopingRules([]);
@@ -2762,6 +2849,21 @@ export default function AdminProcessTemplates() {
                           {process.stages.length}
                         </div>
 
+                        {/* Configure Scope Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTargetProcessForScope(process);
+                            setEditProcessScopingRules(process.scopingRules ? [...process.scopingRules] : []);
+                            setShowProcessScopeModal(true);
+                          }}
+                          className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                          title="Configure Admin Scope Rules"
+                        >
+                          <Sliders className="w-3.5 h-3.5" />
+                        </button>
+
                         {/* Preview Eye Button */}
                         <button
                           type="button"
@@ -2776,6 +2878,19 @@ export default function AdminProcessTemplates() {
                           <Eye className="w-3.5 h-3.5" />
                         </button>
                       </div>
+                    </div>
+
+                    {/* Scope Badges */}
+                    <div className="flex items-center gap-1.5 mt-1.5 pl-6 flex-wrap">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                        <Globe className="w-2.5 h-2.5 text-gray-500" />
+                        <span>{process.industryCategory || "All Industries"}</span>
+                      </span>
+                      {process.industry && process.industry !== "All" && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                          {process.industry}
+                        </span>
+                      )}
                     </div>
 
                     {/* Process Description */}
@@ -2873,8 +2988,23 @@ export default function AdminProcessTemplates() {
                               <Edit className="w-4.5 h-4.5" />
                             </button>
                             <span className="text-sm px-4 py-1.5 bg-blue-100 text-blue-700 rounded-full font-semibold whitespace-nowrap">
-                              Process
+                              {selectedProcessData.entityType && selectedProcessData.entityType !== "client"
+                                ? selectedProcessData.entityType.charAt(0).toUpperCase() + selectedProcessData.entityType.slice(1)
+                                : "Process"}
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetProcessForScope(selectedProcessData);
+                                setEditProcessScopingRules(selectedProcessData.scopingRules ? [...selectedProcessData.scopingRules] : []);
+                                setShowProcessScopeModal(true);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                              title="Configure Scope Rules"
+                            >
+                              <Globe className="w-3.5 h-3.5 text-blue-600" />
+                              <span>{selectedProcessData.industryCategory || "All Industries"}</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
@@ -8297,6 +8427,80 @@ export default function AdminProcessTemplates() {
             }
           }}
         />
+
+        {/* Scope Rules Configuration Modal for Existing Process */}
+        {showProcessScopeModal && targetProcessForScope && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-2xs p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-gray-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-blue-50/50 to-white">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Configure Scope Rules
+                    </h3>
+                    <p className="text-xs text-gray-500 font-medium">
+                      Process: {targetProcessForScope.name} ({targetProcessForScope.entityType || "client"})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowProcessScopeModal(false)}
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Define which tenant industry categories, industries, and locations have visibility to this process in the client app.
+                </p>
+
+                <AdminScopingRulesEditor
+                  rules={editProcessScopingRules}
+                  onChange={(rules) => setEditProcessScopingRules(rules)}
+                  showHeader={true}
+                />
+              </div>
+
+              <div className="p-4 bg-gray-50/70 border-t border-gray-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowProcessScopeModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-200/60 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const firstRule = editProcessScopingRules[0];
+                    setProcesses((prev) =>
+                      prev.map((p) =>
+                        p.id === targetProcessForScope.id
+                          ? {
+                              ...p,
+                              scopingRules: editProcessScopingRules,
+                              industryCategory: firstRule?.industryCategory || "All",
+                              industry: firstRule?.industries && firstRule.industries.length > 0 ? firstRule.industries[0] : "All",
+                              locations: firstRule?.locations && firstRule.locations.length > 0 ? firstRule.locations : ["All"],
+                            }
+                          : p
+                      )
+                    );
+                    setShowProcessScopeModal(false);
+                    toast.success("Process scope rules saved");
+                  }}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors cursor-pointer shadow-xs"
+                >
+                  Save Scope Rules
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

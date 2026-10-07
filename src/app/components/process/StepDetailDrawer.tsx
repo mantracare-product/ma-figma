@@ -6,6 +6,7 @@ import StepParametersFields from "./StepParametersFields";
 import type { WorkflowStep } from "../../types/workflow";
 import { EVENT_CATALOG } from "../../../lib/useAutomationStore";
 import { EntityType } from "../../../lib/useProcessStore";
+import type { ScopingRule } from "../../context/FieldRegistryContext";
 
 export interface StepDetailDrawerProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ export interface StepDetailDrawerProps {
   isCreatingNewStep: boolean;
   stepAllowedTriggers?: Record<string, Array<string>>;
   processes: any[];
+  scopingRules?: ScopingRule[];
 
   stepTrigger: string;
   onStepTriggerChange: (t: any) => void;
@@ -59,6 +61,7 @@ export default function StepDetailDrawer({
   isCreatingNewStep,
   stepAllowedTriggers = {},
   processes,
+  scopingRules = [],
   stepTrigger,
   onStepTriggerChange,
   context = "stage",
@@ -424,6 +427,7 @@ export default function StepDetailDrawer({
               onChange={onParamsChange}
               processes={processes}
               stepTrigger={stepTrigger}
+              scopingRules={scopingRules}
             />
           )}
         </div>

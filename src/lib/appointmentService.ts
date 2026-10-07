@@ -15,7 +15,7 @@
 
 import { eventBus } from "./eventBus";
 import { logStageMove, getStoredRules } from "./useAutomationStore";
-import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage } from "./useProcessStore";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, getActiveOrganizationSync, isProcessMatchingOrg } from "./useProcessStore";
 import { invoiceService, hasInvoiceAutomation, SAMPLE_CLIENT_NAMES } from "./invoiceService";
 
 export function hasAppointmentAutomation(): boolean {
@@ -140,6 +140,13 @@ if (typeof window !== "undefined") {
 class AppointmentService {
   private getAppointmentProcess(): Process {
     const processes = getStoredProcesses();
+    const activeOrg = getActiveOrganizationSync();
+    if (activeOrg) {
+      const match = processes.find(
+        (p) => p.entityType === "appointment" && isProcessMatchingOrg(p, activeOrg)
+      );
+      if (match) return match;
+    }
     const apptProc = processes.find((p) => p.entityType === "appointment");
     return apptProc || DEFAULT_ENTITY_PROCESSES.appointment;
   }

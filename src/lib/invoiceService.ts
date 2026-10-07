@@ -16,7 +16,7 @@
 
 import { eventBus } from "./eventBus";
 import { logStageMove, getStoredRules } from "./useAutomationStore";
-import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage } from "./useProcessStore";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, getActiveOrganizationSync, isProcessMatchingOrg } from "./useProcessStore";
 import { ClientInvoice, InvoiceLineItem, InvoiceStatus, Payment } from "../app/types/invoiceTypes";
 import { addActivityEntry } from "./activityLog";
 
@@ -109,6 +109,13 @@ if (typeof window !== "undefined") {
 class InvoiceService {
   private getInvoiceProcess(): Process {
     const processes = getStoredProcesses();
+    const activeOrg = getActiveOrganizationSync();
+    if (activeOrg) {
+      const match = processes.find(
+        (p) => p.entityType === "invoice" && isProcessMatchingOrg(p, activeOrg)
+      );
+      if (match) return match;
+    }
     const invProc = processes.find((p) => p.entityType === "invoice");
     return invProc || DEFAULT_ENTITY_PROCESSES.invoice;
   }

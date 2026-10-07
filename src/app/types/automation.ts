@@ -58,6 +58,7 @@ export interface Automation {
   status: "draft" | "active";
   trigger: StageTrigger | EventTrigger;
   steps: AutomationStep[];
+  scopingRules?: any[];
   enabled?: boolean;
   createdAt?: string;
   updatedAt?: string;

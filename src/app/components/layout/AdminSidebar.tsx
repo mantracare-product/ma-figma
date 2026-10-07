@@ -34,6 +34,8 @@ import {
   Megaphone,
   LogOut,
   ArrowUpRight,
+  Zap,
+  GitBranch,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { toast } from "sonner";
@@ -99,7 +101,8 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       title: "SETUP",
       items: [
         { id: "industry-category", label: "Industries", icon: FolderTree, path: "/admin/industry-category" },
-        { id: "process-templates", label: "Process templates", icon: LayoutTemplate, path: "/admin/process-templates" },
+        { id: "workflows", label: "Workflows", icon: LayoutTemplate, path: "/admin/workflows" },
+        { id: "automations", label: "Automations", icon: Zap, path: "/admin/automations" },
         { id: "forms", label: "Forms", icon: CheckSquare, path: "/admin/forms" },
         { id: "document-templates", label: "Document Templates", icon: FileCode, path: "/admin/document-templates" },
         { id: "custom-fields", label: "Sections/Fields", icon: SlidersHorizontal, path: "/admin/custom-fields" },
@@ -138,10 +141,18 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         location.pathname === "/admin/industry"
       );
     }
-    if (itemPath === "/admin/process-templates") {
+    if (itemPath === "/admin/workflows" || itemPath === "/admin/process-templates") {
       return (
+        location.pathname === "/admin/workflows" ||
+        location.pathname === "/admin/workflow" ||
         location.pathname === "/admin/process-templates" ||
         location.pathname === "/admin/process-template"
+      );
+    }
+    if (itemPath === "/admin/automations") {
+      return (
+        location.pathname === "/admin/automations" ||
+        location.pathname === "/admin/automation"
       );
     }
     return location.pathname === itemPath;

@@ -5,6 +5,7 @@ import {
   Process,
   getStoredProcesses,
   DEFAULT_ENTITY_PROCESSES,
+  ScopingRule,
 } from "./useProcessStore";
 import type { WorkflowStep } from "../app/types/workflow";
 export type {
@@ -83,8 +84,61 @@ export interface AutomationRule {
   lastRunAt?: string;
   health?: "ok" | "failed" | "needs_attention";
   healthMessage?: string;
+  industryCategory?: string;
+  industry?: string;
+  locations?: string[];
+  scopingRules?: ScopingRule[];
   createdAt: string;
   updatedAt: string;
+}
+
+export function isAutomationRuleMatchingScope(
+  rule: AutomationRule,
+  scope: { category?: string; industry?: string; location?: string }
+): boolean {
+  const { category, industry, location } = scope;
+  if (rule.scopingRules && rule.scopingRules.length > 0) {
+    if (category && category !== "all" && category !== "All") {
+      const catMatch = rule.scopingRules.some(
+        (r) => (r.industryCategory || "").toLowerCase() === category.toLowerCase()
+      );
+      if (!catMatch) return false;
+    }
+    if (industry && industry !== "all" && industry !== "All") {
+      const indMatch = rule.scopingRules.some((r) => {
+        if (!r.industries || r.industries.length === 0 || r.industries.includes("All")) return true;
+        return r.industries.some((i) => i.toLowerCase() === industry.toLowerCase());
+      });
+      if (!indMatch) return false;
+    }
+    if (location && location !== "all" && location !== "All") {
+      const locMatch = rule.scopingRules.some((r) => {
+        if (!r.locations || r.locations.length === 0 || r.locations.includes("All")) return true;
+        return r.locations.some((l) => l.toLowerCase() === location.toLowerCase());
+      });
+      if (!locMatch) return false;
+    }
+    return true;
+  }
+
+  if (category && category !== "all" && category !== "All") {
+    if (rule.industryCategory && rule.industryCategory !== "All" && rule.industryCategory.toLowerCase() !== category.toLowerCase()) {
+      return false;
+    }
+  }
+  if (industry && industry !== "all" && industry !== "All") {
+    if (rule.industry && rule.industry !== "All" && rule.industry.toLowerCase() !== industry.toLowerCase()) {
+      return false;
+    }
+  }
+  if (location && location !== "all" && location !== "All") {
+    if (rule.locations && rule.locations.length > 0 && !rule.locations.includes("All")) {
+      if (!rule.locations.some((l) => l.toLowerCase() === location.toLowerCase())) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 export interface StageMove {

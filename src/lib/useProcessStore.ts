@@ -200,6 +200,28 @@ export function isProcessMatchingOrg(
   });
 }
 
+export function isProcessMatchingScopingRules(
+  process: Process,
+  scopingRules?: ScopingRule[]
+): boolean {
+  if (!scopingRules || scopingRules.length === 0) return true;
+  const activeRules = scopingRules.filter(
+    (r) =>
+      Boolean(r.industryCategory && r.industryCategory !== "All" && r.industryCategory !== "*") ||
+      Boolean(r.industries && r.industries.length > 0 && !r.industries.includes("All")) ||
+      Boolean(r.locations && r.locations.length > 0 && !r.locations.includes("All"))
+  );
+  if (activeRules.length === 0) return true;
+
+  return activeRules.some((rule) => {
+    return isProcessMatchingScope(process, {
+      category: rule.industryCategory,
+      industry: rule.industries?.[0],
+      location: rule.locations?.[0],
+    });
+  });
+}
+
 export const PROCESS_STORE_EVENT = "processStore_updated";
 const PROCESSES_STORAGE_KEY = "process_store_processes";
 const STEPS_STORAGE_KEY = "process_store_steps";
@@ -374,11 +396,20 @@ export function isStageDeletable(process: Process, stageId: string): { deletable
   return { deletable: true };
 }
 
-export function getEntityProcess(processes: Process[], entityType: EntityType): Process | undefined {
-  if (entityType === "client") {
-    return processes.find((p) => !p.entityType || p.entityType === "client");
+export function getEntityProcess(
+  processes: Process[],
+  entityType: EntityType,
+  org?: { industryCategory?: string; industry?: string; location?: string; locations?: string[] } | null
+): Process | undefined {
+  const entityProcs = processes.filter((p) => (p.entityType || "client") === entityType);
+  if (org) {
+    const matching = entityProcs.find((p) => isProcessMatchingOrg(p, org));
+    if (matching) return matching;
   }
-  return processes.find((p) => p.entityType === entityType) || DEFAULT_ENTITY_PROCESSES[entityType];
+  if (entityType === "client") {
+    return entityProcs[0];
+  }
+  return entityProcs[0] || DEFAULT_ENTITY_PROCESSES[entityType];
 }
 
 export const DEFAULT_INITIAL_PROCESSES: Process[] = [
@@ -622,6 +653,29 @@ export function getStoredProcesses(): Process[] {
   return list;
 }
 
+export function getActiveOrganizationSync(): {
+  id: string;
+  name?: string;
+  industryCategory?: string;
+  industry?: string;
+  location?: string;
+  locations?: string[];
+} | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const rawOrgs = localStorage.getItem("mantra_organizations_v1");
+    const orgs = rawOrgs ? JSON.parse(rawOrgs) : [];
+    const activeOrgId = localStorage.getItem("mantra_active_org_id_v1") || (orgs[0] && orgs[0].id);
+    const rawActive = orgs.find((o: any) => o.id === activeOrgId) || orgs[0];
+    const sessionOverrideRaw = sessionStorage.getItem("mantra_org_session_override_v1");
+    const sessionOverride = sessionOverrideRaw ? JSON.parse(sessionOverrideRaw) : null;
+    if (rawActive) {
+      return { ...rawActive, ...(sessionOverride || {}) };
+    }
+  } catch {}
+  return null;
+}
+
 export function saveStoredProcesses(processes: Process[]) {
   try {
     const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim"];
@@ -634,11 +688,11 @@ export function saveStoredProcesses(processes: Process[]) {
       }
     }
 
-    // 2. Non-client processes (singletons only - prevent delete and duplicates)
+    // 2. Non-client processes (supports multiple processes per entity with scoping rules)
     for (const et of nonClientTypes) {
       const candidates = processes.filter((p) => p.entityType === et);
       if (candidates.length > 0) {
-        sanitized.push(candidates[0]);
+        sanitized.push(...candidates);
       } else {
         sanitized.push(DEFAULT_ENTITY_PROCESSES[et]);
       }

@@ -953,11 +953,18 @@ export default function Process() {
 
   // Client-visible processes filtered by organization's industry category, industry, and location
   const clientVisibleProcesses = useMemo(() => {
-    return entityFilteredProcesses.filter((p) => {
-      if (selectedEntity !== "client") return true;
+    const matching = entityFilteredProcesses.filter((p) => {
       if (p.permissions?.canHide === false) return false;
       return isProcessMatchingOrg(p, organization);
     });
+    // For non-client entities (appointment, invoice, insurance, claim), display one process matching the organization's industry & category
+    if (selectedEntity !== "client") {
+      if (matching.length > 0) {
+        return [matching[0]];
+      }
+      return entityFilteredProcesses.length > 0 ? [entityFilteredProcesses[0]] : [];
+    }
+    return matching;
   }, [entityFilteredProcesses, selectedEntity, organization]);
 
   // Auto-select first process if none selected or selected belongs to another entity

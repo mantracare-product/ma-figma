@@ -6,6 +6,8 @@ import {
   ALL_MODULES,
   MODULE_NOUN,
   FieldModule,
+  isFieldMatchingOrg,
+  ScopingRule,
 } from "../../context/FieldRegistryContext";
 
 export interface SelectFieldsMultiModalProps {
@@ -15,6 +17,7 @@ export interface SelectFieldsMultiModalProps {
   onApply: (selectedKeys: string[]) => void;
   title?: string;
   subtitle?: string;
+  scopingRules?: ScopingRule[];
 }
 
 export default function SelectFieldsMultiModal({
@@ -24,6 +27,7 @@ export default function SelectFieldsMultiModal({
   onApply,
   title = "Select Fields",
   subtitle = "Select fields to watch for changes",
+  scopingRules,
 }: SelectFieldsMultiModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedKeys, setSelectedKeys] = useState<string[]>(initialSelectedKeys);
@@ -43,7 +47,20 @@ export default function SelectFieldsMultiModal({
   const targetModules: Exclude<FieldModule, "deal">[] = ALL_MODULES;
   const groupedFieldsList = targetModules
     .map((module) => {
-      const fields = getAllFields(module).filter(
+      const allModuleFields = getAllFields(module);
+      const scopedFields = (scopingRules && scopingRules.length > 0)
+        ? allModuleFields.filter((f) => {
+            const firstRule = scopingRules[0];
+            const scopeOrg = {
+              industryCategory: firstRule.industryCategory,
+              industry: firstRule.industries?.[0],
+              location: firstRule.locations?.[0],
+            };
+            return isFieldMatchingOrg(f, scopeOrg);
+          })
+        : allModuleFields;
+
+      const fields = scopedFields.filter(
         (f) =>
           f.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
           f.key.toLowerCase().includes(searchQuery.toLowerCase())
