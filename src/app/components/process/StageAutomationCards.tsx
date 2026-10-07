@@ -4,6 +4,7 @@ import {
   GripVertical,
   Plus,
   GitBranch,
+  Layers,
   PhoneCall,
   MessageSquare,
   MessageCircle,
@@ -23,6 +24,7 @@ import {
   MoreVertical,
 } from "lucide-react";
 import type { WorkflowStep } from "../../types/workflow";
+import { isParallelStep } from "../../../lib/automationTree";
 import { Tooltip } from "../ui/Tooltip";
 
 export interface StageAutomationCardsProps {
@@ -57,48 +59,41 @@ const STEP_ICON_MAP: Record<string, React.ReactNode> = {
   assignhuman: <UserCheck className="w-4 h-4" />,
   globe: <Globe className="w-4 h-4" />,
   volume2: <Volume2 className="w-4 h-4" />,
+  parallel: <Layers className="w-4 h-4" />,
+  layers: <Layers className="w-4 h-4" />,
 };
 
 function getStepIcon(step: WorkflowStep) {
+  if (isParallelStep(step)) {
+    return <Layers className="w-4 h-4" />;
+  }
   const key = (step.stepKey || step.iconKey || "").toLowerCase();
   return STEP_ICON_MAP[key] || <Zap className="w-4 h-4" />;
 }
 
 function getTriggerBadge(trigger?: string) {
-  switch (trigger) {
-    case "incall":
-      return {
-        label: "In call",
-        className: "bg-blue-50 text-blue-700 border-blue-200",
-        dot: "bg-blue-500",
-        tooltip: "Executes mid-conversation when triggered by the AI receptionist.",
-      };
-    case "postcall":
-      return {
-        label: "Post call",
-        className: "bg-purple-50 text-purple-700 border-purple-200",
-        dot: "bg-purple-500",
-        tooltip: "Executes automatically immediately after the call concludes.",
-      };
-    case "inchat":
-      return {
-        label: "In chat",
-        className: "bg-sky-50 text-sky-700 border-sky-200",
-        dot: "bg-sky-500",
-        tooltip: "Executes during chat conversations across WhatsApp or SMS.",
-      };
-    case "stage":
-    default:
-      return {
-        label: "On entry",
-        className: "bg-emerald-50 text-emerald-700 border-emerald-200",
-        dot: "bg-emerald-500",
-        tooltip: "Runs automatically when a record transitions into this stage.",
-      };
+  if (trigger === "exit" || trigger === "exit_stage" || trigger === "stage.exit") {
+    return {
+      label: "On exit",
+      className: "bg-indigo-50 text-indigo-700 border-indigo-200",
+      dot: "bg-indigo-500",
+      tooltip: "Runs automatically when a record exits this stage.",
+    };
   }
+  return {
+    label: "On entry",
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    dot: "bg-emerald-500",
+    tooltip: "Runs automatically when a record enters this stage.",
+  };
 }
 
 function getStepSummaryTooltip(step: WorkflowStep): string {
+  if (isParallelStep(step)) {
+    const branchCount = step.branches?.length || 2;
+    const totalSteps = step.branches?.reduce((acc, b) => acc + (b.steps?.length || 0), 0) || 0;
+    return `Parallel branches: runs ${branchCount} branches concurrently (${totalSteps} total step${totalSteps === 1 ? "" : "s"}).`;
+  }
   const parts: string[] = [];
   if (step.delayValue && step.delayValue > 0) {
     parts.push(`delay of ${step.delayValue} ${step.delayUnit || "min"}`);
@@ -222,7 +217,13 @@ const DraggableAutomationCard: React.FC<DraggableCardProps> = ({
           <GripVertical className="w-4 h-4" />
         </div>
 
-        <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+        <div
+          className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
+            isParallelStep(step)
+              ? "bg-purple-50 border-purple-200 text-purple-600"
+              : "bg-blue-50 border-blue-100 text-blue-600"
+          }`}
+        >
           {getStepIcon(step)}
         </div>
 
@@ -242,6 +243,14 @@ const DraggableAutomationCard: React.FC<DraggableCardProps> = ({
             <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
             <span>{badge.label}</span>
           </span>
+
+          {/* Parallel Branch Badge */}
+          {isParallelStep(step) && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0">
+              <Layers className="w-3 h-3" />
+              <span>{step.branches?.length || 2} branches</span>
+            </span>
+          )}
 
           {/* Parameters & Delay Info Tooltip */}
           <Tooltip text={tooltipText} placement="top">

@@ -6436,6 +6436,7 @@ export default function AdminProcessTemplates() {
                           setStepDetailDrawerOpen(false);
                           setIsCreatingNewStep(false);
                         }}
+                        onlyParameters={true}
                         onSave={() => {
                           const pendingIntent = intentInput.trim();
                           const finalIntentConditions = pendingIntent

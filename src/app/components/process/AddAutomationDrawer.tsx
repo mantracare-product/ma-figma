@@ -8,6 +8,8 @@ import {
   Search,
   ChevronRight,
   ChevronLeft,
+  ChevronUp,
+  ChevronDown,
   Clock,
   Edit,
   UserCheck,
@@ -48,6 +50,16 @@ import FlowBuilderTab from "./FlowBuilderTab";
 import StepDetailDrawer from "./StepDetailDrawer";
 import { Tooltip } from "../ui/Tooltip";
 import type { WorkflowStep } from "../../types/workflow";
+import {
+  isParallelStep,
+  createParallelStep,
+  appendStepToTree,
+  deleteStepFromTree,
+  addBranchToStep,
+  removeBranchFromStep,
+  reorderStepInTree,
+  findStepInTree,
+} from "../../../lib/automationTree";
 import type {
   Automation,
   AutomationStep,
@@ -58,6 +70,7 @@ import { GLOBAL_TRIGGER_CATALOG } from "../../types/automation";
 import { toast } from "sonner";
 
 export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
+  parallel: ["stage", "incall", "inchat", "postcall"],
   whatsapp: ["stage", "incall", "inchat", "postcall"],
   sms: ["stage", "incall", "inchat", "postcall"],
   email: ["stage", "incall", "inchat", "postcall"],
@@ -117,6 +130,13 @@ export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
     iconKey: "split",
     cats: ["all", "workflow"],
     isCondition: true,
+  },
+  {
+    key: "parallel",
+    name: "Parallel Branches",
+    desc: "Run two or more branches simultaneously in parallel.",
+    iconKey: "layers",
+    cats: ["all", "workflow"],
   },
   {
     key: "processmovement",
@@ -268,6 +288,8 @@ const STEP_ICON_MAP: Record<string, React.ReactNode> = {
   webhook: <Webhook className="w-4 h-4 text-white" />,
   phoneoff: <PhoneOff className="w-4 h-4 text-white" />,
   creditcard: <CreditCard className="w-4 h-4 text-white" />,
+  layers: <Layers className="w-4 h-4 text-white" />,
+  parallel: <Layers className="w-4 h-4 text-white" />,
 };
 
 function getTriggerIcon(type: EventTriggerType | "stage") {
@@ -312,7 +334,10 @@ export interface AddAutomationDrawerProps {
   onSaveAutomation?: (automation: Automation) => void;
   initialAutomation?: Automation | null;
   stepAllowedTriggers?: Record<string, Array<string>>;
+  initialStepIdToConfigure?: string;
 }
+
+
 
 export default function AddAutomationDrawer({
   isOpen,
@@ -331,13 +356,13 @@ export default function AddAutomationDrawer({
   onSaveAutomation,
   initialAutomation,
   stepAllowedTriggers = STEP_ALLOWED_TRIGGERS,
+  initialStepIdToConfigure,
 }: AddAutomationDrawerProps) {
   // Determine effective scope
   const effectiveScope: AutomationScope =
     propScope || (stageRef ? "stage" : "global");
 
-  // View state: Drawer tabs ("builder" | "details") and Canvas View toggle
-  const [activeTab, setActiveTab] = useState<"builder" | "details">("builder");
+  // View state: Canvas View toggle
   const [isCanvasView, setIsCanvasView] = useState(false);
 
   // Automation Form State
@@ -349,8 +374,8 @@ export default function AddAutomationDrawer({
   const [stageTriggerWhen, setStageTriggerWhen] = useState<"entry" | "exit">("entry");
 
   // Global Trigger State (Global Scope)
-  const [globalTriggerType, setGlobalTriggerType] = useState<EventTriggerType>("appointment");
-  const [globalTriggerEvent, setGlobalTriggerEvent] = useState<string>("appointment.booked");
+  const [globalTriggerType, setGlobalTriggerType] = useState<EventTriggerType>("call");
+  const [globalTriggerEvent, setGlobalTriggerEvent] = useState<string>("call.inbound");
   const [isChoosingGlobalTrigger, setIsChoosingGlobalTrigger] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState("");
 
@@ -362,6 +387,7 @@ export default function AddAutomationDrawer({
 
   // Steps List State
   const [steps, setSteps] = useState<WorkflowStep[]>([]);
+  const [addStepTargetBranchId, setAddStepTargetBranchId] = useState<string | null>(null);
 
   // "Add next step..." popover state
   const [isAddStepOpen, setIsAddStepOpen] = useState(false);
@@ -382,11 +408,14 @@ export default function AddAutomationDrawer({
   const drawerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
+  const wasOpenRef = useRef(false);
+
   // Initialize or reset on drawer open
   useEffect(() => {
     if (isOpen) {
-      setActiveTab("builder");
-      setIsCanvasView(defaultView === "flowbuilder");
+      if (!wasOpenRef.current) {
+        setIsCanvasView(defaultView === "flowbuilder");
+      }
       setIsAddStepOpen(false);
       setIsChoosingGlobalTrigger(false);
 
@@ -397,21 +426,25 @@ export default function AddAutomationDrawer({
         if (initialAutomation.trigger.type === "stage") {
           setStageTriggerWhen((initialAutomation.trigger as any).when || "entry");
         } else {
-          setGlobalTriggerType((initialAutomation.trigger as any).type || "appointment");
-          setGlobalTriggerEvent((initialAutomation.trigger as any).event || "appointment.booked");
+          const trigType = (initialAutomation.trigger as any).type || "call";
+          const trigEvt = (initialAutomation.trigger as any).event || "call.inbound";
+          setGlobalTriggerType(trigType);
+          setGlobalTriggerEvent(trigEvt);
         }
         setSteps(
-          (initialAutomation.steps || []).map((s) => ({
-            id: s.id,
-            name: s.name,
-            description: s.description || "",
-            iconKey: s.iconKey || "zap",
-            stepKey: s.stepKey,
-            params: s.params || {},
-            delayValue: s.delay?.value || 0,
-            delayUnit: s.delay?.unit || "minutes",
-            executionType: s.kind === "wait" ? "wait" : "wait",
-          }))
+          workflowSteps !== undefined
+            ? workflowSteps
+            : (initialAutomation.steps || []).map((s) => ({
+                id: s.id,
+                name: s.name,
+                description: s.description || "",
+                iconKey: s.iconKey || "zap",
+                stepKey: s.stepKey,
+                params: s.params || {},
+                delayValue: s.delay?.value || 0,
+                delayUnit: s.delay?.unit || "minutes",
+                executionType: s.kind === "wait" ? "wait" : "wait",
+              }))
         );
       } else {
         const defaultName =
@@ -422,12 +455,29 @@ export default function AddAutomationDrawer({
         setAutomationDescription("");
         setAutomationStatus("active");
         setStageTriggerWhen("entry");
-        setGlobalTriggerType("appointment");
-        setGlobalTriggerEvent("appointment.booked");
+        setGlobalTriggerType("call");
+        setGlobalTriggerEvent("call.inbound");
         setSteps(workflowSteps || []);
       }
+
+      if (initialStepIdToConfigure) {
+        const stepList = workflowSteps || [];
+        const targetStep = stepList.find((s) => s.id === initialStepIdToConfigure);
+        if (targetStep) {
+          setAutomationName(targetStep.name);
+          setAutomationDescription(targetStep.description || "");
+          if (targetStep.trigger === "exit_stage") {
+            setStageTriggerWhen("exit");
+          } else {
+            setStageTriggerWhen("entry");
+          }
+        }
+      }
+      wasOpenRef.current = true;
+    } else {
+      wasOpenRef.current = false;
     }
-  }, [isOpen, initialAutomation, effectiveScope, stageName, workflowSteps]);
+  }, [isOpen, defaultView, initialAutomation, effectiveScope, stageName, workflowSteps, initialStepIdToConfigure]);
 
   // Synchronize steps back to parent when changed
   const updateSteps = (newSteps: WorkflowStep[]) => {
@@ -490,6 +540,15 @@ export default function AddAutomationDrawer({
   // Handle adding step
   const handleAddStepFromCatalog = (item: CatalogStepItem) => {
     setIsAddStepOpen(false);
+
+    if (item.key === "parallel") {
+      const newParallel = createParallelStep();
+      const updated = appendStepToTree(steps, newParallel, addStepTargetBranchId);
+      updateSteps(updated);
+      setAddStepTargetBranchId(null);
+      return;
+    }
+
     const newStep: WorkflowStep = {
       id: `${item.key}-${Date.now()}`,
       name: item.name,
@@ -506,12 +565,33 @@ export default function AddAutomationDrawer({
           : {},
     };
 
-    const updated = [...steps, newStep];
+    const updated = appendStepToTree(steps, newStep, addStepTargetBranchId);
     updateSteps(updated);
+    setAddStepTargetBranchId(null);
 
     // Immediately open configuration for the added step
     handleConfigureStep(newStep, updated.length - 1);
   };
+
+  const handleDeleteStepById = (stepId: string) => {
+    const found = findStepInTree(steps, stepId);
+    if (found && isParallelStep(found.step)) {
+      if (!window.confirm("Delete this Parallel Branches node and all steps inside its branches?")) {
+        return;
+      }
+    }
+    const updated = deleteStepFromTree(steps, stepId);
+    updateSteps(updated);
+  };
+
+  const sequentialSteps = useMemo(
+    () => steps.filter((s) => !isParallelStep(s)),
+    [steps]
+  );
+  const hasParallelSteps = useMemo(
+    () => steps.some((s) => isParallelStep(s)),
+    [steps]
+  );
 
   // Open step config
   const handleConfigureStep = (step: WorkflowStep, index: number) => {
@@ -558,8 +638,22 @@ export default function AddAutomationDrawer({
   // Save entire automation
   const handleSaveAutomation = (statusToSave?: "draft" | "active") => {
     const finalStatus = statusToSave || automationStatus;
+    let finalSteps = [...steps];
+    if (initialStepIdToConfigure) {
+      const idx = finalSteps.findIndex((s) => s.id === initialStepIdToConfigure);
+      if (idx !== -1) {
+        finalSteps[idx] = {
+          ...finalSteps[idx],
+          name: automationName.trim() || finalSteps[idx].name,
+          description: automationDescription || finalSteps[idx].description,
+          trigger: stageTriggerWhen === "exit" ? "exit_stage" : "stage",
+        };
+      }
+    }
+    updateSteps(finalSteps);
+
     const finalAutomation: Automation = {
-      id: initialAutomation?.id || `auto-${Date.now()}`,
+      id: initialAutomation?.id || (initialStepIdToConfigure ? `auto-${initialStepIdToConfigure}` : `auto-${Date.now()}`),
       orgId: "default",
       scope: effectiveScope,
       stageRef:
@@ -594,7 +688,7 @@ export default function AddAutomationDrawer({
                     }
                   : undefined,
             },
-      steps: steps.map((s) => ({
+      steps: finalSteps.map((s) => ({
         id: s.id,
         kind: s.stepKey === "wait" ? "wait" : s.stepKey === "condition" ? "condition" : "action",
         stepKey: s.stepKey || "action",
@@ -667,10 +761,10 @@ export default function AddAutomationDrawer({
                     type="button"
                     onClick={() => setIsCanvasView(false)}
                     className="p-1.5 -ml-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1 text-xs font-semibold cursor-pointer"
-                    title="Return to trigger builder view"
+                    title="Return to Automation Library"
                   >
                     <ChevronLeft className="w-4 h-4" />
-                    <span>Back to builder</span>
+                    <span>Back to library</span>
                   </button>
                 ) : (
                   <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0">
@@ -688,9 +782,7 @@ export default function AddAutomationDrawer({
                       className="text-base font-bold text-gray-950 truncate"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      {isCanvasView
-                        ? "Automation Canvas"
-                        : automationName || "New automation"}
+                      {isCanvasView ? "Automation Canvas" : initialStepIdToConfigure || initialAutomation ? "Edit Automation" : "Automation Library"}
                     </h2>
 
                     {/* Scope Chip */}
@@ -710,49 +802,8 @@ export default function AddAutomationDrawer({
                 </div>
               </div>
 
-              {/* Top Right: View Mode Toggle & Close */}
+              {/* Top Right: Close Button */}
               <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center p-0.5 bg-gray-100 rounded-lg border border-gray-200/80">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsCanvasView(false);
-                      setActiveTab("builder");
-                    }}
-                    className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                      !isCanvasView && activeTab === "builder"
-                        ? "bg-white text-gray-900 shadow-2xs font-bold"
-                        : "text-gray-500 hover:text-gray-900"
-                    }`}
-                  >
-                    Step Library
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsCanvasView(true)}
-                    className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                      isCanvasView
-                        ? "bg-white text-gray-900 shadow-2xs font-bold"
-                        : "text-gray-500 hover:text-gray-900"
-                    }`}
-                  >
-                    Flow Builder
-                  </button>
-                  {!isCanvasView && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("details")}
-                      className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                        activeTab === "details"
-                          ? "bg-white text-gray-900 shadow-2xs font-bold"
-                          : "text-gray-500 hover:text-gray-900"
-                      }`}
-                    >
-                      Details
-                    </button>
-                  )}
-                </div>
-
                 <button
                   type="button"
                   onClick={onClose}
@@ -783,105 +834,39 @@ export default function AddAutomationDrawer({
                 triggerLabel={
                   effectiveScope === "global"
                     ? GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find((e) => e.event === globalTriggerEvent)?.label || globalTriggerEvent
-                    : `When entering "${stageName}"`
+                    : (stageTriggerWhen === "exit" ? `On Exit: ${stageName}` : `On Entry: ${stageName}`)
                 }
                 triggerDescription={
                   effectiveScope === "global"
                     ? GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find((e) => e.event === globalTriggerEvent)?.description
-                    : `Process: ${processName}`
+                    : (stageTriggerWhen === "exit" ? `Fires when record moves out of "${stageName}"` : `Fires when record moves into "${stageName}"`)
                 }
                 triggerIconKey={
                   effectiveScope === "global"
                     ? GLOBAL_TRIGGER_CATALOG.find((c) => c.type === globalTriggerType)?.iconKey || "zap"
                     : "gitbranch"
                 }
+                onTriggerChange={(trig) => {
+                  if (effectiveScope === "global") {
+                    setGlobalTriggerType(trig.type as EventTriggerType);
+                    setGlobalTriggerEvent(trig.event);
+                  } else {
+                    if (trig.event === "stage.exit") {
+                      setStageTriggerWhen("exit");
+                    } else if (trig.event === "stage.entry") {
+                      setStageTriggerWhen("entry");
+                    }
+                  }
+                }}
+                onSave={() => handleSaveAutomation("active")}
               />
             </div>
-          ) : activeTab === "details" ? (
-            /* ── Details Tab ── */
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                  Description
-                </label>
-                <textarea
-                  value={automationDescription}
-                  onChange={(e) => setAutomationDescription(e.target.value)}
-                  placeholder="Explain why this automation exists and what it accomplishes..."
-                  rows={4}
-                  className="w-full text-xs p-3 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                  Automation Status
-                </label>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setAutomationStatus("active")}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                      automationStatus === "active"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 shadow-2xs"
-                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span>Active (Runs on trigger)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAutomationStatus("draft")}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                      automationStatus === "draft"
-                        ? "bg-amber-50 text-amber-700 border-amber-300 shadow-2xs"
-                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <span>Draft (Paused)</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Read-Only Info */}
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-200/80 space-y-2.5 text-xs">
-                <div className="flex justify-between text-gray-600">
-                  <span className="font-medium">Execution Scope</span>
-                  <span className="font-semibold text-gray-900 capitalize">
-                    {effectiveScope}
-                  </span>
-                </div>
-                {effectiveScope === "stage" && (
-                  <div className="flex justify-between text-gray-600">
-                    <span className="font-medium">Bound Stage</span>
-                    <span className="font-semibold text-gray-900">
-                      {stageName} ({processName})
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between text-gray-600">
-                  <span className="font-medium">Configured Actions</span>
-                  <span className="font-semibold text-gray-900">
-                    {steps.length} {steps.length === 1 ? "step" : "steps"}
-                  </span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span className="font-medium">Health Status</span>
-                  <span className="font-semibold text-emerald-600 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    Healthy
-                  </span>
-                </div>
-              </div>
-            </div>
           ) : (
-            /* ── Builder Tab (Default) ── */
+            /* ── Automation Library Form View ── */
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* 1. Name Field */}
+              {/* 1. Automation Name */}
               <div>
-                <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                   Automation Name
                 </label>
                 <input
@@ -890,257 +875,210 @@ export default function AddAutomationDrawer({
                   onChange={(e) => setAutomationName(e.target.value)}
                   placeholder={
                     effectiveScope === "stage"
-                      ? `On ${stageTriggerWhen}: ${stageName}`
+                      ? `On ${stageTriggerWhen === "exit" ? "exit" : "entry"}: ${stageName}`
                       : "e.g. Appointment Confirmation Flow"
                   }
                   className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-gray-900"
                 />
               </div>
 
-              {/* 2. When this happens (Trigger Card) */}
+              {/* 2. Automation Description */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-gray-600 flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5 text-blue-600" />
-                    <span>When this happens</span>
-                  </span>
-                  {effectiveScope === "global" && (
-                    <button
-                      type="button"
-                      onClick={() => setIsChoosingGlobalTrigger((v) => !v)}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                    >
-                      {isChoosingGlobalTrigger ? "Cancel" : "Change trigger"}
-                    </button>
-                  )}
-                </div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                  Description
+                </label>
+                <textarea
+                  value={automationDescription}
+                  onChange={(e) => setAutomationDescription(e.target.value)}
+                  placeholder="Explain why this automation exists and what it accomplishes..."
+                  rows={2}
+                  className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-gray-900 resize-none"
+                />
+              </div>
 
+              {/* 3. Trigger Dropdown */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Trigger</span>
+                </label>
                 {effectiveScope === "stage" ? (
-                  /* Stage Scope Trigger Card: Locked */
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center">
-                          <GitBranch className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-bold text-gray-900">
-                            Stage movement
-                          </h4>
-                          <p className="text-[11px] text-gray-500">
-                            Runs when a record transitions into or out of this stage.
-                          </p>
-                        </div>
-                      </div>
-                      <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gray-200/80 text-gray-600 border border-gray-300/60">
-                        <Lock className="w-3 h-3" />
-                        Locked to stage
-                      </span>
+                  <div className="space-y-1.5">
+                    <div className="relative">
+                      <select
+                        value={stageTriggerWhen}
+                        onChange={(e) => {
+                          const val = e.target.value as "entry" | "exit";
+                          setStageTriggerWhen(val);
+                          if (
+                            automationName.startsWith("On entry:") ||
+                            automationName.startsWith("On exit:") ||
+                            automationName.startsWith("On Entry:") ||
+                            automationName.startsWith("On Exit:")
+                          ) {
+                            setAutomationName(`On ${val === "exit" ? "exit" : "entry"}: ${stageName}`);
+                          }
+                        }}
+                        className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs"
+                      >
+                        <option value="entry">On Stage Enter</option>
+                        <option value="exit">On Stage Exit</option>
+                      </select>
                     </div>
-
-                    {/* Segmented Control [ Entry | Exit ] */}
-                    <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between">
-                      <span className="text-xs font-medium text-gray-700">
-                        Trigger timing:
-                      </span>
-                      <div className="flex items-center p-0.5 bg-white rounded-lg border border-gray-200 shadow-2xs">
-                        <button
-                          type="button"
-                          onClick={() => setStageTriggerWhen("entry")}
-                          className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                            stageTriggerWhen === "entry"
-                              ? "bg-[#1E293B] text-white shadow-2xs"
-                              : "text-gray-600 hover:text-gray-900"
-                          }`}
-                        >
-                          On Entry
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setStageTriggerWhen("exit")}
-                          className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                            stageTriggerWhen === "exit"
-                              ? "bg-[#1E293B] text-white shadow-2xs"
-                              : "text-gray-600 hover:text-gray-900"
-                          }`}
-                        >
-                          On Exit
-                        </button>
-                      </div>
-                    </div>
+                    <p className="text-[11px] text-gray-500">
+                      {stageTriggerWhen === "entry"
+                        ? `Fires automatically when a record transitions into "${stageName}".`
+                        : `Fires automatically when a record transitions out of "${stageName}".`}
+                    </p>
                   </div>
                 ) : (
-                  /* Global Scope Trigger Card */
-                  <div className="space-y-3">
-                    {isChoosingGlobalTrigger ? (
-                      /* Searchable Trigger Catalog Picker */
-                      <div className="bg-white border border-gray-200 rounded-xl p-3.5 shadow-sm space-y-3">
-                        <div className="relative">
-                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                          <input
-                            type="text"
-                            value={triggerSearch}
-                            onChange={(e) => setTriggerSearch(e.target.value)}
-                            placeholder="Search triggers (e.g. Appointment, Invoice, Call)..."
-                            className="w-full text-xs pl-8 pr-3 py-2 rounded-lg border border-gray-200 outline-none focus:border-blue-500"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-1.5 max-h-56 overflow-y-auto">
-                          {GLOBAL_TRIGGER_CATALOG.filter(
-                            (t) =>
-                              t.label.toLowerCase().includes(triggerSearch.toLowerCase()) ||
-                              t.description.toLowerCase().includes(triggerSearch.toLowerCase())
-                          ).map((t) => (
-                            <button
-                              key={t.type}
-                              type="button"
-                              onClick={() => {
-                                setGlobalTriggerType(t.type);
-                                setGlobalTriggerEvent(t.events[0]?.event || "");
-                                setIsChoosingGlobalTrigger(false);
-                              }}
-                              className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-colors cursor-pointer ${
-                                globalTriggerType === t.type
-                                  ? "bg-blue-50/70 border-blue-300"
-                                  : "border-gray-100 hover:bg-gray-50"
-                              }`}
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="p-1.5 rounded-md bg-white border border-gray-200 shadow-2xs">
-                                  {getTriggerIcon(t.type)}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="text-xs font-bold text-gray-900">
-                                    {t.label}
-                                  </div>
-                                  <p className="text-[11px] text-gray-500 truncate">
-                                    {t.description}
-                                  </p>
-                                </div>
-                              </div>
-                              <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      /* Active Trigger Card & Event Dropdown */
-                      <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-2xs space-y-3">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-blue-50 border border-blue-200">
-                            {getTriggerIcon(globalTriggerType)}
-                          </div>
-                          <div>
-                            <div className="text-xs font-bold text-gray-900">
-                              {currentGlobalTriggerDef?.label || "Trigger"}
-                            </div>
-                            <div className="text-[11px] text-gray-500">
-                              {currentGlobalTriggerDef?.description}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Event Selector */}
-                        <div className="pt-2.5 border-t border-gray-100 flex items-center justify-between gap-3">
-                          <label className="text-xs font-semibold text-gray-700 shrink-0">
-                            Which event?
-                          </label>
-                          <select
-                            value={globalTriggerEvent}
-                            onChange={(e) => setGlobalTriggerEvent(e.target.value)}
-                            className="text-xs font-medium px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 cursor-pointer max-w-[260px] truncate"
-                          >
-                            {currentGlobalTriggerDef?.events.map((evt) => (
-                              <option key={evt.event} value={evt.event}>
+                  <div className="space-y-1.5">
+                    <div className="relative">
+                      <select
+                        value={`${globalTriggerType}::${globalTriggerEvent}`}
+                        onChange={(e) => {
+                          const [type, event] = e.target.value.split("::");
+                          setGlobalTriggerType(type as EventTriggerType);
+                          setGlobalTriggerEvent(event);
+                        }}
+                        className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs"
+                      >
+                        {GLOBAL_TRIGGER_CATALOG.map((cat) => (
+                          <optgroup key={cat.type} label={cat.label}>
+                            {cat.events.map((evt) => (
+                              <option key={evt.event} value={`${cat.type}::${evt.event}`}>
                                 {evt.label}
                               </option>
                             ))}
-                          </select>
-                        </div>
-                      </div>
-                    )}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="text-[11px] text-gray-500">
+                      {currentGlobalEventDef?.description ||
+                        "Fires automatically when this event occurs."}
+                    </p>
                   </div>
                 )}
               </div>
 
-              {/* 3. Then do these actions (Numbered Step Cards) */}
+              {/* 4. Then do these actions (Numbered Step Cards) */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-gray-600 flex items-center gap-1.5">
                     <ArrowRight className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Then do these actions ({steps.length})</span>
+                    <span>Then do these actions ({sequentialSteps.length})</span>
                   </span>
                 </div>
 
-                {steps.length === 0 ? (
+                {hasParallelSteps && (
+                  <div className="flex items-center justify-between p-3 bg-purple-50/80 border border-purple-200 rounded-xl text-xs text-purple-900 mb-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Layers className="w-4 h-4 text-purple-600 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-purple-900">Parallel branches active</p>
+                        <p className="text-[11px] text-purple-700 truncate">
+                          Branched workflows are visual — open Flow Builder canvas to view and edit them.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsCanvasView(true)}
+                      className="px-2.5 py-1 text-[11px] font-bold bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shrink-0 cursor-pointer"
+                    >
+                      Open Canvas
+                    </button>
+                  </div>
+                )}
+
+                {sequentialSteps.length === 0 ? (
                   <div className="border border-dashed border-gray-200 rounded-xl p-5 text-center text-xs text-gray-500 space-y-1">
-                    <p className="font-semibold text-gray-700">No actions added yet</p>
+                    <p className="font-semibold text-gray-700">No sequential actions added yet</p>
                     <p className="text-[11px]">Click "Add next step" below to start chaining actions.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {steps.map((step, idx) => (
-                      <div
-                        key={step.id}
-                        className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl shadow-2xs hover:border-gray-300 transition-colors"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          {/* Step Index Bubble */}
-                          <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold flex items-center justify-center shrink-0">
-                            {idx + 1}
-                          </div>
-
-                          {/* Step Icon */}
-                          <div
-                            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 shadow-2xs"
-                            style={{ backgroundColor: "#2563EB" }}
-                          >
-                            {STEP_ICON_MAP[step.iconKey] || <Zap className="w-3.5 h-3.5 text-white" />}
-                          </div>
-
-                          {/* Step Title & Summary */}
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="text-xs font-bold text-gray-900 truncate"
-                                style={{ fontFamily: "DM Sans, sans-serif" }}
-                              >
-                                {step.name}
-                              </span>
-                              {(step as any).outputAlias && (
-                                <span className="text-[9px] font-semibold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
-                                  Output: {(step as any).outputAlias}
-                                </span>
-                              )}
+                    {sequentialSteps.map((step, idx) => {
+                      const isHighlighted = initialStepIdToConfigure === step.id;
+                      return (
+                        <div
+                          key={step.id}
+                          className={`flex items-center justify-between p-3 bg-white border rounded-xl shadow-2xs transition-all ${
+                            isHighlighted
+                              ? "border-blue-400 bg-blue-50/25 ring-1 ring-blue-300"
+                              : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {/* Step Index Bubble */}
+                            <div className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 ${
+                              isHighlighted ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"
+                            }`}>
+                              {idx + 1}
                             </div>
-                            <p className="text-[11px] text-gray-500 truncate">
-                              {step.description || "Action configured"}
-                            </p>
+
+                            {/* Step Icon */}
+                            <div
+                              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 shadow-2xs"
+                              style={{ backgroundColor: "#2563EB" }}
+                            >
+                              {STEP_ICON_MAP[step.iconKey] || <Zap className="w-3.5 h-3.5 text-white" />}
+                            </div>
+
+                            {/* Step Title & Summary */}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="text-xs font-bold text-gray-900 truncate"
+                                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                                >
+                                  {step.name}
+                                </span>
+                                {(step as any).outputAlias && (
+                                  <span className="text-[9px] font-semibold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
+                                    Output: {(step as any).outputAlias}
+                                  </span>
+                                )}
+                                {(step.stepKey === "wait" || step.stepKey === "delay") && (
+                                  <span className="text-[10px] font-semibold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                                    {step.delayValue || step.params?.delayValue || 15}{" "}
+                                    {step.delayUnit || step.params?.delayUnit || "minutes"}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-gray-500 truncate">
+                                {step.description || "Action configured"}
+                              </p>
+                            </div>
+                          </div>                          {/* Actions: Settings (Gear Box) & Delete */}
+                          <div className="flex items-center gap-1 shrink-0 ml-2">
+                            <button
+                              type="button"
+                              onClick={() => handleConfigureStep(step, idx)}
+                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                isHighlighted
+                                  ? "text-blue-600 bg-blue-100/80 hover:bg-blue-200"
+                                  : "text-gray-500 hover:text-blue-600 hover:bg-blue-50"
+                              }`}
+                              title="Configure parameters"
+                              aria-label="Configure parameters"
+                            >
+                              <Settings2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteStepById(step.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Remove action"
+                              aria-label="Remove action"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
-
-                        {/* Actions: Settings & Delete */}
-                        <div className="flex items-center gap-1 shrink-0 ml-2">
-                          <button
-                            type="button"
-                            onClick={() => handleConfigureStep(step, idx)}
-                            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                            title="Configure parameters"
-                          >
-                            <Settings2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteStep(idx)}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                            title="Remove action"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1149,7 +1087,10 @@ export default function AddAutomationDrawer({
               <div className="relative" ref={popoverRef}>
                 <button
                   type="button"
-                  onClick={() => setIsAddStepOpen((v) => !v)}
+                  onClick={() => {
+                    setAddStepTargetBranchId(null);
+                    setIsAddStepOpen((v) => !v);
+                  }}
                   className="w-full py-2.5 px-4 border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-xl text-xs font-bold text-gray-600 hover:text-blue-600 transition-colors flex items-center justify-center gap-2 cursor-pointer bg-gray-50/50 hover:bg-blue-50/20"
                 >
                   <Plus className="w-4 h-4 text-blue-600" />
@@ -1255,18 +1196,18 @@ export default function AddAutomationDrawer({
             </div>
           )}
 
-          {/* Footer (Builder & Details Mode) */}
+          {/* Footer (Automation Library Mode) */}
           {!isCanvasView && (
             <div className="flex-shrink-0 px-6 py-4 border-t border-gray-200 bg-white flex items-center justify-between">
-              {/* Left: Open in canvas */}
+              {/* Left: Open in flow builder */}
               <button
                 type="button"
                 onClick={() => setIsCanvasView(true)}
                 className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer transition-colors"
-                title="Expand to visual 75vw flow builder canvas"
+                title="Expand to visual flow builder canvas"
               >
                 <GitBranch className="w-4 h-4 text-blue-600" />
-                <span>Open in canvas</span>
+                <span>Open in flow builder</span>
               </button>
 
               {/* Right: Actions */}
@@ -1290,14 +1231,14 @@ export default function AddAutomationDrawer({
                   onClick={() => handleSaveAutomation("active")}
                   className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs cursor-pointer transition-colors"
                 >
-                  Activate
+                  {initialStepIdToConfigure || initialAutomation ? "Save Changes" : "Save Changes"}
                 </button>
               </div>
             </div>
           )}
         </motion.div>
 
-        {/* Step Detail Drawer: Configures parameters for selected step */}
+        {/* Step Detail Drawer: Configures ONLY parameters for selected step */}
         {isStepDetailOpen && editingStep && (
           <StepDetailDrawer
             isOpen={isStepDetailOpen}
@@ -1327,6 +1268,7 @@ export default function AddAutomationDrawer({
             onBack={() => setIsStepDetailOpen(false)}
             onClose={() => setIsStepDetailOpen(false)}
             onSave={handleSaveStepDetail}
+            onlyParameters={true}
           />
         )}
       </div>

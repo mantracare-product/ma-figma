@@ -149,207 +149,36 @@ export const EVENT_CATALOG: Record<
   ],
 };
 
-const DEFAULT_GLOBAL_RULES: AutomationRule[] = [
-  {
-    id: "rule-client-intake-auto",
-    orgId: "default",
-    name: "New Client Intake Routing",
-    description: "Moves newly created clients directly into the initial intake stage",
-    entityType: "client",
-    trigger: {
-      event: "client.created",
-      label: "Client created",
-      source: "any",
-    },
-    action: {
-      type: "moveToStage",
-      processId: "proc-1",
-      stageId: "stg-1",
-      processName: "Client Onboarding",
-      stageName: "Initial Contact",
-    },
-    enabled: true,
-    health: "ok",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    graph: {
-      nodes: [
-        {
-          id: "node-trigger-1",
-          type: "trigger",
-          label: "Client created",
-          subtitle: "Source: Any (Manual, Webhook, Call)",
-          data: { event: "client.created" },
-          position: { x: 80, y: 120 },
-        },
-        {
-          id: "node-action-1",
-          type: "action",
-          label: "Move to stage",
-          subtitle: "Client Onboarding → Initial Contact",
-          data: { processId: "proc-1", stageId: "stg-1" },
-          position: { x: 380, y: 120 },
-        },
-      ],
-      edges: [
-        {
-          id: "edge-1",
-          source: "node-trigger-1",
-          target: "node-action-1",
-          label: "Immediate",
-        },
-      ],
-    },
-  },
-  {
-    id: "rule-appt-booked-auto",
-    orgId: "default",
-    name: "Auto Move Booked Appointment",
-    description: "Moves newly scheduled appointments into the Booked stage",
-    entityType: "appointment",
-    trigger: {
-      event: "appointment.booked",
-      label: "Appointment booked",
-    },
-    action: {
-      type: "moveToStage",
-      processId: "process-appointment-default",
-      stageId: "appt-1",
-      processName: "Appointment Flow",
-      stageName: "Booked",
-    },
-    enabled: true,
-    health: "ok",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    graph: {
-      nodes: [
-        {
-          id: "node-trigger-2",
-          type: "trigger",
-          label: "Appointment booked",
-          subtitle: "AI Call or Online Booking",
-          data: { event: "appointment.booked" },
-          position: { x: 80, y: 120 },
-        },
-        {
-          id: "node-action-2",
-          type: "action",
-          label: "Move to stage",
-          subtitle: "Appointment Flow → Booked",
-          data: { processId: "process-appointment-default", stageId: "appt-1" },
-          position: { x: 380, y: 120 },
-        },
-      ],
-      edges: [
-        {
-          id: "edge-2",
-          source: "node-trigger-2",
-          target: "node-action-2",
-          label: "Immediate",
-        },
-      ],
-    },
-  },
-  {
-    id: "rule-appt-rescheduled-auto",
-    orgId: "default",
-    name: "Auto Move Rescheduled Appointment",
-    description: "Moves rescheduled appointments into the Rescheduled stage",
-    entityType: "appointment",
-    trigger: {
-      event: "appointment.rescheduled",
-      label: "Appointment rescheduled",
-    },
-    action: {
-      type: "moveToStage",
-      processId: "process-appointment-default",
-      stageId: "appt-2",
-      processName: "Appointment Flow",
-      stageName: "Rescheduled",
-    },
-    enabled: true,
-    health: "ok",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "rule-inv-sent-auto",
-    orgId: "default",
-    name: "Auto Move Sent Invoice",
-    description: "Moves invoices to Sent stage upon dispatch",
-    entityType: "invoice",
-    trigger: {
-      event: "invoice.sent",
-      label: "Invoice sent",
-    },
-    action: {
-      type: "moveToStage",
-      processId: "process-invoice-default",
-      stageId: "inv-2",
-      processName: "Billing & Invoicing",
-      stageName: "Sent",
-    },
-    enabled: true,
-    health: "ok",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "rule-inv-paid-auto",
-    orgId: "default",
-    name: "Auto Move Paid Invoice",
-    description: "Moves invoices to Paid stage upon payment settlement",
-    entityType: "invoice",
-    trigger: {
-      event: "invoice.paid",
-      label: "Invoice paid",
-    },
-    action: {
-      type: "moveToStage",
-      processId: "process-invoice-default",
-      stageId: "inv-5",
-      processName: "Billing & Invoicing",
-      stageName: "Paid",
-    },
-    enabled: true,
-    health: "ok",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+const DEFAULT_GLOBAL_RULES: AutomationRule[] = [];
 
 /**
- * Validate that moveToStage targets a process and stage of the EXACT SAME entityType
+ * Validate that moveToStage targets a process and stage of the EXACT SAME entityType (if configured)
  */
 export function validateRuleEntityTarget(
   rule: Partial<AutomationRule>,
   processes: Process[] = getStoredProcesses()
 ): { valid: boolean; error?: string } {
-  if (!rule.entityType) {
-    return { valid: false, error: "Rule requires an entityType." };
-  }
-  if (!rule.action || rule.action.type !== "moveToStage") {
-    return { valid: false, error: "Action must specify moveToStage." };
-  }
+  if (rule.action?.type === "moveToStage" && rule.action.processId) {
+    const { processId, stageId } = rule.action;
+    const targetProcess = processes.find((p) => p.id === processId);
+    if (!targetProcess) {
+      return { valid: false, error: `Target process "${processId}" not found.` };
+    }
 
-  const { processId, stageId } = rule.action;
-  const targetProcess = processes.find((p) => p.id === processId);
-  if (!targetProcess) {
-    return { valid: false, error: `Target process "${processId}" not found.` };
-  }
+    const targetEntityType = targetProcess.entityType || "client";
+    if (rule.entityType && targetEntityType !== rule.entityType) {
+      return {
+        valid: false,
+        error: `Entity mismatch: ${rule.entityType} rule cannot move records to ${targetEntityType} process.`,
+      };
+    }
 
-  const targetEntityType = targetProcess.entityType || "client";
-  if (targetEntityType !== rule.entityType) {
-    return {
-      valid: false,
-      error: `Entity mismatch: ${rule.entityType} rule cannot move records to ${targetEntityType} process.`,
-    };
-  }
-
-  const targetStage = targetProcess.stages.find((s) => s.id === stageId);
-  if (!targetStage) {
-    return { valid: false, error: `Target stage "${stageId}" not found in process "${targetProcess.name}".` };
+    if (stageId) {
+      const targetStage = targetProcess.stages.find((s) => s.id === stageId);
+      if (!targetStage) {
+        return { valid: false, error: `Target stage "${stageId}" not found in process "${targetProcess.name}".` };
+      }
+    }
   }
 
   return { valid: true };
@@ -377,27 +206,35 @@ export function checkRuleCycle(
 
 export function getStoredRules(orgId?: string): AutomationRule[] {
   if (typeof localStorage === "undefined") {
-    return DEFAULT_GLOBAL_RULES;
+    return [];
   }
   try {
     const raw = localStorage.getItem(AUTOMATION_RULES_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(AUTOMATION_RULES_STORAGE_KEY, JSON.stringify(DEFAULT_GLOBAL_RULES));
-      return orgId && orgId !== "all"
-        ? DEFAULT_GLOBAL_RULES.filter((r) => !r.orgId || r.orgId === "default" || r.orgId === orgId)
-        : DEFAULT_GLOBAL_RULES;
+      return [];
     }
     const parsed: AutomationRule[] = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem(AUTOMATION_RULES_STORAGE_KEY, JSON.stringify(DEFAULT_GLOBAL_RULES));
-      return DEFAULT_GLOBAL_RULES;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    // Filter out hardcoded sample mock rules
+    const legacyMockIds = new Set([
+      "rule-client-intake-auto",
+      "rule-appt-booked-auto",
+      "rule-appt-rescheduled-auto",
+      "rule-inv-sent-auto",
+      "rule-inv-paid-auto",
+    ]);
+    const filtered = parsed.filter((r) => !legacyMockIds.has(r.id));
+    if (filtered.length !== parsed.length) {
+      localStorage.setItem(AUTOMATION_RULES_STORAGE_KEY, JSON.stringify(filtered));
     }
     if (orgId && orgId !== "all") {
-      return parsed.filter((r) => !r.orgId || r.orgId === "default" || r.orgId === orgId);
+      return filtered.filter((r) => !r.orgId || r.orgId === "default" || r.orgId === orgId);
     }
-    return parsed;
+    return filtered;
   } catch {
-    return DEFAULT_GLOBAL_RULES;
+    return [];
   }
 }
 

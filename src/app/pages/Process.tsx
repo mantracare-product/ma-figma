@@ -1189,6 +1189,7 @@ export default function Process() {
   // CHANGE 1: Collapsible sections state
   const [workflowStepsExpanded, setWorkflowStepsExpanded] = useState(true);
   const [workflowStepsDrawerOpen, setWorkflowStepsDrawerOpen] = useState(false);
+  const [editingAutomationStepId, setEditingAutomationStepId] = useState<string | undefined>(undefined);
   const [automationDrawerView, setAutomationDrawerView] = useState<"library" | "flowbuilder">("library");
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
   const [workflowStepCategory, setWorkflowStepCategory] = useState("all");
@@ -4383,95 +4384,90 @@ export default function Process() {
 
                 return (
                   <div className="h-full flex flex-col">
-                    {/* Stage Header */}
-                    <div className="px-6 py-4 border-b border-border">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <h2 className="text-2xl font-bold" style={{ fontFamily: 'DM Sans, sans-serif' }}>{stage.name}</h2>
-                            <span className="text-sm px-3 py-1 bg-secondary/10 text-secondary rounded-full" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Stage
-                            </span>
-                            {targetedStages.has(stage.id) && (
-                              <Tooltip text="Records transition into this stage automatically via Global Automation rules.">
-                                <Link
-                                  to="/automation"
-                                  className="text-xs px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-full font-semibold flex items-center gap-1 transition-colors"
-                                >
-                                  <Zap className="w-3 h-3 text-blue-600" />
-                                  <span>Moves here via Automation</span>
-                                </Link>
-                              </Tooltip>
-                            )}
-                          </div>
-                          <p className="text-sm mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{stage.description}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Tooltip text="Temporarily disable this stage">
-                            <label className="relative inline-flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={temporaryDisableEnabled}
-                                onChange={(e) => {
-                                  setTemporaryDisableEnabled(e.target.checked);
-                                  toast.success(e.target.checked ? "Stage temporarily disabled" : "Stage re-enabled");
-                                }}
-                              />
-                              <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                            </label>
-                          </Tooltip>
-                          <HowItWorksButton label="How Stage Works" onClick={() => setShowStageHowItWorksModal(true)} />
-                          {stage.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stage.systemCategory) ? (
-                            <Tooltip text="Required stage cannot be deleted">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled
-                                className="opacity-50 cursor-not-allowed text-gray-400"
-                              >
-                                <Lock className="w-4 h-4 text-gray-400" />
-                              </Button>
-                            </Tooltip>
-                          ) : (
-                            <Tooltip text="Delete Stage">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setStageToDelete(stage);
-                                  const others = selectedProcessData?.stages.filter((s) => s.id !== stage.id) || [];
-                                  if (others.length > 0) {
-                                    setReplacementStageId(others[0].id);
-                                  }
-                                  setShowDeleteStageModal(true);
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                              </Button>
-                            </Tooltip>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Stage Tabs */}
-                      <div className="flex items-center gap-2 mt-4">
+                    {/* Stage Header: Tabs + Corner Automations Button */}
+                    <div className="px-6 py-3.5 border-b border-border bg-white flex items-center justify-between">
+                      {/* Left: General & AI Agent Tabs */}
+                      <div className="flex items-center gap-2">
                         {[
                           { id: "general", label: "General" },
                           { id: "ai-agent", label: "AI Agent" },
-                          { id: "automation", label: "Automation" },
-                        ].map((tab) => (
-                          <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer ${(activeTab === tab.id || (tab.id === "general" && activeTab === "basic") || (tab.id === "ai-agent" && activeTab === "advanced"))
-                              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                              : "text-muted-foreground hover:bg-muted"
+                        ].map((tab) => {
+                          const isActive =
+                            activeTab === tab.id ||
+                            (tab.id === "general" && (activeTab === "basic" || activeTab === "automation")) ||
+                            (tab.id === "ai-agent" && activeTab === "advanced");
+                          return (
+                            <button
+                              key={tab.id}
+                              onClick={() => setActiveTab(tab.id)}
+                              className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all cursor-pointer ${
+                                isActive
+                                  ? "bg-primary text-primary-foreground shadow-xs"
+                                  : "text-muted-foreground hover:bg-muted hover:text-gray-900"
                               }`}
-                          >
-                            {tab.label}
-                          </button>
-                        ))}
+                              style={{ fontFamily: 'DM Sans, sans-serif' }}
+                            >
+                              {tab.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Right Corner: Automation Icon Label Button + Stage Delete */}
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedWorkflowStepCard(null);
+                            setEditingAutomationStepId(undefined);
+                            setAutomationDrawerView("library");
+                            setWorkflowStepsDrawerOpen(true);
+                          }}
+                          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-gray-800 bg-white hover:bg-gray-50 border border-gray-200 shadow-2xs hover:shadow-xs transition-all cursor-pointer group"
+                          style={{ fontFamily: 'DM Sans, sans-serif' }}
+                          title="View and configure automations for this stage"
+                        >
+                          <div className="w-5 h-5 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                            <Zap className="w-3.5 h-3.5" />
+                          </div>
+                          <span>Automations</span>
+                          {workflowSteps.length > 0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                              {workflowSteps.length}
+                            </span>
+                          )}
+                        </button>
+
+                        {stage.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stage.systemCategory) ? (
+                          <Tooltip text="Required stage cannot be deleted">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled
+                              className="opacity-50 cursor-not-allowed text-gray-400 h-9 w-9 p-0"
+                            >
+                              <Lock className="w-4 h-4 text-gray-400" />
+                            </Button>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip text="Delete Stage">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-9 w-9 p-0 hover:bg-red-50 hover:border-red-200"
+                              onClick={() => {
+                                setStageToDelete(stage);
+                                const others = selectedProcessData?.stages.filter((s) => s.id !== stage.id) || [];
+                                if (others.length > 0) {
+                                  setReplacementStageId(others[0].id);
+                                }
+                                setShowDeleteStageModal(true);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </Tooltip>
+                        )}
                       </div>
                     </div>
 
@@ -6454,120 +6450,16 @@ export default function Process() {
                         </div>
                       )}
 
-                      {/* Automation Tab */}
-                      {activeTab === "automation" && (
-                        <div className="space-y-4">
-                          {/* Toolbar Row */}
-                          <div className="flex items-center justify-between gap-3">
-                            {/* Left: Help Icon with Tooltip */}
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                Automations
-                              </span>
-                              <Tooltip text="Triggers, delays, conditions, and actions executing automatically during this stage.">
-                                <button
-                                  type="button"
-                                  onClick={() => setShowAutomationHowItWorksModal(true)}
-                                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                                  aria-label="How Automations Works"
-                                >
-                                  <Info className="w-3.5 h-3.5" />
-                                </button>
-                              </Tooltip>
-                            </div>
 
-                            {/* Right: Primary Dark Button "+ Add automation" */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedWorkflowStepCard(null);
-                                setAutomationDrawerView("library");
-                                setWorkflowStepsDrawerOpen(true);
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-900/40"
-                              style={{ fontFamily: 'DM Sans, sans-serif' }}
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Add automation</span>
-                            </button>
-                          </div>
-
-                          {/* ONE list of automation cards */}
-                          <StageAutomationCards
-                            stageId={stage.id}
-                            stageName={stage.name}
-                            steps={workflowSteps}
-                            onStepsChange={(newSteps) => {
-                              setWorkflowSteps(newSteps);
-                              setProcesses((prev) =>
-                                prev.map((p) =>
-                                  p.id !== selectedProcess
-                                    ? p
-                                    : {
-                                        ...p,
-                                        stages: p.stages.map((s) =>
-                                          s.id !== stage.id ? s : { ...s, workflowSteps: newSteps }
-                                        ),
-                                      }
-                                )
-                              );
-                            }}
-                            onAddAutomation={() => {
-                              setSelectedWorkflowStepCard(null);
-                              setAutomationDrawerView("library");
-                              setWorkflowStepsDrawerOpen(true);
-                            }}
-                            onEditStep={(step) => {
-                              handleEditWorkflowStep(step);
-                            }}
-                            onDuplicateStep={(step) => {
-                              const duplicated = {
-                                ...step,
-                                id: `ws-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-                                name: `${step.name} (Copy)`,
-                              };
-                              const updated = [...workflowSteps, duplicated];
-                              setWorkflowSteps(updated);
-                              setProcesses((prev) =>
-                                prev.map((p) =>
-                                  p.id !== selectedProcess
-                                    ? p
-                                    : {
-                                        ...p,
-                                        stages: p.stages.map((s) =>
-                                          s.id !== stage.id ? s : { ...s, workflowSteps: updated }
-                                        ),
-                                      }
-                                )
-                              );
-                              toast.success("Automation duplicated");
-                            }}
-                            onDeleteStep={(stepId) => {
-                              const updated = workflowSteps.filter((s) => s.id !== stepId);
-                              setWorkflowSteps(updated);
-                              setProcesses((prev) =>
-                                prev.map((p) =>
-                                  p.id !== selectedProcess
-                                    ? p
-                                    : {
-                                        ...p,
-                                        stages: p.stages.map((s) =>
-                                          s.id !== stage.id ? s : { ...s, workflowSteps: updated }
-                                        ),
-                                      }
-                                )
-                              );
-                              toast.success("Automation step removed");
-                            }}
-                          />
-                        </div>
-                      )}
 
                       {/* Automation Side Drawer */}
                       {/* Refactored Scope-Aware Automation Drawer (Stage Scope) */}
                       <AddAutomationDrawer
                         isOpen={workflowStepsDrawerOpen}
-                        onClose={() => setWorkflowStepsDrawerOpen(false)}
+                        onClose={() => {
+                          setWorkflowStepsDrawerOpen(false);
+                          setEditingAutomationStepId(undefined);
+                        }}
                         scope="stage"
                         stageRef={{
                           processId: selectedProcess || "",
@@ -6600,6 +6492,36 @@ export default function Process() {
                           }
                         }}
                         stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
+                        initialStepIdToConfigure={editingAutomationStepId}
+                        onSaveAutomation={(savedAuto) => {
+                          const updated = savedAuto.steps.map((s) => ({
+                            id: s.id,
+                            name: s.name,
+                            description: s.description || "",
+                            iconKey: s.iconKey || "zap",
+                            stepKey: s.stepKey,
+                            params: s.params || {},
+                            delayValue: s.delay?.value || 0,
+                            delayUnit: (s.delay?.unit as any) || "minutes",
+                            executionType: "wait" as const,
+                            trigger: savedAuto.trigger.type === "stage" && (savedAuto.trigger as any).when === "exit" ? "exit_stage" : "stage",
+                          }));
+                          setWorkflowSteps(updated);
+                          if (selectedProcess && expandedStage) {
+                            setProcesses((prev) =>
+                              prev.map((p) =>
+                                p.id !== selectedProcess
+                                  ? p
+                                  : {
+                                      ...p,
+                                      stages: p.stages.map((s) =>
+                                        s.id !== expandedStage ? s : { ...s, workflowSteps: updated }
+                                      ),
+                                    }
+                              )
+                            );
+                          }
+                        }}
                       />
 
                       {/* Step Detail Drawer */}
@@ -6641,6 +6563,7 @@ export default function Process() {
                           setStepDetailDrawerOpen(false);
                           setIsFlowBuilderDrawerOpen(true);
                         }}
+                        onlyParameters={true}
                         onSave={() => {
                           const pendingIntent = intentInput.trim();
                           const finalIntentConditions = pendingIntent

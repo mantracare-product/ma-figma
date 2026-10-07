@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { X, ChevronRight, ChevronDown, Info, GitBranch } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import StepParametersFields from "./StepParametersFields";
@@ -37,8 +38,9 @@ export interface StepDetailDrawerProps {
 
   onBack: () => void;
   onClose: () => void;
-  onSave: () => void;
+  onSave?: () => void;
   onShowInFlowBuilder?: () => void;
+  onlyParameters?: boolean;
 }
 
 function InfoTooltip({ text }: { text: string }) {
@@ -77,11 +79,12 @@ export default function StepDetailDrawer({
   onClose,
   onSave,
   onShowInFlowBuilder,
+  onlyParameters = false,
 }: StepDetailDrawerProps) {
   // Local UI-only state — neither caller needs to own this
   const [executionTimingModalOpen, setExecutionTimingModalOpen] = useState(false);
 
-  if (!isOpen || !step) return null;
+  if (typeof document === "undefined" || !isOpen || !step) return null;
 
   // Build trigger options based on context
   let triggerOptions: Array<{ key: string; label: string; desc: string }> = [];
@@ -102,20 +105,11 @@ export default function StepDetailDrawer({
       }));
     }
   } else {
-    // Stage-level triggers: Enter Stage, Exit Stage, In Call, In Chat, Post Call
-    const allowed = stepAllowedTriggers[step.stepKey ?? ""] ?? ["stage", "enter_stage", "exit_stage", "incall", "postcall"];
-    const stageCandidates = [
-      { key: "stage", label: "Enter Stage", desc: "Runs automatically when the record enters this stage." },
-      { key: "exit_stage", label: "Exit Stage", desc: "Runs automatically when the record exits this stage." },
-      { key: "incall", label: "In Call", desc: "Fires mid-conversation when the AI decides to execute this action." },
-      { key: "inchat", label: "In Chat", desc: "Fires when the client sends a message in a chat channel during this stage." },
-      { key: "postcall", label: "Post Call", desc: "Fires automatically once the call has finished." },
+    // Stage-level triggers: strictly two triggers (On Stage Enter & On Stage Exit)
+    triggerOptions = [
+      { key: "stage", label: "On Stage Enter", desc: "Runs automatically when the record enters this stage." },
+      { key: "exit_stage", label: "On Stage Exit", desc: "Runs automatically when the record exits this stage." },
     ];
-
-    triggerOptions = stageCandidates.filter((cand) => {
-      if (cand.key === "stage" || cand.key === "exit_stage") return true;
-      return allowed.includes(cand.key);
-    });
   }
 
   const activeTrigger = triggerOptions.find((t) => t.key === stepTrigger) || triggerOptions[0];
@@ -125,11 +119,11 @@ export default function StepDetailDrawer({
       ? "Runs automatically when the record exits this stage."
       : "Runs in sequence as part of this stage's step order, with an optional delay.");
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40"
+        className="fixed inset-0 z-[60]"
         style={{ backgroundColor: "rgba(0,0,0,0.30)" }}
         onClick={() => {
           if (isCreatingNewStep) {
@@ -142,7 +136,7 @@ export default function StepDetailDrawer({
 
       {/* Drawer panel */}
       <div
-        className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border"
+        className="fixed top-0 right-0 h-screen z-[70] flex flex-col bg-white border-l border-border"
         style={{
           width: "55vw",
           minWidth: "55vw",
@@ -170,7 +164,7 @@ export default function StepDetailDrawer({
               </p>
             </div>
             <div className="flex items-center gap-2 ml-4 flex-shrink-0">
-              {onShowInFlowBuilder && (
+              {!onlyParameters && onShowInFlowBuilder && (
                 <button
                   type="button"
                   onClick={onShowInFlowBuilder}
@@ -199,199 +193,239 @@ export default function StepDetailDrawer({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-          {/* Trigger, Execution & Delay Row */}
-          <div className="flex items-start gap-4">
-            {/* Column 1 — Trigger Dropdown */}
-            <div className="w-[280px] flex-shrink-0">
-              <div className="flex items-center gap-1.5 mb-2">
-                <label
-                  className="text-sm font-semibold"
-                  style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                >
-                  Trigger
-                </label>
-                <InfoTooltip text="Select the event or stage lifecycle point that triggers this action." />
-              </div>
+          {!onlyParameters && (
+            <>
+              {/* Trigger, Execution & Delay Row */}
+              <div className="flex items-start gap-4">
+                {/* Column 1 — Trigger Dropdown */}
+                <div className="w-[280px] flex-shrink-0">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <label
+                      className="text-sm font-semibold"
+                      style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      Trigger
+                    </label>
+                    <InfoTooltip text="Select the event or stage lifecycle point that triggers this action." />
+                  </div>
 
-              <div className="relative">
-                <select
-                  value={stepTrigger}
-                  onChange={(e) => onStepTriggerChange(e.target.value)}
-                  className="w-full appearance-none px-3.5 py-2.5 pr-9 text-sm font-medium rounded-lg border border-border bg-white text-gray-900 shadow-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer transition-colors"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  {triggerOptions.map((opt) => (
-                    <option key={opt.key} value={opt.key}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400">
-                  <ChevronDown className="w-4 h-4" />
-                </div>
-              </div>
+                  <div className="relative">
+                    <select
+                      value={stepTrigger}
+                      onChange={(e) => onStepTriggerChange(e.target.value)}
+                      className="w-full appearance-none px-3.5 py-2.5 pr-9 text-sm font-medium rounded-lg border border-border bg-white text-gray-900 shadow-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer transition-colors"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {triggerOptions.map((opt) => (
+                        <option key={opt.key} value={opt.key}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400">
+                      <ChevronDown className="w-4 h-4" />
+                    </div>
+                  </div>
 
-              <p
-                className="text-xs mt-2 leading-relaxed"
-                style={{ color: "#64748B", fontFamily: "Outfit, sans-serif" }}
-              >
-                {subtitleText}
-              </p>
-            </div>
-
-            {/* Column 2 — Execution */}
-            {stepTrigger === "stage" || stepTrigger === "enter_stage" || stepTrigger === "exit_stage" || context === "automation" ? (
-              <div className="w-[140px] flex-shrink-0">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <label
-                    className="text-sm font-semibold"
-                    style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                  >
-                    Execution
-                  </label>
-                  <InfoTooltip text="Wait runs this step only after the previous one finishes. Parallel runs it at the same time as other steps." />
-                </div>
-                <button
-                  onClick={() => setExecutionTimingModalOpen(true)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
-                >
-                  <span
-                    className="text-sm truncate"
-                    style={{ color: "#020817", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {executionType === "wait" ? "Wait" : "In Parallel"}
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
-                </button>
-              </div>
-            ) : stepTrigger === "postcall" ? (
-              <div className="w-[140px] flex-shrink-0">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <label
-                    className="text-sm font-semibold"
-                    style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                  >
-                    Execution
-                  </label>
-                  <InfoTooltip text="Wait runs this step only after the previous one finishes. Parallel runs it at the same time as other steps." />
-                </div>
-                <button
-                  onClick={() => setExecutionTimingModalOpen(true)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
-                >
-                  <span
-                    className="text-sm truncate"
-                    style={{ color: "#020817", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {executionType === "wait" ? "Wait" : "In Parallel"}
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
-                </button>
-              </div>
-            ) : stepTrigger === "incall" || stepTrigger === "inchat" ? (
-              <div className="w-fit flex-shrink-0">
-                <label
-                  className="block text-sm font-semibold mb-2"
-                  style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                >
-                  Execution
-                </label>
-                <div
-                  className="w-full px-3 py-2.5 rounded-md border border-border bg-muted/10 flex items-center gap-2"
-                  style={{ height: "42px" }}
-                >
-                  <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
-                  <span
-                    className="text-xs truncate whitespace-nowrap"
+                  <p
+                    className="text-xs mt-2 leading-relaxed"
                     style={{ color: "#64748B", fontFamily: "Outfit, sans-serif" }}
                   >
-                    Event Driven · AI Action
-                  </span>
+                    {subtitleText}
+                  </p>
                 </div>
-              </div>
-            ) : null}
 
-            {/* Column 3 — Delay */}
-            {(stepTrigger === "stage" || stepTrigger === "postcall") && (
-              <div className="w-[150px] flex-shrink-0">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <label
-                    className="text-sm font-semibold"
-                    style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                  >
-                    Delay
-                  </label>
-                  <InfoTooltip text="Time to wait after the previous step finishes before this one runs." />
-                </div>
-                <div className="flex items-center border border-border rounded-lg bg-white overflow-hidden">
-                  <input
-                    type="number"
-                    value={delayValue}
-                    onChange={(e) =>
-                      onDelayValueChange(parseInt(e.target.value) || 0)
-                    }
-                    className="w-16 px-3 py-2.5 text-sm outline-none bg-transparent border-none"
-                    style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
-                  />
-                  <div className="w-px h-5 bg-gray-300 flex-shrink-0" />
+                {/* Column 2 — Execution */}
+                {stepTrigger === "stage" || stepTrigger === "enter_stage" || stepTrigger === "exit_stage" || context === "automation" ? (
+                  <div className="w-[140px] flex-shrink-0">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <label
+                        className="text-sm font-semibold"
+                        style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        Execution
+                      </label>
+                      <InfoTooltip text="Wait runs this step only after the previous one finishes. Parallel runs it at the same time as other steps." />
+                    </div>
+                    <button
+                      onClick={() => setExecutionTimingModalOpen(true)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
+                    >
+                      <span
+                        className="text-sm truncate"
+                        style={{ color: "#020817", fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {executionType === "wait" ? "Wait" : "In Parallel"}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
+                    </button>
+                  </div>
+                ) : stepTrigger === "postcall" ? (
+                  <div className="w-[140px] flex-shrink-0">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <label
+                        className="text-sm font-semibold"
+                        style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        Execution
+                      </label>
+                      <InfoTooltip text="Wait runs this step only after the previous one finishes. Parallel runs it at the same time as other steps." />
+                    </div>
+                    <button
+                      onClick={() => setExecutionTimingModalOpen(true)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
+                    >
+                      <span
+                        className="text-sm truncate"
+                        style={{ color: "#020817", fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {executionType === "wait" ? "Wait" : "In Parallel"}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
+                    </button>
+                  </div>
+                ) : stepTrigger === "incall" || stepTrigger === "inchat" ? (
+                  <div className="w-fit flex-shrink-0">
+                    <label
+                      className="block text-sm font-semibold mb-2"
+                      style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      Execution
+                    </label>
+                    <div
+                      className="w-full px-3 py-2.5 rounded-md border border-border bg-muted/10 flex items-center gap-2"
+                      style={{ height: "42px" }}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                      <span
+                        className="text-xs truncate whitespace-nowrap"
+                        style={{ color: "#64748B", fontFamily: "Outfit, sans-serif" }}
+                      >
+                        Event Driven · AI Action
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Column 3 — Delay */}
+                {(stepTrigger === "stage" || stepTrigger === "postcall") && (
+                  <div className="w-[150px] flex-shrink-0">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <label
+                        className="text-sm font-semibold"
+                        style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        Delay
+                      </label>
+                      <InfoTooltip text="Time to wait after the previous step finishes before this one runs." />
+                    </div>
+                    <div className="flex items-center border border-border rounded-lg bg-white overflow-hidden">
+                      <input
+                        type="number"
+                        value={delayValue}
+                        onChange={(e) =>
+                          onDelayValueChange(parseInt(e.target.value) || 0)
+                        }
+                        className="w-16 px-3 py-2.5 text-sm outline-none bg-transparent border-none"
+                        style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
+                      />
+                      <div className="w-px h-5 bg-gray-300 flex-shrink-0" />
+                      <select
+                        value={delayUnit}
+                        onChange={(e) => onDelayUnitChange(e.target.value)}
+                        className="px-3 py-2.5 text-sm bg-transparent border-none outline-none hover:bg-gray-50 transition-colors"
+                        style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
+                      >
+                        {["Second", "Minute", "Hour", "Day", "Week", "Month"].map(
+                          (unit) => (
+                            <option key={unit} value={unit}>
+                              {unit}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Connect After dropdown */}
+              {(stepTrigger === "stage" || stepTrigger === "postcall") && executionType === "wait" && (
+                <div className="w-full">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <label
+                      className="text-sm font-semibold"
+                      style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      Connect After
+                    </label>
+                    <InfoTooltip text="Choose which step must finish before this one starts. Leave as 'Start of flow' to run it first." />
+                  </div>
                   <select
-                    value={delayUnit}
-                    onChange={(e) => onDelayUnitChange(e.target.value)}
-                    className="px-3 py-2.5 text-sm bg-transparent border-none outline-none hover:bg-gray-50 transition-colors"
+                    value={connectAfterId || "start"}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      onConnectAfterIdChange(val === "start" ? undefined : val);
+                    }}
+                    className="w-full max-w-[360px] px-3 py-2.5 text-sm bg-white border border-border rounded-lg outline-none hover:bg-gray-50 transition-colors"
                     style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
                   >
-                    {["Second", "Minute", "Hour", "Day", "Week", "Month"].map(
-                      (unit) => (
-                        <option key={unit} value={unit}>
-                          {unit}
-                        </option>
-                      )
-                    )}
+                    <option value="start">Start of flow</option>
+                    {availablePredecessors.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Connect After dropdown */}
-          {(stepTrigger === "stage" || stepTrigger === "postcall") && executionType === "wait" && (
-            <div className="w-full">
-              <div className="flex items-center gap-1.5 mb-2">
-                <label
-                  className="text-sm font-semibold"
-                  style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                >
-                  Connect After
-                </label>
-                <InfoTooltip text="Choose which step must finish before this one starts. Leave as 'Start of flow' to run it first." />
-              </div>
-              <select
-                value={connectAfterId || "start"}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  onConnectAfterIdChange(val === "start" ? undefined : val);
-                }}
-                className="w-full max-w-[360px] px-3 py-2.5 text-sm bg-white border border-border rounded-lg outline-none hover:bg-gray-50 transition-colors"
-                style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
-              >
-                <option value="start">Start of flow</option>
-                {availablePredecessors.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+              )}
+            </>
           )}
 
-          {/* ───────────── CONDITIONS + PARAMETERS (shared component) ───────────── */}
-          <StepParametersFields
-            stepKey={step.stepKey ?? ""}
-            params={params}
-            onChange={onParamsChange}
-            processes={processes}
-            stepTrigger={stepTrigger}
-          />
+          {/* Wait / Delay step configuration */}
+          {(step.stepKey === "wait" || step.stepKey === "delay") ? (
+            <div className="space-y-4 bg-gray-50/50 p-5 rounded-xl border border-gray-200">
+              <h3 className="text-sm font-bold text-gray-900">Wait Duration</h3>
+              <p className="text-xs text-gray-500">
+                Specify how long to pause before executing subsequent actions in this workflow.
+              </p>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min="1"
+                  value={params.delayValue ?? delayValue ?? 15}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    onParamsChange({ delayValue: val });
+                    onDelayValueChange(val);
+                  }}
+                  className="w-28 px-3.5 py-2.5 text-sm font-semibold border border-gray-200 rounded-lg outline-none focus:border-blue-500 bg-white"
+                />
+                <select
+                  value={params.delayUnit ?? delayUnit ?? "minutes"}
+                  onChange={(e) => {
+                    onParamsChange({ delayUnit: e.target.value });
+                    onDelayUnitChange(e.target.value);
+                  }}
+                  className="px-3.5 py-2.5 text-sm font-semibold border border-gray-200 rounded-lg bg-white outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="seconds">Seconds</option>
+                  <option value="minutes">Minutes</option>
+                  <option value="hours">Hours</option>
+                  <option value="days">Days</option>
+                </select>
+              </div>
+            </div>
+          ) : (
+            /* ───────────── CONDITIONS + PARAMETERS (shared component) ───────────── */
+            <StepParametersFields
+              stepKey={step.stepKey ?? ""}
+              params={params}
+              onChange={onParamsChange}
+              processes={processes}
+              stepTrigger={stepTrigger}
+            />
+          )}
         </div>
 
         {/* Footer */}
@@ -509,6 +543,7 @@ export default function StepDetailDrawer({
           </div>
         </div>
       )}
-    </>
+    </>,
+    document.body
   );
 }

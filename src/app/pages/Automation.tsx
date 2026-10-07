@@ -1,12 +1,8 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   Zap,
-  GitBranch,
   Plus,
   Trash2,
-  Calendar,
-  Receipt,
-  ShieldCheck,
   Pencil,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
@@ -14,85 +10,38 @@ import PageTopBar from "../components/layout/PageTopBar";
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import AddAutomationDrawer, { STEP_ALLOWED_TRIGGERS } from "../components/process/AddAutomationDrawer";
 import type { WorkflowStep } from "../types/workflow";
+import type { EventTriggerType } from "../types/automation";
+import { GLOBAL_TRIGGER_CATALOG } from "../types/automation";
 import {
   useAutomationRules,
   AutomationRule,
-  EVENT_CATALOG,
 } from "../../lib/useAutomationStore";
-import {
-  getStoredProcesses,
-  Process,
-  EntityType,
-} from "../../lib/useProcessStore";
 import { toast } from "sonner";
-
-const ENTITY_CONFIG: Record<
-  EntityType,
-  { label: string; icon: React.ReactNode; color: string; bg: string }
-> = {
-  client: {
-    label: "Processes",
-    icon: <GitBranch className="w-4 h-4" />,
-    color: "#2563EB",
-    bg: "#EFF6FF",
-  },
-  appointment: {
-    label: "Appointments",
-    icon: <Calendar className="w-4 h-4" />,
-    color: "#059669",
-    bg: "#ECFDF5",
-  },
-  invoice: {
-    label: "Invoices",
-    icon: <Receipt className="w-4 h-4" />,
-    color: "#7C3AED",
-    bg: "#F5F3FF",
-  },
-  insurance: {
-    label: "Insurance",
-    icon: <ShieldCheck className="w-4 h-4" />,
-    color: "#D97706",
-    bg: "#FFFBEB",
-  },
-  claim: {
-    label: "Claims",
-    icon: <ShieldCheck className="w-4 h-4" />,
-    color: "#DC2626",
-    bg: "#FEF2F2",
-  },
-};
 
 export default function Automation() {
   const { rules, createRule, updateRule, deleteRule, toggleRule } = useAutomationRules();
-  const [processes, setProcesses] = useState<Process[]>(() => getStoredProcesses());
 
   // Filter state
-  const [selectedEntity, setSelectedEntity] = useState<EntityType | "all">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeRuleId, setActiveRuleId] = useState<string | null>(null);
   const [isAddAutomationDrawerOpen, setIsAddAutomationDrawerOpen] = useState(false);
 
-  useEffect(() => {
-    setProcesses(getStoredProcesses());
-  }, []);
-
-  // Filtered rules list
+  // Filtered rules list (no entities)
   const filteredRules = useMemo(() => {
     return rules.filter((r) => {
-      if (selectedEntity !== "all" && r.entityType !== selectedEntity) return false;
       if (statusFilter === "active" && !r.enabled) return false;
       if (statusFilter === "paused" && r.enabled) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const nameMatch = r.name.toLowerCase().includes(q);
         const triggerMatch = (r.trigger.label || r.trigger.event).toLowerCase().includes(q);
-        const stageMatch = (r.action.stageName || "").toLowerCase().includes(q);
-        if (!nameMatch && !triggerMatch && !stageMatch) return false;
+        const descMatch = (r.description || "").toLowerCase().includes(q);
+        if (!nameMatch && !triggerMatch && !descMatch) return false;
       }
       return true;
     });
-  }, [rules, selectedEntity, statusFilter, searchQuery]);
+  }, [rules, statusFilter, searchQuery]);
 
   // Set default active rule
   useEffect(() => {
@@ -107,49 +56,10 @@ export default function Automation() {
     return rules.find((r) => r.id === activeRuleId) || filteredRules[0] || null;
   }, [rules, activeRuleId, filteredRules]);
 
-  const activeProcess = useMemo(() => {
-    if (!activeRule) return processes[0] || null;
-    return (
-      processes.find((p) => p.id === activeRule.action.processId) ||
-      processes.find((p) => p.entityType === activeRule.entityType) ||
-      processes[0] ||
-      null
-    );
-  }, [activeRule, processes]);
-
-  const activeStage = useMemo(() => {
-    if (!activeProcess) return null;
-    return (
-      activeProcess.stages.find((s) => s.id === activeRule?.action.stageId) ||
-      activeProcess.stages[0] ||
-      null
-    );
-  }, [activeProcess, activeRule]);
-
+  // Workflow steps bound directly to the active rule without any hardcoded mock injections
   const activeWorkflowSteps: WorkflowStep[] = useMemo(() => {
     if (!activeRule) return [];
-    if (activeRule.actions && activeRule.actions.length > 0) {
-      return activeRule.actions;
-    }
-    return [
-      {
-        id: "act-move-stage",
-        name: "Assign Process / Stage",
-        description: `Move record to ${activeRule.action.stageName || "target stage"}`,
-        iconKey: "zap",
-        stepKey: "processmovement",
-        trigger: "stage",
-        executionType: "wait",
-        delayValue: 0,
-        delayUnit: "minutes",
-        params: {
-          processId: activeRule.action.processId,
-          stageId: activeRule.action.stageId,
-          processName: activeRule.action.processName,
-          stageName: activeRule.action.stageName,
-        },
-      },
-    ];
+    return activeRule.actions || [];
   }, [activeRule]);
 
   const handleWorkflowStepsChange = (newSteps: WorkflowStep[]) => {
@@ -160,53 +70,27 @@ export default function Automation() {
     });
   };
 
-  // Create new rule & open flow builder view by default
+  // Create new rule & open flow builder view with completely clean, empty steps
   const handleCreateNewRule = () => {
-    const entity: EntityType = selectedEntity === "all" ? "client" : selectedEntity;
-    const entityProcesses = processes.filter((p) => (p.entityType || "client") === entity);
-    const targetProcess = entityProcesses[0] || processes[0];
-    const targetStage = targetProcess?.stages[0];
-
-    const defaultEvents = EVENT_CATALOG[entity] || EVENT_CATALOG.client;
-    const defaultEvent = defaultEvents[0] || {
-      event: "client.created",
-      label: "Contact Created",
-    };
-
-    const initialSteps: WorkflowStep[] = [
-      {
-        id: `ws-${Date.now()}-1`,
-        name: "Send Welcome WhatsApp",
-        description: "Send instant greeting on intake",
-        iconKey: "whatsapp",
-        stepKey: "whatsapp",
-        trigger: "stage",
-        executionType: "wait",
-        delayValue: 0,
-        delayUnit: "minutes",
-        params: {},
-      },
-    ];
-
     try {
       const created = createRule({
         orgId: "default",
-        name: `New ${ENTITY_CONFIG[entity]?.label || "Rule"} Automation`,
-        description: `Automates stage transition when ${defaultEvent.label.toLowerCase()}`,
-        entityType: entity,
+        name: "New Automation",
+        description: "Executes configured actions when triggered",
+        entityType: "client",
         trigger: {
-          event: defaultEvent.event,
-          label: defaultEvent.label,
+          event: "call.inbound",
+          label: "Inbound call",
           source: "any",
         },
         action: {
           type: "moveToStage",
-          processId: targetProcess?.id || "proc-1",
-          stageId: targetStage?.id || "stg-1",
-          processName: targetProcess?.name || "Default Process",
-          stageName: targetStage?.name || "Initial Stage",
+          processId: "",
+          stageId: "",
+          processName: "",
+          stageName: "",
         },
-        actions: initialSteps,
+        actions: [],
         enabled: true,
         health: "ok",
       });
@@ -218,32 +102,44 @@ export default function Automation() {
     }
   };
 
-  // Table Columns
+  // Table Columns (no entity column)
   const ruleColumns: TableColumn<AutomationRule>[] = [
     {
       id: "name",
       header: "Rule Name",
       align: "left",
-      width: "40%",
+      width: "45%",
       render: (rule) => (
-        <span
-          className="font-bold text-gray-900 hover:text-blue-600 transition-colors cursor-pointer text-xs sm:text-sm"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          {rule.name}
-        </span>
+        <div className="flex flex-col py-0.5">
+          <span
+            className="font-bold text-gray-900 hover:text-blue-600 transition-colors cursor-pointer text-xs sm:text-sm"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            {rule.name}
+          </span>
+          {rule.description && (
+            <span className="text-[11px] text-gray-500 truncate max-w-md">
+              {rule.description}
+            </span>
+          )}
+        </div>
       ),
     },
     {
-      id: "entityType",
-      header: "Entity",
+      id: "trigger",
+      header: "Trigger Event",
       align: "left",
-      width: "25%",
+      width: "30%",
       render: (rule) => {
-        const entInfo = ENTITY_CONFIG[rule.entityType] || ENTITY_CONFIG.client;
+        const catalogEvt = GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
+          (e) => e.event === rule.trigger.event
+        );
         return (
-          <span className="text-xs text-gray-700 font-medium">
-            {entInfo.label}
+          <span className="inline-flex items-center gap-1.5 text-xs text-gray-700 font-medium">
+            <Zap className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span className="truncate">
+              {catalogEvt?.label || rule.trigger.label || rule.trigger.event || "Custom Trigger"}
+            </span>
           </span>
         );
       },
@@ -252,7 +148,7 @@ export default function Automation() {
       id: "status",
       header: "Status",
       align: "center",
-      width: "15%",
+      width: "12%",
       render: (rule) => (
         <button
           type="button"
@@ -274,7 +170,7 @@ export default function Automation() {
       id: "lastRunAt",
       header: "Last Run",
       align: "left",
-      width: "20%",
+      width: "13%",
       render: (rule) => (
         <span className="text-xs text-gray-500 font-mono">
           {rule.lastRunAt
@@ -318,43 +214,33 @@ export default function Automation() {
         {/* Top Header */}
         <PageHeader
           title="Automations"
-          subtitle="Visual rule engine connecting lifecycle events directly to entity pipeline stages."
+          subtitle="Visual rule engine connecting lifecycle events directly to pipeline actions."
         />
 
-        {/* Action Bar powered by PageTopBar */}
+        {/* Action Bar powered by PageTopBar without entity modes */}
         <PageTopBar
-          modes={[
-            { id: "all", label: "All Entities" },
-            { id: "client", label: "Processes" },
-            { id: "appointment", label: "Appointments" },
-            { id: "invoice", label: "Invoices" },
-            { id: "insurance", label: "Insurance" },
-            { id: "claim", label: "Claims" },
-          ]}
-          activeMode={selectedEntity}
-          onModeChange={(m) => setSelectedEntity(m as EntityType | "all")}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          searchPlaceholder="Search rules, events, stages..."
+          searchPlaceholder="Search rules, events, triggers..."
           filterPresets={[
             {
               id: "all",
               label: "All Rules",
-              count: rules.filter((r) => selectedEntity === "all" || r.entityType === selectedEntity).length,
+              count: rules.length,
               isActive: statusFilter === "all",
               onClick: () => setStatusFilter("all"),
             },
             {
               id: "active",
               label: "Active",
-              count: rules.filter((r) => (selectedEntity === "all" || r.entityType === selectedEntity) && r.enabled).length,
+              count: rules.filter((r) => r.enabled).length,
               isActive: statusFilter === "active",
               onClick: () => setStatusFilter("active"),
             },
             {
               id: "paused",
               label: "Paused",
-              count: rules.filter((r) => (selectedEntity === "all" || r.entityType === selectedEntity) && !r.enabled).length,
+              count: rules.filter((r) => !r.enabled).length,
               isActive: statusFilter === "paused",
               onClick: () => setStatusFilter("paused"),
             },
@@ -377,25 +263,81 @@ export default function Automation() {
             setIsAddAutomationDrawerOpen(true);
           }}
           defaultRowsPerPage={15}
-          emptyMessage="No automation rules found matching your filters."
+          emptyMessage="No automation rules found. Click 'New Rule' to create one."
           tableId="automation-rules-table"
         />
       </div>
 
-      {/* Add Automation Drawer (Refactored scope-aware drawer: Global Scope) */}
+      {/* Add Automation Drawer (Global Scope) */}
       <AddAutomationDrawer
         isOpen={isAddAutomationDrawerOpen && !!activeRule}
         onClose={() => setIsAddAutomationDrawerOpen(false)}
         scope="global"
-        defaultView="flowbuilder"
-        processName={activeProcess?.name || activeRule?.name}
-        stageName={activeStage?.name || activeRule?.action.stageName || "Initial Stage"}
-        stageColor={activeStage?.color || "#2563EB"}
-        stageType={activeStage?.stageType}
-        processes={processes}
-        currentProcessId={activeProcess?.id}
+        defaultView="library"
+        initialAutomation={
+          activeRule
+            ? {
+                id: activeRule.id,
+                orgId: activeRule.orgId || "default",
+                name: activeRule.name,
+                description: activeRule.description,
+                scope: "global",
+                status: activeRule.enabled ? "active" : "draft",
+                trigger: {
+                  type: (GLOBAL_TRIGGER_CATALOG.find((c) =>
+                    c.events.some((e) => e.event === activeRule.trigger.event)
+                  )?.type || "call") as EventTriggerType,
+                  event: activeRule.trigger.event,
+                },
+                steps: (activeRule.actions || []).map((s, idx) => ({
+                  id: s.id,
+                  name: s.name,
+                  stepKey: s.stepKey,
+                  iconKey: s.iconKey,
+                  kind: "wait",
+                  delay:
+                    (s.delayValue ?? 0) > 0
+                      ? { value: s.delayValue!, unit: (s.delayUnit as any) || "minutes" }
+                      : undefined,
+                  params: s.params || {},
+                  order: idx + 1,
+                })),
+                updatedAt: activeRule.updatedAt || new Date().toISOString(),
+              }
+            : null
+        }
+        processName={activeRule?.name || "Global Automation"}
         workflowSteps={activeWorkflowSteps}
         onWorkflowStepsChange={handleWorkflowStepsChange}
+        onSaveAutomation={(saved) => {
+          if (!activeRule) return;
+          const catalogEvt = GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
+            (e) => e.event === (saved.trigger as any).event
+          );
+          updateRule(activeRule.id, {
+            name: saved.name,
+            description: saved.description,
+            enabled: saved.status === "active",
+            trigger: {
+              event: (saved.trigger as any).event,
+              label: catalogEvt?.label || (saved.trigger as any).event,
+              source: "any",
+            },
+            actions: (saved.steps || []).map((s) => ({
+              id: s.id,
+              name: s.name,
+              description: s.description || "",
+              iconKey: s.iconKey || "zap",
+              stepKey: s.stepKey,
+              trigger: "stage",
+              executionType: "wait",
+              delayValue: s.delay?.value || 0,
+              delayUnit: s.delay?.unit || "minutes",
+              params: s.params || {},
+            })),
+            updatedAt: new Date().toISOString(),
+          });
+        }}
         stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
       />
     </div>
