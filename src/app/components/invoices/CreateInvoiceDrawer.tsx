@@ -45,6 +45,10 @@ interface CreateInvoiceDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   editingInvoice?: ClientInvoice | null;
+  prefillClientId?: string;
+  prefillClientName?: string;
+  prefillAppointmentId?: string | number;
+  prefillAppointmentTitle?: string;
 }
 
 interface StagedPayment {
@@ -75,6 +79,10 @@ export default function CreateInvoiceDrawer({
   isOpen,
   onClose,
   editingInvoice,
+  prefillClientId,
+  prefillClientName,
+  prefillAppointmentId,
+  prefillAppointmentTitle,
 }: CreateInvoiceDrawerProps) {
   const {
     invoices,
@@ -92,7 +100,13 @@ export default function CreateInvoiceDrawer({
   const [activeTab, setActiveTab] = useState<"general" | "activity" | "documents" | "payments">("general");
   const [activityFilter, setActivityFilter] = useState<"all" | "billing" | "comm" | "crm">("all");
 
-  const [selectedClientId, setSelectedClientId] = useState<string>(clientsList[0]?.id || "c-1");
+  const [selectedClientId, setSelectedClientId] = useState<string>(() => {
+    if (prefillClientId) {
+      const match = clientsList.find((c) => c.id === prefillClientId || c.name === prefillClientName);
+      if (match) return match.id;
+    }
+    return clientsList[0]?.id || "c-1";
+  });
   const [dueDate, setDueDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 14);

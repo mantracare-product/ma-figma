@@ -16,9 +16,11 @@ import {
   useAutomationRules,
   AutomationRule,
 } from "../../lib/useAutomationStore";
+import { useProcessStore } from "../../lib/useProcessStore";
 import { toast } from "sonner";
 
 export default function Automation() {
+  const { processes } = useProcessStore();
   const { rules, createRule, updateRule, deleteRule, toggleRule } = useAutomationRules();
 
   // Filter state
@@ -274,6 +276,7 @@ export default function Automation() {
         onClose={() => setIsAddAutomationDrawerOpen(false)}
         scope="global"
         defaultView="library"
+        processes={processes}
         initialAutomation={
           activeRule
             ? {

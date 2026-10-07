@@ -34,8 +34,7 @@ export interface StepItem {
 }
 
 export const ALL_WORKFLOW_STEPS: StepItem[] = [
-  { key: "processmovement", name: "Assign Process / Stage", desc: "Move the record to a specific process and stage.", iconKey: "zap", cats: ["all", "workflow"], popular: true },
-  { key: "movetonewprocess", name: "Move to New Process", desc: "Move record to another process and stage to continue the pipeline.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
+  { key: "processmovement", name: "Move to Process / Stage", desc: "Move the record to a specific process and stage.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
   { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the record as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
   { key: "scheduleappointment", name: "Schedule Appointment", desc: "Book or schedule an appointment for this client/contact.", iconKey: "calendar", cats: ["all", "records", "workflow"], popular: true },
   { key: "generate_invoice", name: "Generate Invoice", desc: "Generate invoice in Draft for appointment or record (strictly idempotent).", iconKey: "filetext", cats: ["all", "records"], popular: true },

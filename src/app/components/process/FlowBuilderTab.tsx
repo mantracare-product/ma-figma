@@ -28,6 +28,7 @@ import {
 } from "../../../lib/automationNormalizer";
 import StepParametersFields from "./StepParametersFields";
 import StepDetailDrawer from "./StepDetailDrawer";
+import { getStoredProcesses } from "../../../lib/useProcessStore";
 import { FETCH_FIELD_SOURCES } from "./VariablePickerButton";
 import { toast } from "sonner";
 import { HowItWorksModal, HowItWorksButton } from "../help/HowItWorksModal";
@@ -199,8 +200,7 @@ const NODE_CATEGORIES = [
       { type: "condition" as NodeType, label: "Condition", icon: <Split className="w-4 h-4" />, desc: "Gate this step behind field or intent conditions" },
       { type: "wait" as NodeType, label: "Wait / Delay", icon: <Clock className="w-4 h-4" />, desc: "Delay this step before it runs" },
       { type: "parallel" as NodeType, label: "Parallel Branches", icon: <Layers className="w-4 h-4" />, desc: "Run two automations simultaneously in parallel" },
-      { type: "move-process" as NodeType, label: "Assign Process / Stage", icon: <Workflow className="w-4 h-4" />, desc: "Move record to a specific process and stage" },
-      { type: "move-new-process" as NodeType, label: "Move to New Process", icon: <GitBranch className="w-4 h-4" />, desc: "Move record to another process to continue the pipeline" },
+      { type: "move-process" as NodeType, label: "Move to Process / Stage", icon: <Workflow className="w-4 h-4" />, desc: "Move record to a specific process and stage" },
       { type: "end" as NodeType, label: "End Workflow", icon: <XCircle className="w-4 h-4" />, desc: "Terminate workflow execution" },
     ],
   },
@@ -469,7 +469,8 @@ const STEP_KEY_TO_NODE_TYPE: Record<string, NodeType> = {
   fieldupdate: "field-update",
   assignhuman: "assign-responsible",
   processmovement: "move-process",
-  movetonewprocess: "move-new-process",
+  movetonewprocess: "move-process",
+  "move-new-process": "move-process",
   stagemovement: "move-stage",
   callaction: "call-transfer",
   callhangup: "call-hangup",
@@ -534,6 +535,7 @@ export default function FlowBuilderTab({
   onTriggerClick,
   onSave,
 }: FlowBuilderTabProps) {
+  const effectiveProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
   // Drawer execution/timing controls (seeded on openConfig)
   const [drawerTrigger, setDrawerTrigger] = useState<"stage" | "incall" | "inchat" | "postcall">("stage");
   const [drawerExecType, setDrawerExecType] = useState<"wait" | "parallel">("wait");
@@ -2124,11 +2126,19 @@ export default function FlowBuilderTab({
                               Send invoice statement
                             </p>
                           )}
-                          {(node.type === "move-process" || node.type === "move-stage" || node.type === "move-new-process") && (
-                            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                              {node.config?.stageName ? `Move to: ${node.config.stageName}` : node.config?.processName ? `Move to: ${node.config.processName}` : "Assign process/stage"}
-                            </p>
-                          )}
+                          {(node.type === "move-process" || node.type === "move-stage" || node.type === "move-new-process") && (() => {
+                            const targetProc = effectiveProcesses.find(p => p.id === (node.config?.stepDetailProcess || node.config?.processId));
+                            const targetStage = targetProc?.stages?.find(s => s.id === (node.config?.stepDetailStage || node.config?.stageId) || s.name === (node.config?.stepDetailStage || node.config?.stageId));
+                            const procDisplay = targetProc?.name || node.config?.processName;
+                            const stageDisplay = targetStage?.name || node.config?.stageName;
+                            return (
+                              <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                                {stageDisplay && procDisplay ? `Move to: ${procDisplay} → ${stageDisplay}` :
+                                 stageDisplay ? `Move to: ${stageDisplay}` :
+                                 procDisplay ? `Move to: ${procDisplay}` : "Move to Process / Stage"}
+                              </p>
+                            );
+                          })()}
                           {node.type === "parallel" && (
                             <div className="mt-1 flex items-center justify-between gap-1">
                               <p className="text-[10px] text-muted-foreground truncate">
@@ -2349,7 +2359,7 @@ export default function FlowBuilderTab({
         step={configNode ? (workflowSteps.find(s => s.id === (configNode.config?.sourceStepId ?? configNode.config?.syntheticFor ?? configNode.id)) ?? null) : null}
         isCreatingNewStep={false}
         stepAllowedTriggers={stepAllowedTriggers}
-        processes={processes}
+        processes={effectiveProcesses}
         stepTrigger={drawerTrigger}
         onStepTriggerChange={setDrawerTrigger}
         executionType={drawerExecType}

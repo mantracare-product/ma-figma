@@ -33,6 +33,8 @@ import {
 } from "lucide-react";
 import { Link } from "react-router";
 import InvoiceProgressBar from "./InvoiceProgressBar";
+import { ChevronStageRibbon } from "../common/ChevronStageRibbon";
+import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES } from "../../../lib/useProcessStore";
 import RecordPaymentModal from "./RecordPaymentModal";
 import {
   getActivityForClient,
@@ -95,6 +97,25 @@ export default function InvoiceDetailDrawer({
 
   const isAutomated = invoice.createdBy === "system";
   const availableCredit = getClientCredit(invoice.clientId);
+
+  const invoiceStages = useMemo(() => {
+    const proc = getStoredProcesses().find((p) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
+    return (proc.stages || []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      color: s.color,
+      isFinalStage: s.isFinalStage || s.isFinal || s.systemCategory === "paid" || s.systemCategory === "void",
+      isFinal: s.isFinal || s.isFinalStage,
+      systemCategory: s.systemCategory,
+    }));
+  }, []);
+
+  const currentInvoiceStageName = useMemo(() => {
+    const matched = invoiceStages.find(
+      (s) => s.systemCategory === invoice.status || s.id === invoice.status || s.name.toLowerCase() === invoice.status.toLowerCase()
+    );
+    return matched ? matched.name : (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1));
+  }, [invoiceStages, invoice.status]);
 
   const handleCopyLink = () => {
     if (invoice.paymentLinkUrl) {
@@ -268,6 +289,23 @@ export default function InvoiceDetailDrawer({
           </div>
         }
       >
+        {/* ── Stage Pipeline Bar (Chevron Stage Ribbon identical to Process Tab) ── */}
+        <div className="-mx-6 -mt-6 mb-6 px-6 py-2.5 bg-white border-b border-slate-200">
+          <ChevronStageRibbon
+            stages={invoiceStages}
+            activeStageName={currentInvoiceStageName}
+            onStageClick={(stg) => {
+              if (stg.systemCategory) {
+                updateInvoiceStatus(invoice.id, stg.systemCategory as any);
+              } else {
+                updateInvoiceStatus(invoice.id, stg.name.toLowerCase() as any);
+              }
+              toast.success(`Invoice moved to "${stg.name}"`);
+            }}
+            showAddButton={true}
+          />
+        </div>
+
         {/* Tab Bar: General | Activity | Documents | Payments */}
         <div className="border-b border-slate-200 mb-6">
           <div className="flex items-center gap-6">

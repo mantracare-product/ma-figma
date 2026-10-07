@@ -6300,8 +6300,7 @@ export default function AdminProcessTemplates() {
                                   );
 
                                   const allSteps = [
-                                    { key: "processmovement", name: "Assign Process / Stage", desc: "Move the contact to a specific process and stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
-                                    { key: "movetonewprocess", name: "Move to New Process", desc: "Move contact to another process and stage with optional termination of current process.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
+                                    { key: "processmovement", name: "Move to Process / Stage", desc: "Move the contact to a specific process and stage.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
                                     { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
                                     { key: "callhangup", name: "Auto Hangup", desc: "Automatically end the call after the AI completes its interaction, with an optional closing message.", iconKey: "phoneoff", cats: ["all", "callerengagement"], popular: false },
                                     { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "callerengagement"], popular: false },

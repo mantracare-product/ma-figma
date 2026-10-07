@@ -65,6 +65,7 @@ import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/u
 import { getStagesForProcess } from "../ui/ProcessStageSelect";
 import DocumentsTab from "../profile/DocumentsTab";
 import { TableComponent } from "../ui/TableComponent";
+import { ChevronStageRibbon, ChevronStage } from "../common/ChevronStageRibbon";
 import { getStoredClientDocuments } from "../../../lib/clientDocumentsStore";
 import {
   appendActivity,
@@ -610,6 +611,24 @@ export default function ProcessDetailDrawer({
     return log?.currentStage ? [log.currentStage] : dealStageLabels;
   }, [log?.process, log?.currentStage, matchedProc]);
 
+  const drawerStages: ChevronStage[] = useMemo(() => {
+    if (matchedProc?.stages && matchedProc.stages.length > 0) {
+      return matchedProc.stages.map((s) => ({
+        id: s.id,
+        name: s.name,
+        color: s.color,
+        isFinalStage: s.isFinalStage,
+        isFinal: s.isFinal,
+        systemCategory: s.systemCategory,
+      }));
+    }
+    return activeStageList.map((label, idx) => ({
+      id: `stage-${idx}`,
+      name: label,
+      isFinalStage: idx === activeStageList.length - 1,
+    }));
+  }, [matchedProc, activeStageList]);
+
   const matchedIdx = log?.currentStage ? activeStageList.findIndex(
     (s) => s.toLowerCase() === log.currentStage.toLowerCase()
   ) : -1;
@@ -985,66 +1004,42 @@ export default function ProcessDetailDrawer({
             </div>
           </div>
 
-          {/* 3. Stage Pipeline - Stepper Ribbon */}
+          {/* 3. Stage Pipeline - Chevron Stage Ribbon (identical to Process Tab) */}
           <div className="flex-shrink-0 px-7 py-2.5 bg-white border-b border-slate-200">
-            <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-thin">
-              {activeStageList.map((label, i) => {
-                const idx = i + 1;
-                const isCompleted = idx < effectiveStageIdx;
-                const isActive = idx === effectiveStageIdx;
-                const isFinal = Boolean(
-                  matchedProc?.stages?.[i]?.isFinalStage ||
-                  matchedProc?.stages?.[i]?.isFinal ||
-                  i === activeStageList.length - 1
-                );
+            <ChevronStageRibbon
+              stages={drawerStages}
+              activeStageName={currentStageName}
+              onStageClick={(_stg, origIdx) => handleStageClick(origIdx + 1)}
+              showAddButton={true}
+              extraContent={
+                <>
+                  {/* Partition Divider */}
+                  <div className="flex items-center gap-1 px-2.5 py-1 flex-shrink-0 border-l-2 border-dashed border-slate-300 bg-slate-100/90 rounded-r-md select-none">
+                    <span className="text-[10px] font-extrabold tracking-wider text-slate-500">PARTITION →</span>
+                  </div>
 
-                return (
-                  <button
-                    key={label}
-                    onClick={() => handleStageClick(idx)}
-                    className={`flex-1 min-w-[130px] max-w-[200px] h-9 px-3 flex items-center justify-center text-center gap-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer shadow-2xs ${isActive
-                        ? isFinal
-                          ? "bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-pink-500/20"
-                          : "bg-blue-600 text-white shadow-blue-500/20"
-                        : isCompleted
-                          ? "bg-slate-900 text-slate-100 hover:bg-slate-800"
-                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300"
-                      }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                    title={`Stage ${idx}: ${label}${isFinal ? " (Final Stage)" : ""}`}
-                  >
-                    {isCompleted && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
-                    {isFinal && <span className="text-[10px]">🏁</span>}
-                    <span className="truncate">{label}</span>
-                  </button>
-                );
-              })}
-
-              {/* Partition Divider */}
-              <div className="flex items-center gap-1 px-2.5 py-1 flex-shrink-0 border-l-2 border-dashed border-slate-300 bg-slate-100/90 rounded-r-md select-none">
-                <span className="text-[10px] font-extrabold tracking-wider text-slate-500">PARTITION →</span>
-              </div>
-
-              {/* Connected Other Process Stages */}
-              {allProcessTransitions.length > 0 ? (
-                allProcessTransitions.map((t, tIdx) => (
-                  <button
-                    key={tIdx}
-                    onClick={() => handleExecuteHandoff(t.targetProcessName, t.targetStageName)}
-                    className="flex-shrink-0 h-9 px-3.5 flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer border border-purple-400/40"
-                    title={`Transfer contact across partition to ${t.targetProcessName}: ${t.targetStageName}`}
-                  >
-                    <span className="text-purple-200">🔀</span>
-                    <span className="text-purple-100">{t.targetProcessName}:</span>
-                    <span className="text-amber-300 underline font-extrabold">{t.targetStageName}</span>
-                  </button>
-                ))
-              ) : (
-                <div className="text-[11px] text-slate-400 italic px-2 flex-shrink-0">
-                  (Configure transitions in Process tab)
-                </div>
-              )}
-            </div>
+                  {/* Connected Other Process Stages */}
+                  {allProcessTransitions.length > 0 ? (
+                    allProcessTransitions.map((t, tIdx) => (
+                      <button
+                        key={tIdx}
+                        onClick={() => handleExecuteHandoff(t.targetProcessName, t.targetStageName)}
+                        className="flex-shrink-0 h-10 px-3.5 flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer border border-purple-400/40"
+                        title={`Transfer contact across partition to ${t.targetProcessName}: ${t.targetStageName}`}
+                      >
+                        <span className="text-purple-200">🔀</span>
+                        <span className="text-purple-100">{t.targetProcessName}:</span>
+                        <span className="text-amber-300 underline font-extrabold">{t.targetStageName}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="text-[11px] text-slate-400 italic px-2 flex-shrink-0">
+                      (Configure transitions in Process tab)
+                    </div>
+                  )}
+                </>
+              }
+            />
           </div>
 
           {/* Final Stage Handoff Alert Banner */}

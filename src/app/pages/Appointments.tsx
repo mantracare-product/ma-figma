@@ -29,10 +29,14 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { appointmentService } from "../../lib/appointmentService";
-import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses } from "../../lib/useProcessStore";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage } from "../../lib/useProcessStore";
+import { appendActivity } from "../../lib/activityEngine";
+import { logStageMove } from "../../lib/useAutomationStore";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
 
+import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
+import AppointmentDetailDrawer from "../components/appointments/AppointmentDetailDrawer";
 import AppointmentCard from "../components/appointments/AppointmentCard";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
@@ -124,11 +128,6 @@ export default function Appointments() {
     { id: 4, name: "X-Ray Imaging", duration: 20, price: 80 },
   ];
 
-  const appointmentProcess = useMemo(() => {
-    const processes = getStoredProcesses();
-    return processes.find((p) => p.entityType === "appointment") || DEFAULT_ENTITY_PROCESSES.appointment;
-  }, []);
-
   const [appointments, setAppointments] = useState<Appointment[]>(() => appointmentService.getAppointments() as any);
   const [stageFilter, setStageFilter] = useState<string>("all");
 
@@ -150,10 +149,78 @@ export default function Appointments() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [selectedAppointmentForDrawer, setSelectedAppointmentForDrawer] = useState<Appointment | null>(null);
+  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
+
+  // Dynamic appointment process and workflow stages
+  const appointmentProcess: Process = useMemo(() => {
+    const procs = getStoredProcesses();
+    const found = procs.find((p) => p.entityType === "appointment");
+    return found || DEFAULT_ENTITY_PROCESSES.appointment;
+  }, []);
+
+  const appointmentWorkflowStages: Stage[] = useMemo(() => {
+    return appointmentProcess.stages || DEFAULT_ENTITY_PROCESSES.appointment.stages;
+  }, [appointmentProcess]);
+
+  const handleQuickStageChange = (apt: Appointment, targetStage: Stage) => {
+    let newStatus: Appointment["status"] = apt.status;
+    if (targetStage.systemCategory === "completed") newStatus = "completed";
+    else if (targetStage.systemCategory === "cancelled") newStatus = "cancelled";
+    else if (targetStage.systemCategory === "rescheduled") newStatus = "rescheduled" as any;
+    else if (targetStage.systemCategory === "booked") newStatus = "scheduled";
+
+    const updated = {
+      ...apt,
+      currentStageId: targetStage.id,
+      statusLabel: targetStage.name,
+      status: newStatus,
+    };
+
+    setAppointments((prev) => prev.map((a) => (a.id === apt.id ? updated : a)));
+    appointmentService.saveAppointments(
+      appointmentService.getAppointments().map((a) => (a.id === apt.id ? updated : a))
+    );
+
+    logStageMove({
+      orgId: "default",
+      recordType: "appointment",
+      recordId: String(apt.id),
+      fromStageId: apt.currentStageId,
+      fromStageName: apt.statusLabel,
+      toStageId: targetStage.id,
+      toStageName: targetStage.name,
+      processId: appointmentProcess.id,
+      processName: appointmentProcess.name,
+      cause: {
+        type: "manual",
+        ruleName: `Stage changed to ${targetStage.name} from appointments table`,
+      },
+    });
+
+    const prevStage = appointmentWorkflowStages.find((s) => s.id === apt.stageId || s.id === apt.currentStageId);
+    appendActivity({
+      clientId: (apt as any).clientId || `APT-${apt.id}`,
+      processId: appointmentProcess.id,
+      processName: appointmentProcess.name,
+      type: "stage_change",
+      createdBy: "user",
+      fromStage: prevStage?.name || "Initial Stage",
+      toStage: targetStage.name,
+      details: {
+        primary: `Moved to stage "${targetStage.name}"`,
+        secondary: `Appointment #${apt.id} for ${apt.clientName}`,
+      },
+    });
+
+    toast.success(`Appointment moved to "${targetStage.name}"`);
+  };
+
   const [listViewTab, setListViewTab] = useState<"upcoming" | "done" | "pending" | "all">("all");
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [editingRows, setEditingRows] = useState<{ [key: number]: Appointment }>({});
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [hoveredStageBox, setHoveredStageBox] = useState<{ aptId: number; stageIdx: number } | null>(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showProviderDropdown, setShowProviderDropdown] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -666,8 +733,11 @@ export default function Appointments() {
 
   const filteredAppointments = appointments.filter((apt) => {
     const query = searchQuery.toLowerCase().trim();
+    const apptIdStr = `apt-${apt.id}`;
     const matchesSearch =
       !query ||
+      apptIdStr.includes(query) ||
+      String(apt.id).includes(query) ||
       apt.clientName.toLowerCase().includes(query) ||
       apt.clientEmail.toLowerCase().includes(query) ||
       (apt.clientPhone && apt.clientPhone.toLowerCase().includes(query)) ||
@@ -691,7 +761,11 @@ export default function Appointments() {
         matchesTab = true;
         break;
     }
-    const matchesStage = stageFilter === "all" || apt.currentStageId === stageFilter || apt.status === stageFilter;
+    const matchesStage =
+      stageFilter === "all" ||
+      apt.currentStageId === stageFilter ||
+      (apt.statusLabel && apt.statusLabel.toLowerCase() === stageFilter.toLowerCase()) ||
+      apt.status === stageFilter;
 
     return matchesSearch && matchesEmployee && matchesTab && matchesStage;
   });
@@ -893,446 +967,224 @@ export default function Appointments() {
             formatDate={formatDate}
           />
         )}
-        {/* List View */}
+        {/* List View (TableComponent) */}
         {view === "list" && (
           <div className="space-y-4">
-            {/* Subheader */}
-            <div className="flex items-center justify-between" style={{ marginTop: '4px', marginBottom: '8px' }}>
-              <span style={{ fontSize: '12px', color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                All sessions
-              </span>
-              <span style={{ fontSize: '12px', color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                Total {filteredAppointments.length}
-              </span>
-            </div>
-
-            {/* Card Container */}
-            <div
-              style={{
-                backgroundColor: "#FFFFFF",
-                border: "1px solid #E5E7EB",
-                borderRadius: "12px",
-                padding: "20px",
-                width: "100%",
-              }}
-            >
-              {filteredAppointments.length === 0 ? (
-                <div className="text-center py-16">
-                  <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <CalendarIcon className="w-10 h-10 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2" style={{ color: "#020817" }}>
-                    No {listViewTab === "all" ? "" : listViewTab + " "}appointments found
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {searchQuery ? "Try adjusting your search" : listViewTab === "done" ? "No completed appointments yet" : "Get started by booking your first appointment"}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {filteredAppointments.map((apt) => {
-                    const employee = employees.find((e) => String(e.id) === String(apt.employeeId));
-                    const service = services.find((s) => s.id === apt.serviceId);
+            {/* TableComponent with sharp edges */}
+            <TableComponent
+              data={filteredAppointments}
+              columns={[
+                {
+                  header: "Appointment ID",
+                  accessorKey: "id",
+                  align: "left",
+                  width: 140,
+                  render: (apt) => {
+                    const formattedId = `APT-${String(apt.id).padStart(4, "0")}`;
+                    return (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedAppointmentForDrawer(apt);
+                          setIsDetailDrawerOpen(true);
+                        }}
+                        className="font-mono text-xs font-semibold text-[#1456f0] hover:text-[#1d4ed8] hover:underline cursor-pointer tracking-tight"
+                        style={{ fontFamily: "JetBrains Mono, monospace" }}
+                        title="Open appointment details"
+                      >
+                        {formattedId}
+                      </button>
+                    );
+                  },
+                },
+                {
+                  header: "Stages",
+                  accessorKey: "currentStageId",
+                  align: "left",
+                  minWidth: 190,
+                  render: (apt) => {
+                    const stages = appointmentWorkflowStages;
+                    const matchedStage =
+                      stages.find(
+                        (s) =>
+                          s.id === apt.currentStageId ||
+                          s.id === apt.stageId ||
+                          s.name.toLowerCase() === (apt.statusLabel || "").toLowerCase() ||
+                          s.systemCategory === apt.status
+                      ) || stages[0];
+                    const activeIdx = stages.findIndex((s) => s.id === matchedStage?.id);
 
                     return (
-                      <AppointmentCard
-                        key={apt.id}
-                        appointment={apt}
-                        employee={employee}
-                        service={service}
-                        onCancel={(id) => {
-                          setAppointments(appointments.map(a =>
-                            a.id === id ? { ...a, status: "cancelled" } : a
-                          ));
-                          toast.success("Appointment cancelled");
-                        }}
-                        onReschedule={(id) => {
-                          const apt = appointments.find(a => a.id === id);
-                          if (apt) {
-                            openBookingDrawerForReschedule(apt);
-                          }
-                        }}
-                        onMarkComplete={(id) => {
-                          setAppointments(appointments.map(a =>
-                            a.id === id ? { ...a, status: "completed", rating: 4 } : a
-                          ));
-                          toast.success("Appointment marked as completed");
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                      <div className="flex items-center gap-2.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-[3px]">
+                          {stages.map((stg, i) => {
+                            const isCompleted = activeIdx >= 0 && i < activeIdx;
+                            const isActive = activeIdx >= 0 && i === activeIdx;
+                            const isHovered = hoveredStageBox?.aptId === apt.id && hoveredStageBox?.stageIdx === i;
 
-            {/* Old Table Code - Keep for reference but hidden */}
-            <div className="hidden bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr style={{ backgroundColor: '#1C2B4A', height: '48px' }}>
-                    <th style={{ width: '40px', padding: '0 12px' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedRows.length === filteredAppointments.length && filteredAppointments.length > 0}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedRows(filteredAppointments.map(a => a.id));
-                            const editing: { [key: number]: Appointment } = {};
-                            filteredAppointments.forEach(apt => {
-                              editing[apt.id] = { ...apt };
-                            });
-                            setEditingRows(editing);
-                          } else {
-                            setSelectedRows([]);
-                            setEditingRows({});
-                          }
-                        }}
-                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                      />
-                    </th>
-                    <th style={{ width: '160px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Client</th>
-                    <th style={{ width: '180px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Email</th>
-                    <th style={{ width: '130px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Phone</th>
-                    <th style={{ width: '150px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Date & Time</th>
-                    <th style={{ width: '130px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Provider</th>
-                    <th style={{ width: '180px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Service</th>
-                    <th style={{ width: '80px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Duration</th>
-                    <th style={{ width: '110px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Status</th>
-                    <th style={{ width: '120px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredAppointments.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="text-center py-16">
-                        <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <CalendarIcon className="w-10 h-10 text-muted-foreground" />
+                            return (
+                              <div key={stg.id} className="relative">
+                                {isHovered && (
+                                  <div
+                                    className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded text-[11px] font-medium shadow-md pointer-events-none"
+                                    style={{ backgroundColor: "#1A2B4A", color: "#fff", zIndex: 200 }}
+                                  >
+                                    {stg.name}
+                                  </div>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickStageChange(apt, stg)}
+                                  onMouseEnter={() => setHoveredStageBox({ aptId: apt.id, stageIdx: i })}
+                                  onMouseLeave={() => setHoveredStageBox(null)}
+                                  style={{
+                                    width: "18px",
+                                    height: "8px",
+                                    borderRadius: "0px",
+                                    backgroundColor: (isCompleted || isActive) ? (stg.color || "#1E88E5") : "transparent",
+                                    border: (isCompleted || isActive) ? "none" : "1px solid #CBD5E1",
+                                    cursor: "pointer",
+                                    display: "block",
+                                    padding: 0,
+                                    flexShrink: 0,
+                                    transition: "all 0.15s ease",
+                                  }}
+                                  title={stg.name}
+                                />
+                              </div>
+                            );
+                          })}
                         </div>
-                        <h3 className="text-lg font-semibold mb-2" style={{ color: "#020817" }}>
-                          No appointments found
-                        </h3>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          {searchQuery ? "Try adjusting your search" : "Get started by booking your first appointment"}
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredAppointments.map((apt) => {
-                      const employee = employees.find((e) => String(e.id) === String(apt.employeeId));
-                      const service = services.find((s) => s.id === apt.serviceId);
-                      const isSelected = selectedRows.includes(apt.id);
-                      const isEditing = isSelected && editingRows[apt.id];
-                      const editData = isEditing ? editingRows[apt.id] : apt;
-                      const isDeleting = confirmDelete === apt.id;
-
-                      const getStatusBadgeStyle = (status: Appointment["status"]) => {
-                        switch (status) {
-                          case "scheduled":
-                            return { bg: '#DBEAFE', color: '#1D4ED8' };
-                          case "completed":
-                            return { bg: '#DCFCE7', color: '#15803D' };
-                          case "pending-accept":
-                            return { bg: '#FEF3C7', color: '#B45309' };
-                          case "cancelled":
-                            return { bg: '#FEE2E2', color: '#B91C1C' };
-                          case "no-show":
-                            return { bg: '#F3F4F6', color: '#6B7280' };
-                          default:
-                            return { bg: '#F3F4F6', color: '#6B7280' };
+                      </div>
+                    );
+                  },
+                },
+                {
+                  header: "Client",
+                  accessorKey: "clientName",
+                  align: "left",
+                  minWidth: 160,
+                  render: (apt) => (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedAppointmentForDrawer(apt);
+                        setIsDetailDrawerOpen(true);
+                      }}
+                      className="font-medium text-xs text-slate-900 cursor-pointer hover:text-blue-600 hover:underline"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      {apt.clientName}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Date",
+                  accessorKey: "date",
+                  align: "left",
+                  width: 130,
+                  render: (apt) => {
+                    let dateText = apt.date || "—";
+                    try {
+                      if (apt.date) {
+                        const d = new Date(apt.date.includes("T") ? apt.date : `${apt.date}T00:00:00`);
+                        if (!isNaN(d.getTime())) {
+                          dateText = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
                         }
-                      };
-
-                      const statusStyle = getStatusBadgeStyle(apt.status);
-
-                      return (
-                        <tr
-                          key={apt.id}
-                          style={{
-                            height: '52px',
-                            borderBottom: '1px solid #F3F4F6',
-                            backgroundColor: isDeleting ? '#FEF2F2' : '#FFFFFF',
-                          }}
-                        >
-                          <td style={{ padding: '0 12px' }}>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedRows([...selectedRows, apt.id]);
-                                  setEditingRows({ ...editingRows, [apt.id]: { ...apt } });
-                                } else {
-                                  setSelectedRows(selectedRows.filter(id => id !== apt.id));
-                                  const newEditing = { ...editingRows };
-                                  delete newEditing[apt.id];
-                                  setEditingRows(newEditing);
-                                }
-                              }}
-                              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                            />
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                value={editData.clientName}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, clientName: e.target.value }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded"
-                                style={{ fontSize: '13px', borderColor: '#1A73E8' }}
-                              />
-                            ) : (
-                              <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                {apt.clientName}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <input
-                                type="email"
-                                value={editData.clientEmail}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, clientEmail: e.target.value }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded"
-                                style={{ fontSize: '13px', borderColor: '#1A73E8' }}
-                              />
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                                {apt.clientEmail}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <input
-                                type="tel"
-                                value={editData.clientPhone}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, clientPhone: e.target.value }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded"
-                                style={{ fontSize: '13px', borderColor: '#1A73E8' }}
-                              />
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                                {apt.clientPhone}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <div className="flex gap-1">
-                                <input
-                                  type="date"
-                                  value={editData.date}
-                                  onChange={(e) => {
-                                    setEditingRows({
-                                      ...editingRows,
-                                      [apt.id]: { ...editData, date: e.target.value }
-                                    });
-                                  }}
-                                  className="px-2 py-1 border rounded text-xs"
-                                  style={{ borderColor: '#1A73E8', width: '90px' }}
-                                />
-                                <input
-                                  type="time"
-                                  value={editData.time}
-                                  onChange={(e) => {
-                                    setEditingRows({
-                                      ...editingRows,
-                                      [apt.id]: { ...editData, time: e.target.value }
-                                    });
-                                  }}
-                                  className="px-2 py-1 border rounded text-xs"
-                                  style={{ borderColor: '#1A73E8', width: '60px' }}
-                                />
-                              </div>
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#374151', fontFamily: 'Outfit, sans-serif' }}>
-                                {new Date(apt.date + "T00:00:00").toLocaleDateString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric"
-                                })} · {apt.time}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <select
-                                value={editData.employeeId}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, employeeId: Number(e.target.value) }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded text-xs"
-                                style={{ borderColor: '#1A73E8' }}
-                              >
-                                {employees.map((emp) => (
-                                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#374151', fontFamily: 'Outfit, sans-serif' }}>
-                                {employee?.name}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <select
-                                value={editData.serviceId}
-                                onChange={(e) => {
-                                  const selectedService = services.find(s => s.id === Number(e.target.value));
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: {
-                                      ...editData,
-                                      serviceId: Number(e.target.value),
-                                      duration: selectedService?.duration || editData.duration
-                                    }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded text-xs"
-                                style={{ borderColor: '#1A73E8' }}
-                              >
-                                {services.map((svc) => (
-                                  <option key={svc.id} value={svc.id}>
-                                    {svc.name} - {svc.duration} min (${svc.price})
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#374151', fontFamily: 'Outfit, sans-serif' }}>
-                                {service?.name}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            <span style={{ fontSize: '13px', color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                              {isEditing ? editData.duration : apt.duration} min
-                            </span>
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <select
-                                value={editData.status}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, status: e.target.value as Appointment["status"] }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded text-xs capitalize"
-                                style={{ borderColor: '#1A73E8' }}
-                              >
-                                <option value="scheduled">Scheduled</option>
-                                <option value="completed">Completed</option>
-                                <option value="pending-accept">Pending Accept</option>
-                                <option value="cancelled">Cancelled</option>
-                                <option value="no-show">No Show</option>
-                              </select>
-                            ) : (
-                              <span
-                                className="px-2 py-1 rounded-full text-xs font-semibold capitalize"
-                                style={{
-                                  backgroundColor: statusStyle.bg,
-                                  color: statusStyle.color,
-                                  fontFamily: 'Outfit, sans-serif',
-                                }}
-                              >
-                                {apt.status}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isDeleting ? (
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => {
-                                    handleDeleteAppointment(apt.id);
-                                    setConfirmDelete(null);
-                                  }}
-                                  className="px-2 py-1 rounded text-xs font-semibold"
-                                  style={{ backgroundColor: '#EF4444', color: '#FFFFFF' }}
-                                >
-                                  Confirm
-                                </button>
-                                <button
-                                  onClick={() => setConfirmDelete(null)}
-                                  className="px-2 py-1 rounded text-xs font-semibold"
-                                  style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}
-                                >
-                                  Undo
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  onClick={() => handleStatusChange(apt.id, "completed")}
-                                  className="hover:opacity-80"
-                                  title="Mark Complete"
-                                  style={{ color: '#6B7280' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.color = '#22C55E')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
-                                >
-                                  <CheckCircle className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleStatusChange(apt.id, "no-show")}
-                                  className="hover:opacity-80"
-                                  title="Mark No Show"
-                                  style={{ color: '#6B7280' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.color = '#F97316')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
-                                >
-                                  <AlertCircle className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => openBookingDrawerForReschedule(apt)}
-                                  className="hover:opacity-80"
-                                  title="Edit"
-                                  style={{ color: '#6B7280' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.color = '#1A73E8')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => setConfirmDelete(apt.id)}
-                                  className="hover:opacity-80"
-                                  title="Cancel"
-                                  style={{ color: '#6B7280' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
+                      }
+                    } catch {
+                      // ignore
+                    }
+                    return (
+                      <span className="text-xs text-slate-800 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        {dateText}
+                      </span>
+                    );
+                  },
+                },
+                {
+                  header: "Time",
+                  accessorKey: "time",
+                  align: "left",
+                  width: 125,
+                  render: (apt) => (
+                    <span className="text-xs text-slate-600 tabular-nums" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      {apt.time ? `${apt.time} (${apt.duration || 60}m)` : "—"}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Provider",
+                  accessorKey: "employeeId",
+                  align: "left",
+                  width: 150,
+                  render: (apt) => {
+                    const emp = employees.find((e) => String(e.id) === String(apt.employeeId));
+                    return (
+                      <span className="text-xs text-slate-700 font-medium truncate">
+                        {emp?.name || "Unassigned"}
+                      </span>
+                    );
+                  },
+                },
+                {
+                  header: "Service",
+                  accessorKey: "serviceId",
+                  align: "left",
+                  minWidth: 150,
+                  render: (apt) => {
+                    const svc = services.find((s) => s.id === apt.serviceId);
+                    return (
+                      <span className="text-xs font-semibold text-slate-800 truncate">
+                        {svc?.name || apt.title || "Consultation"}
+                      </span>
+                    );
+                  },
+                },
+              ]}
+                getRowId={(apt) => apt.id}
+                onRowClick={(apt) => {
+                  setSelectedAppointmentForDrawer(apt);
+                  setIsDetailDrawerOpen(true);
+                }}
+                emptyMessage="No appointments found. Adjust your filters or book a new appointment."
+                tableId="appointments-master-table"
+                rowActions={[
+                  {
+                    label: "View Details",
+                    icon: <CalendarIcon className="w-3.5 h-3.5 text-blue-600" />,
+                    onClick: (apt) => {
+                      setSelectedAppointmentForDrawer(apt);
+                      setIsDetailDrawerOpen(true);
+                    },
+                  },
+                  {
+                    label: "Reschedule",
+                    icon: <Clock className="w-3.5 h-3.5 text-amber-600" />,
+                    onClick: (apt) => openBookingDrawerForReschedule(apt),
+                  },
+                  {
+                    label: "Mark Done",
+                    icon: <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />,
+                    hidden: (apt) => apt.status === "completed",
+                    onClick: (apt) => {
+                      const updated = appointments.map((a) =>
+                        a.id === apt.id ? { ...a, status: "completed" as const, rating: 5, statusLabel: "Completed" } : a
                       );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {/* End of old table code */}
+                      setAppointments(updated);
+                      appointmentService.saveAppointments(updated as any);
+                      toast.success("Appointment marked as completed");
+                    },
+                  },
+                  {
+                    label: "Cancel / Delete",
+                    icon: <Trash2 className="w-3.5 h-3.5 text-rose-600" />,
+                    isDanger: true,
+                    onClick: (apt) => setConfirmDelete(apt.id),
+                  },
+                ]}
+              />
           </div>
         )}
 
@@ -1429,6 +1281,44 @@ export default function Appointments() {
           }}
         />
       )}
+
+      {/* Appointment Detail Drawer */}
+      <AppointmentDetailDrawer
+        isOpen={isDetailDrawerOpen && Boolean(selectedAppointmentForDrawer)}
+        onClose={() => {
+          setIsDetailDrawerOpen(false);
+          setSelectedAppointmentForDrawer(null);
+        }}
+        appointment={selectedAppointmentForDrawer}
+        onUpdateAppointment={(updated) => {
+          setAppointments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+          setSelectedAppointmentForDrawer(updated);
+        }}
+        onReschedule={(apt) => {
+          setIsDetailDrawerOpen(false);
+          openBookingDrawerForReschedule(apt);
+        }}
+        onMarkComplete={(id) => {
+          const updated = appointments.map((a) =>
+            a.id === id ? { ...a, status: "completed" as const, rating: 5, statusLabel: "Completed" } : a
+          );
+          setAppointments(updated);
+          appointmentService.saveAppointments(updated as any);
+          if (selectedAppointmentForDrawer && selectedAppointmentForDrawer.id === id) {
+            setSelectedAppointmentForDrawer({ ...selectedAppointmentForDrawer, status: "completed", rating: 5, statusLabel: "Completed" });
+          }
+        }}
+        onDelete={(id) => {
+          const updated = appointments.filter((a) => a.id !== id);
+          setAppointments(updated);
+          appointmentService.saveAppointments(updated as any);
+          setIsDetailDrawerOpen(false);
+          setSelectedAppointmentForDrawer(null);
+          toast.success("Appointment removed");
+        }}
+        employees={employees}
+        services={services}
+      />
 
       <HowItWorksModal
         isOpen={showHelp}

@@ -68,6 +68,7 @@ import type {
 } from "../../types/automation";
 import { GLOBAL_TRIGGER_CATALOG } from "../../types/automation";
 import { toast } from "sonner";
+import { getStoredProcesses } from "../../../lib/useProcessStore";
 
 export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   parallel: ["stage", "incall", "inchat", "postcall"],
@@ -77,7 +78,7 @@ export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   "send-invoice": ["stage", "incall", "inchat", "postcall"],
   generate_invoice: ["stage", "postcall"],
   send_payment: ["stage", "incall", "inchat", "postcall"],
-  processmovement: ["inchat", "postcall"],
+  processmovement: ["stage", "inchat", "postcall"],
   movetonewprocess: ["stage", "inchat", "postcall"],
   endworkflow: ["stage", "inchat", "postcall"],
   fieldupdate: ["stage", "inchat", "postcall"],
@@ -140,16 +141,8 @@ export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
   },
   {
     key: "processmovement",
-    name: "Assign Process / Stage",
+    name: "Move to Process / Stage",
     desc: "Move the record to a specific process and stage.",
-    iconKey: "zap",
-    cats: ["all", "workflow"],
-    isMoveToStage: true,
-  },
-  {
-    key: "movetonewprocess",
-    name: "Move to New Process",
-    desc: "Move contact to another process to continue the pipeline.",
     iconKey: "gitbranch",
     cats: ["all", "workflow"],
     isMoveToStage: true,
@@ -359,6 +352,7 @@ export default function AddAutomationDrawer({
   initialStepIdToConfigure,
 }: AddAutomationDrawerProps) {
   // Determine effective scope
+  const effectiveProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
   const effectiveScope: AutomationScope =
     propScope || (stageRef ? "stage" : "global");
 
@@ -823,7 +817,7 @@ export default function AddAutomationDrawer({
               <FlowBuilderTab
                 processName={processName}
                 stageName={stageName}
-                processes={processes}
+                processes={effectiveProcesses}
                 currentProcessId={currentProcessId}
                 workflowSteps={steps}
                 onWorkflowStepsChange={(newSteps) => updateSteps(newSteps)}
@@ -896,70 +890,114 @@ export default function AddAutomationDrawer({
                 />
               </div>
 
-              {/* 3. Trigger Dropdown */}
-              <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Trigger</span>
-                </label>
-                {effectiveScope === "stage" ? (
-                  <div className="space-y-1.5">
-                    <div className="relative">
+              {/* 3. Trigger Configuration */}
+              <div className="space-y-3.5">
+                {/* 3a. Trigger Category */}
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <LayoutGrid className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Trigger Category</span>
+                  </label>
+                  {effectiveScope === "stage" ? (
+                    <div>
                       <select
-                        value={stageTriggerWhen}
+                        disabled
+                        value="stage"
+                        className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-gray-50/80 text-gray-600 cursor-not-allowed shadow-2xs"
+                      >
+                        <option value="stage">Stage</option>
+                      </select>
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        Stage automations are scoped directly to this stage.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <select
+                        value={globalTriggerType}
                         onChange={(e) => {
-                          const val = e.target.value as "entry" | "exit";
-                          setStageTriggerWhen(val);
-                          if (
-                            automationName.startsWith("On entry:") ||
-                            automationName.startsWith("On exit:") ||
-                            automationName.startsWith("On Entry:") ||
-                            automationName.startsWith("On Exit:")
-                          ) {
-                            setAutomationName(`On ${val === "exit" ? "exit" : "entry"}: ${stageName}`);
+                          const newType = e.target.value as EventTriggerType;
+                          setGlobalTriggerType(newType);
+                          const catDef = GLOBAL_TRIGGER_CATALOG.find((t) => t.type === newType);
+                          if (catDef && catDef.events.length > 0) {
+                            setGlobalTriggerEvent(catDef.events[0].event);
                           }
                         }}
-                        className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs"
-                      >
-                        <option value="entry">On Stage Enter</option>
-                        <option value="exit">On Stage Exit</option>
-                      </select>
-                    </div>
-                    <p className="text-[11px] text-gray-500">
-                      {stageTriggerWhen === "entry"
-                        ? `Fires automatically when a record transitions into "${stageName}".`
-                        : `Fires automatically when a record transitions out of "${stageName}".`}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    <div className="relative">
-                      <select
-                        value={`${globalTriggerType}::${globalTriggerEvent}`}
-                        onChange={(e) => {
-                          const [type, event] = e.target.value.split("::");
-                          setGlobalTriggerType(type as EventTriggerType);
-                          setGlobalTriggerEvent(event);
-                        }}
-                        className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs"
+                        className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
                       >
                         {GLOBAL_TRIGGER_CATALOG.map((cat) => (
-                          <optgroup key={cat.type} label={cat.label}>
-                            {cat.events.map((evt) => (
-                              <option key={evt.event} value={`${cat.type}::${evt.event}`}>
-                                {evt.label}
-                              </option>
-                            ))}
-                          </optgroup>
+                          <option key={cat.type} value={cat.type}>
+                            {cat.label}
+                          </option>
                         ))}
                       </select>
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        {currentGlobalTriggerDef?.description ||
+                          "Select a category to filter available trigger events."}
+                      </p>
                     </div>
-                    <p className="text-[11px] text-gray-500">
-                      {currentGlobalEventDef?.description ||
-                        "Fires automatically when this event occurs."}
-                    </p>
-                  </div>
-                )}
+                  )}
+                </div>
+
+                {/* 3b. Trigger Event */}
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Trigger</span>
+                  </label>
+                  {effectiveScope === "stage" ? (
+                    <div className="space-y-1.5">
+                      <div className="relative">
+                        <select
+                          value={stageTriggerWhen}
+                          onChange={(e) => {
+                            const val = e.target.value as "entry" | "exit";
+                            setStageTriggerWhen(val);
+                            if (
+                              automationName.startsWith("On entry:") ||
+                              automationName.startsWith("On exit:") ||
+                              automationName.startsWith("On Entry:") ||
+                              automationName.startsWith("On Exit:")
+                            ) {
+                              setAutomationName(`On ${val === "exit" ? "exit" : "entry"}: ${stageName}`);
+                            }
+                          }}
+                          className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
+                        >
+                          <option value="entry">On Stage Enter</option>
+                          <option value="exit">On Stage Exit</option>
+                        </select>
+                      </div>
+                      <p className="text-[11px] text-gray-500">
+                        {stageTriggerWhen === "entry"
+                          ? `Fires automatically when a record transitions into "${stageName}".`
+                          : `Fires automatically when a record transitions out of "${stageName}".`}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="relative">
+                        <select
+                          value={globalTriggerEvent}
+                          onChange={(e) => {
+                            setGlobalTriggerEvent(e.target.value);
+                          }}
+                          className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
+                        >
+                          {(currentGlobalTriggerDef?.events || []).map((evt) => (
+                            <option key={evt.event} value={evt.event}>
+                              {evt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="text-[11px] text-gray-500">
+                        {currentGlobalEventDef?.description ||
+                          "Fires automatically when this event occurs."}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* 4. Then do these actions (Numbered Step Cards) */}
@@ -1245,7 +1283,7 @@ export default function AddAutomationDrawer({
             step={editingStep}
             isCreatingNewStep={false}
             stepAllowedTriggers={stepAllowedTriggers}
-            processes={processes}
+            processes={effectiveProcesses}
             stepTrigger={stepTrigger}
             onStepTriggerChange={setStepTrigger}
             executionType={executionType}

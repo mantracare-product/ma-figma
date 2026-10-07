@@ -9,6 +9,7 @@ import VariablePickerButton, { FETCH_FIELD_SOURCES } from "./VariablePickerButto
 import { InfoTooltip } from "../help/InfoTooltip";
 
 import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
+import { getStoredProcesses } from "../../../lib/useProcessStore";
 import { MOCK_SERVICES } from "../../../lib/mockServicesData";
 
 const availableEmployees = [
@@ -48,6 +49,8 @@ export default function StepParametersFields({
   processes = [],
   stepTrigger
 }: StepParametersFieldsProps) {
+  const effectiveProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
+
   // Local UI-only states
   const [conditionsSectionExpanded, setConditionsSectionExpanded] = useState(true);
   const [fieldConditionsGroupExpanded, setFieldConditionsGroupExpanded] = useState(true);
@@ -1631,51 +1634,28 @@ export default function StepParametersFields({
               </div>
             )}
 
-            {(stepKey === "processmovement" || stepKey === "stagemovement" || stepKey === "move-process" || stepKey === "move-stage") && (
+            {(stepKey === "processmovement" || stepKey === "stagemovement" || stepKey === "move-process" || stepKey === "move-stage" || stepKey === "movetonewprocess" || stepKey === "move-new-process") && (
               <div className="space-y-4">
-                {renderField("Target Process",
-                  <select
-                    value={stepDetailProcess}
-                    onChange={e => onChange({ stepDetailProcess: e.target.value, stepDetailStage: "" })}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
-                  >
-                    <option value="">Select target process...</option>
-                    {processes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                )}
-                {renderField("Target Stage",
-                  <select
-                    value={stepDetailStage}
-                    onChange={e => onChange({ stepDetailStage: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
-                  >
-                    <option value="">Select target stage...</option>
-                    {(processes.find(p => p.id === stepDetailProcess)?.stages || []).map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )}
-
-            {(stepKey === "movetonewprocess" || stepKey === "move-new-process") && (
-              <div className="space-y-4">
-                {renderField("Assign Target Process",
+                {renderField("Target Process / Workflow",
                   <select
                     value={stepDetailProcess}
                     onChange={e => {
                       const selectedProcId = e.target.value;
-                      const targetProc = processes.find(p => p.id === selectedProcId);
+                      const targetProc = effectiveProcesses.find(p => p.id === selectedProcId);
                       const defaultStage = targetProc?.stages?.[0];
                       onChange({
                         stepDetailProcess: selectedProcId,
-                        stepDetailStage: defaultStage?.id || defaultStage?.name || ""
+                        processId: selectedProcId,
+                        processName: targetProc?.name || "",
+                        stepDetailStage: defaultStage?.id || defaultStage?.name || "",
+                        stageId: defaultStage?.id || defaultStage?.name || "",
+                        stageName: defaultStage?.name || "",
                       });
                     }}
                     className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
                   >
-                    <option value="">Select target process...</option>
-                    {processes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    <option value="">Select target workflow / process...</option>
+                    {effectiveProcesses.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 )}
 
@@ -1684,11 +1664,19 @@ export default function StepParametersFields({
                     {renderField("Target Stage",
                       <select
                         value={stepDetailStage}
-                        onChange={e => onChange({ stepDetailStage: e.target.value })}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const targetStage = (effectiveProcesses.find(p => p.id === stepDetailProcess)?.stages || []).find(s => s.id === val || s.name === val);
+                          onChange({
+                            stepDetailStage: val,
+                            stageId: val,
+                            stageName: targetStage?.name || val,
+                          });
+                        }}
                         className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
                       >
-                        <option value="">Default (First Stage)</option>
-                        {(processes.find(p => p.id === stepDetailProcess)?.stages || []).map(s => (
+                        <option value="">Select target stage...</option>
+                        {(effectiveProcesses.find(p => p.id === stepDetailProcess)?.stages || []).map(s => (
                           <option key={s.id} value={s.id || s.name}>{s.name}</option>
                         ))}
                       </select>
@@ -1701,7 +1689,7 @@ export default function StepParametersFields({
                           End current process before moving
                         </span>
                         <p className="text-[11px] text-slate-500 mt-0.5">
-                          Terminate the active process when transitioning the contact to the new process stage.
+                          Terminate the active process when transitioning the contact to the new process / stage.
                         </p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer shrink-0">
