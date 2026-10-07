@@ -5,16 +5,16 @@ export type AutomationScope = "stage" | "global";
 export type StageTrigger = {
   type: "stage";
   when: "entry" | "exit";
+  params?: Record<string, any>;
 };
 
 export type EventTriggerType =
   | "appointment"
-  | "call"
   | "client"
-  | "document"
   | "invoice"
   | "insurance"
-  | "stage";
+  | "stage"
+  | "field_update";
 
 export type EventTrigger = {
   type: EventTriggerType;
@@ -25,6 +25,7 @@ export type EventTrigger = {
     stageId: string;
     when: "entry" | "exit";
   };
+  params?: Record<string, any>;
 };
 
 export interface AutomationStep {
@@ -86,6 +87,18 @@ export interface GlobalTriggerDefinition {
 
 export const GLOBAL_TRIGGER_CATALOG: GlobalTriggerDefinition[] = [
   {
+    type: "client",
+    label: "Client",
+    description: "Trigger when client records are created, updated, or products are assigned",
+    iconKey: "user",
+    events: [
+      { event: "client.created", label: "Client created", description: "New client record added from any intake source" },
+      { event: "client.updated", label: "Client updated", description: "Client demographic or medical records change" },
+      { event: "client.product_assigned", label: "Assign Product", description: "Product or service is assigned to client in client profile" },
+      { event: "client.deleted", label: "Client deleted", description: "Client record is archived or removed" },
+    ],
+  },
+  {
     type: "appointment",
     label: "Appointment",
     description: "Trigger when a clinic appointment is booked, changed, or completed",
@@ -97,40 +110,6 @@ export const GLOBAL_TRIGGER_CATALOG: GlobalTriggerDefinition[] = [
       { event: "appointment.checked_in", label: "Checked in", description: "Patient arrives or confirms presence at session" },
       { event: "appointment.completed", label: "Appointment completed", description: "Consultation or clinical service concludes" },
       { event: "appointment.no_show", label: "No-show", description: "Client fails to attend scheduled session without notice" },
-    ],
-  },
-  {
-    type: "call",
-    label: "Call",
-    description: "Trigger on inbound, outbound, or completed AI/telephony calls",
-    iconKey: "phone",
-    events: [
-      { event: "call.inbound", label: "Inbound call", description: "An incoming call arrives at the clinic number" },
-      { event: "call.outbound", label: "Outbound call", description: "An automated or agent dial is dispatched" },
-      { event: "call.missed", label: "Missed call", description: "Caller disconnects before pickup or triage" },
-      { event: "call.voicemail", label: "Voicemail left", description: "Caller leaves a voice recording" },
-      { event: "call.ended", label: "Call ended", description: "Phone conversation concludes with transcript and summary" },
-    ],
-  },
-  {
-    type: "client",
-    label: "Client",
-    description: "Trigger when client records are created, modified, or archived",
-    iconKey: "user",
-    events: [
-      { event: "client.created", label: "Client created", description: "New client record added from any intake source" },
-      { event: "client.updated", label: "Client updated", description: "Client demographic or medical records change" },
-      { event: "client.deleted", label: "Client deleted", description: "Client record is archived or removed" },
-    ],
-  },
-  {
-    type: "document",
-    label: "Document",
-    description: "Trigger when clinical documents or consent forms are handled",
-    iconKey: "filetext",
-    events: [
-      { event: "document.uploaded", label: "Document uploaded", description: "File, lab result, or intake form is uploaded" },
-      { event: "document.deleted", label: "Document deleted", description: "A document attachment is removed" },
     ],
   },
   {
@@ -166,6 +145,15 @@ export const GLOBAL_TRIGGER_CATALOG: GlobalTriggerDefinition[] = [
     events: [
       { event: "stage.entered", label: "Stage entered", description: "Record transitions into the selected process stage" },
       { event: "stage.exited", label: "Stage exited", description: "Record transitions out of the selected process stage" },
+    ],
+  },
+  {
+    type: "field_update",
+    label: "Field Update",
+    description: "Trigger when monitored fields are modified on a record",
+    iconKey: "sliders",
+    events: [
+      { event: "field.updated", label: "Field updated", description: "Monitored field value is modified on record" },
     ],
   },
 ];

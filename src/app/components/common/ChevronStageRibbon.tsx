@@ -45,17 +45,17 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
 }) => {
   // Determine active index
   const activeIndex = React.useMemo(() => {
-    if (activeStageId !== undefined) {
-      const idx = stages.findIndex((s) => String(s.id) === String(activeStageId));
+    if (activeStageId !== undefined && String(activeStageId).trim() !== "") {
+      const idx = stages.findIndex((s) => String(s.id).toLowerCase() === String(activeStageId).toLowerCase());
       if (idx !== -1) return idx;
     }
-    if (activeStageName) {
+    if (activeStageName && activeStageName.trim() !== "") {
       const idx = stages.findIndex(
         (s) => s.name.trim().toLowerCase() === activeStageName.trim().toLowerCase()
       );
       if (idx !== -1) return idx;
     }
-    return 0;
+    return -1;
   }, [stages, activeStageId, activeStageName]);
 
   // Split sequential vs final stage options (matching Process.tsx exactly)
@@ -83,8 +83,8 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
   ) => {
     const isFirst = groupIndex === 0;
     const isLast = groupIndex === groupTotal - 1;
-    const isActive = originalIndex === activeIndex;
-    const isCompleted = activeIndex > originalIndex;
+    const isActive = activeIndex >= 0 && originalIndex === activeIndex;
+    const isCompleted = activeIndex >= 0 && activeIndex > originalIndex;
 
     const chevronClip = isFirst
       ? "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)"
@@ -96,6 +96,8 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
         ? CHEVRON_PALETTE[(sequentialStages.length + groupIndex) % CHEVRON_PALETTE.length] || "#EC4899"
         : CHEVRON_PALETTE[groupIndex % CHEVRON_PALETTE.length]);
 
+    const displayColor = isActive ? baseColor : "#E2E8F0";
+
     return (
       <button
         key={String(stage.id)}
@@ -103,15 +105,19 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
         onClick={() => onStageClick?.(stage, originalIndex)}
         className={`relative group flex items-center h-10 select-none cursor-pointer transition-all flex-shrink-0 ${
           isFirst ? "rounded-l-md" : "-ml-3.5"
-        } ${isActive ? "brightness-110 shadow-md ring-2 ring-blue-500/80 z-20 scale-[1.02]" : "hover:brightness-105 hover:z-10"}`}
+        } ${
+          isActive
+            ? "brightness-105 shadow-md ring-2 ring-blue-500/80 z-20 scale-[1.02]"
+            : "hover:bg-slate-300/80 hover:text-slate-900 hover:z-10"
+        }`}
         style={{
-          backgroundColor: baseColor,
+          backgroundColor: displayColor,
           clipPath: chevronClip,
           minWidth: "140px",
           paddingLeft: isFirst ? "14px" : "24px",
           paddingRight: "24px",
         }}
-        title={`Stage: ${stage.name}${isActive ? " (Active)" : isCompleted ? " (Completed)" : ""}`}
+        title={`Stage: ${stage.name}${isActive ? " (Active)" : ""}`}
       >
         {!isLast && (
           <svg
@@ -130,16 +136,18 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
           </svg>
         )}
 
-        <div className="p-0.5 -ml-1 mr-1 text-white/80 shrink-0">
-          {isCompleted ? (
-            <Check className="w-3.5 h-3.5 text-white stroke-[2.5]" />
+        <div className={`p-0.5 -ml-1 mr-1 shrink-0 ${isActive ? "text-white/80" : "text-slate-400 group-hover:text-slate-600"}`}>
+          {isCompleted && !isActive ? (
+            <Check className="w-3.5 h-3.5 text-slate-500 stroke-[2.5]" />
           ) : (
             <GripVertical className="w-3.5 h-3.5" />
           )}
         </div>
 
         <span
-          className="text-xs font-semibold text-white tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1"
+          className={`text-xs font-semibold tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1 ${
+            isActive ? "text-white" : "text-slate-600 group-hover:text-slate-900"
+          }`}
           style={{ fontFamily: "Outfit, sans-serif" }}
         >
           {isFinalGroup && <span className="text-[10px] opacity-90">🏁</span>}

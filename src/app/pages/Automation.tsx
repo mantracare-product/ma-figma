@@ -27,6 +27,7 @@ export default function Automation() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeRuleId, setActiveRuleId] = useState<string | null>(null);
+  const [isCreatingNewRule, setIsCreatingNewRule] = useState(false);
   const [isAddAutomationDrawerOpen, setIsAddAutomationDrawerOpen] = useState(false);
 
   // Filtered rules list (no entities)
@@ -47,61 +48,30 @@ export default function Automation() {
 
   // Set default active rule
   useEffect(() => {
+    if (isCreatingNewRule) return;
     if (!activeRuleId && filteredRules.length > 0) {
       setActiveRuleId(filteredRules[0].id);
     } else if (activeRuleId && !rules.some((r) => r.id === activeRuleId) && filteredRules.length > 0) {
       setActiveRuleId(filteredRules[0].id);
     }
-  }, [filteredRules, activeRuleId, rules]);
+  }, [filteredRules, activeRuleId, rules, isCreatingNewRule]);
 
   const activeRule = useMemo(() => {
-    return rules.find((r) => r.id === activeRuleId) || filteredRules[0] || null;
-  }, [rules, activeRuleId, filteredRules]);
+    if (isCreatingNewRule) return null;
+    return rules.find((r) => r.id === activeRuleId) || null;
+  }, [rules, activeRuleId, isCreatingNewRule]);
 
   // Workflow steps bound directly to the active rule without any hardcoded mock injections
   const activeWorkflowSteps: WorkflowStep[] = useMemo(() => {
-    if (!activeRule) return [];
+    if (isCreatingNewRule || !activeRule) return [];
     return activeRule.actions || [];
-  }, [activeRule]);
+  }, [activeRule, isCreatingNewRule]);
 
-  const handleWorkflowStepsChange = (newSteps: WorkflowStep[]) => {
-    if (!activeRule) return;
-    updateRule(activeRule.id, {
-      actions: newSteps,
-      updatedAt: new Date().toISOString(),
-    });
-  };
-
-  // Create new rule & open flow builder view with completely clean, empty steps
+  // Open flow builder view in creation mode without saving until the user explicitly clicks Save
   const handleCreateNewRule = () => {
-    try {
-      const created = createRule({
-        orgId: "default",
-        name: "New Automation",
-        description: "Executes configured actions when triggered",
-        entityType: "client",
-        trigger: {
-          event: "call.inbound",
-          label: "Inbound call",
-          source: "any",
-        },
-        action: {
-          type: "moveToStage",
-          processId: "",
-          stageId: "",
-          processName: "",
-          stageName: "",
-        },
-        actions: [],
-        enabled: true,
-        health: "ok",
-      });
-      setActiveRuleId(created.id);
-      setIsAddAutomationDrawerOpen(true);
-      toast.success("New automation rule created");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to create rule");
-    }
+    setIsCreatingNewRule(true);
+    setActiveRuleId(null);
+    setIsAddAutomationDrawerOpen(true);
   };
 
   // Table Columns (no entity column)
@@ -193,6 +163,7 @@ export default function Automation() {
       label: "View / Edit Rule",
       icon: <Pencil className="w-3.5 h-3.5" />,
       onClick: (rule) => {
+        setIsCreatingNewRule(false);
         setActiveRuleId(rule.id);
         setIsAddAutomationDrawerOpen(true);
       },
@@ -261,6 +232,7 @@ export default function Automation() {
           getRowId={(rule) => rule.id}
           rowActions={ruleRowActions}
           onRowClick={(rule) => {
+            setIsCreatingNewRule(false);
             setActiveRuleId(rule.id);
             setIsAddAutomationDrawerOpen(true);
           }}
@@ -272,13 +244,16 @@ export default function Automation() {
 
       {/* Add Automation Drawer (Global Scope) */}
       <AddAutomationDrawer
-        isOpen={isAddAutomationDrawerOpen && !!activeRule}
-        onClose={() => setIsAddAutomationDrawerOpen(false)}
+        isOpen={isAddAutomationDrawerOpen}
+        onClose={() => {
+          setIsAddAutomationDrawerOpen(false);
+          setIsCreatingNewRule(false);
+        }}
         scope="global"
         defaultView="library"
         processes={processes}
         initialAutomation={
-          activeRule
+          !isCreatingNewRule && activeRule
             ? {
                 id: activeRule.id,
                 orgId: activeRule.orgId || "default",
@@ -309,37 +284,87 @@ export default function Automation() {
               }
             : null
         }
-        processName={activeRule?.name || "Global Automation"}
-        workflowSteps={activeWorkflowSteps}
-        onWorkflowStepsChange={handleWorkflowStepsChange}
+        processName={!isCreatingNewRule && activeRule ? activeRule.name : "New Global Automation"}
+        workflowSteps={!isCreatingNewRule && activeRule ? activeWorkflowSteps : []}
         onSaveAutomation={(saved) => {
-          if (!activeRule) return;
           const catalogEvt = GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
             (e) => e.event === (saved.trigger as any).event
           );
-          updateRule(activeRule.id, {
-            name: saved.name,
-            description: saved.description,
-            enabled: saved.status === "active",
-            trigger: {
-              event: (saved.trigger as any).event,
-              label: catalogEvt?.label || (saved.trigger as any).event,
-              source: "any",
-            },
-            actions: (saved.steps || []).map((s) => ({
-              id: s.id,
-              name: s.name,
-              description: s.description || "",
-              iconKey: s.iconKey || "zap",
-              stepKey: s.stepKey,
-              trigger: "stage",
-              executionType: "wait",
-              delayValue: s.delay?.value || 0,
-              delayUnit: s.delay?.unit || "minutes",
-              params: s.params || {},
-            })),
-            updatedAt: new Date().toISOString(),
-          });
+          const triggerCategory = GLOBAL_TRIGGER_CATALOG.find((cat) =>
+            cat.events.some((e) => e.event === (saved.trigger as any).event)
+          );
+          const detectedEntityType =
+            triggerCategory?.type === "appointment"
+              ? "appointment"
+              : triggerCategory?.type === "invoice"
+              ? "invoice"
+              : "client";
+
+          const mappedActions: WorkflowStep[] = (saved.steps || []).map((s: any) => ({
+            ...s,
+            id: s.id,
+            name: s.name,
+            description: s.description || "",
+            iconKey: s.iconKey || "zap",
+            stepKey: s.stepKey,
+            trigger: s.trigger || "stage",
+            executionType: s.executionType || "wait",
+            delayValue: s.delay?.value ?? s.delayValue ?? 0,
+            delayUnit: s.delay?.unit ?? s.delayUnit ?? "minutes",
+            params: s.params || {},
+            branches: s.branches,
+          }));
+
+          if (isCreatingNewRule || !activeRule) {
+            try {
+              const created = createRule({
+                orgId: "default",
+                name: saved.name || "New Automation",
+                description: saved.description || "",
+                entityType: detectedEntityType,
+                trigger: {
+                  event: (saved.trigger as any).event || "call.inbound",
+                  label: catalogEvt?.label || (saved.trigger as any).event || "Inbound call",
+                  source: "any",
+                  params: (saved.trigger as any).params || {},
+                },
+                action: {
+                  type: "moveToStage",
+                  processId: "",
+                  stageId: "",
+                  processName: "",
+                  stageName: "",
+                },
+                actions: mappedActions,
+                enabled: saved.status === "active",
+                health: "ok",
+              });
+              setActiveRuleId(created.id);
+              setIsCreatingNewRule(false);
+            } catch (err: any) {
+              toast.error(err.message || "Failed to create rule");
+            }
+          } else {
+            try {
+              updateRule(activeRule.id, {
+                name: saved.name,
+                description: saved.description,
+                enabled: saved.status === "active",
+                entityType: detectedEntityType,
+                trigger: {
+                  event: (saved.trigger as any).event,
+                  label: catalogEvt?.label || (saved.trigger as any).event,
+                  source: "any",
+                  params: (saved.trigger as any).params || {},
+                },
+                actions: mappedActions,
+                updatedAt: new Date().toISOString(),
+              });
+              setIsCreatingNewRule(false);
+            } catch (err: any) {
+              toast.error(err.message || "Failed to update rule");
+            }
+          }
         }}
         stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
       />

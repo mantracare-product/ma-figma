@@ -3,14 +3,18 @@ import { Link } from "react-router";
 import {
   ChevronDown, Plus, Trash2, Info, Sliders, Star, Volume2, Play, ArrowRight,
   User, PhoneForwarded, PhoneOff, Mail, MessageSquare, Paperclip, ExternalLink,
-  ChevronRight, X, Copy, Pencil, Sparkles
+  ChevronRight, X, Copy, Pencil, Sparkles, Calendar, Receipt, Briefcase, FileCheck, Check, GitBranch
 } from "lucide-react";
 import VariablePickerButton, { FETCH_FIELD_SOURCES } from "./VariablePickerButton";
+import VariableSelectorModal from "./VariableSelectorModal";
+import SelectFieldsMultiModal from "./SelectFieldsMultiModal";
 import { InfoTooltip } from "../help/InfoTooltip";
 
 import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
-import { getStoredProcesses } from "../../../lib/useProcessStore";
+import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES } from "../../../lib/useProcessStore";
 import { MOCK_SERVICES } from "../../../lib/mockServicesData";
+import { getStoredServices } from "../../../lib/servicesStore";
+import { getStoredDocumentTemplates } from "../../../lib/documentTemplatesStore";
 
 const availableEmployees = [
   { id: "1", name: "Sarah Johnson" },
@@ -32,6 +36,7 @@ interface ProcessOption {
   id: string;
   name: string;
   stages?: { id: string; name: string }[];
+  entityType?: string;
 }
 
 interface StepParametersFieldsProps {
@@ -69,6 +74,7 @@ export default function StepParametersFields({
   const [customWebhookIntegrations, setCustomWebhookIntegrations] = useState<any[]>([]);
   const [jsonPaste, setJsonPaste] = useState("");
   const [jsonError, setJsonError] = useState("");
+  const [isFieldRegistryModalOpen, setIsFieldRegistryModalOpen] = useState(false);
 
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -220,7 +226,7 @@ export default function StepParametersFields({
   return (
     <div className="space-y-6 text-left">
       {/* ───────────── CONDITIONS EDITOR ───────────── */}
-      {stepTrigger && (
+      {(stepTrigger || stepKey === "trigger_config") && (
         <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
           <div
             onClick={() => conditionsEnabled && setConditionsSectionExpanded(!conditionsSectionExpanded)}
@@ -1634,78 +1640,192 @@ export default function StepParametersFields({
               </div>
             )}
 
-            {(stepKey === "processmovement" || stepKey === "stagemovement" || stepKey === "move-process" || stepKey === "move-stage" || stepKey === "movetonewprocess" || stepKey === "move-new-process") && (
-              <div className="space-y-4">
-                {renderField("Target Process / Workflow",
-                  <select
-                    value={stepDetailProcess}
-                    onChange={e => {
-                      const selectedProcId = e.target.value;
-                      const targetProc = effectiveProcesses.find(p => p.id === selectedProcId);
-                      const defaultStage = targetProc?.stages?.[0];
-                      onChange({
-                        stepDetailProcess: selectedProcId,
-                        processId: selectedProcId,
-                        processName: targetProc?.name || "",
-                        stepDetailStage: defaultStage?.id || defaultStage?.name || "",
-                        stageId: defaultStage?.id || defaultStage?.name || "",
-                        stageName: defaultStage?.name || "",
-                      });
-                    }}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
-                  >
-                    <option value="">Select target workflow / process...</option>
-                    {effectiveProcesses.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                )}
+            {(stepKey === "update_to_stage" || stepKey === "update-stage" || stepKey === "processmovement" || stepKey === "stagemovement" || stepKey === "move-process" || stepKey === "move-stage" || stepKey === "movetonewprocess" || stepKey === "move-new-process") && (() => {
+              const stageEntity = (params.stageEntity || params.entityType || "processes") as "processes" | "appointment" | "invoice";
 
-                {stepDetailProcess && (
-                  <>
-                    {renderField("Target Stage",
+              return (
+                <div className="space-y-4">
+                  {/* Choose entity dropdown */}
+                  {renderField("Choose Entity",
+                    <select
+                      value={stageEntity}
+                      onChange={(e) => {
+                        const entId = e.target.value as "processes" | "appointment" | "invoice";
+                        let nextStageId = "";
+                        let nextStageName = "";
+                        let nextProcId = params.stepDetailProcess || "";
+                        let nextProcName = params.processName || "";
+
+                        if (entId === "processes") {
+                          const proc = effectiveProcesses.find(p => p.id === nextProcId) || effectiveProcesses[0];
+                          nextProcId = proc?.id || "";
+                          nextProcName = proc?.name || "";
+                          const stg = proc?.stages?.[0];
+                          nextStageId = stg?.id || stg?.name || "";
+                          nextStageName = stg?.name || "";
+                        } else if (entId === "appointment") {
+                          const apptProc = effectiveProcesses.find((p: any) => p.entityType === "appointment") || DEFAULT_ENTITY_PROCESSES.appointment;
+                          const defaultApptStage = apptProc?.stages?.[0];
+                          nextStageId = defaultApptStage?.id || "";
+                          nextStageName = defaultApptStage?.name || "";
+                        } else if (entId === "invoice") {
+                          const invProc = effectiveProcesses.find((p: any) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
+                          const defaultInvStage = invProc?.stages?.[0];
+                          nextStageId = defaultInvStage?.id || "";
+                          nextStageName = defaultInvStage?.name || "";
+                        }
+
+                        onChange({
+                          stageEntity: entId,
+                          entityType: entId,
+                          stepDetailProcess: entId === "processes" ? nextProcId : undefined,
+                          processId: entId === "processes" ? nextProcId : undefined,
+                          processName: entId === "processes" ? nextProcName : undefined,
+                          stepDetailStage: nextStageId,
+                          stageId: nextStageId,
+                          stageName: nextStageName,
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                    >
+                      <option value="processes">Processes</option>
+                      <option value="appointment">Appointment</option>
+                      <option value="invoice">Invoice</option>
+                    </select>
+                  )}
+
+                  {/* Render based on entity */}
+                  {stageEntity === "processes" && (
+                    <>
+                      {renderField("Choose Process",
+                        <select
+                          value={stepDetailProcess}
+                          onChange={e => {
+                            const selectedProcId = e.target.value;
+                            const targetProc = effectiveProcesses.find(p => p.id === selectedProcId);
+                            const defaultStage = targetProc?.stages?.[0];
+                            onChange({
+                              stageEntity: "processes",
+                              entityType: "processes",
+                              stepDetailProcess: selectedProcId,
+                              processId: selectedProcId,
+                              processName: targetProc?.name || "",
+                              stepDetailStage: defaultStage?.id || defaultStage?.name || "",
+                              stageId: defaultStage?.id || defaultStage?.name || "",
+                              stageName: defaultStage?.name || "",
+                            });
+                          }}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                        >
+                          <option value="">Select process...</option>
+                          {effectiveProcesses.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      )}
+
+                      {stepDetailProcess && (
+                        <>
+                          {renderField("Choose Stage",
+                            <select
+                              value={stepDetailStage}
+                              onChange={e => {
+                                const val = e.target.value;
+                                const targetStage = (effectiveProcesses.find(p => p.id === stepDetailProcess)?.stages || []).find(s => s.id === val || s.name === val);
+                                onChange({
+                                  stepDetailStage: val,
+                                  stageId: val,
+                                  stageName: targetStage?.name || val,
+                                });
+                              }}
+                              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                            >
+                              <option value="">Select stage...</option>
+                              {(effectiveProcesses.find(p => p.id === stepDetailProcess)?.stages || []).map(s => (
+                                <option key={s.id} value={s.id || s.name}>{s.name}</option>
+                              ))}
+                            </select>
+                          )}
+
+                          {/* Optional Toggle to End Current Process */}
+                          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-4">
+                            <div>
+                              <span className="text-xs font-bold text-slate-800">
+                                End current process before moving
+                              </span>
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                Terminate the active process when transitioning the record to the new process / stage.
+                              </p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(params.stepEndCurrentProcess)}
+                                onChange={e => onChange({ stepEndCurrentProcess: e.target.checked })}
+                                className="sr-only peer"
+                              />
+                              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                            </label>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  {stageEntity === "appointment" && (() => {
+                    const apptProc = effectiveProcesses.find((p: any) => p.entityType === "appointment") || DEFAULT_ENTITY_PROCESSES.appointment;
+                    const stagesList = apptProc?.stages || [];
+                    const currentVal = stepDetailStage || params.stageId || stagesList[0]?.id || "";
+                    return renderField("Choose Stage",
                       <select
-                        value={stepDetailStage}
+                        value={currentVal}
                         onChange={e => {
                           const val = e.target.value;
-                          const targetStage = (effectiveProcesses.find(p => p.id === stepDetailProcess)?.stages || []).find(s => s.id === val || s.name === val);
+                          const targetStage = stagesList.find((s: any) => s.id === val || s.name === val);
                           onChange({
+                            stageEntity: "appointment",
+                            entityType: "appointment",
                             stepDetailStage: val,
                             stageId: val,
                             stageName: targetStage?.name || val,
                           });
                         }}
-                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
+                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
                       >
-                        <option value="">Select target stage...</option>
-                        {(effectiveProcesses.find(p => p.id === stepDetailProcess)?.stages || []).map(s => (
-                          <option key={s.id} value={s.id || s.name}>{s.name}</option>
+                        {stagesList.map((s: any) => (
+                          <option key={s.id} value={s.id}>{s.name} {s.description ? `(${s.description})` : ""}</option>
                         ))}
                       </select>
-                    )}
+                    );
+                  })()}
 
-                    {/* Optional Toggle to End Current Process */}
-                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-4">
-                      <div>
-                        <span className="text-xs font-bold text-slate-800">
-                          End current process before moving
-                        </span>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Terminate the active process when transitioning the contact to the new process / stage.
-                        </p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(params.stepEndCurrentProcess)}
-                          onChange={e => onChange({ stepEndCurrentProcess: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+                  {stageEntity === "invoice" && (() => {
+                    const invProc = effectiveProcesses.find((p: any) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
+                    const stagesList = invProc?.stages || [];
+                    const currentVal = stepDetailStage || params.stageId || stagesList[0]?.id || "";
+                    return renderField("Choose Stage",
+                      <select
+                        value={currentVal}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const targetStage = stagesList.find((s: any) => s.id === val || s.name === val);
+                          onChange({
+                            stageEntity: "invoice",
+                            entityType: "invoice",
+                            stepDetailStage: val,
+                            stageId: val,
+                            stageName: targetStage?.name || val,
+                          });
+                        }}
+                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                      >
+                        {stagesList.map((s: any) => (
+                          <option key={s.id} value={s.id}>{s.name} {s.description ? `(${s.description})` : ""}</option>
+                        ))}
+                      </select>
+                    );
+                  })()}
+                </div>
+              );
+            })()}
 
             {stepKey === "greetingphrase" && renderField("Greeting Phrase",
               <textarea
@@ -1921,61 +2041,323 @@ export default function StepParametersFields({
               </div>
             )}
 
-            {/* Stage Entry Action: Generate Invoice (Records category) */}
-            {stepKey === "generate_invoice" && (
-              <div className="space-y-4">
-                <div className="p-3 bg-blue-50/60 border border-blue-200/80 rounded-xl space-y-1 text-xs">
-                  <div className="flex items-center gap-2 font-semibold text-blue-900">
-                    <span>Generate Invoice (Records)</span>
-                    <InfoTooltip text="Strictly idempotent per appointment: if an invoice already exists for this appointment, duplicate generation is automatically skipped." />
-                  </div>
-                  <p className="text-blue-700/80 text-[11px]">
-                    Creates a draft invoice in the Billing &amp; Invoicing process upon entering this stage.
-                  </p>
-                </div>
+            {/* Stage Action: Generate Invoice */}
+            {(stepKey === "generate_invoice" || stepKey === "generate-invoice") && (() => {
+              const triggerLower = (stepTrigger || params.stepTrigger || "").toLowerCase();
+              const isApptTrigger = Boolean(
+                triggerLower.includes("appt") ||
+                triggerLower.includes("appointment") ||
+                triggerLower.includes("booking")
+              );
+              const isApptProcess = Boolean(
+                params.processName?.toLowerCase().includes("appointment") ||
+                effectiveProcesses.some(p => (p.id === params.processId || p.entityType === "appointment") && 
+                  (p.entityType === "appointment" || p.name.toLowerCase().includes("appointment")))
+              );
+              const canSupplyAppointment = Boolean(
+                isApptTrigger ||
+                isApptProcess ||
+                params.hasAppointmentContext === true ||
+                params.appointmentInRun === true
+              );
+              const canSupplyClient = true;
 
-                {renderField("Payment Due In",
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={1}
-                      max={90}
-                      value={params.dueDays || 14}
-                      onChange={e => onChange({ dueDays: parseInt(e.target.value) || 14 })}
-                      className="w-24 px-3 py-2 border rounded-md bg-white text-sm"
-                    />
-                    <span className="text-sm text-gray-500">days after appointment booking</span>
-                  </div>
-                )}
+              // Default is the first available one:
+              const firstAvailable = canSupplyAppointment ? "appointment" : (canSupplyClient ? "client" : "choose");
+              const rawBillFor = params.billFor || firstAvailable;
+              const currentBillFor = (rawBillFor === "appointment" && !canSupplyAppointment) ? firstAvailable : rawBillFor;
 
-                {renderField("Default Line Item Service",
-                  <select
-                    value={params.defaultServiceId || "1"}
-                    onChange={e => onChange({ defaultServiceId: e.target.value })}
-                    className="w-full px-3 py-2.5 border rounded-md bg-white text-sm"
-                  >
-                    {MOCK_SERVICES.map(srv => (
-                      <option key={srv.id} value={srv.id}>
-                        {srv.name} (${srv.price})
+              // Services for "Choose services"
+              const selectedServices = Array.isArray(params.selectedServices) && params.selectedServices.length > 0
+                ? params.selectedServices
+                : [
+                    {
+                      serviceId: MOCK_SERVICES[0].id,
+                      name: MOCK_SERVICES[0].name,
+                      quantity: 1,
+                      unitPrice: MOCK_SERVICES[0].price,
+                      taxPercent: MOCK_SERVICES[0].tax ?? 5,
+                    }
+                  ];
+
+              const dueDays = typeof params.dueDays === "number" ? params.dueDays : 14;
+              const paymentMode = params.paymentMode || "Bank Transfer";
+
+              const handleBillForChange = (newBillFor: string) => {
+                const patch: Record<string, any> = { billFor: newBillFor };
+                if (newBillFor === "choose" && (!params.selectedServices || params.selectedServices.length === 0)) {
+                  patch.selectedServices = selectedServices;
+                }
+                onChange(patch);
+              };
+
+              const handleUpdateServiceDiscount = (index: number, newDiscount: number) => {
+                const next = selectedServices.map((item: any, i: number) => i === index ? { ...item, discount: newDiscount } : item);
+                onChange({ selectedServices: next });
+              };
+
+              const handleUpdateServiceDiscountType = (index: number, newType: string) => {
+                const next = selectedServices.map((item: any, i: number) => i === index ? { ...item, discountType: newType } : item);
+                onChange({ selectedServices: next });
+              };
+
+              const handleSelectServiceChange = (index: number, serviceId: string) => {
+                const found = MOCK_SERVICES.find((s) => s.id === serviceId) || MOCK_SERVICES[0];
+                const next = selectedServices.map((item: any, i: number) =>
+                  i === index
+                    ? {
+                        ...item,
+                        serviceId: found.id,
+                        name: found.name,
+                        unitPrice: found.price,
+                        taxPercent: found.tax ?? 5,
+                      }
+                    : item
+                );
+                onChange({ selectedServices: next });
+              };
+
+              const handleRemoveService = (index: number) => {
+                const next = selectedServices.filter((_: any, i: number) => i !== index);
+                onChange({ selectedServices: next });
+              };
+
+              const handleUpdateServiceQty = (index: number, newQty: number) => {
+                const next = selectedServices.map((item: any, i: number) =>
+                  i === index ? { ...item, quantity: newQty } : item
+                );
+                onChange({ selectedServices: next });
+              };
+
+              const handleAddService = () => {
+                const defaultService = MOCK_SERVICES[0];
+                const next = [
+                  ...selectedServices,
+                  {
+                    serviceId: defaultService.id,
+                    name: defaultService.name,
+                    quantity: 1,
+                    unitPrice: defaultService.price,
+                    taxPercent: defaultService.tax ?? 5,
+                    discount: 0,
+                    discountType: "%",
+                  },
+                ];
+                onChange({ selectedServices: next });
+              };
+
+              return (
+                <div className="space-y-4">
+                  {/* Bill for dropdown */}
+                  {renderField("Bill for",
+                    <select
+                      value={currentBillFor}
+                      onChange={(e) => handleBillForChange(e.target.value)}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                    >
+                      <option value="appointment" disabled={!canSupplyAppointment}>
+                        Appointment's service {!canSupplyAppointment ? "(Unavailable - no appointment in trigger)" : ""}
                       </option>
-                    ))}
-                  </select>
-                )}
+                      <option value="client" disabled={!canSupplyClient}>
+                        Client's services {!canSupplyClient ? "(Unavailable)" : ""}
+                      </option>
+                      <option value="choose">Choose services</option>
+                    </select>
+                  )}
 
-                <div className="flex items-center justify-between p-3 bg-gray-50 border rounded-lg">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-800">Auto-send upon generation</p>
-                    <p className="text-[11px] text-gray-500">Automatically dispatch payment link to client via preferred channel</p>
+                  {/* Quantity and Discount per type */}
+                  {currentBillFor === "appointment" && (
+                    <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
+                      <p className="text-xs text-slate-500">Service automatically pulled from the appointment.</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">Quantity</label>
+                          <input
+                            type="number"
+                            value={1}
+                            disabled
+                            readOnly
+                            className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-slate-100 text-slate-500 font-semibold cursor-not-allowed text-sm"
+                          />
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">Fixed to 1 for appointment</span>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">Discount</label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={0}
+                              value={params.discount ?? 0}
+                              onChange={(e) => onChange({ discount: Math.max(0, parseFloat(e.target.value) || 0) })}
+                              className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="0"
+                            />
+                            <select
+                              value={params.discountType || "%"}
+                              onChange={(e) => onChange({ discountType: e.target.value })}
+                              className="px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-700 focus:outline-none"
+                            >
+                              <option value="%">%</option>
+                              <option value="$">$</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {currentBillFor === "client" && (
+                    <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
+                      <p className="text-xs text-slate-500">Service automatically pulled from the client profile.</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">Quantity</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={params.quantity || 1}
+                            onChange={(e) => onChange({ quantity: Math.max(1, parseInt(e.target.value) || 1) })}
+                            className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">Discount</label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={0}
+                              value={params.discount ?? 0}
+                              onChange={(e) => onChange({ discount: Math.max(0, parseFloat(e.target.value) || 0) })}
+                              className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="0"
+                            />
+                            <select
+                              value={params.discountType || "%"}
+                              onChange={(e) => onChange({ discountType: e.target.value })}
+                              className="px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-700 focus:outline-none"
+                            >
+                              <option value="%">%</option>
+                              <option value="$">$</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {currentBillFor === "choose" && (
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Services
+                      </label>
+                      {selectedServices.map((item: any, idx: number) => (
+                        <div key={idx} className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <label className="block text-xs font-semibold text-slate-700 mb-1">Service</label>
+                              <select
+                                value={item.serviceId}
+                                onChange={(e) => handleSelectServiceChange(idx, e.target.value)}
+                                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              >
+                                {MOCK_SERVICES.map(s => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            {selectedServices.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveService(idx)}
+                                className="mt-5 p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="Remove service"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-700 mb-1">Quantity</label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={item.quantity || 1}
+                                onChange={(e) => handleUpdateServiceQty(idx, Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-700 mb-1">Discount</label>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={item.discount ?? 0}
+                                  onChange={(e) => handleUpdateServiceDiscount(idx, Math.max(0, parseFloat(e.target.value) || 0))}
+                                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  placeholder="0"
+                                />
+                                <select
+                                  value={item.discountType || "%"}
+                                  onChange={(e) => handleUpdateServiceDiscountType(idx, e.target.value)}
+                                  className="px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-700 focus:outline-none"
+                                >
+                                  <option value="%">%</option>
+                                  <option value="$">$</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={handleAddService}
+                        className="w-full py-2 px-3 border border-dashed border-slate-300 hover:border-blue-400 rounded-xl text-xs font-semibold text-blue-600 hover:bg-blue-50/50 flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add another service
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Due in and Payment mode */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {renderField("Due in",
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          max={365}
+                          value={dueDays}
+                          onChange={(e) => onChange({ dueDays: Math.max(0, parseInt(e.target.value) || 0) })}
+                          className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-medium text-slate-600 shrink-0">days</span>
+                      </div>
+                    )}
+
+                    {renderField("Payment mode",
+                      <select
+                        value={paymentMode}
+                        onChange={(e) => onChange({ paymentMode: e.target.value })}
+                        className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="Bank Transfer">Bank Transfer (Clinic default)</option>
+                        <option value="Card">Card</option>
+                        <option value="Cash">Cash</option>
+                        <option value="Insurance-EMI">Insurance-EMI</option>
+                      </select>
+                    )}
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={params.autoSend !== false}
-                    onChange={e => onChange({ autoSend: e.target.checked })}
-                    className="w-4 h-4 text-blue-600 rounded"
-                  />
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Stage Entry Action: Send Payment (Records category) */}
             {stepKey === "send_payment" && (
@@ -2100,50 +2482,7 @@ export default function StepParametersFields({
               </div>
             )}
 
-            {(stepKey === "generate_invoice" || stepKey === "generate-invoice") && (
-              <div className="space-y-4">
-                <div className="p-3 bg-purple-50/70 border border-purple-200/80 rounded-xl text-xs text-purple-800 space-y-1">
-                  <span className="font-bold flex items-center gap-1.5">
-                    <Info className="w-3.5 h-3.5 text-purple-600" />
-                    Idempotent Billing Generation
-                  </span>
-                  <p className="text-[11px] text-purple-700 leading-relaxed">
-                    Automatically creates an invoice in draft status associated with the active appointment. Exactly one invoice is generated per record to prevent duplicate billing.
-                  </p>
-                </div>
-                {renderField("Invoice Initial Status",
-                  <select
-                    value={params.initialStatus || "draft"}
-                    onChange={(e) => onChange({ initialStatus: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
-                  >
-                    <option value="draft">Draft (Requires clinic review)</option>
-                    <option value="sent">Sent (Instantly ready for dispatch)</option>
-                  </select>
-                )}
-                {renderField("Line Item Source",
-                  <select
-                    value={params.itemSource || "appointment_service"}
-                    onChange={(e) => onChange({ itemSource: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
-                  >
-                    <option value="appointment_service">Auto-pull from Scheduled Appointment Service</option>
-                    <option value="custom">Standard Clinical Consultation Fee</option>
-                  </select>
-                )}
-                {renderField("Payment Terms",
-                  <select
-                    value={params.paymentTerms || "receipt"}
-                    onChange={(e) => onChange({ paymentTerms: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
-                  >
-                    <option value="receipt">Due on Receipt</option>
-                    <option value="net15">Net 15 Days</option>
-                    <option value="net30">Net 30 Days</option>
-                  </select>
-                )}
-              </div>
-            )}
+
 
             {(stepKey === "send_payment" || stepKey === "send-payment") && (
               <div className="space-y-4">
@@ -2299,6 +2638,544 @@ export default function StepParametersFields({
                 )}
               </div>
             )}
+
+            {/* ───────────── TRIGGER CONFIGURATION ───────────── */}
+            {stepKey === "trigger_config" && (() => {
+              const currentScope = params.scope || "global";
+              const isStageScope = currentScope === "stage" || params.category === "stage";
+              const activeCategory = params.category || (isStageScope ? "stage" : (params.selectedEvent === "field.updated" ? "field_update" : params.selectedEvent?.startsWith("stage") ? "stage" : "client"));
+              const currentEvent = params.selectedEvent || (
+                activeCategory === "stage" ? (isStageScope ? "stage.entry" : "stage.entered") :
+                activeCategory === "field_update" ? "field.updated" :
+                activeCategory === "client" ? "client.created" :
+                activeCategory === "appointment" ? "appointment.booked" :
+                activeCategory === "invoice" ? "invoice.created" :
+                "client.created"
+              );
+
+              const storedServices = getStoredServices();
+              const monitoredFields: string[] = Array.isArray(params.monitoredFields) ? params.monitoredFields : [];
+
+              const triggerOptionsByCategory: Record<string, Array<{ event: string; label: string; desc: string; iconKey: string }>> = {
+                stage: [
+                  {
+                    event: isStageScope ? "stage.entry" : "stage.entered",
+                    label: isStageScope ? "On Stage Entry" : "Stage Entered",
+                    desc: isStageScope ? "Runs when record moves into this stage" : "Fires when a record moves into a selected stage",
+                    iconKey: "gitbranch",
+                  },
+                  {
+                    event: isStageScope ? "stage.exit" : "stage.exited",
+                    label: isStageScope ? "On Stage Exit" : "Stage Exited",
+                    desc: isStageScope ? "Runs when record moves out of this stage" : "Fires when a record moves out of a selected stage",
+                    iconKey: "gitbranch",
+                  },
+                ],
+                field_update: [
+                  {
+                    event: "field.updated",
+                    label: "Field Updated",
+                    desc: "Fires when monitored fields on a record are updated",
+                    iconKey: "sliders",
+                  },
+                ],
+                client: [
+                  { event: "client.created", label: "Client Created", desc: "Fires when a new client record is added to the system", iconKey: "user" },
+                  { event: "client.updated", label: "Client Updated", desc: "Fires when existing client details or fields are modified", iconKey: "user" },
+                  { event: "client.product_assigned", label: "Assign Product", desc: "Fires when a product or service is assigned to this client in their profile", iconKey: "briefcase" },
+                ],
+                appointment: [
+                  { event: "appointment.booked", label: "Appointment Booked", desc: "Fires when a time slot is confirmed for a client", iconKey: "calendar" },
+                  { event: "appointment.rescheduled", label: "Appointment Rescheduled", desc: "Fires when an appointment date or time is modified", iconKey: "calendar" },
+                  { event: "appointment.cancelled", label: "Appointment Cancelled", desc: "Fires when an appointment is cancelled or marked void", iconKey: "calendar" },
+                ],
+                invoice: [
+                  { event: "invoice.created", label: "Invoice Created", desc: "Fires when a billing invoice is drafted or issued", iconKey: "receipt" },
+                  { event: "invoice.paid", label: "Invoice Paid", desc: "Fires when payment is recorded and settled for an invoice", iconKey: "receipt" },
+                ],
+              };
+
+              const currentOptions = triggerOptionsByCategory[activeCategory] || triggerOptionsByCategory.client;
+
+              const handleCategoryChange = (newCat: string) => {
+                const defaults = triggerOptionsByCategory[newCat] || triggerOptionsByCategory.client;
+                const firstOption = defaults[0];
+                onChange({
+                  category: newCat,
+                  selectedEvent: firstOption.event,
+                  triggerLabel: firstOption.label,
+                  triggerDescription: firstOption.desc,
+                  triggerIconKey: firstOption.iconKey,
+                });
+              };
+
+              const handleEventSelect = (opt: { event: string; label: string; desc: string; iconKey: string }) => {
+                onChange({
+                  selectedEvent: opt.event,
+                  triggerLabel: opt.label,
+                  triggerDescription: opt.desc,
+                  triggerIconKey: opt.iconKey,
+                });
+              };
+
+              const handleAddMonitoredField = (token: string) => {
+                const cleanKey = token.replace(/[{}]/g, "").trim();
+                if (!monitoredFields.includes(cleanKey)) {
+                  onChange({ monitoredFields: [...monitoredFields, cleanKey] });
+                }
+              };
+
+              const handleRemoveMonitoredField = (fieldKey: string) => {
+                onChange({ monitoredFields: monitoredFields.filter((f) => f !== fieldKey) });
+              };
+
+              return (
+                <div className="space-y-5">
+                  {/* Respective Trigger Options (Categories already selected in sidebar) */}
+                  {currentOptions.length > 1 && (
+                    <div className="space-y-2">
+                      <label
+                        className="block text-xs font-bold text-slate-700 uppercase tracking-wider"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        Select Trigger ({activeCategory.charAt(0).toUpperCase() + activeCategory.slice(1).replace("_", " ")})
+                      </label>
+                      <div className="space-y-2">
+                        {currentOptions.map((opt) => {
+                          const isSelected =
+                            currentEvent === opt.event ||
+                            (opt.event === "stage.entered" && (currentEvent === "stage.entry" || currentEvent === "entry")) ||
+                            (opt.event === "stage.exited" && (currentEvent === "stage.exit" || currentEvent === "exit")) ||
+                            (opt.event === "stage.entry" && (currentEvent === "stage.entered" || currentEvent === "entry")) ||
+                            (opt.event === "stage.exit" && (currentEvent === "stage.exited" || currentEvent === "exit"));
+                          return (
+                            <div
+                              key={opt.event}
+                              onClick={() => handleEventSelect(opt)}
+                              className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                                isSelected
+                                  ? "bg-blue-50/70 border-blue-500 ring-1 ring-blue-500 shadow-2xs"
+                                  : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
+                              }`}
+                            >
+                              <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                isSelected ? "border-blue-600 bg-blue-600" : "border-slate-300 bg-white"
+                              }`}>
+                                {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p
+                                  className={`text-xs font-semibold ${isSelected ? "text-blue-900" : "text-slate-900"}`}
+                                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                                >
+                                  {opt.label}
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                                  {opt.desc}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Specific Trigger Sub-Parameters */}
+                  {activeCategory === "stage" && (
+                    <div className="p-3.5 bg-blue-50/40 rounded-xl border border-blue-100 space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <GitBranch className="w-4 h-4 text-blue-600" />
+                        <span className="text-xs font-semibold text-blue-900">Stage Filter Options</span>
+                      </div>
+                      {renderField("Process Filter",
+                        <select
+                          value={params.triggerProcessId || "all"}
+                          onChange={(e) => {
+                            const pId = e.target.value;
+                            const proc = effectiveProcesses.find((p: any) => p.id === pId);
+                            onChange({
+                              triggerProcessId: pId,
+                              triggerProcessName: proc?.name || "Any Process",
+                              triggerStageId: "all",
+                              triggerStageName: "Any Stage",
+                            });
+                          }}
+                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
+                        >
+                          <option value="all">Any Process</option>
+                          {effectiveProcesses.map((proc: any) => (
+                            <option key={proc.id} value={proc.id}>
+                              {proc.name} {proc.entityType ? `(${proc.entityType})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {(() => {
+                        const selectedProc = effectiveProcesses.find((p: any) => p.id === params.triggerProcessId);
+                        const stages = selectedProc?.stages || [];
+                        return renderField("Stage Filter",
+                          <select
+                            value={params.triggerStageId || "all"}
+                            disabled={!params.triggerProcessId || params.triggerProcessId === "all"}
+                            onChange={(e) => {
+                              const sId = e.target.value;
+                              const stg = stages.find((s: any) => s.id === sId);
+                              onChange({
+                                triggerStageId: sId,
+                                triggerStageName: stg?.name || "Any Stage",
+                              });
+                            }}
+                            className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            <option value="all">
+                              {params.triggerProcessId && params.triggerProcessId !== "all"
+                                ? "Any Stage in this Process"
+                                : "Select a process to specify a stage"}
+                            </option>
+                            {stages.map((stg: any) => (
+                              <option key={stg.id} value={stg.id}>
+                                {stg.name}
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      })()}
+                      <p className="text-[11px] text-blue-700">
+                        {currentEvent === "stage.exited" || currentEvent === "stage.exit"
+                          ? "This automation fires whenever a record transitions out of the selected stage."
+                          : "This automation fires whenever a record transitions into the selected stage."}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Field Update Sub-Parameters */}
+                  {activeCategory === "field_update" && (
+                    <div className="p-4 bg-[#fafafa] rounded-2xl border border-slate-200 space-y-4">
+                      {/* Monitored Fields Header */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div
+                            className="flex items-center gap-1.5 text-xs font-bold text-slate-900"
+                            style={{ fontFamily: "DM Sans, sans-serif" }}
+                          >
+                            <Sliders className="w-4 h-4 text-blue-600" />
+                            <span>Monitored Fields</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Select client & record fields that will trigger this automation
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsFieldRegistryModalOpen(true)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Select Fields</span>
+                        </button>
+                      </div>
+
+                      {/* Monitored Fields Tags */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-semibold text-slate-700">Fields to Watch</label>
+                        {monitoredFields.length === 0 ? (
+                          <div className="p-3 bg-white border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                            No specific fields selected. <strong>Triggers on ANY field update.</strong>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5 p-2 bg-white border border-slate-200 rounded-xl">
+                            {monitoredFields.map((fld) => (
+                              <span
+                                key={fld}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 text-xs font-medium border border-blue-200"
+                              >
+                                <code className="font-mono text-[11px]">{fld}</code>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveMonitoredField(fld)}
+                                  className="text-blue-500 hover:text-blue-800 cursor-pointer ml-0.5"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Trigger Parameter (Evaluation Logic) Dropdown */}
+                      <div className="space-y-1.5">
+                        <label
+                          className="block text-xs font-semibold text-slate-800"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          Trigger Parameter (Evaluation Logic)
+                        </label>
+                        <select
+                          value={params.matchLogic || "any"}
+                          onChange={(e) => onChange({ matchLogic: e.target.value })}
+                          className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          <option value="any">
+                            Any Field Updated — Triggers when ANY of the watched fields is changed
+                          </option>
+                          <option value="all">
+                            All Fields Updated — Triggers only when ALL watched fields are changed
+                          </option>
+                        </select>
+                        <p className="text-[11px] text-slate-500" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          {(params.matchLogic || "any") === "any"
+                            ? "Triggers when ANY of the watched fields is changed"
+                            : "Triggers only when ALL watched fields are changed"}
+                        </p>
+                      </div>
+
+                      {/* Select Fields Multi Modal (same multi-select modal as document template builder) */}
+                      {isFieldRegistryModalOpen && (
+                        <SelectFieldsMultiModal
+                          isOpen={isFieldRegistryModalOpen}
+                          onClose={() => setIsFieldRegistryModalOpen(false)}
+                          initialSelectedKeys={monitoredFields}
+                          onApply={(keys) => onChange({ monitoredFields: keys })}
+                          title="Select Fields to Watch"
+                          subtitle="Choose fields that will trigger this automation when updated"
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Specific Trigger Sub-Parameters */}
+                  {currentEvent === "client.product_assigned" && (
+                    <div className="p-3.5 bg-blue-50/40 rounded-xl border border-blue-100 space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <Briefcase className="w-4 h-4 text-blue-600" />
+                        <span className="text-xs font-semibold text-blue-900">Assign Product Filter</span>
+                      </div>
+                      {renderField("Target Product / Service",
+                        <select
+                          value={params.selectedProductId || "all"}
+                          onChange={(e) => onChange({ selectedProductId: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
+                        >
+                          <option value="all">Any Product or Service assigned</option>
+                          {storedServices.map((svc) => (
+                            <option key={svc.id} value={String(svc.id)}>
+                              {svc.name} (${svc.price})
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <p className="text-[11px] text-blue-700">
+                        When this product is assigned in the Client Profile, this trigger activates and can feed invoice generation.
+                      </p>
+                    </div>
+                  )}
+
+                  {activeCategory === "appointment" && (
+                    <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-4 h-4 text-gray-700" />
+                        <span className="text-xs font-semibold text-gray-900">Appointment Filter</span>
+                      </div>
+                      {renderField("Filter by Service",
+                        <select
+                          value={params.appointmentServiceFilter || "all"}
+                          onChange={(e) => onChange({ appointmentServiceFilter: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
+                        >
+                          <option value="all">Any Appointment Service</option>
+                          {storedServices.map((svc) => (
+                            <option key={svc.id} value={String(svc.id)}>
+                              {svc.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
+
+                  {activeCategory === "invoice" && (
+                    <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <Receipt className="w-4 h-4 text-gray-700" />
+                        <span className="text-xs font-semibold text-gray-900">Invoice Filter</span>
+                      </div>
+                      {renderField("Payment Mode Filter",
+                        <select
+                          value={params.invoicePaymentMode || "all"}
+                          onChange={(e) => onChange({ invoicePaymentMode: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
+                        >
+                          <option value="all">Any Payment Mode</option>
+                          <option value="Online / Link">Online / Payment Link</option>
+                          <option value="Bank Transfer">Bank Transfer</option>
+                          <option value="Card on File">Card on File</option>
+                          <option value="Cash / POS">Cash / POS Terminal</option>
+                        </select>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ───────────── GENERATE DOCUMENT AUTOMATION STEP ───────────── */}
+            {(stepKey === "generate_document" || stepKey === "generate-document") && (() => {
+              const selectedEntity = params.entity || "client";
+              const storedTemplates = getStoredDocumentTemplates();
+
+              // Predefined templates by entity
+              const ENTITY_TEMPLATES: Record<string, Array<{ id: string; name: string; category: string; desc: string }>> = {
+                client: [
+                  { id: "tpl-client-onboarding", name: "Client Onboarding & Intake Agreement", category: "Client", desc: "Full onboarding paperwork and intake disclosure" },
+                  { id: "tpl-1", name: "Client KYC & Identification Verification Form", category: "Client", desc: "Identity KYC verification checklist" },
+                  { id: "tpl-cf-1", name: "General Medical & Treatment Consent Form", category: "Client", desc: "Informed consent for services and assessments" },
+                  { id: "tpl-client-summary", name: "Client Medical Profile & Registration Summary", category: "Client", desc: "Complete demographic and case summary" },
+                ],
+                process: [
+                  { id: "tpl-proc-sop", name: "Process SOP & Stage Execution Checklist", category: "Process", desc: "Standard operating procedure for current stage" },
+                  { id: "tpl-proc-transition", name: "Stage Transition Handover Brief", category: "Process", desc: "Handover document for next responsible team member" },
+                  { id: "tpl-proc-assessment", name: "Service & Workflow Assessment Protocol", category: "Process", desc: "Evaluation of process progress and milestones" },
+                  { id: "tpl-proc-summary", name: "Process Progress & Milestone Summary Sheet", category: "Process", desc: "Summary sheet of activities completed" },
+                ],
+                appointment: [
+                  { id: "tpl-appt-confirm", name: "Appointment Confirmation & Preparation Guide", category: "Appointment", desc: "Session timing, provider details, and prep guidelines" },
+                  { id: "tpl-sn-1", name: "Clinical Consultation & Session Notes", category: "Appointment", desc: "SOAP notes, provider assessment, and clinical review" },
+                  { id: "tpl-rx-1", name: "Prescription & Medication Order", category: "Appointment", desc: "Doctor prescription and instructions" },
+                  { id: "tpl-appt-aftercare", name: "Post-Appointment Care Instructions & Follow-up", category: "Appointment", desc: "Patient discharge notes and care protocol" },
+                ],
+                invoice: [
+                  { id: "tpl-inv-tax", name: "Tax Invoice & Billing Statement", category: "Invoice", desc: "Official PDF tax invoice with itemized services" },
+                  { id: "tpl-inv-receipt", name: "Payment Receipt & Proof of Payment", category: "Invoice", desc: "Paid receipt acknowledgment document" },
+                  { id: "tpl-inv-itemized", name: "Itemized Service Summary & Claim Breakdown", category: "Invoice", desc: "Itemized CPT and service code statement" },
+                  { id: "tpl-inv-credit", name: "Credit Note & Account Statement Adjustment", category: "Invoice", desc: "Adjustment voucher and statement" },
+                ],
+              };
+
+              // Merge predefined with matching user-created templates
+              const availableTemplates = [
+                ...(ENTITY_TEMPLATES[selectedEntity] || ENTITY_TEMPLATES.client),
+                ...storedTemplates.filter(t => !["tpl-1", "tpl-cf-1", "tpl-sn-1", "tpl-rx-1"].includes(t.id)).map(t => ({
+                  id: t.id,
+                  name: t.name,
+                  category: t.category || "Custom",
+                  desc: `Custom template (${t.extractedFields?.length || 0} fields)`,
+                })),
+              ];
+
+              const currentTemplateId = params.templateId || availableTemplates[0]?.id || "";
+              const activeTemplate = availableTemplates.find(t => t.id === currentTemplateId) || availableTemplates[0];
+
+              const handleEntityChange = (newEntity: string) => {
+                const nextTemplates = ENTITY_TEMPLATES[newEntity] || ENTITY_TEMPLATES.client;
+                const firstTpl = nextTemplates[0];
+                onChange({
+                  entity: newEntity,
+                  templateId: firstTpl.id,
+                  templateName: firstTpl.name,
+                  documentName: `{client_name} - ${firstTpl.name}`,
+                });
+              };
+
+              const handleTemplateSelect = (tplId: string) => {
+                const found = availableTemplates.find(t => t.id === tplId);
+                onChange({
+                  templateId: tplId,
+                  templateName: found?.name || "",
+                  documentName: `{client_name} - ${found?.name || "Document"}`,
+                });
+              };
+
+              const docName = params.documentName || (activeTemplate ? `{client_name} - ${activeTemplate.name}` : "Generated Document");
+
+              return (
+                <div className="space-y-4">
+                  {/* Select Entity - moved to clean dropdown */}
+                  {renderField("Select Entity *",
+                    <select
+                      value={selectedEntity}
+                      onChange={(e) => handleEntityChange(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs font-semibold text-gray-800 focus:border-blue-500 outline-none"
+                    >
+                      <option value="client">Client</option>
+                      <option value="process">Process</option>
+                      <option value="appointment">Appointment</option>
+                      <option value="invoice">Invoice</option>
+                    </select>
+                  )}
+
+                  {/* Respective Template */}
+                  {renderField(
+                    <div className="flex items-center justify-between">
+                      <span>Select Template ({selectedEntity.toUpperCase()})</span>
+                      <span className="text-[11px] text-gray-500 font-normal">
+                        {availableTemplates.length} templates available
+                      </span>
+                    </div>,
+                    <select
+                      value={currentTemplateId}
+                      onChange={(e) => handleTemplateSelect(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-white border border-border rounded-xl text-xs font-medium focus:border-blue-500 outline-none"
+                    >
+                      {availableTemplates.map((tpl) => (
+                        <option key={tpl.id} value={tpl.id}>
+                          {tpl.name} ({tpl.category})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {/* Selected Template Description Card */}
+                  {activeTemplate && (
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-2.5">
+                      <FileCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-slate-800">{activeTemplate.name}</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">{activeTemplate.desc}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Document Name / Title */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-gray-700">Document Title / File Name</label>
+                      <VariablePickerButton
+                        targetRef={getRefForField("docNameInput")}
+                        value={docName}
+                        onChange={(newVal) => onChange({ documentName: newVal })}
+                        label="+ Insert Variable"
+                      />
+                    </div>
+                    <input
+                      ref={(el) => { inputRefs.current["docNameInput"] = el; }}
+                      type="text"
+                      value={docName}
+                      onChange={(e) => onChange({ documentName: e.target.value })}
+                      placeholder="e.g. {client_name} - Consultation Intake Document"
+                      className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
+                    />
+                  </div>
+
+                  {/* Output Format (Cleaned, Execution Mode removed) */}
+                  <div>
+                    {renderField("Output Format",
+                      <select
+                        value={params.fileType || "pdf"}
+                        onChange={(e) => onChange({ fileType: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
+                      >
+                        <option value="pdf">PDF Document (.pdf)</option>
+                        <option value="doc">Word Document (.docx)</option>
+                      </select>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>

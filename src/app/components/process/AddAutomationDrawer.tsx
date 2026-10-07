@@ -55,6 +55,7 @@ import {
   createParallelStep,
   appendStepToTree,
   deleteStepFromTree,
+  updateStepInTree,
   addBranchToStep,
   removeBranchFromStep,
   reorderStepInTree,
@@ -77,8 +78,10 @@ export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   email: ["stage", "incall", "inchat", "postcall"],
   "send-invoice": ["stage", "incall", "inchat", "postcall"],
   generate_invoice: ["stage", "postcall"],
+  generate_document: ["stage", "postcall"],
   send_payment: ["stage", "incall", "inchat", "postcall"],
   processmovement: ["stage", "inchat", "postcall"],
+  update_to_stage: ["stage", "inchat", "postcall"],
   movetonewprocess: ["stage", "inchat", "postcall"],
   endworkflow: ["stage", "inchat", "postcall"],
   fieldupdate: ["stage", "inchat", "postcall"],
@@ -140,9 +143,9 @@ export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
     cats: ["all", "workflow"],
   },
   {
-    key: "processmovement",
-    name: "Move to Process / Stage",
-    desc: "Move the record to a specific process and stage.",
+    key: "update_to_stage",
+    name: "Update to stage",
+    desc: "Update the stage for a process, appointment, or invoice.",
     iconKey: "gitbranch",
     cats: ["all", "workflow"],
     isMoveToStage: true,
@@ -164,6 +167,14 @@ export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
     cats: ["all", "records"],
     popular: true,
     outputAlias: "invoice",
+  },
+  {
+    key: "generate_document",
+    name: "Generate Document",
+    desc: "Generate document from template for client, process, appointment, or invoice.",
+    iconKey: "filetext",
+    cats: ["all", "records"],
+    popular: true,
   },
   {
     key: "send_payment",
@@ -289,12 +300,8 @@ function getTriggerIcon(type: EventTriggerType | "stage") {
   switch (type) {
     case "appointment":
       return <Calendar className="w-4 h-4 text-emerald-600" />;
-    case "call":
-      return <Phone className="w-4 h-4 text-sky-600" />;
     case "client":
       return <User className="w-4 h-4 text-blue-600" />;
-    case "document":
-      return <FileText className="w-4 h-4 text-amber-600" />;
     case "invoice":
       return <Receipt className="w-4 h-4 text-purple-600" />;
     case "insurance":
@@ -368,8 +375,9 @@ export default function AddAutomationDrawer({
   const [stageTriggerWhen, setStageTriggerWhen] = useState<"entry" | "exit">("entry");
 
   // Global Trigger State (Global Scope)
-  const [globalTriggerType, setGlobalTriggerType] = useState<EventTriggerType>("call");
-  const [globalTriggerEvent, setGlobalTriggerEvent] = useState<string>("call.inbound");
+  const [globalTriggerType, setGlobalTriggerType] = useState<EventTriggerType>("client");
+  const [globalTriggerEvent, setGlobalTriggerEvent] = useState<string>("client.created");
+  const [globalTriggerParams, setGlobalTriggerParams] = useState<Record<string, any>>({});
   const [isChoosingGlobalTrigger, setIsChoosingGlobalTrigger] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState("");
 
@@ -404,66 +412,67 @@ export default function AddAutomationDrawer({
 
   const wasOpenRef = useRef(false);
 
-  // Initialize or reset on drawer open
+  // Initialize or reset ONLY on drawer open
   useEffect(() => {
     if (isOpen) {
       if (!wasOpenRef.current) {
         setIsCanvasView(defaultView === "flowbuilder");
-      }
-      setIsAddStepOpen(false);
-      setIsChoosingGlobalTrigger(false);
+        setIsAddStepOpen(false);
+        setIsChoosingGlobalTrigger(false);
 
-      if (initialAutomation) {
-        setAutomationName(initialAutomation.name || "");
-        setAutomationDescription(initialAutomation.description || "");
-        setAutomationStatus(initialAutomation.status || "active");
-        if (initialAutomation.trigger.type === "stage") {
-          setStageTriggerWhen((initialAutomation.trigger as any).when || "entry");
-        } else {
-          const trigType = (initialAutomation.trigger as any).type || "call";
-          const trigEvt = (initialAutomation.trigger as any).event || "call.inbound";
-          setGlobalTriggerType(trigType);
-          setGlobalTriggerEvent(trigEvt);
-        }
-        setSteps(
-          workflowSteps !== undefined
-            ? workflowSteps
-            : (initialAutomation.steps || []).map((s) => ({
-                id: s.id,
-                name: s.name,
-                description: s.description || "",
-                iconKey: s.iconKey || "zap",
-                stepKey: s.stepKey,
-                params: s.params || {},
-                delayValue: s.delay?.value || 0,
-                delayUnit: s.delay?.unit || "minutes",
-                executionType: s.kind === "wait" ? "wait" : "wait",
-              }))
-        );
-      } else {
-        const defaultName =
-          effectiveScope === "stage"
-            ? `On entry: ${stageName}`
-            : "New Global Automation";
-        setAutomationName(defaultName);
-        setAutomationDescription("");
-        setAutomationStatus("active");
-        setStageTriggerWhen("entry");
-        setGlobalTriggerType("call");
-        setGlobalTriggerEvent("call.inbound");
-        setSteps(workflowSteps || []);
-      }
-
-      if (initialStepIdToConfigure) {
-        const stepList = workflowSteps || [];
-        const targetStep = stepList.find((s) => s.id === initialStepIdToConfigure);
-        if (targetStep) {
-          setAutomationName(targetStep.name);
-          setAutomationDescription(targetStep.description || "");
-          if (targetStep.trigger === "exit_stage") {
-            setStageTriggerWhen("exit");
+        if (initialAutomation) {
+          setAutomationName(initialAutomation.name || "");
+          setAutomationDescription(initialAutomation.description || "");
+          setAutomationStatus(initialAutomation.status || "active");
+          if (initialAutomation.trigger.type === "stage") {
+            setStageTriggerWhen((initialAutomation.trigger as any).when || "entry");
           } else {
-            setStageTriggerWhen("entry");
+            const trigType = (initialAutomation.trigger as any).type || "client";
+            const trigEvt = (initialAutomation.trigger as any).event || "client.created";
+            setGlobalTriggerType(trigType);
+            setGlobalTriggerEvent(trigEvt);
+            setGlobalTriggerParams((initialAutomation.trigger as any).params || {});
+          }
+          setSteps(
+            workflowSteps && workflowSteps.length > 0
+              ? workflowSteps
+              : (initialAutomation.steps || []).map((s) => ({
+                  id: s.id,
+                  name: s.name,
+                  description: s.description || "",
+                  iconKey: s.iconKey || "zap",
+                  stepKey: s.stepKey,
+                  params: s.params || {},
+                  delayValue: s.delay?.value || 0,
+                  delayUnit: s.delay?.unit || "minutes",
+                  executionType: s.kind === "wait" ? "wait" : "wait",
+                }))
+          );
+        } else {
+          const defaultName =
+            effectiveScope === "stage"
+              ? `On entry: ${stageName}`
+              : "New Global Automation";
+          setAutomationName(defaultName);
+          setAutomationDescription("");
+          setAutomationStatus("active");
+          setStageTriggerWhen("entry");
+          setGlobalTriggerType("client");
+          setGlobalTriggerEvent("client.created");
+          setSteps(workflowSteps || []);
+        }
+
+        if (initialStepIdToConfigure) {
+          const stepList = workflowSteps || [];
+          const targetStep = stepList.find((s) => s.id === initialStepIdToConfigure);
+          if (targetStep) {
+            setAutomationName(targetStep.name);
+            setAutomationDescription(targetStep.description || "");
+            if (targetStep.trigger === "exit_stage") {
+              setStageTriggerWhen("exit");
+            } else {
+              setStageTriggerWhen("entry");
+            }
           }
         }
       }
@@ -613,8 +622,7 @@ export default function AddAutomationDrawer({
       params: stepParams,
     };
 
-    const updated = [...steps];
-    updated[editingStepIndex] = updatedStep;
+    const updated = updateStepInTree(steps, editingStep.id, updatedStep);
     updateSteps(updated);
     setIsStepDetailOpen(false);
     setEditingStep(null);
@@ -672,6 +680,7 @@ export default function AddAutomationDrawer({
           : {
               type: globalTriggerType,
               event: globalTriggerEvent,
+              params: globalTriggerParams,
               stage:
                 globalTriggerType === "stage"
                   ? {
@@ -683,6 +692,7 @@ export default function AddAutomationDrawer({
                   : undefined,
             },
       steps: finalSteps.map((s) => ({
+        ...s,
         id: s.id,
         kind: s.stepKey === "wait" ? "wait" : s.stepKey === "condition" ? "condition" : "action",
         stepKey: s.stepKey || "action",
@@ -691,6 +701,8 @@ export default function AddAutomationDrawer({
         iconKey: s.iconKey,
         params: s.params || {},
         outputAlias: (s as any).outputAlias,
+        branches: (s as any).branches,
+        executionType: s.executionType || "wait",
         delay:
           s.delayValue && s.delayValue > 0
             ? { value: s.delayValue, unit: (s.delayUnit as any) || "minutes" }
@@ -844,6 +856,9 @@ export default function AddAutomationDrawer({
                   if (effectiveScope === "global") {
                     setGlobalTriggerType(trig.type as EventTriggerType);
                     setGlobalTriggerEvent(trig.event);
+                    if (trig.params) {
+                      setGlobalTriggerParams(trig.params);
+                    }
                   } else {
                     if (trig.event === "stage.exit") {
                       setStageTriggerWhen("exit");
@@ -1269,7 +1284,7 @@ export default function AddAutomationDrawer({
                   onClick={() => handleSaveAutomation("active")}
                   className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs cursor-pointer transition-colors"
                 >
-                  {initialStepIdToConfigure || initialAutomation ? "Save Changes" : "Save Changes"}
+                  {initialStepIdToConfigure || initialAutomation ? "Save Changes" : "Save Automation"}
                 </button>
               </div>
             </div>

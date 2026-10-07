@@ -347,9 +347,9 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
         isFirst ? "rounded-l-md" : "-ml-3.5"
       } ${isDragging ? "opacity-35 scale-95" : "opacity-100"} ${
         isOver ? "ring-2 ring-white scale-105 z-20" : ""
-      } ${isSelected ? "brightness-110 shadow-md ring-2 ring-blue-500/50" : ""}`}
+      } ${isSelected ? "brightness-105 shadow-md ring-2 ring-blue-500/50 z-20" : "hover:bg-slate-300/80 hover:text-slate-900 hover:z-10"}`}
       style={{
-        backgroundColor: color || stage.color || "#3B82F6",
+        backgroundColor: isSelected ? (color || stage.color || "#3B82F6") : "#E2E8F0",
         clipPath: chevronClip,
         minWidth: "140px",
         paddingLeft: isFirst ? "14px" : "24px",
@@ -375,14 +375,18 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
       )}
 
       <div
-        className="cursor-grab active:cursor-grabbing p-0.5 -ml-1 mr-1 text-white/70 group-hover:text-white shrink-0 transition-colors"
+        className={`cursor-grab active:cursor-grabbing p-0.5 -ml-1 mr-1 shrink-0 transition-colors ${
+          isSelected ? "text-white/70 group-hover:text-white" : "text-slate-400 group-hover:text-slate-600"
+        }`}
         title="Drag to reorder"
       >
         <GripVertical className="w-3.5 h-3.5" />
       </div>
 
       <span
-        className="text-xs font-semibold text-white tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1"
+        className={`text-xs font-semibold tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1 ${
+          isSelected ? "text-white" : "text-slate-600 group-hover:text-slate-900"
+        }`}
         style={{ fontFamily: "Outfit, sans-serif" }}
       >
         {isLastStage && <span className="text-[10px] opacity-90">🏁</span>}
@@ -396,7 +400,9 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
             e.stopPropagation();
             onEdit(stage);
           }}
-          className="p-1 text-white/80 hover:text-white hover:bg-black/20 rounded transition-all"
+          className={`p-1 rounded transition-all ${
+            isSelected ? "text-white/80 hover:text-white hover:bg-black/20" : "text-slate-500 hover:text-slate-800 hover:bg-slate-300"
+          }`}
           title="Edit stage"
         >
           <Edit className="w-3 h-3" />
@@ -407,7 +413,9 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
             e.stopPropagation();
             onRemove(stage.id);
           }}
-          className="p-1 text-white/80 hover:text-white hover:bg-black/20 rounded transition-all"
+          className={`p-1 rounded transition-all ${
+            isSelected ? "text-white/80 hover:text-white hover:bg-black/20" : "text-slate-500 hover:text-rose-600 hover:bg-rose-100"
+          }`}
           title="Delete stage"
         >
           <Trash2 className="w-3 h-3" />

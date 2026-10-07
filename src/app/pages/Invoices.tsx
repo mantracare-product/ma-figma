@@ -34,9 +34,9 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useNavigate, Link } from "react-router";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
-import { invoiceService } from "../../lib/invoiceService";
+import { invoiceService, hasInvoiceAutomation } from "../../lib/invoiceService";
 
 export default function Invoices() {
   const navigate = useNavigate();
@@ -192,6 +192,11 @@ export default function Invoices() {
   };
 
   const handleCreateInvoice = () => {
+    if (!hasInvoiceAutomation()) {
+      toast.error("Please build an automation first before creating invoices. Navigate to Automation to configure workflow rules.");
+      navigate("/automation");
+      return;
+    }
     setEditingInvoice(null);
     setIsCreateDrawerOpen(true);
   };
@@ -302,6 +307,17 @@ export default function Invoices() {
             <span className="text-[10px] shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{overdueCount > 0 ? "Needs action" : "All clear"}</span>
           </div>
         </div>
+        {!hasInvoiceAutomation() && (
+          <div className="flex items-center justify-between px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 shadow-2xs">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              Automated Invoicing is locked — please build the automation first in Automation to enable creating invoices and stage workflows.
+            </span>
+            <Link to="/automation" className="text-blue-600 hover:underline font-semibold text-xs ml-2">
+              Build automation &rarr;
+            </Link>
+          </div>
+        )}
 
         {/* View Mode Toggle & Filter Bar powered by PageTopBar */}
         <PageTopBar
@@ -451,18 +467,45 @@ export default function Invoices() {
                 id: "stage",
                 header: "Stage",
                 align: "center",
-                render: (inv) => (
-                  <div className="flex items-center justify-center">
-                    <InvoiceProgressBar
-                      status={inv.status}
-                      currentStageId={inv.currentStageId}
-                      stages={invoiceProcess.stages}
-                      onStatusChange={(newSt) => handleUpdateInvoiceStatus(inv.id, newSt)}
-                      interactive={true}
-                      logId={inv.id}
-                    />
-                  </div>
-                ),
+                render: (inv) => {
+                  const stages = invoiceProcess.stages;
+                  const stageKey = (inv.currentStageId || "").trim();
+                  const matchedStage = stageKey
+                    ? stages.find(
+                        (s) =>
+                          s.id.toLowerCase() === stageKey.toLowerCase() ||
+                          s.name.toLowerCase() === stageKey.toLowerCase() ||
+                          (inv.statusLabel && s.name.toLowerCase() === inv.statusLabel.toLowerCase())
+                      )
+                    : undefined;
+
+                  if (!matchedStage) {
+                    return (
+                      <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/80 tracking-tight whitespace-nowrap"
+                          title="No stage marked — please build the automation first"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          Please build the automation first
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="flex items-center justify-center">
+                      <InvoiceProgressBar
+                        status={inv.status}
+                        currentStageId={inv.currentStageId}
+                        stages={invoiceProcess.stages}
+                        onStatusChange={(newSt) => handleUpdateInvoiceStatus(inv.id, newSt)}
+                        interactive={true}
+                        logId={inv.id}
+                      />
+                    </div>
+                  );
+                },
               },
               {
                 id: "dueDate",

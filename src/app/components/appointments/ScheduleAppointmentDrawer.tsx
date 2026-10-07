@@ -21,6 +21,10 @@ import { useOrganization } from "../../context/OrganizationContext";
 import { CustomSideDrawer } from "../ui/drawer";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
 import { InfoTooltip } from "../help/InfoTooltip";
+import { hasInvoiceAutomation } from "../../../lib/invoiceService";
+import { hasAppointmentAutomation } from "../../../lib/appointmentService";
+import { Link } from "react-router";
+import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -885,14 +889,15 @@ export default function ScheduleAppointmentDrawer({
             <button
               type="button"
               onClick={onSave}
-              disabled={!isFormComplete || isSaving}
+              disabled={!isFormComplete || isSaving || (mode !== "reschedule" && !hasAppointmentAutomation())}
               className="flex-1 py-2.5 rounded-lg font-semibold text-sm transition-all"
               style={{
                 fontFamily: "Outfit, sans-serif",
-                backgroundColor: isFormComplete && !isSaving ? "#181e25" : "#e2e8f0",
-                color: isFormComplete && !isSaving ? "#ffffff" : "#94a3b8",
-                cursor: isFormComplete && !isSaving ? "pointer" : "not-allowed",
+                backgroundColor: isFormComplete && !isSaving && (mode === "reschedule" || hasAppointmentAutomation()) ? "#181e25" : "#e2e8f0",
+                color: isFormComplete && !isSaving && (mode === "reschedule" || hasAppointmentAutomation()) ? "#ffffff" : "#94a3b8",
+                cursor: isFormComplete && !isSaving && (mode === "reschedule" || hasAppointmentAutomation()) ? "pointer" : "not-allowed",
               }}
+              title={mode !== "reschedule" && !hasAppointmentAutomation() ? "Please build the automation first" : undefined}
             >
               {isSaving ? "Saving..." : mode === "reschedule" ? "Save Changes" : "Book Appointment"}
             </button>
@@ -901,6 +906,17 @@ export default function ScheduleAppointmentDrawer({
       }
     >
       <div className="space-y-3 pb-4">
+        {mode !== "reschedule" && !hasAppointmentAutomation() && (
+          <div className="px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              Appointment booking is locked — please build the automation first in the Automation page.
+            </span>
+            <Link to="/automation" className="text-blue-600 hover:underline font-semibold text-xs ml-2">
+              Build automation &rarr;
+            </Link>
+          </div>
+        )}
 
         {/* ================================================================ */}
         {/* SECTION 1 — SERVICE                                              */}
@@ -1193,12 +1209,29 @@ export default function ScheduleAppointmentDrawer({
                 {invoiceSectionExpanded && (
                   <div className="mt-2 space-y-3 px-2">
                     <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50 border border-slate-200">
-                      <p className="text-xs text-slate-700" style={{ fontFamily: "DM Sans, sans-serif" }}>Generate invoice on booking</p>
+                      <div className="flex flex-col">
+                        <p className="text-xs text-slate-700 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          Generate invoice on booking
+                        </p>
+                        {!hasInvoiceAutomation() && (
+                          <span className="text-[11px] text-amber-700 flex items-center gap-1 mt-0.5 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Locked — please build the automation first
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="checkbox"
-                        checked={values.generateInvoice ?? true}
-                        onChange={(e) => onChange({ generateInvoice: e.target.checked })}
-                        className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-slate-700"
+                        disabled={!hasInvoiceAutomation()}
+                        checked={hasInvoiceAutomation() ? Boolean(values.generateInvoice) : false}
+                        onChange={(e) => {
+                          if (!hasInvoiceAutomation()) {
+                            toast.error("Please build the invoice automation first in Automation.");
+                            return;
+                          }
+                          onChange({ generateInvoice: e.target.checked });
+                        }}
+                        className={`w-3.5 h-3.5 rounded border-slate-300 ${!hasInvoiceAutomation() ? "opacity-40 cursor-not-allowed" : "cursor-pointer accent-slate-700"}`}
                       />
                     </div>
 

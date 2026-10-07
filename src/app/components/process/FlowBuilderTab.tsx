@@ -5,7 +5,7 @@ import {
   Zap, Webhook, Search, ChevronDown, ChevronRight, Plus, Trash2, X,
   ZoomIn, ZoomOut, Maximize2, Undo2, Redo2, CheckCircle2, AlertCircle,
   Code2, Activity, Layers, PhoneCall, Save, AlignCenter, Hand, Sparkles,
-  CreditCard, FileText, Receipt, ShieldCheck,
+  CreditCard, FileText, Receipt, ShieldCheck, Briefcase, Sliders,
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import VariableSelectorModal from "./VariableSelectorModal";
@@ -15,6 +15,7 @@ import {
   createParallelStep,
   appendStepToTree,
   deleteStepFromTree,
+  updateStepInTree,
   addBranchToStep,
   removeBranchFromStep,
   findStepInTree,
@@ -76,9 +77,9 @@ type NodeType =
   | "call-transfer" | "call-transfer-human" | "call-transfer-ai" | "call-hangup"
   | "fetch-availability" | "fetch-field-value"
   | "send-email" | "send-sms" | "send-whatsapp"
-  | "field-update" | "assign-responsible" | "move-stage" | "move-process" | "move-new-process"
+  | "field-update" | "assign-responsible" | "move-stage" | "move-process" | "move-new-process" | "update-stage"
   | "book-appointment" | "reschedule-appointment" | "cancel-appointment"
-  | "generate-invoice" | "send-payment" | "send-invoice"
+  | "generate-invoice" | "generate-document" | "send-payment" | "send-invoice"
   | "webhook" | "api"
   | "idle-messages";
 
@@ -119,6 +120,7 @@ interface FlowBuilderTabProps {
     label: string;
     description: string;
     iconKey: string;
+    params?: Record<string, any>;
   }) => void;
   onTriggerClick?: () => void;
   onSave?: () => void;
@@ -150,12 +152,14 @@ const NODE_TYPE_TO_STEP_KEY: Partial<Record<NodeType, string>> = {
   "field-update": "fieldupdate",
   "assign-responsible": "assignhuman",
   "move-stage": "stagemovement",
-  "move-process": "processmovement",
-  "move-new-process": "movetonewprocess",
+  "move-process": "update_to_stage",
+  "move-new-process": "update_to_stage",
+  "update-stage": "update_to_stage",
   "book-appointment": "scheduleappointment",
   "reschedule-appointment": "scheduleappointment",
   "cancel-appointment": "scheduleappointment",
   "generate-invoice": "generate_invoice",
+  "generate-document": "generate_document",
   "send-payment": "send_payment",
   "send-invoice": "send-invoice",
   "webhook": "webhook_trigger",
@@ -179,10 +183,12 @@ const NODE_TYPE_TO_ICON_KEY: Record<string, string> = {
   "move-stage": "gitbranch",
   "move-process": "zap",
   "move-new-process": "gitbranch",
+  "update-stage": "gitbranch",
   "book-appointment": "calendar",
   "reschedule-appointment": "calendar",
   "cancel-appointment": "x",
   "generate-invoice": "filetext",
+  "generate-document": "filetext",
   "send-payment": "creditcard",
   "send-invoice": "filetext",
   "webhook": "webhook",
@@ -200,7 +206,7 @@ const NODE_CATEGORIES = [
       { type: "condition" as NodeType, label: "Condition", icon: <Split className="w-4 h-4" />, desc: "Gate this step behind field or intent conditions" },
       { type: "wait" as NodeType, label: "Wait / Delay", icon: <Clock className="w-4 h-4" />, desc: "Delay this step before it runs" },
       { type: "parallel" as NodeType, label: "Parallel Branches", icon: <Layers className="w-4 h-4" />, desc: "Run two automations simultaneously in parallel" },
-      { type: "move-process" as NodeType, label: "Move to Process / Stage", icon: <Workflow className="w-4 h-4" />, desc: "Move record to a specific process and stage" },
+      { type: "update-stage" as NodeType, label: "Update to stage", icon: <Workflow className="w-4 h-4" />, desc: "Update stage for process, appointment, or invoice" },
       { type: "end" as NodeType, label: "End Workflow", icon: <XCircle className="w-4 h-4" />, desc: "Terminate workflow execution" },
     ],
   },
@@ -210,6 +216,7 @@ const NODE_CATEGORIES = [
     icon: <CreditCard className="w-3.5 h-3.5" />,
     nodes: [
       { type: "generate-invoice" as NodeType, label: "Generate Invoice", icon: <FileText className="w-4 h-4" />, desc: "Generate draft invoice for appointment (strictly idempotent)" },
+      { type: "generate-document" as NodeType, label: "Generate Document", icon: <FileText className="w-4 h-4" />, desc: "Generate document from template for client, process, appointment, or invoice" },
       { type: "send-payment" as NodeType, label: "Send Payment", icon: <CreditCard className="w-4 h-4" />, desc: "Send payment link or invoice checkout request" },
       { type: "send-invoice" as NodeType, label: "Send Invoice", icon: <FileText className="w-4 h-4" />, desc: "Send invoice link to client via preferred channel" },
     ],
@@ -258,22 +265,31 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
   if (scope === "global") {
     return [
       {
-        id: "trig-call-inbound",
-        triggerType: "call",
-        triggerEvent: "call.inbound",
-        label: "Inbound Call",
-        desc: "Fires when an incoming phone call arrives",
-        icon: <Phone className="w-4 h-4" />,
-        iconKey: "phone",
+        id: "trig-global-stage-entry",
+        triggerType: "stage",
+        triggerEvent: "stage.entered",
+        label: "Stage Entered",
+        desc: "Fires when a record moves into a selected stage",
+        icon: <GitBranch className="w-4 h-4" />,
+        iconKey: "gitbranch",
       },
       {
-        id: "trig-call-ended",
-        triggerType: "call",
-        triggerEvent: "call.ended",
-        label: "Call Ended",
-        desc: "Fires when a call concludes with summary",
-        icon: <PhoneOff className="w-4 h-4" />,
-        iconKey: "phone",
+        id: "trig-global-stage-exit",
+        triggerType: "stage",
+        triggerEvent: "stage.exited",
+        label: "Stage Exited",
+        desc: "Fires when a record moves out of a selected stage",
+        icon: <GitBranch className="w-4 h-4" />,
+        iconKey: "gitbranch",
+      },
+      {
+        id: "trig-global-field-update",
+        triggerType: "field_update",
+        triggerEvent: "field.updated",
+        label: "Field Update",
+        desc: "Fires when monitored fields on a record are updated",
+        icon: <Sliders className="w-4 h-4" />,
+        iconKey: "sliders",
       },
       {
         id: "trig-client-created",
@@ -292,6 +308,15 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
         desc: "Fires when client details are modified",
         icon: <User className="w-4 h-4" />,
         iconKey: "user",
+      },
+      {
+        id: "trig-client-product-assigned",
+        triggerType: "client",
+        triggerEvent: "client.product_assigned",
+        label: "Assign Product",
+        desc: "Fires when a product or service is assigned to a client",
+        icon: <Briefcase className="w-4 h-4" />,
+        iconKey: "briefcase",
       },
       {
         id: "trig-appt-booked",
@@ -337,24 +362,6 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
         desc: "Fires when invoice payment is collected",
         icon: <CreditCard className="w-4 h-4" />,
         iconKey: "receipt",
-      },
-      {
-        id: "trig-doc-uploaded",
-        triggerType: "document",
-        triggerEvent: "document.uploaded",
-        label: "Document Uploaded",
-        desc: "Fires when intake form or document arrives",
-        icon: <FileText className="w-4 h-4" />,
-        iconKey: "filetext",
-      },
-      {
-        id: "trig-wh-received",
-        triggerType: "webhook",
-        triggerEvent: "webhook.received",
-        label: "Inbound Webhook",
-        desc: "Fires when external webhook is received",
-        icon: <Webhook className="w-4 h-4" />,
-        iconKey: "webhook",
       },
     ];
   } else {
@@ -405,10 +412,12 @@ const NODE_STYLE: Record<string, { bg: string; border: string; text: string; ico
   "move-stage":          { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
   "move-process":        { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
   "move-new-process":    { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
+  "update-stage":        { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
   "book-appointment":    { bg: "bg-teal-50 dark:bg-teal-900/20",     border: "border-teal-400",   text: "text-teal-700 dark:text-teal-400" },
   "reschedule-appointment": { bg: "bg-teal-50 dark:bg-teal-900/20", border: "border-teal-400",   text: "text-teal-700 dark:text-teal-400" },
   "cancel-appointment":  { bg: "bg-rose-50 dark:bg-rose-900/20",     border: "border-rose-400",   text: "text-rose-700 dark:text-rose-400" },
   "generate-invoice":    { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
+  "generate-document":   { bg: "bg-blue-50 dark:bg-blue-900/20",     border: "border-blue-400",   text: "text-blue-700 dark:text-blue-400" },
   "send-payment":        { bg: "bg-emerald-50 dark:bg-emerald-900/20", border: "border-emerald-400", text: "text-emerald-700 dark:text-emerald-400" },
   "send-invoice":        { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
   webhook:               { bg: "bg-orange-50 dark:bg-orange-900/20", border: "border-orange-400", text: "text-orange-700 dark:text-orange-400" },
@@ -418,6 +427,7 @@ const NODE_STYLE: Record<string, { bg: string; border: string; text: string; ico
 
 function getNodeIcon(type: NodeType) {
   if (type === "generate-invoice") return <FileText className="w-4 h-4" />;
+  if (type === "generate-document") return <FileText className="w-4 h-4" />;
   if (type === "send-payment") return <CreditCard className="w-4 h-4" />;
   if (type === "send-invoice") return <FileText className="w-4 h-4" />;
   const all = NODE_CATEGORIES.flatMap((c) => c.nodes);
@@ -425,6 +435,7 @@ function getNodeIcon(type: NodeType) {
 }
 
 function getNodeLabel(type: NodeType) {
+  if (type === "generate-document") return "Generate Document";
   const all = NODE_CATEGORIES.flatMap((c) => c.nodes);
   return all.find((n) => n.type === type)?.label ?? type;
 }
@@ -432,6 +443,7 @@ function getNodeLabel(type: NodeType) {
 function getTriggerIconComponent(triggerIconKey?: string, triggerType?: string) {
   if (triggerIconKey === "calendar" || triggerType === "appointment") return <Calendar className="w-4 h-4" />;
   if (triggerIconKey === "receipt" || triggerType === "invoice") return <Receipt className="w-4 h-4" />;
+  if (triggerIconKey === "briefcase" || triggerIconKey === "product") return <Briefcase className="w-4 h-4" />;
   if (triggerIconKey === "creditcard") return <CreditCard className="w-4 h-4" />;
   if (triggerIconKey === "phone" || triggerType === "call") return <Phone className="w-4 h-4" />;
   if (triggerIconKey === "user" || triggerType === "client") return <User className="w-4 h-4" />;
@@ -465,13 +477,17 @@ const STEP_KEY_TO_NODE_TYPE: Record<string, NodeType> = {
   email: "send-email",
   "send-invoice": "send-invoice",
   generate_invoice: "generate-invoice",
+  generate_document: "generate-document",
+  "generate-document": "generate-document",
   send_payment: "send-payment",
   fieldupdate: "field-update",
   assignhuman: "assign-responsible",
-  processmovement: "move-process",
-  movetonewprocess: "move-process",
-  "move-new-process": "move-process",
-  stagemovement: "move-stage",
+  processmovement: "update-stage",
+  movetonewprocess: "update-stage",
+  "move-new-process": "update-stage",
+  stagemovement: "update-stage",
+  update_to_stage: "update-stage",
+  "update-stage": "update-stage",
   callaction: "call-transfer",
   callhangup: "call-hangup",
   fetchavailability: "fetch-availability",
@@ -489,7 +505,19 @@ const STEP_KEY_TO_NODE_TYPE: Record<string, NodeType> = {
 const FALLBACK_NODE_TYPE: NodeType = "wait";
 
 const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "incall" | "inchat" | "postcall", excludeId?: string) => {
-  const laneSteps = steps.filter(s => (s.trigger ?? "stage") === lane && s.id !== excludeId);
+  const allSteps: WorkflowStep[] = [];
+  function collectSteps(list: WorkflowStep[]) {
+    for (const s of list) {
+      allSteps.push(s);
+      if (isParallelStep(s) && s.branches) {
+        for (const b of s.branches) {
+          if (b.steps) collectSteps(b.steps);
+        }
+      }
+    }
+  }
+  collectSteps(steps);
+  const laneSteps = allSteps.filter(s => (s.trigger ?? "stage") === lane && s.id !== excludeId);
   // Identify which step ids belong to a parallel group (>=2 consecutive parallel steps)
   const parallelMemberIds = new Set<string>();
   let i = 0;
@@ -552,7 +580,7 @@ export default function FlowBuilderTab({
       if (scope === "stage" && triggerEvent === "exit") return "stage.exit";
       return triggerEvent;
     }
-    return scope === "global" ? "call.inbound" : "stage.entry";
+    return scope === "global" ? "stage.entered" : "stage.entry";
   });
 
   useEffect(() => {
@@ -564,7 +592,13 @@ export default function FlowBuilderTab({
   }, [triggerEvent, scope]);
 
   const activeTriggerItem = useMemo(() => {
-    return allTriggers.find(t => t.triggerEvent === activeTriggerEvent) || allTriggers[0];
+    return allTriggers.find(t =>
+      t.triggerEvent === activeTriggerEvent ||
+      (t.triggerEvent === "stage.entered" && activeTriggerEvent === "stage.entry") ||
+      (t.triggerEvent === "stage.exited" && activeTriggerEvent === "stage.exit") ||
+      (t.triggerEvent === "stage.entry" && activeTriggerEvent === "stage.entered") ||
+      (t.triggerEvent === "stage.exit" && activeTriggerEvent === "stage.exited")
+    ) || allTriggers[0];
   }, [allTriggers, activeTriggerEvent]);
 
   const defaultStartLabel = activeTriggerItem?.label || (
@@ -582,8 +616,8 @@ export default function FlowBuilderTab({
       y: 80,
       config: {
         scope,
-        triggerType: activeTriggerItem?.triggerType || triggerType || (scope === "global" ? "call" : "stage"),
-        triggerEvent: activeTriggerItem?.triggerEvent || triggerEvent || (scope === "global" ? "call.inbound" : "stage.entry"),
+        triggerType: activeTriggerItem?.triggerType || triggerType || (scope === "global" ? "stage" : "stage"),
+        triggerEvent: activeTriggerItem?.triggerEvent || triggerEvent || (scope === "global" ? "stage.entered" : "stage.entry"),
         triggerLabel: activeTriggerItem?.label || triggerLabel || defaultStartLabel,
         triggerDescription: activeTriggerItem?.desc || triggerDescription,
         triggerIconKey: activeTriggerItem?.iconKey || triggerIconKey,
@@ -952,15 +986,18 @@ export default function FlowBuilderTab({
     if (id === "start") return;
     const node = nodes.find(n => n.id === id);
     if (node?.config?.syntheticFor) return;
-    if (node?.config?.autoGenerated) {
+    const realStepId = (node?.config?.sourceStepId || id.replace(/^(wait-|cond-|parallel-)/, "")) as string;
+    const targetId = findStepInTree(workflowSteps, id) ? id : (findStepInTree(workflowSteps, realStepId) ? realStepId : null);
+    if (node?.config?.autoGenerated || targetId) {
       if (onWorkflowStepsChange) {
         snapshot();
-        const updatedSteps = workflowSteps.filter(s => s.id !== id);
+        const updatedSteps = targetId ? deleteStepFromTree(workflowSteps, targetId) : workflowSteps;
         onWorkflowStepsChange(updatedSteps);
-        setNodes((prev) => prev.filter((n) => n.id !== id));
-        setConnections((prev) => prev.filter((c) => c.fromId !== id && c.toId !== id));
-        if (selectedId === id) setSelectedId(null);
-        if (configNode?.id === id) setConfigNode(null);
+        setNodes((prev) => prev.filter((n) => n.id !== id && n.id !== targetId && n.config?.sourceParallelStepId !== targetId && n.config?.sourceParallelStepId !== id));
+        setConnections((prev) => prev.filter((c) => c.fromId !== id && c.toId !== id && c.fromId !== targetId && c.toId !== targetId));
+        if (selectedId === id || selectedId === targetId) setSelectedId(null);
+        if (configNode?.id === id || configNode?.id === targetId) setConfigNode(null);
+        toast.success("Step removed");
       }
       return;
     }
@@ -1056,18 +1093,13 @@ export default function FlowBuilderTab({
     // Update target step so its connectAfterId is "none" (unconnected)
     const targetStepId = conn.toId.replace(/^(wait-|cond-|parallel-)/, "");
     if (onWorkflowStepsChange) {
-      const targetStep = workflowSteps.find(s => s.id === targetStepId);
-      if (targetStep) {
+      const stepCtx = findStepInTree(workflowSteps, targetStepId);
+      if (stepCtx) {
         const isFromParallel = conn.fromPort.startsWith("branch-") || conn.fromId.startsWith("parallel");
-        const updatedSteps = workflowSteps.map(step =>
-          step.id === targetStep.id
-            ? {
-                ...step,
-                connectAfterId: "none",
-                executionType: isFromParallel ? ("wait" as const) : step.executionType
-              }
-            : step
-        );
+        const updatedSteps = updateStepInTree(workflowSteps, targetStepId, {
+          connectAfterId: "none",
+          executionType: isFromParallel ? ("wait" as const) : stepCtx.step.executionType,
+        });
         onWorkflowStepsChange(updatedSteps);
       }
     }
@@ -1098,19 +1130,14 @@ export default function FlowBuilderTab({
     // If user selected "parallel", insert a Parallel Branches node before toNode
     if (type === "parallel") {
       const targetStepId = conn.toId.replace(/^(wait-|cond-|parallel-)/, "");
-      const targetStep = workflowSteps.find(s => s.id === targetStepId);
-      if (targetStep && onWorkflowStepsChange) {
-        const parallelNodeId = `parallel-${targetStep.id}`;
+      const stepCtx = findStepInTree(workflowSteps, targetStepId);
+      if (stepCtx && onWorkflowStepsChange) {
+        const parallelNodeId = `parallel-${stepCtx.step.id}`;
         const sourceStepId = conn.fromId.replace(/^(wait-|cond-|parallel-)/, "");
-        const updatedSteps = workflowSteps.map(s =>
-          s.id === targetStep.id
-            ? {
-                ...s,
-                executionType: "parallel" as const,
-                connectAfterId: conn.fromId === "start" ? undefined : sourceStepId
-              }
-            : s
-        );
+        const updatedSteps = updateStepInTree(workflowSteps, targetStepId, {
+          executionType: "parallel" as const,
+          connectAfterId: conn.fromId === "start" ? undefined : sourceStepId,
+        });
         onWorkflowStepsChange(updatedSteps);
 
         setConnections(prev => [
@@ -1123,7 +1150,7 @@ export default function FlowBuilderTab({
           }
         ]);
         setSelectedId(parallelNodeId);
-        toast.success(`Parallel Branch inserted before ${targetStep.name}.`);
+        toast.success(`Parallel Branch inserted before ${stepCtx.step.name}.`);
       } else {
         const pId = `parallel-${Date.now()}`;
         const newParallelNode: FlowNode = {
@@ -1393,7 +1420,53 @@ export default function FlowBuilderTab({
 
   const openConfig = (node: FlowNode) => {
     if (node.type === "start") {
-      focusTriggersCategory();
+      const activeItem = allTriggers.find(t =>
+        t.triggerEvent === (node.config?.selectedEvent || node.config?.triggerEvent || activeTriggerEvent) ||
+        (t.triggerEvent === "stage.entered" && (node.config?.selectedEvent || node.config?.triggerEvent || activeTriggerEvent) === "stage.entry") ||
+        (t.triggerEvent === "stage.exited" && (node.config?.selectedEvent || node.config?.triggerEvent || activeTriggerEvent) === "stage.exit") ||
+        (t.triggerEvent === "stage.entry" && (node.config?.selectedEvent || node.config?.triggerEvent || activeTriggerEvent) === "stage.entered") ||
+        (t.triggerEvent === "stage.exit" && (node.config?.selectedEvent || node.config?.triggerEvent || activeTriggerEvent) === "stage.exited")
+      ) || allTriggers[0];
+      const trigCategory = node.config?.category || node.config?.triggerType || activeItem?.triggerType || (scope === "global" ? (node.config?.triggerEvent?.startsWith("stage") ? "stage" : node.config?.triggerEvent === "field.updated" ? "field_update" : "client") : "stage");
+      const trigEvent = node.config?.selectedEvent || node.config?.triggerEvent || activeItem?.triggerEvent || (
+        trigCategory === "stage" ? (scope === "stage" ? "stage.entry" : "stage.entered") :
+        trigCategory === "field_update" ? "field.updated" :
+        trigCategory === "client" ? "client.created" :
+        trigCategory === "invoice" ? "invoice.created" :
+        "appointment.booked"
+      );
+      const trigItem = allTriggers.find(t => t.triggerEvent === trigEvent) || activeItem;
+      const trigLabel = node.config?.triggerLabel || trigItem?.label || node.label || "Trigger";
+      const trigDesc = node.config?.triggerDescription || trigItem?.desc || "";
+      const trigIconKey = node.config?.triggerIconKey || trigItem?.iconKey || "zap";
+
+      setConfigNode({
+        ...node,
+        label: trigLabel,
+        stepKey: "trigger_config",
+        config: {
+          productFilter: "all",
+          selectedProductId: "",
+          appointmentServiceFilter: "all",
+          appointmentProviderFilter: "all",
+          invoicePaymentMode: "all",
+          triggerProcessId: "all",
+          triggerStageId: "all",
+          monitoredFields: [],
+          matchLogic: "any",
+          conditionsEnabled: false,
+          conditions: [],
+          fieldConditions: [],
+          ...(node.config || {}),
+          category: trigCategory,
+          triggerType: trigCategory,
+          selectedEvent: trigEvent,
+          triggerEvent: trigEvent,
+          triggerLabel: trigLabel,
+          triggerDescription: trigDesc,
+          triggerIconKey: trigIconKey,
+        },
+      });
       return;
     }
     if (node.type === "end") {
@@ -1401,8 +1474,32 @@ export default function FlowBuilderTab({
     }
     // Synthetic nodes (cond-, wait-, parallel-) proxy to the underlying step node
     const targetStepId = (node.config?.syntheticFor || node.config?.sourceStepId || node.id) as string;
-    const realStep = workflowSteps.find(s => s.id === targetStepId);
+    const stepCtx = findStepInTree(workflowSteps, targetStepId);
+    let realStep = stepCtx?.step || workflowSteps.find(s => s.id === targetStepId);
     const realNode = nodes.find(n => n.id === targetStepId) || node;
+
+    const resolvedStepKey = realStep?.stepKey || node.stepKey || realNode.stepKey || NODE_TYPE_TO_STEP_KEY[node.type];
+
+    if (!realStep && resolvedStepKey && node.type !== "parallel" && node.type !== "empty-branch") {
+      const catalogEntry = NODE_CATEGORIES.flatMap(c => c.nodes).find(n => n.type === node.type);
+      const allowed: Array<string> = stepAllowedTriggers[resolvedStepKey] ?? ["stage", "incall", "inchat", "postcall"];
+      realStep = {
+        id: node.id,
+        name: node.label || getNodeLabel(node.type),
+        description: catalogEntry?.desc ?? "",
+        iconKey: NODE_TYPE_TO_ICON_KEY[node.type] ?? "zap",
+        stepKey: resolvedStepKey,
+        trigger: allowed[0],
+        executionType: "wait",
+        delayValue: 0,
+        delayUnit: "Minute",
+        params: node.config || {},
+      };
+      if (onWorkflowStepsChange) {
+        const updated = appendStepToTree(workflowSteps, realStep);
+        onWorkflowStepsChange(updated);
+      }
+    }
 
     if (realStep) {
       setDrawerTrigger((realStep.trigger ?? (node.config?.lane ?? "stage")) as "stage" | "incall" | "postcall");
@@ -1412,6 +1509,7 @@ export default function FlowBuilderTab({
       setDrawerConnectAfterId(realStep.connectAfterId);
       setConfigNode({
         ...realNode,
+        stepKey: realStep.stepKey,
         config: {
           ...(realStep.params ?? {}),
           ...(realNode.config ?? {}),
@@ -1426,32 +1524,72 @@ export default function FlowBuilderTab({
 
   const saveConfig = () => {
     if (!configNode) return;
+
+    if (configNode.type === "start") {
+      const selectedEvent = configNode.config?.selectedEvent;
+      const trigCategory = configNode.config?.category;
+      const catalogItem = allTriggers.find(t =>
+        t.triggerEvent === selectedEvent ||
+        (t.triggerEvent === "stage.entered" && selectedEvent === "stage.entry") ||
+        (t.triggerEvent === "stage.exited" && selectedEvent === "stage.exit") ||
+        (t.triggerEvent === "stage.entry" && selectedEvent === "stage.entered") ||
+        (t.triggerEvent === "stage.exit" && selectedEvent === "stage.exited")
+      );
+      const newLabel = catalogItem?.label || configNode.label || "Trigger";
+      const newDesc = catalogItem?.desc || configNode.config?.triggerDescription || "";
+      const newIconKey = catalogItem?.iconKey || configNode.config?.triggerIconKey || "gitbranch";
+
+      if (catalogItem) {
+        selectTrigger(catalogItem);
+      }
+      updateNode(configNode.id, {
+        label: newLabel,
+        config: {
+          ...configNode.config,
+          triggerEvent: selectedEvent,
+          triggerType: catalogItem?.triggerType || trigCategory || (selectedEvent?.startsWith("stage") ? "stage" : "client"),
+          triggerLabel: newLabel,
+          triggerDescription: newDesc,
+          triggerIconKey: newIconKey,
+        }
+      });
+      if (onTriggerChange) {
+        onTriggerChange({
+          type: (catalogItem?.triggerType || trigCategory || (selectedEvent?.startsWith("stage") ? "stage" : "client")) as any,
+          event: selectedEvent || "stage.entered",
+          label: newLabel,
+          description: newDesc,
+          iconKey: newIconKey,
+          params: configNode.config || {},
+        });
+      }
+      toast.success(`Trigger configured: "${newLabel}"`);
+      setConfigNode(null);
+      return;
+    }
+
     updateNode(configNode.id, { label: configNode.label, config: configNode.config });
     // Sync back to WorkflowStep (trigger + executionType + delay + connectAfterId + params)
     const targetStepId = (configNode.config?.sourceStepId || configNode.config?.syntheticFor || configNode.id) as string;
-    const hasTargetStep = workflowSteps.some(s => s.id === targetStepId);
+    const stepCtx = findStepInTree(workflowSteps, targetStepId);
 
-    if (hasTargetStep && onWorkflowStepsChange) {
+    if (stepCtx && onWorkflowStepsChange) {
       const { autoGenerated: _a, sourceStepId: _s, lane: _l, syntheticFor: _syn, ...params } = configNode.config || {};
       const finalConnectAfterId = drawerTrigger !== "incall" && drawerExecType === "wait" ? drawerConnectAfterId : undefined;
-      const updatedSteps = workflowSteps.map(step =>
-        step.id === targetStepId
-          ? {
-              ...step,
-              name: configNode.label || step.name,
-              trigger: drawerTrigger,
-              executionType: drawerExecType,
-              delayValue: drawerDelayValue,
-              delayUnit: drawerDelayUnit,
-              connectAfterId: finalConnectAfterId,
-              params: {
-                ...(step.params ?? {}),
-                ...params,
-              }
-            }
-          : step
-      );
+      const updatedSteps = updateStepInTree(workflowSteps, targetStepId, {
+        name: configNode.label || stepCtx.step.name,
+        trigger: drawerTrigger,
+        executionType: drawerExecType,
+        delayValue: drawerDelayValue,
+        delayUnit: drawerDelayUnit,
+        connectAfterId: finalConnectAfterId,
+        params: {
+          ...(stepCtx.step.params ?? {}),
+          ...params,
+        }
+      });
       onWorkflowStepsChange(updatedSteps);
+      toast.success(`Action "${configNode.label || stepCtx.step.name}" updated`);
     }
     setConfigNode(null);
   };
@@ -1500,65 +1638,159 @@ export default function FlowBuilderTab({
 
         {/* Category list */}
         <div ref={sidebarRef} className="flex-1 overflow-y-auto">
-          {/* Triggers Category */}
-          {filteredTriggers.length > 0 && (
-            <div className="border-b border-border/60">
-              <button
-                type="button"
-                onClick={() => setCollapsedCats((s) => {
-                  const n = new Set(s);
-                  n.has("triggers") ? n.delete("triggers") : n.add("triggers");
-                  return n;
-                })}
-                className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/50 transition-colors cursor-pointer"
-              >
-                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  <Zap className="w-3.5 h-3.5" />
-                  <span>Triggers</span>
-                </div>
-                {collapsedCats.has("triggers")
-                  ? <ChevronRight className="w-3 h-3 text-muted-foreground" />
-                  : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
-              </button>
+          {/* Triggers Category List (Sidebar shows only categories) */}
+          {(() => {
+            const triggerCategories: Array<{
+              id: string;
+              type: string;
+              label: string;
+              desc: string;
+              icon: React.ReactNode;
+              defaultTrigger: TriggerCatalogItem;
+            }> = scope === "stage"
+              ? [
+                  {
+                    id: "stage",
+                    type: "stage",
+                    label: "Stage Triggers",
+                    desc: "On stage entry or exit",
+                    icon: <GitBranch className="w-3.5 h-3.5" />,
+                    defaultTrigger: allTriggers.find((t) => t.triggerType === "stage") || allTriggers[0],
+                  },
+                ]
+              : [
+                  {
+                    id: "stage",
+                    type: "stage",
+                    label: "Stage Triggers",
+                    desc: "Stage entered or exited",
+                    icon: <GitBranch className="w-3.5 h-3.5" />,
+                    defaultTrigger: allTriggers.find((t) => t.triggerType === "stage") || allTriggers[0],
+                  },
+                  {
+                    id: "field_update",
+                    type: "field_update",
+                    label: "Field Update Triggers",
+                    desc: "Monitored field value updates",
+                    icon: <Sliders className="w-3.5 h-3.5" />,
+                    defaultTrigger: allTriggers.find((t) => t.triggerType === "field_update") || allTriggers[0],
+                  },
+                  {
+                    id: "client",
+                    type: "client",
+                    label: "Client Triggers",
+                    desc: "Created, updated, product assigned",
+                    icon: <User className="w-3.5 h-3.5" />,
+                    defaultTrigger: allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
+                  },
+                  {
+                    id: "appointment",
+                    type: "appointment",
+                    label: "Appointment Triggers",
+                    desc: "Booked, rescheduled, cancelled",
+                    icon: <Calendar className="w-3.5 h-3.5" />,
+                    defaultTrigger: allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
+                  },
+                  {
+                    id: "invoice",
+                    type: "invoice",
+                    label: "Invoice Triggers",
+                    desc: "Invoice created or paid",
+                    icon: <Receipt className="w-3.5 h-3.5" />,
+                    defaultTrigger: allTriggers.find((t) => t.triggerType === "invoice") || allTriggers[0],
+                  },
+                ];
 
-              {!collapsedCats.has("triggers") && (
-                <div className="pb-2 px-2 space-y-1">
-                  {filteredTriggers.map((trig) => {
-                    const isActive = activeTriggerEvent === trig.triggerEvent;
-                    return (
-                      <button
-                        key={trig.id}
-                        type="button"
-                        onClick={() => selectTrigger(trig)}
-                        className={`w-full text-left flex items-start gap-2.5 px-2.5 py-2 rounded-lg transition-colors group cursor-pointer ${
-                          isActive
-                            ? "bg-primary/10 text-primary border border-primary/20"
-                            : "hover:bg-primary/5 hover:text-primary border border-transparent"
-                        }`}
-                      >
-                        <span className={`flex-shrink-0 mt-0.5 transition-colors ${isActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"}`}>
-                          {trig.icon}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <p className={`text-xs font-medium truncate ${isActive ? "font-semibold text-primary" : ""}`}>
-                              {trig.label}
-                            </p>
-                            {isActive && (
-                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-primary/15 text-primary leading-none shrink-0">
-                                Active
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">{trig.desc}</p>
-                        </div>
-                      </button>
-                    );
+            return (
+              <div className="border-b border-border/60">
+                <button
+                  type="button"
+                  onClick={() => setCollapsedCats((s) => {
+                    const n = new Set(s);
+                    n.has("triggers") ? n.delete("triggers") : n.add("triggers");
+                    return n;
                   })}
-                </div>
-              )}
-            </div>
-          )}
+                  className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/50 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Triggers</span>
+                  </div>
+                  {collapsedCats.has("triggers")
+                    ? <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                    : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
+                </button>
+
+                {!collapsedCats.has("triggers") && (
+                  <div className="pb-2 px-2 space-y-1.5">
+                    {triggerCategories.map((cat) => {
+                      const isActiveCategory = activeTriggerItem?.triggerType === cat.type;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => {
+                            selectTrigger(cat.defaultTrigger);
+                            const startNode = nodes.find((n) => n.type === "start");
+                            const baseNode = startNode || {
+                              id: "start",
+                              type: "start" as const,
+                              label: cat.defaultTrigger.label,
+                              x: 300,
+                              y: 80,
+                              config: {},
+                            };
+                            openConfig({
+                              ...baseNode,
+                              label: cat.defaultTrigger.label,
+                              config: {
+                                ...baseNode.config,
+                                category: cat.type,
+                                triggerType: cat.type,
+                                selectedEvent: cat.defaultTrigger.triggerEvent,
+                                triggerEvent: cat.defaultTrigger.triggerEvent,
+                                triggerLabel: cat.defaultTrigger.label,
+                                triggerDescription: cat.defaultTrigger.desc,
+                                triggerIconKey: cat.defaultTrigger.iconKey,
+                              },
+                            });
+                          }}
+                          className={`w-full text-left flex items-start gap-2.5 p-2 rounded-xl border transition-all cursor-pointer ${
+                            isActiveCategory
+                              ? "bg-primary/10 border-primary/40 text-primary shadow-2xs"
+                              : "bg-card border-border/60 hover:bg-muted/40 hover:border-border text-foreground/90"
+                          }`}
+                        >
+                          <div className={`p-1.5 rounded-lg border flex items-center justify-center shrink-0 mt-0.5 ${
+                            isActiveCategory
+                              ? "bg-primary/20 border-primary/30 text-primary"
+                              : "bg-muted/50 border-border/40 text-muted-foreground"
+                          }`}>
+                            {cat.icon}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <p className={`text-xs font-semibold truncate ${isActiveCategory ? "text-primary" : "text-foreground"}`}>
+                                {cat.label}
+                              </p>
+                              {isActiveCategory && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-primary/20 text-primary leading-none">
+                                  Selected
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                              {cat.desc}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Action Categories */}
           {filteredCats.map((cat) => {
@@ -2055,7 +2287,23 @@ export default function FlowBuilderTab({
                             {node.config.branchName || "Branch"}
                           </span>
                         </div>
-                        <span className="text-[9px] text-gray-400 font-medium shrink-0">(Empty)</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[9px] text-gray-400 font-medium">(Empty)</span>
+                          {node.config?.sourceParallelStepId && node.config?.branchId && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveBranch(node.config.sourceParallelStepId, node.config.branchId);
+                              }}
+                              className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Delete branch"
+                              aria-label="Delete branch"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-1.5 text-xs text-purple-700 font-semibold py-0.5">
                         <Plus className="w-3.5 h-3.5 text-purple-600" />
@@ -2113,7 +2361,11 @@ export default function FlowBuilderTab({
                           )}
                           {node.type === "generate-invoice" && (
                             <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                              Draft invoice per appointment
+                              {node.config?.billFor === "choose"
+                                ? `Custom (${(node.config?.selectedServices || []).length} items)`
+                                : node.config?.billFor === "client"
+                                ? "Client's services"
+                                : "Appointment's service"}
                             </p>
                           )}
                           {node.type === "send-payment" && (
@@ -2126,16 +2378,33 @@ export default function FlowBuilderTab({
                               Send invoice statement
                             </p>
                           )}
-                          {(node.type === "move-process" || node.type === "move-stage" || node.type === "move-new-process") && (() => {
+                          {(node.type === "update-stage" || node.type === "move-process" || node.type === "move-stage" || node.type === "move-new-process") && (() => {
+                            const entity = node.config?.stageEntity || node.config?.entityType || "processes";
+                            if (entity === "appointment") {
+                              const stageName = node.config?.stageName || node.config?.stepDetailStage || "Select stage";
+                              return (
+                                <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                                  Appointment → {stageName}
+                                </p>
+                              );
+                            }
+                            if (entity === "invoice") {
+                              const stageName = node.config?.stageName || node.config?.stepDetailStage || "Select stage";
+                              return (
+                                <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                                  Invoice → {stageName}
+                                </p>
+                              );
+                            }
                             const targetProc = effectiveProcesses.find(p => p.id === (node.config?.stepDetailProcess || node.config?.processId));
                             const targetStage = targetProc?.stages?.find(s => s.id === (node.config?.stepDetailStage || node.config?.stageId) || s.name === (node.config?.stepDetailStage || node.config?.stageId));
                             const procDisplay = targetProc?.name || node.config?.processName;
                             const stageDisplay = targetStage?.name || node.config?.stageName;
                             return (
                               <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                                {stageDisplay && procDisplay ? `Move to: ${procDisplay} → ${stageDisplay}` :
-                                 stageDisplay ? `Move to: ${stageDisplay}` :
-                                 procDisplay ? `Move to: ${procDisplay}` : "Move to Process / Stage"}
+                                {stageDisplay && procDisplay ? `${procDisplay} → ${stageDisplay}` :
+                                 stageDisplay ? `Stage: ${stageDisplay}` :
+                                 procDisplay ? `Process: ${procDisplay}` : "Update to stage"}
                               </p>
                             );
                           })()}
@@ -2179,13 +2448,19 @@ export default function FlowBuilderTab({
                           )}
                         </div>
 
-                        {/* Delete btn */}
-                        {!isStart && isSelected && !node.config?.syntheticFor && (!node.config?.autoGenerated || onWorkflowStepsChange) && (
+                        {/* Delete btn - always accessible to delete mistake nodes */}
+                        {!isStart && !node.config?.syntheticFor && (!node.config?.autoGenerated || onWorkflowStepsChange) && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); deleteNode(node.id); }}
-                            className="flex-shrink-0 p-0.5 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteNode(node.id);
+                            }}
+                            className="flex-shrink-0 p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Delete node"
+                            aria-label="Delete node"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
@@ -2312,72 +2587,97 @@ export default function FlowBuilderTab({
         </div>
       </div>
 
-      {/* ── RIGHT: Config Drawer (Fallback for non-step nodes) ───────────────── */}
-      {configNode && (!configNode.config?.autoGenerated || !configNode.stepKey) && (
-        <div className="w-72 bg-card border-l border-border flex flex-col flex-shrink-0 overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
-            <div>
-              <p className="text-sm font-semibold">Configure Node</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{configNode.label}</p>
-            </div>
-            <button onClick={() => setConfigNode(null)} className="p-1 rounded hover:bg-muted transition-colors">
-              <X className="w-4 h-4 text-muted-foreground" />
-            </button>
-          </div>
+      {/* StepDetailDrawer for step configuration & Fallback Config Drawer */}
+      {(() => {
+        const isTriggerNode = configNode?.type === "start";
+        const targetStepId = configNode ? (configNode.config?.sourceStepId ?? configNode.config?.syntheticFor ?? configNode.id) : null;
+        const targetStep = isTriggerNode
+          ? {
+              id: configNode.id,
+              name: configNode.label || "Trigger Configuration",
+              description: configNode.config?.triggerDescription || "Configure conditions and parameters for when this trigger fires",
+              iconKey: configNode.config?.triggerIconKey || "zap",
+              stepKey: "trigger_config",
+              trigger: "stage",
+              executionType: "wait" as const,
+              delayValue: 0,
+              delayUnit: "Minute",
+              params: configNode.config || {},
+            }
+          : (targetStepId ? (findStepInTree(workflowSteps, targetStepId)?.step || workflowSteps.find(s => s.id === targetStepId) || null) : null);
+        const isStepDrawerOpen = Boolean(configNode && targetStep);
 
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Node label */}
-            <div>
-              <label className="block text-sm font-medium mb-1.5">Node Label</label>
-              <input
-                value={configNode.label}
-                onChange={(e) => setConfigNode((prev) => prev ? { ...prev, label: e.target.value } : prev)}
-                className="w-full px-3 py-2 bg-input-background border border-input rounded-xl text-sm"
-              />
-            </div>
+        return (
+          <>
+            {/* ── RIGHT: Config Drawer (Fallback for non-step nodes) ───────────────── */}
+            {configNode && !targetStep && (
+              <div className="w-72 bg-card border-l border-border flex flex-col flex-shrink-0 overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
+                  <div>
+                    <p className="text-sm font-semibold">Configure Node</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{configNode.label}</p>
+                  </div>
+                  <button onClick={() => setConfigNode(null)} className="p-1 rounded hover:bg-muted transition-colors">
+                    <X className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </div>
 
-            <p className="text-sm text-muted-foreground">No configuration needed.</p>
-          </div>
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {/* Node label */}
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">Node Label</label>
+                    <input
+                      value={configNode.label}
+                      onChange={(e) => setConfigNode((prev) => prev ? { ...prev, label: e.target.value } : prev)}
+                      className="w-full px-3 py-2 bg-input-background border border-input rounded-xl text-sm"
+                    />
+                  </div>
 
-          {/* Footer */}
-          <div className="flex gap-2 p-4 border-t border-border flex-shrink-0">
-            <Button variant="outline" size="sm" onClick={() => setConfigNode(null)} className="flex-1">
-              Cancel
-            </Button>
-            <Button variant="primary" size="sm" onClick={saveConfig} className="flex-1">
-              Apply
-            </Button>
-          </div>
-        </div>
-      )}
+                  <p className="text-sm text-muted-foreground">No configuration needed.</p>
+                </div>
 
-      {/* StepDetailDrawer for step configuration */}
-      <StepDetailDrawer
-        isOpen={Boolean(configNode && workflowSteps.some(s => s.id === (configNode.config?.sourceStepId ?? configNode.config?.syntheticFor ?? configNode.id)))}
-        step={configNode ? (workflowSteps.find(s => s.id === (configNode.config?.sourceStepId ?? configNode.config?.syntheticFor ?? configNode.id)) ?? null) : null}
-        isCreatingNewStep={false}
-        stepAllowedTriggers={stepAllowedTriggers}
-        processes={effectiveProcesses}
-        stepTrigger={drawerTrigger}
-        onStepTriggerChange={setDrawerTrigger}
-        executionType={drawerExecType}
-        onExecutionTypeChange={setDrawerExecType}
-        delayValue={drawerDelayValue}
-        onDelayValueChange={setDrawerDelayValue}
-        delayUnit={drawerDelayUnit}
-        onDelayUnitChange={setDrawerDelayUnit}
-        connectAfterId={drawerConnectAfterId}
-        onConnectAfterIdChange={setDrawerConnectAfterId}
-        availablePredecessors={buildAvailablePredecessors(workflowSteps, drawerTrigger, configNode ? (configNode.config?.sourceStepId ?? configNode.config?.syntheticFor ?? configNode.id) : undefined)}
-        params={configNode?.config ?? {}}
-        onParamsChange={patchConfig}
-        onBack={() => setConfigNode(null)}
-        onClose={() => setConfigNode(null)}
-        onSave={saveConfig}
-        onlyParameters={true}
-      />
+                {/* Footer */}
+                <div className="flex gap-2 p-4 border-t border-border flex-shrink-0">
+                  <Button variant="outline" size="sm" onClick={() => setConfigNode(null)} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={saveConfig} className="flex-1">
+                    Apply
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* StepDetailDrawer for step configuration */}
+            <StepDetailDrawer
+              isOpen={isStepDrawerOpen}
+              step={targetStep}
+              isCreatingNewStep={false}
+              stepAllowedTriggers={stepAllowedTriggers}
+              processes={effectiveProcesses}
+              stepTrigger={drawerTrigger}
+              onStepTriggerChange={setDrawerTrigger}
+              executionType={drawerExecType}
+              onExecutionTypeChange={setDrawerExecType}
+              delayValue={drawerDelayValue}
+              onDelayValueChange={setDrawerDelayValue}
+              delayUnit={drawerDelayUnit}
+              onDelayUnitChange={setDrawerDelayUnit}
+              connectAfterId={drawerConnectAfterId}
+              onConnectAfterIdChange={setDrawerConnectAfterId}
+              availablePredecessors={buildAvailablePredecessors(workflowSteps, drawerTrigger, targetStepId || undefined)}
+              params={configNode?.config ?? {}}
+              onParamsChange={patchConfig}
+              onBack={() => setConfigNode(null)}
+              onClose={() => setConfigNode(null)}
+              onSave={saveConfig}
+              onlyParameters={true}
+            />
+          </>
+        );
+      })()}
 
       {/* Variable Selector Modal */}
       <VariableSelectorModal

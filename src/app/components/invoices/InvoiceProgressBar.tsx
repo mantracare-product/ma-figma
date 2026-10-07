@@ -68,15 +68,16 @@ export default function InvoiceProgressBar({
 
   // Determine active step position (1-based index)
   const activeIndex = useMemo(() => {
-    if (currentStageId) {
-      const idx = effectiveStages.findIndex((s) => s.id === currentStageId);
+    if (currentStageId && currentStageId.trim() !== "") {
+      const idx = effectiveStages.findIndex(
+        (s) =>
+          s.id.toLowerCase() === currentStageId.trim().toLowerCase() ||
+          s.name.toLowerCase() === currentStageId.trim().toLowerCase()
+      );
       if (idx !== -1) return idx + 1;
     }
-    const idx = effectiveStages.findIndex(
-      (s) => s.id === status || s.systemCategory === status
-    );
-    return idx !== -1 ? idx + 1 : 1;
-  }, [effectiveStages, currentStageId, status]);
+    return -1;
+  }, [effectiveStages, currentStageId]);
 
   const isOverdue = status === "overdue";
   const isVoid = status === "void";
@@ -94,8 +95,8 @@ export default function InvoiceProgressBar({
         {/* Render dynamic Visual Block Segments */}
         {effectiveStages.map((stg, i) => {
           const segIdx = i + 1;
-          const isCompleted = segIdx < activeIndex;
-          const isActive = segIdx === activeIndex;
+          const isCompleted = activeIndex > 0 && segIdx < activeIndex;
+          const isActive = activeIndex > 0 && segIdx === activeIndex;
           const isFilled = isCompleted || isActive;
           const isHovered = hoveredIdx === segIdx;
 

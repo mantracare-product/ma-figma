@@ -10,6 +10,11 @@ import {
 import { getStoredProcesses, Process } from "./useProcessStore";
 import { appointmentService } from "./appointmentService";
 import { invoiceService } from "./invoiceService";
+import { getClientProducts } from "./servicesStore";
+import { saveClientDocument, StoredClientDocument } from "./clientDocumentsStore";
+import { appendActivity } from "./activityEngine";
+import { getStoredDocumentTemplates } from "./documentTemplatesStore";
+import { getClientList } from "./getClientList";
 
 const MAX_CHAIN_DEPTH = 10;
 const executedIdempotencyKeys = new Set<string>();
@@ -46,6 +51,22 @@ export interface RuleExecutionResult {
   movedToStageName?: string;
 }
 
+export function flattenRuleSteps(steps: any[]): any[] {
+  const flattened: any[] = [];
+  if (!Array.isArray(steps)) return flattened;
+  for (const step of steps) {
+    flattened.push(step);
+    if (Array.isArray(step.branches)) {
+      for (const branch of step.branches) {
+        if (Array.isArray(branch.steps)) {
+          flattened.push(...flattenRuleSteps(branch.steps));
+        }
+      }
+    }
+  }
+  return flattened;
+}
+
 /**
  * Core Rule Execution Engine
  */
@@ -61,13 +82,90 @@ export async function executeRulesForEvent(
 
   const allRules = getStoredRules(event.orgId);
   const matchingRules = allRules.filter(
-    (r) => r.enabled && r.entityType === event.recordType && r.trigger.event === event.event
+    (r) =>
+      r.enabled &&
+      (r.entityType === event.recordType ||
+        !r.entityType ||
+        r.trigger.event.startsWith(`${event.recordType}.`) ||
+        r.trigger.event.startsWith("stage.") ||
+        r.trigger.event.startsWith("field.") ||
+        r.trigger.event === "field_update" ||
+        r.trigger.event === event.event) &&
+      (r.trigger.event === event.event ||
+       (r.trigger.event === "stage.entered" && (event.event === "stage.entry" || event.event === `${event.recordType}.entered_stage` || event.event === "stage.entered")) ||
+       (r.trigger.event === "stage.entry" && (event.event === "stage.entered" || event.event === `${event.recordType}.entered_stage` || event.event === "stage.entry")) ||
+       (r.trigger.event === "stage.exited" && (event.event === "stage.exit" || event.event === `${event.recordType}.exited_stage` || event.event === "stage.exited")) ||
+       (r.trigger.event === "stage.exit" && (event.event === "stage.exited" || event.event === `${event.recordType}.exited_stage` || event.event === "stage.exit")) ||
+       ((r.trigger.event === "field.updated" || r.trigger.event === "field_update" || r.trigger.event.includes("field")) &&
+        (event.event === "field.updated" || event.event === "field_update" || event.event === "client.field_updated" || event.event === `${event.recordType}.field_updated`)))
   );
 
   const results: RuleExecutionResult[] = [];
   const processes = getStoredProcesses();
 
   for (const rule of matchingRules) {
+    // Stage Filter check
+    if (rule.trigger.event.startsWith("stage.") || rule.trigger.event.includes("stage")) {
+      const filterStageId = rule.trigger.params?.triggerStageId || rule.trigger.params?.stageId;
+      if (filterStageId && filterStageId !== "all") {
+        const evStageId = event.data?.stageId || event.data?.toStageId || event.data?.currentStageId;
+        if (evStageId && evStageId !== filterStageId) {
+          continue;
+        }
+      }
+      const filterProcessId = rule.trigger.params?.triggerProcessId || rule.trigger.params?.processId;
+      if (filterProcessId && filterProcessId !== "all") {
+        const evProcessId = event.data?.processId;
+        if (evProcessId && evProcessId !== filterProcessId) {
+          continue;
+        }
+      }
+    }
+
+    // Field Update Filter check
+    if (
+      rule.trigger.event === "field.updated" ||
+      rule.trigger.event === "field_update" ||
+      rule.trigger.event.includes("field")
+    ) {
+      const monitoredFields: string[] =
+        rule.trigger.params?.monitoredFields || rule.trigger.params?.fields || [];
+      const matchLogic: string = rule.trigger.params?.matchLogic || "any";
+
+      if (monitoredFields.length > 0) {
+        const updatedFieldsList: string[] = [];
+        if (event.data?.updatedFields && Array.isArray(event.data.updatedFields)) {
+          updatedFieldsList.push(...event.data.updatedFields);
+        }
+        if (event.data?.updatedField && typeof event.data.updatedField === "string") {
+          updatedFieldsList.push(event.data.updatedField);
+        }
+        if (event.data?.fieldKey && typeof event.data.fieldKey === "string") {
+          updatedFieldsList.push(event.data.fieldKey);
+        }
+
+        const normClean = (s: string) =>
+          s.trim().toLowerCase().replace(/^\{+|\}+$/g, "").replace(/[^a-z0-9]/g, "");
+        const normUpdated = new Set(updatedFieldsList.map(normClean));
+
+        if (normUpdated.size > 0) {
+          const normMonitored = monitoredFields.map(normClean);
+          if (matchLogic === "all") {
+            const allMatch = normMonitored.every((f) => normUpdated.has(f));
+            if (!allMatch) {
+              continue;
+            }
+          } else {
+            // "any"
+            const anyMatch = normMonitored.some((f) => normUpdated.has(f));
+            if (!anyMatch) {
+              continue;
+            }
+          }
+        }
+      }
+    }
+
     // 1. Loop Guard
     if (visitedRules.has(rule.id)) {
       console.warn(`[RuleEngine] Loop guard prevented rule "${rule.name}" (${rule.id}) from re-firing in the same chain.`);
@@ -131,93 +229,138 @@ export async function executeRulesForEvent(
 
     // 5. Mark idempotency key as executed
     executedIdempotencyKeys.add(idempotencyKey);
-    // Keep set bounded
     if (executedIdempotencyKeys.size > 2000) {
       const first = executedIdempotencyKeys.values().next().value;
       if (first) executedIdempotencyKeys.delete(first);
     }
 
-    // 6. Find target process and stage
-    const targetProcess = processes.find((p) => p.id === rule.action.processId);
-    const targetStage = targetProcess?.stages.find((s) => s.id === rule.action.stageId);
+    // 6. Handle top-level moveToStage action ONLY if a valid stageId is provided
+    const hasTopLevelMove = Boolean(
+      rule.action?.type === "moveToStage" && rule.action?.stageId && rule.action.stageId.trim() !== ""
+    );
+    const targetProcess = hasTopLevelMove ? processes.find((p) => p.id === rule.action.processId) : undefined;
+    const targetStage = hasTopLevelMove ? targetProcess?.stages.find((s) => s.id === rule.action.stageId) : undefined;
 
-    // 7. Log Stage Move
-    const stageMove = logStageMove({
-      orgId: event.orgId || "default",
-      recordType: event.recordType,
-      recordId: event.recordId,
-      toStageId: rule.action.stageId,
-      toStageName: targetStage?.name || rule.action.stageName || "Unknown Stage",
-      processId: rule.action.processId,
-      processName: targetProcess?.name || rule.action.processName || "Default Process",
-      cause: {
-        type: "rule",
-        ruleId: rule.id,
-        ruleName: rule.name,
-        eventId: event.id,
-        eventName: event.event,
-      },
-    });
+    if (hasTopLevelMove && rule.action?.stageId) {
+      logStageMove({
+        orgId: event.orgId || "default",
+        recordType: event.recordType,
+        recordId: event.recordId,
+        toStageId: rule.action.stageId,
+        toStageName: targetStage?.name || rule.action.stageName || "Unknown Stage",
+        processId: rule.action.processId,
+        processName: targetProcess?.name || rule.action.processName || "Default Process",
+        cause: {
+          type: "rule",
+          ruleId: rule.id,
+          ruleName: rule.name,
+          eventId: event.id,
+          eventName: event.event,
+        },
+      });
 
-    // 7b. Sync target stage to entity store
-    if (event.recordType === "appointment") {
-      try {
-        appointmentService.updateAppointment(event.recordId, {
-          currentStageId: rule.action.stageId,
-          statusLabel: targetStage?.name,
-        });
-      } catch (err) {
-        console.warn("[RuleEngine] Failed to sync appointment stage:", err);
-      }
-    } else if (event.recordType === "invoice") {
-      try {
-        const inv = invoiceService.getInvoiceById(event.recordId);
-        if (inv) {
-          invoiceService.saveInvoices(
-            invoiceService.getInvoices().map((i) =>
-              i.id === event.recordId
-                ? { ...i, currentStageId: rule.action.stageId, statusLabel: targetStage?.name }
-                : i
-            )
-          );
+      if (event.recordType === "appointment") {
+        try {
+          appointmentService.moveToStage(event.recordId, rule.action.stageId, {
+            type: "rule",
+            ruleName: rule.name,
+          });
+        } catch (err) {
+          console.warn("[RuleEngine] Failed to sync appointment stage:", err);
         }
-      } catch (err) {
-        console.warn("[RuleEngine] Failed to sync invoice stage:", err);
+      } else if (event.recordType === "invoice") {
+        try {
+          invoiceService.moveToStage(event.recordId, rule.action.stageId, {
+            type: "rule",
+            ruleName: rule.name,
+          });
+        } catch (err) {
+          console.warn("[RuleEngine] Failed to sync invoice stage:", err);
+        }
       }
     }
 
-    // 7c. Execute Stage on-entry actions (e.g. generate_invoice)
-    const stageSteps = (targetStage as any)?.workflowSteps || [];
-    for (const step of stageSteps) {
-      if (!step.trigger || step.trigger === "stage" || step.trigger === "enter_stage") {
-        if (step.stepKey === "generate_invoice" && event.recordType === "appointment") {
-          const appt = appointmentService.getAppointmentById(event.recordId);
-          if (appt) {
-            invoiceService.createInvoiceFromAppointment(
-              {
-                id: appt.id,
-                clientId: appt.clientId || "c-1",
-                clientName: appt.clientName,
-                clientEmail: appt.clientEmail,
-                clientPhone: appt.clientPhone,
-                title: appt.title,
-              },
-              [],
-              { createdBy: "system" }
-            );
+    // 7. Execute Rule's Step Actions Chain (from FlowBuilderTab / Canvas / Library)
+    const allActions = flattenRuleSteps(rule.actions || []);
+    for (const act of allActions) {
+      const stepKey = (act.stepKey || "").toLowerCase();
+
+      // Action: Update Stage / Move To Stage
+      if (
+        stepKey === "update_to_stage" ||
+        stepKey === "update-stage" ||
+        stepKey === "movetostage" ||
+        stepKey === "move_to_stage" ||
+        stepKey === "move-stage" ||
+        stepKey === "stage_movement" ||
+        stepKey === "stagemovement" ||
+        stepKey === "processmovement"
+      ) {
+        const rawTargetEntity = act.params?.stageEntity || act.params?.entityType;
+        const targetStageId = act.params?.stageId || act.params?.stepDetailStage;
+
+        if (targetStageId) {
+          // If explicitly invoice or target stage belongs to invoice
+          const isInvoiceTarget = rawTargetEntity === "invoice" || (!rawTargetEntity && event.recordType === "invoice");
+          const isAppointmentTarget = rawTargetEntity === "appointment" || (!rawTargetEntity && event.recordType === "appointment");
+
+          if (isAppointmentTarget || (!isInvoiceTarget && event.recordType === "appointment")) {
+            const apptId = event.recordType === "appointment" ? event.recordId : act.params?.appointmentId;
+            if (apptId) {
+              try {
+                appointmentService.moveToStage(apptId, targetStageId, {
+                  type: "rule",
+                  ruleName: rule.name,
+                });
+                console.log(`[RuleEngine] Moved appointment ${apptId} to stage ${targetStageId} via rule "${rule.name}"`);
+              } catch (e) {
+                console.warn("[RuleEngine] Failed to move appointment stage:", e);
+              }
+            }
+          }
+
+          if (isInvoiceTarget || (!isAppointmentTarget && event.recordType === "invoice") || (rawTargetEntity === "invoice" && event.recordType === "appointment")) {
+            const currentAppt = event.recordType === "appointment" ? appointmentService.getAppointmentById(event.recordId) : undefined;
+            const invId = event.recordType === "invoice" ? event.recordId : (event.data?.invoiceId || act.params?.invoiceId || currentAppt?.invoiceId);
+            if (invId) {
+              try {
+                invoiceService.moveToStage(invId, targetStageId, {
+                  type: "rule",
+                  ruleName: rule.name,
+                });
+                console.log(`[RuleEngine] Moved invoice ${invId} to stage ${targetStageId} via rule "${rule.name}"`);
+              } catch (e) {
+                console.warn("[RuleEngine] Failed to move invoice stage:", e);
+              }
+            }
           }
         }
       }
-    }
 
-    // 7d. Execute Rule's Explicit Action Chain (e.g. Book Appointment, Generate Invoice, Send Payment, WhatsApp)
-    const ruleActions = rule.actions || [];
-    for (const act of ruleActions) {
-      if (act.stepKey === "generate_invoice") {
+      // Action: Generate Invoice
+      if (stepKey === "generate_invoice" || stepKey === "generate-invoice" || stepKey === "create_invoice") {
         if (event.recordType === "appointment") {
           const appt = appointmentService.getAppointmentById(event.recordId);
           if (appt) {
-            invoiceService.createInvoiceFromAppointment(
+            let lineItems: any[] = [];
+            if (act.params?.billFor === "choose" && Array.isArray(act.params?.selectedServices) && act.params.selectedServices.length > 0) {
+              lineItems = act.params.selectedServices.map((s: any, idx: number) => ({
+                id: `li-${appt.id}-${idx}`,
+                source: "service",
+                serviceId: s.serviceId,
+                description: s.name,
+                quantity: s.quantity || 1,
+                unitPrice: s.unitPrice || 150,
+                discountAmount: s.discount || 0,
+                taxPercent: s.taxPercent ?? 5,
+              }));
+            }
+            const discountVal = act.params?.discount ?? 0;
+            const discountType = act.params?.discountType === "$" ? "amount" : "percent";
+            const dueDays = typeof act.params?.dueDays === "number" ? act.params.dueDays : 14;
+            const dueDate = new Date(Date.now() + dueDays * 86400000).toISOString().split("T")[0];
+
+            const { invoice } = invoiceService.createInvoiceFromAppointment(
               {
                 id: appt.id,
                 clientId: appt.clientId || "c-1",
@@ -226,12 +369,250 @@ export async function executeRulesForEvent(
                 clientPhone: appt.clientPhone,
                 title: appt.title,
               },
-              [],
-              { createdBy: "system" }
+              lineItems,
+              {
+                createdBy: "system",
+                discountValue: discountVal,
+                discountType: discountType as any,
+                dueDate,
+                paymentMode: act.params?.paymentMode,
+              }
             );
+
+            if (invoice?.id) {
+              appointmentService.updateAppointment(appt.id, { invoiceId: invoice.id });
+              if (event.data) {
+                event.data.invoiceId = invoice.id;
+              }
+              console.log(`[RuleEngine] Generated invoice ${invoice.id} for appointment ${appt.id} via rule "${rule.name}"`);
+            }
+          }
+        } else if (event.recordType === "client") {
+          // Task 2: Triggered by Assign Product or Client events
+          const clientId = String(event.recordId);
+          let lineItems: any[] = [];
+
+          if (act.params?.billFor === "choose" && Array.isArray(act.params?.selectedServices) && act.params.selectedServices.length > 0) {
+            lineItems = act.params.selectedServices.map((s: any, idx: number) => ({
+              id: `li-cl-${clientId}-${idx}`,
+              source: "service",
+              serviceId: s.serviceId,
+              description: s.name,
+              quantity: s.quantity || 1,
+              unitPrice: s.unitPrice || 150,
+              discountAmount: s.discount || 0,
+              taxPercent: s.taxPercent ?? 5,
+            }));
+          } else if (event.data?.product || event.data?.productId) {
+            const p = event.data.product || {};
+            lineItems = [{
+              id: `li-cl-${clientId}-prod`,
+              source: "service",
+              serviceId: p.id || event.data.productId,
+              description: p.name || event.data.productName || "Client Service",
+              quantity: 1,
+              unitPrice: p.price ?? (event.data.productPrice || 150),
+              discountAmount: 0,
+              taxPercent: p.tax ?? 5,
+            }];
+          } else {
+            const clientProducts = getClientProducts(clientId);
+            if (clientProducts.length > 0) {
+              lineItems = clientProducts.map((p, idx) => ({
+                id: `li-cl-${clientId}-${idx}`,
+                source: "service",
+                serviceId: p.id,
+                description: p.name,
+                quantity: 1,
+                unitPrice: p.price || 150,
+                discountAmount: 0,
+                taxPercent: p.tax ?? 5,
+              }));
+            }
+          }
+
+          if (lineItems.length === 0) {
+            lineItems = [{
+              id: `li-cl-${clientId}-def`,
+              source: "service",
+              description: "Assigned Client Service",
+              quantity: 1,
+              unitPrice: 150,
+              discountAmount: 0,
+              taxPercent: 5,
+            }];
+          }
+
+          const discountVal = act.params?.discount ?? 0;
+          const discountType = act.params?.discountType === "$" ? "amount" : "percent";
+          const dueDays = typeof act.params?.dueDays === "number" ? act.params.dueDays : 14;
+          const dueDate = new Date(Date.now() + dueDays * 86400000).toISOString().split("T")[0];
+
+          const clientName = event.data?.clientName || event.data?.name || "Client";
+          const clientEmail = event.data?.clientEmail || event.data?.email || "";
+          const clientPhone = event.data?.clientPhone || event.data?.phone || "";
+          const invoiceTitle = event.data?.productName
+            ? `Invoice for ${event.data.productName}`
+            : "Client Services Invoice";
+
+          const { invoice } = invoiceService.createInvoiceFromAppointment(
+            {
+              clientId,
+              clientName,
+              clientEmail,
+              clientPhone,
+              title: invoiceTitle,
+            },
+            lineItems,
+            {
+              createdBy: "system",
+              discountValue: discountVal,
+              discountType: discountType as any,
+              dueDate,
+              paymentMode: act.params?.paymentMode,
+            }
+          );
+
+          if (invoice?.id) {
+            if (event.data) {
+              event.data.invoiceId = invoice.id;
+            }
+            console.log(`[RuleEngine] Generated invoice ${invoice.id} for client ${clientId} via rule "${rule.name}"`);
+            appendActivity({
+              type: "field_update",
+              clientId,
+              processId: "billing",
+              processName: "Billing & Invoicing",
+              timestamp: new Date().toISOString(),
+              fieldLabel: "Invoice",
+              newValue: invoice.id,
+              details: {
+                primary: `Invoice ${invoice.id} generated for client services`,
+                secondary: `Total: $${invoice.total.toFixed(2)} · ${lineItems.map((l: any) => l.description).join(", ")}`,
+              },
+            });
           }
         }
-      } else if (act.stepKey === "scheduleappointment") {
+      }
+
+      // Action: Generate Document (Task 3)
+      if (stepKey === "generate_document" || stepKey === "generate-document") {
+        try {
+          const targetEntity = act.params?.entity || event.recordType || "client";
+          const targetClientId = event.recordType === "client"
+            ? String(event.recordId)
+            : (event.data?.clientId ? String(event.data.clientId) : "c-1");
+
+          // Find template if templateId or template name was selected
+          const storedTemplates = getStoredDocumentTemplates();
+          const matchedTemplate = storedTemplates.find(
+            (t) =>
+              t.id === act.params?.templateId ||
+              t.id === act.params?.template ||
+              t.name.toLowerCase() === (act.params?.templateName || act.params?.template || "").toLowerCase()
+          );
+
+          const templateName = act.params?.templateName || matchedTemplate?.name || act.params?.template || "Document";
+          const clientName = event.data?.clientName || event.data?.name || "Client";
+
+          // Gather all available client/record data for substitution
+          const rawTemplateText = act.params?.templateText || matchedTemplate?.templateText || `Generated document for ${clientName} on ${new Date().toLocaleString()}`;
+
+          // Merge fields from event.data, client list, and parameters
+          const clientList = getClientList();
+          const storedClient = clientList.find((c) => String(c.id) === targetClientId);
+
+          const mergedData: Record<string, any> = {
+            client_name: clientName,
+            name: clientName,
+            contact_name: clientName,
+            clientName: clientName,
+            email: event.data?.email || storedClient?.email || "",
+            phone: event.data?.phone || storedClient?.phoneNumber || "",
+            phoneNumber: event.data?.phone || storedClient?.phoneNumber || "",
+            company: event.data?.company || event.data?.companyName || "",
+            companyName: event.data?.company || event.data?.companyName || "",
+            status: event.data?.status || "Active",
+            role: event.data?.role || event.data?.jobPosition || "",
+            location: event.data?.location || "",
+            country: event.data?.country || "",
+            entity: targetEntity,
+            date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            current_date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            ...(storedClient || {}),
+            ...(event.data || {}),
+          };
+
+          // Helper to substitute {var} and {{var}}
+          const substituteTokens = (inputStr: string): string => {
+            if (!inputStr) return "";
+            return inputStr.replace(/\{\{?([a-zA-Z0-9_\-]+)\}?\}/g, (match, token) => {
+              const cleanToken = token.trim().toLowerCase();
+              const normToken = cleanToken.replace(/[^a-z0-9]/g, "");
+
+              for (const [k, v] of Object.entries(mergedData)) {
+                const normK = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+                if (normK === normToken && v !== undefined && v !== null && v !== "") {
+                  return String(v);
+                }
+              }
+              if (cleanToken === "current_date" || cleanToken === "date") {
+                return new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+              }
+              return match;
+            });
+          };
+
+          const rawDocName = act.params?.documentName || act.params?.docTitle || `${templateName} - {client_name}`;
+          const resolvedDocName = substituteTokens(rawDocName);
+          const resolvedContent = substituteTokens(rawTemplateText);
+
+          const docId = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+          const categoryByEntity: Record<string, string> = {
+            client: "Client Documents",
+            process: "Process",
+            appointment: "Clinical",
+            invoice: "Billing",
+          };
+
+          const newDoc: StoredClientDocument = {
+            id: docId,
+            clientId: targetClientId,
+            name: resolvedDocName.endsWith(".pdf") ? resolvedDocName : `${resolvedDocName}.pdf`,
+            category: matchedTemplate?.category || categoryByEntity[targetEntity] || "General",
+            fileType: "pdf",
+            fileSize: "148 KB",
+            uploadedDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            uploadedBy: "Automation Engine",
+            status: "Verified",
+            notes: `Generated automatically via rule "${rule.name}" for ${targetEntity} #${event.recordId}`,
+            templateId: matchedTemplate?.id || act.params?.templateId,
+            generatedContent: resolvedContent,
+          };
+
+          saveClientDocument(newDoc);
+
+          appendActivity({
+            type: "field_update",
+            clientId: targetClientId,
+            processId: targetEntity === "process" ? event.recordId : "general",
+            processName: "Document Automation",
+            timestamp: new Date().toISOString(),
+            fieldLabel: "Generated Document",
+            newValue: newDoc.name,
+            details: {
+              primary: `Document generated: ${newDoc.name}`,
+              secondary: `Entity: ${targetEntity.toUpperCase()} · Template: ${templateName}`,
+            },
+          });
+          console.log(`[RuleEngine] Generated document "${newDoc.name}" (${newDoc.id}) for ${targetEntity} #${event.recordId}`);
+        } catch (e) {
+          console.warn("[RuleEngine] Failed to generate document from rule action:", e);
+        }
+      }
+
+      // Action: Schedule Appointment
+      if (stepKey === "scheduleappointment" || stepKey === "schedule-appointment") {
         try {
           appointmentService.createAppointment({
             clientName: event.data?.clientName || event.data?.name || "Client",
@@ -246,10 +627,19 @@ export async function executeRulesForEvent(
         } catch (e) {
           console.warn("[RuleEngine] Failed to schedule appointment from rule action:", e);
         }
-      } else if (act.stepKey === "send_payment" || act.stepKey === "send-invoice") {
+      }
+
+      // Action: Send Payment / Send Invoice
+      if (
+        stepKey === "send_payment" ||
+        stepKey === "send-payment" ||
+        stepKey === "send_invoice" ||
+        stepKey === "send-invoice"
+      ) {
         try {
-          if (event.recordType === "invoice") {
-            invoiceService.sendInvoice(event.recordId, act.params?.channel || "whatsapp");
+          const invId = event.recordType === "invoice" ? event.recordId : event.data?.invoiceId;
+          if (invId) {
+            invoiceService.sendInvoice(invId, act.params?.channel || act.params?.invoiceChannel || "whatsapp");
           }
         } catch (e) {
           console.warn("[RuleEngine] Failed to send payment/invoice from rule action:", e);
@@ -267,31 +657,32 @@ export async function executeRulesForEvent(
       ruleId: rule.id,
       ruleName: rule.name,
       matched: true,
-      movedToStageId: rule.action.stageId,
+      movedToStageId: rule.action?.stageId,
       movedToStageName: targetStage?.name,
     });
 
-    // 9. Cascade: Emit stage entry event with loop tracking
-    const nextVisited = new Set(visitedRules);
-    nextVisited.add(rule.id);
+    // 9. Cascade: Emit stage entry event if top level move happened
+    if (hasTopLevelMove && rule.action?.stageId) {
+      const nextVisited = new Set(visitedRules);
+      nextVisited.add(rule.id);
 
-    const enteredStageEvent: BusEvent = {
-      id: `evt-stg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      event: `${event.recordType}.entered_stage`,
-      recordType: event.recordType,
-      recordId: event.recordId,
-      orgId: event.orgId,
-      data: {
-        stageId: rule.action.stageId,
-        stageName: targetStage?.name,
-        processId: rule.action.processId,
-        causeRuleId: rule.id,
-      },
-      timestamp: new Date().toISOString(),
-    };
+      const enteredStageEvent: BusEvent = {
+        id: `evt-stg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        event: `${event.recordType}.entered_stage`,
+        recordType: event.recordType,
+        recordId: event.recordId,
+        orgId: event.orgId,
+        data: {
+          stageId: rule.action.stageId,
+          stageName: targetStage?.name,
+          processId: rule.action.processId,
+          causeRuleId: rule.id,
+        },
+        timestamp: new Date().toISOString(),
+      };
 
-    // Recursively execute downstream rules with depth increment
-    await executeRulesForEvent(enteredStageEvent, depth + 1, nextVisited);
+      await executeRulesForEvent(enteredStageEvent, depth + 1, nextVisited);
+    }
   }
 
   return results;
@@ -310,7 +701,5 @@ export function initializeRuleEngine() {
   });
 }
 
-// Initialize immediately in browser / app lifecycle
-if (typeof window !== "undefined") {
-  initializeRuleEngine();
-}
+// Initialize immediately in app and test lifecycles
+initializeRuleEngine();

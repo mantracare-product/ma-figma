@@ -14,9 +14,40 @@
  */
 
 import { eventBus } from "./eventBus";
-import { logStageMove } from "./useAutomationStore";
+import { logStageMove, getStoredRules } from "./useAutomationStore";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage } from "./useProcessStore";
-import { invoiceService } from "./invoiceService";
+import { invoiceService, hasInvoiceAutomation, SAMPLE_CLIENT_NAMES } from "./invoiceService";
+
+export function hasAppointmentAutomation(): boolean {
+  try {
+    const rules = getStoredRules();
+    return rules.some((r) => {
+      if (!r.enabled) return false;
+      if (r.entityType === "appointment") return true;
+      if (r.trigger?.event && r.trigger.event.startsWith("appointment.")) return true;
+      if (
+        r.actions &&
+        r.actions.some((a) => {
+          const key = (a.stepKey || (a as any).type || "").toLowerCase();
+          if (["book_appointment", "schedule_appointment", "book-appointment"].includes(key)) return true;
+          if (a.params?.stageEntity === "appointment") return true;
+          return false;
+        })
+      ) {
+        return true;
+      }
+      if (
+        r.action?.processId &&
+        (r.action.processId.includes("appointment") || r.action.processName?.toLowerCase().includes("appointment"))
+      ) {
+        return true;
+      }
+      return false;
+    });
+  } catch {
+    return false;
+  }
+}
 
 export interface Appointment {
   id: number | string;
@@ -62,77 +93,49 @@ export interface CreateAppointmentPayload {
   clientId?: string;
   location?: string;
   sessionType?: "video" | "inPerson";
+  stageId?: string;
   generateInvoice?: boolean;
   lineItems?: any[];
   source?: "screen" | "call" | "webhook" | "import" | "ai";
 }
 
+export interface CreateAppointmentOptions {
+  createdBy?: "rule" | "user" | "test";
+  force?: boolean;
+}
+
 const APPOINTMENTS_STORAGE_KEY = "appointments_v1";
 const APPOINTMENTS_CHANGE_EVENT = "mantra_appointments_changed";
 
-const INITIAL_APPOINTMENTS: Appointment[] = [
-  {
-    id: 1,
-    clientName: "James Wilson",
-    clientEmail: "james.w@example.com",
-    clientPhone: "+1 (555) 123-4567",
-    employeeId: 1,
-    serviceId: 1,
-    date: "2026-05-12",
-    time: "09:00",
-    duration: 60,
-    status: "scheduled",
-    currentStageId: "appt-1",
-    statusLabel: "Booked",
-    title: "Initial Consultation",
-    notes: "First-time patient",
-  },
-  {
-    id: 2,
-    clientName: "Emma Brown",
-    clientEmail: "emma.b@example.com",
-    clientPhone: "+1 (555) 234-5678",
-    employeeId: 2,
-    serviceId: 2,
-    date: "2026-05-12",
-    time: "10:30",
-    duration: 30,
-    status: "scheduled",
-    currentStageId: "appt-1",
-    statusLabel: "Booked",
-    title: "Follow-up Visit",
-  },
-  {
-    id: 3,
-    clientName: "Oliver Davis",
-    clientEmail: "oliver.d@example.com",
-    clientPhone: "+1 (555) 345-6789",
-    employeeId: 1,
-    serviceId: 4,
-    date: "2026-05-13",
-    time: "14:00",
-    duration: 20,
-    status: "scheduled",
-    currentStageId: "appt-1",
-    statusLabel: "Booked",
-    title: "X-Ray Imaging",
-  },
-  {
-    id: 4,
-    clientName: "Sophia Martinez",
-    clientEmail: "sophia.m@example.com",
-    clientPhone: "+1 (555) 456-7890",
-    employeeId: 5,
-    serviceId: 3,
-    date: "2026-05-14",
-    time: "11:00",
-    duration: 45,
-    status: "scheduled",
-    currentStageId: "appt-1",
-    statusLabel: "Booked",
-    title: "Dental Cleaning",
-  },
-];
+export function isSampleAppointment(a: Appointment): boolean {
+  if (!a) return false;
+  const name = (a.clientName || "").trim().toLowerCase();
+  if (SAMPLE_CLIENT_NAMES.has(name)) return true;
+  if (typeof a.id === "number" && a.id <= 20) return true;
+  if (typeof a.id === "string" && /^appt-\d+$/i.test(a.id)) return true;
+  return false;
+}
+
+const INITIAL_APPOINTMENTS: Appointment[] = [];
+
+if (typeof window !== "undefined") {
+  try {
+    const cleanStorage = (storage: Storage) => {
+      const raw = storage.getItem(APPOINTMENTS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter((a) => !isSampleAppointment(a));
+          if (cleaned.length !== parsed.length) {
+            storage.setItem(APPOINTMENTS_STORAGE_KEY, JSON.stringify(cleaned));
+          }
+        }
+      }
+    };
+    cleanStorage(sessionStorage);
+    cleanStorage(localStorage);
+  } catch {}
+}
 
 class AppointmentService {
   private getAppointmentProcess(): Process {
@@ -146,9 +149,10 @@ class AppointmentService {
     return proc.stages.find((s) => s.systemCategory === category) || proc.stages[0];
   }
 
-  private findStageById(stageId: string): Stage | undefined {
+  public findStageById(stageId: string): Stage | undefined {
     const proc = this.getAppointmentProcess();
-    return proc.stages.find((s) => s.id === stageId);
+    const query = String(stageId).trim().toLowerCase();
+    return proc.stages.find((s) => s.id.toLowerCase() === query || s.name.toLowerCase() === query);
   }
 
   public getAppointments(): Appointment[] {
@@ -156,16 +160,20 @@ class AppointmentService {
     try {
       const raw = sessionStorage.getItem(APPOINTMENTS_STORAGE_KEY) || localStorage.getItem(APPOINTMENTS_STORAGE_KEY);
       if (!raw) {
-        this.saveAppointments(INITIAL_APPOINTMENTS);
-        return INITIAL_APPOINTMENTS;
+        return [];
       }
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        // Filter out legacy hardcoded sample appointments
+        const filtered = parsed.filter((a) => !isSampleAppointment(a));
+        if (filtered.length !== parsed.length) {
+          this.saveAppointments(filtered);
+        }
+        return filtered;
       }
-      return INITIAL_APPOINTMENTS;
+      return [];
     } catch {
-      return INITIAL_APPOINTMENTS;
+      return [];
     }
   }
 
@@ -197,19 +205,34 @@ class AppointmentService {
   }
 
   /**
-   * Create an appointment (One Door)
-   * Moves directly into Booked stage, emits appointment.booked,
-   * runs stage entry actions (e.g. idempotent invoice generation).
+   * Create an appointment
+   * Stage is NOT assigned automatically unless explicitly passed or updated by an automation rule!
    */
-  public createAppointment(payload: CreateAppointmentPayload): {
+  public createAppointment(
+    payload: CreateAppointmentPayload,
+    options?: CreateAppointmentOptions
+  ): {
     appointment: Appointment;
     invoiceId?: string;
     confirmationSent: boolean;
   } {
+    // 0. Automation Check: Only allow appointment creation if automation rule exists or created by rule / test
+    if (
+      !hasAppointmentAutomation() &&
+      options?.createdBy !== "rule" &&
+      options?.createdBy !== "test" &&
+      !options?.force &&
+      (payload as any).source !== "test"
+    ) {
+      console.warn("[AppointmentService] Appointment booking blocked: No appointment automation configured.");
+      return { appointment: null as any, confirmationSent: false };
+    }
+
     const all = this.getAppointments();
     const nextId = all.length > 0 ? Math.max(...all.map((a) => Number(a.id) || 0)) + 1 : 101;
-    const bookedStage = this.findStageByCategory("booked") || { id: "appt-1", name: "Booked" };
-    const proc = this.getAppointmentProcess();
+    const initialStage = payload.stageId ? this.findStageById(payload.stageId) : undefined;
+    const initialStageId = initialStage?.id || "";
+    const initialStageName = initialStage?.name || "";
 
     const newAppointment: Appointment = {
       id: nextId,
@@ -226,8 +249,8 @@ class AppointmentService {
       title: payload.title || "Scheduled Appointment",
       description: payload.description,
       tags: payload.tags,
-      currentStageId: bookedStage.id,
-      statusLabel: bookedStage.name,
+      currentStageId: initialStageId,
+      statusLabel: initialStageName,
       clientId: payload.clientId,
       location: payload.location,
       sessionType: payload.sessionType || "video",
@@ -238,53 +261,43 @@ class AppointmentService {
     // 1. Save appointment
     this.saveAppointments([newAppointment, ...all]);
 
-    // 2. Log Stage Movement
-    logStageMove({
-      orgId: "default",
-      recordType: "appointment",
-      recordId: String(newAppointment.id),
-      fromStageId: undefined,
-      toStageId: bookedStage.id,
-      toStageName: bookedStage.name,
-      processId: proc.id,
-      processName: proc.name,
-      cause: {
-        type: payload.source === "call" ? "intent" : payload.source ? "webhook" : "manual",
-        ruleName: `Appointment Booked (${payload.source || "screen"})`,
-      },
-    });
-
-    // 3. Emit appointment.booked event via eventBus
+    // 2. Emit appointment.booked event via eventBus (triggers automations for stage move / invoicing)
     eventBus.emit("appointment.booked", "appointment", String(newAppointment.id), {
       ...newAppointment,
       source: payload.source || "screen",
     });
 
-    // 4. Stage Entry Action: Idempotent Invoice Generation
+    // 3. Invoice Generation (only if explicitly enabled AND an active invoice automation exists!)
     let createdInvoiceId: string | undefined = undefined;
-    if (payload.generateInvoice !== false) {
-      const lineItems = payload.lineItems && payload.lineItems.length > 0
-        ? payload.lineItems
-        : [{ id: `li-${newAppointment.id}-1`, source: "service", serviceId: String(newAppointment.serviceId), description: newAppointment.title || "Appointment Consultation", quantity: 1, unitPrice: 150 }];
+    if (payload.generateInvoice === true) {
+      if (!hasInvoiceAutomation()) {
+        console.warn("[AppointmentService] Invoice creation skipped: No active invoice automation configured.");
+      } else {
+        const lineItems = payload.lineItems && payload.lineItems.length > 0
+          ? payload.lineItems
+          : [{ id: `li-${newAppointment.id}-1`, source: "service", serviceId: String(newAppointment.serviceId), description: newAppointment.title || "Appointment Consultation", quantity: 1, unitPrice: 150 }];
 
-      const { invoice } = invoiceService.createInvoiceFromAppointment(
-        {
-          id: newAppointment.id,
-          clientId: newAppointment.clientId || "c-1",
-          clientName: newAppointment.clientName,
-          clientEmail: newAppointment.clientEmail,
-          clientPhone: newAppointment.clientPhone,
-          title: newAppointment.title,
-        },
-        lineItems,
-        { createdBy: payload.source === "call" ? "system" : "Admin User" }
-      );
-      createdInvoiceId = invoice.id;
-      newAppointment.invoiceId = invoice.id;
-      this.updateAppointment(newAppointment.id, { invoiceId: invoice.id });
+        const { invoice } = invoiceService.createInvoiceFromAppointment(
+          {
+            id: newAppointment.id,
+            clientId: newAppointment.clientId || "c-1",
+            clientName: newAppointment.clientName,
+            clientEmail: newAppointment.clientEmail,
+            clientPhone: newAppointment.clientPhone,
+            title: newAppointment.title,
+          },
+          lineItems,
+          { createdBy: payload.source === "call" ? "system" : "Admin User" }
+        );
+        if (invoice?.id) {
+          createdInvoiceId = invoice.id;
+          newAppointment.invoiceId = invoice.id;
+          this.updateAppointment(newAppointment.id, { invoiceId: invoice.id });
+        }
+      }
     }
 
-    // 5. Confirmation notification signal
+    // 4. Confirmation notification signal
     const confirmationSent = true;
 
     return {
@@ -295,8 +308,8 @@ class AppointmentService {
   }
 
   /**
-   * Reschedule an appointment (One Door)
-   * Updates the existing appointment record in-place without creating a duplicate record or duplicate invoice!
+   * Reschedule an appointment
+   * Updates date/time without hardcoding stage. Stage movement is driven by automations on appointment.rescheduled.
    */
   public rescheduleAppointment(
     id: number | string,
@@ -310,41 +323,18 @@ class AppointmentService {
       throw new Error(`[AppointmentService] Appointment with ID ${id} not found.`);
     }
 
-    const previousStageId = existing.currentStageId;
-    const rescheduledStage = this.findStageByCategory("rescheduled") || { id: "appt-2", name: "Rescheduled" };
-    const proc = this.getAppointmentProcess();
-
     const updatedAppointment: Appointment = {
       ...existing,
       date: newDate,
       time: newTime,
       notes: notes ? `${existing.notes ? existing.notes + " | " : ""}${notes}` : existing.notes,
-      currentStageId: rescheduledStage.id,
-      statusLabel: rescheduledStage.name,
-      status: "scheduled",
       updatedAt: new Date().toISOString(),
     };
 
     const updatedList = all.map((a) => (String(a.id) === String(id) ? updatedAppointment : a));
     this.saveAppointments(updatedList);
 
-    // Log Stage Move
-    logStageMove({
-      orgId: "default",
-      recordType: "appointment",
-      recordId: String(id),
-      fromStageId: previousStageId,
-      toStageId: rescheduledStage.id,
-      toStageName: rescheduledStage.name,
-      processId: proc.id,
-      processName: proc.name,
-      cause: {
-        type: "manual",
-        ruleName: "Appointment Rescheduled",
-      },
-    });
-
-    // Emit appointment.rescheduled event
+    // Emit appointment.rescheduled event (automations will execute update_to_stage if defined)
     eventBus.emit("appointment.rescheduled", "appointment", String(id), {
       ...updatedAppointment,
       previousDate: existing.date,
@@ -356,38 +346,21 @@ class AppointmentService {
 
   /**
    * Cancel an appointment
+   * Updates status without hardcoding stage. Stage movement is driven by automations on appointment.cancelled.
    */
   public cancelAppointment(id: number | string, reason?: string): Appointment {
     const all = this.getAppointments();
     const existing = all.find((a) => String(a.id) === String(id));
     if (!existing) throw new Error(`[AppointmentService] Appointment ${id} not found.`);
 
-    const previousStageId = existing.currentStageId;
-    const cancelledStage = this.findStageByCategory("cancelled") || { id: "appt-6", name: "Cancelled" };
-    const proc = this.getAppointmentProcess();
-
     const updatedAppointment: Appointment = {
       ...existing,
-      currentStageId: cancelledStage.id,
-      statusLabel: cancelledStage.name,
       status: "cancelled",
       notes: reason ? `${existing.notes ? existing.notes + " | " : ""}Cancelled: ${reason}` : existing.notes,
       updatedAt: new Date().toISOString(),
     };
 
     this.saveAppointments(all.map((a) => (String(a.id) === String(id) ? updatedAppointment : a)));
-
-    logStageMove({
-      orgId: "default",
-      recordType: "appointment",
-      recordId: String(id),
-      fromStageId: previousStageId,
-      toStageId: cancelledStage.id,
-      toStageName: cancelledStage.name,
-      processId: proc.id,
-      processName: proc.name,
-      cause: { type: "manual", ruleName: "Appointment Cancelled" },
-    });
 
     eventBus.emit("appointment.cancelled", "appointment", String(id), updatedAppointment);
 
@@ -406,38 +379,21 @@ class AppointmentService {
 
   /**
    * Complete an appointment
+   * Updates status without hardcoding stage. Stage movement is driven by automations on appointment.completed.
    */
   public completeAppointment(id: number | string, rating?: number): Appointment {
     const all = this.getAppointments();
     const existing = all.find((a) => String(a.id) === String(id));
     if (!existing) throw new Error(`[AppointmentService] Appointment ${id} not found.`);
 
-    const previousStageId = existing.currentStageId;
-    const completedStage = this.findStageByCategory("completed") || { id: "appt-5", name: "Completed" };
-    const proc = this.getAppointmentProcess();
-
     const updatedAppointment: Appointment = {
       ...existing,
-      currentStageId: completedStage.id,
-      statusLabel: completedStage.name,
       status: "completed",
       rating: rating ?? existing.rating,
       updatedAt: new Date().toISOString(),
     };
 
     this.saveAppointments(all.map((a) => (String(a.id) === String(id) ? updatedAppointment : a)));
-
-    logStageMove({
-      orgId: "default",
-      recordType: "appointment",
-      recordId: String(id),
-      fromStageId: previousStageId,
-      toStageId: completedStage.id,
-      toStageName: completedStage.name,
-      processId: proc.id,
-      processName: proc.name,
-      cause: { type: "manual", ruleName: "Appointment Completed" },
-    });
 
     eventBus.emit("appointment.completed", "appointment", String(id), updatedAppointment);
 
@@ -446,37 +402,19 @@ class AppointmentService {
 
   /**
    * Check in an appointment
+   * Updates status without hardcoding stage. Stage movement is driven by automations on appointment.checked_in.
    */
   public checkInAppointment(id: number | string): Appointment {
     const all = this.getAppointments();
     const existing = all.find((a) => String(a.id) === String(id));
     if (!existing) throw new Error(`[AppointmentService] Appointment ${id} not found.`);
 
-    const previousStageId = existing.currentStageId;
-    const checkedInStage = this.findStageByCategory("checked_in") || { id: "appt-4", name: "Checked In" };
-    const proc = this.getAppointmentProcess();
-
     const updatedAppointment: Appointment = {
       ...existing,
-      currentStageId: checkedInStage.id,
-      statusLabel: checkedInStage.name,
-      status: "scheduled",
       updatedAt: new Date().toISOString(),
     };
 
     this.saveAppointments(all.map((a) => (String(a.id) === String(id) ? updatedAppointment : a)));
-
-    logStageMove({
-      orgId: "default",
-      recordType: "appointment",
-      recordId: String(id),
-      fromStageId: previousStageId,
-      toStageId: checkedInStage.id,
-      toStageName: checkedInStage.name,
-      processId: proc.id,
-      processName: proc.name,
-      cause: { type: "manual", ruleName: "Appointment Checked In" },
-    });
 
     eventBus.emit("appointment.checked_in", "appointment", String(id), updatedAppointment);
 

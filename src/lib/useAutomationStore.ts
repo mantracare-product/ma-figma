@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { eventBus } from "./eventBus";
 import {
   EntityType,
   Process,
@@ -365,6 +366,29 @@ export function logStageMove(move: Omit<StageMove, "id" | "at">): StageMove {
     const updated = [newMove, ...moves.slice(0, 499)]; // Keep latest 500
     localStorage.setItem(STAGE_MOVES_STORAGE_KEY, JSON.stringify(updated));
     window.dispatchEvent(new Event(STAGE_MOVES_STORE_EVENT));
+
+    // Emit eventBus stage events for automations
+    eventBus.emit("stage.entered", move.recordType, move.recordId, {
+      ...move,
+      stageId: move.toStageId,
+      stageName: move.toStageName,
+      processId: move.processId,
+    });
+    eventBus.emit(`${move.recordType}.entered_stage`, move.recordType, move.recordId, {
+      ...move,
+      stageId: move.toStageId,
+      stageName: move.toStageName,
+      processId: move.processId,
+    });
+    if (move.fromStageId) {
+      eventBus.emit("stage.exited", move.recordType, move.recordId, {
+        ...move,
+        stageId: move.fromStageId,
+        stageName: move.fromStageName,
+        processId: move.processId,
+      });
+    }
+
     return newMove;
   } catch (e) {
     console.error("Error logging stage move:", e);

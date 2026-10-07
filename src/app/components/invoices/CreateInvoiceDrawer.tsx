@@ -10,6 +10,8 @@ import { addActivityEntry, getActivityForClient, ACTIVITY_LOG_EVENT } from "../.
 import { ACTIVITY_ENGINE_EVENT } from "../../../lib/activityEngine";
 import InvoiceFieldConfigModal from "./InvoiceFieldConfigModal";
 import InvoiceDocumentModal from "./InvoiceDocumentModal";
+import { hasInvoiceAutomation } from "../../../lib/invoiceService";
+import { Link } from "react-router";
 import {
   FileText,
   User,
@@ -420,6 +422,10 @@ export default function CreateInvoiceDrawer({
   };
 
   const handleSave = (finalStatus: InvoiceStatus = status) => {
+    if (!editingInvoice && !hasInvoiceAutomation()) {
+      toast.error("Cannot create invoice: Please build the automation first in Automation.");
+      return;
+    }
     if (!selectedClient) {
       toast.error("Please select a client");
       return;
@@ -594,20 +600,28 @@ export default function CreateInvoiceDrawer({
           <div className="flex items-center gap-2.5">
             <button
               onClick={onClose}
-              className="px-4 py-2.5 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold"
+              className="px-4 py-2.5 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold cursor-pointer"
             >
               Cancel
             </button>
             <button
               onClick={() => handleSave("draft")}
-              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold transition-all"
+              disabled={!editingInvoice && !hasInvoiceAutomation()}
+              className={`px-4 py-2.5 bg-slate-100 text-slate-800 rounded-xl text-xs font-semibold transition-all ${
+                !editingInvoice && !hasInvoiceAutomation() ? "opacity-50 cursor-not-allowed" : "hover:bg-slate-200 cursor-pointer"
+              }`}
+              title={!editingInvoice && !hasInvoiceAutomation() ? "Please build the automation first" : undefined}
             >
               Save as Draft
             </button>
             <button
               onClick={() => handleSave("sent")}
-              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5"
+              disabled={!editingInvoice && !hasInvoiceAutomation()}
+              className={`px-6 py-2.5 bg-blue-600 text-white rounded-xl font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5 ${
+                !editingInvoice && !hasInvoiceAutomation() ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-700 cursor-pointer"
+              }`}
               style={{ fontFamily: "Outfit, sans-serif" }}
+              title={!editingInvoice && !hasInvoiceAutomation() ? "Please build the automation first" : undefined}
             >
               <Send className="w-4 h-4" /> Save & Send Invoice
             </button>
@@ -615,6 +629,17 @@ export default function CreateInvoiceDrawer({
         </div>
       }
     >
+      {!editingInvoice && !hasInvoiceAutomation() && (
+        <div className="mb-4 px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            Invoice creation is locked — please build the automation first in the Automation page.
+          </span>
+          <Link to="/automation" className="text-blue-600 hover:underline font-semibold text-xs ml-2">
+            Build automation &rarr;
+          </Link>
+        </div>
+      )}
       {/* Top Tab Bar: General | Activity | Documents | Payments */}
       <div className="border-b border-slate-200 mb-6">
         <div className="flex items-center gap-6">

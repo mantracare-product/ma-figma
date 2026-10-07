@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router";
 import {
   X,
   Calendar,
@@ -55,6 +56,7 @@ import { appointmentService } from "../../../lib/appointmentService";
 import { getStoredCallLogs, CallLog } from "../../../lib/processLogsStore";
 import { appendActivity, getActivity, subscribeToActivity } from "../../../lib/activityEngine";
 import { logStageMove } from "../../../lib/useAutomationStore";
+import { hasInvoiceAutomation } from "../../../lib/invoiceService";
 import type { Appointment as ServiceAppointment } from "../../../lib/appointmentService";
 
 export interface AppointmentDetailDrawerProps {
@@ -151,15 +153,16 @@ export default function AppointmentDetailDrawer({
   }, [appointmentProcess]);
 
   // Current appointment stage
-  const currentStage: Stage = useMemo(() => {
-    if (!appointment) return stages[0];
+  const currentStage: Stage | undefined = useMemo(() => {
+    if (!appointment || !appointment.currentStageId || String(appointment.currentStageId).trim() === "") {
+      return undefined;
+    }
     const match = stages.find(
       (s) =>
-        s.id === appointment.currentStageId ||
-        s.name.toLowerCase() === (appointment.statusLabel || "").toLowerCase() ||
-        s.systemCategory === appointment.status
+        s.id.toLowerCase() === String(appointment.currentStageId).toLowerCase() ||
+        (appointment.statusLabel && s.name.toLowerCase() === String(appointment.statusLabel).toLowerCase())
     );
-    return match || stages[0];
+    return match;
   }, [appointment, stages]);
 
   // Appointment Formatted ID
@@ -203,10 +206,10 @@ export default function AppointmentDetailDrawer({
       email: appointment.clientEmail || "",
       phone: appointment.clientPhone || "",
       status: appointment.status || "scheduled",
-      stage: currentStage.name,
+      stage: currentStage?.name || "Unassigned",
       ...storedCustom,
     });
-  }, [appointment, employees, services, currentStage]);
+  }, [appointment, employees, services, currentStage?.name]);
 
   // Sections State
   const storageSectionKey = `mantra_appt_sections_layout`;
@@ -295,7 +298,7 @@ export default function AppointmentDetailDrawer({
 
   // Stage Progression Handler
   const handleStageSelect = (targetStage: Stage) => {
-    if (!appointment || targetStage.id === currentStage.id) return;
+    if (!appointment || targetStage.id === currentStage?.id) return;
 
     let newStatus = appointment.status;
     if (targetStage.systemCategory === "completed") newStatus = "completed";
@@ -323,8 +326,8 @@ export default function AppointmentDetailDrawer({
       orgId: "default",
       recordType: "appointment",
       recordId: String(appointment.id),
-      fromStageId: currentStage.id,
-      fromStageName: currentStage.name,
+      fromStageId: currentStage?.id || "",
+      fromStageName: currentStage?.name || "Unassigned",
       toStageId: targetStage.id,
       toStageName: targetStage.name,
       processId: appointmentProcess.id,
@@ -371,8 +374,8 @@ export default function AppointmentDetailDrawer({
     if (!appointment) return [];
     return invoices.filter((inv) => {
       const matchClient =
-        inv.clientId === appointment.clientId ||
-        (inv.clientName && inv.clientName.toLowerCase() === appointment.clientName.toLowerCase());
+        (appointment.clientId && inv.clientId === appointment.clientId) ||
+        (inv.clientName && appointment.clientName && inv.clientName.toLowerCase() === appointment.clientName.toLowerCase());
       const matchAppt = inv.appointmentId && String(inv.appointmentId) === String(appointment.id);
       return matchClient || matchAppt;
     });
@@ -420,7 +423,7 @@ export default function AppointmentDetailDrawer({
         clientId: effectiveClientId,
         process: appointmentProcess.name,
         lastStage: "Requested",
-        currentStage: currentStage.name,
+        currentStage: currentStage?.name || "Unassigned",
         type: "Outbound",
         status: "Completed",
         duration: "2:45",
@@ -434,7 +437,7 @@ export default function AppointmentDetailDrawer({
         clientId: effectiveClientId,
         process: appointmentProcess.name,
         lastStage: "Initial Contact",
-        currentStage: currentStage.name,
+        currentStage: currentStage?.name || "Unassigned",
         type: "Inbound",
         status: "Completed",
         duration: "1:30",
@@ -443,7 +446,7 @@ export default function AppointmentDetailDrawer({
         hasTranscript: true,
       } as any,
     ];
-  }, [appointment, effectiveClientId, appointmentProcess.name, currentStage.name]);
+  }, [appointment, effectiveClientId, appointmentProcess.name, currentStage?.name]);
 
   if (!isOpen || !appointment) return null;
 
@@ -517,13 +520,24 @@ export default function AppointmentDetailDrawer({
               isFinal: s.isFinal || s.isFinalStage,
               systemCategory: s.systemCategory,
             }))}
-            activeStageId={currentStage.id}
+            activeStageId={currentStage?.id}
             onStageClick={(stg) => {
               const matched = stages.find((s) => String(s.id) === String(stg.id));
               if (matched) handleStageSelect(matched);
             }}
             showAddButton={true}
           />
+          {!currentStage && (
+            <div className="mt-2.5 flex items-center justify-between px-3 py-1.5 bg-amber-50/90 border border-amber-200/90 rounded-lg text-xs font-medium text-amber-800">
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                Stage not marked — please build the automation first
+              </span>
+              <Link to="/automation" className="text-blue-600 hover:underline font-semibold text-xs ml-2">
+                Build automation &rarr;
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* ── Tabs Bar ── */}
@@ -656,7 +670,13 @@ export default function AppointmentDetailDrawer({
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setIsCreateInvoiceDrawerOpen(true)}
+                    onClick={() => {
+                      if (!hasInvoiceAutomation()) {
+                        toast.error("Please build an automation first before creating invoices. Go to Automation to configure workflow rules.");
+                        return;
+                      }
+                      setIsCreateInvoiceDrawerOpen(true);
+                    }}
                     className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" /> + Create Invoice

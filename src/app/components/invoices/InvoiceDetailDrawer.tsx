@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { CustomSideDrawer } from "../ui/drawer";
 import { ClientInvoice, InvoiceStatus } from "../../types/invoiceTypes";
 import { useInvoices } from "../../context/InvoiceContext";
@@ -93,11 +93,6 @@ export default function InvoiceDetailDrawer({
     }
   }, [invoice?.clientId, invoice?.id]);
 
-  if (!invoice) return null;
-
-  const isAutomated = invoice.createdBy === "system";
-  const availableCredit = getClientCredit(invoice.clientId);
-
   const invoiceStages = useMemo(() => {
     const proc = getStoredProcesses().find((p) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
     return (proc.stages || []).map((s) => ({
@@ -110,12 +105,23 @@ export default function InvoiceDetailDrawer({
     }));
   }, []);
 
-  const currentInvoiceStageName = useMemo(() => {
-    const matched = invoiceStages.find(
-      (s) => s.systemCategory === invoice.status || s.id === invoice.status || s.name.toLowerCase() === invoice.status.toLowerCase()
+  const currentInvoiceStage = useMemo(() => {
+    if (!invoice || !invoice.currentStageId || invoice.currentStageId.trim() === "") return undefined;
+    const stageKey = invoice.currentStageId.trim().toLowerCase();
+    return invoiceStages.find(
+      (s) =>
+        s.id.toLowerCase() === stageKey ||
+        s.name.toLowerCase() === stageKey ||
+        (invoice.statusLabel && s.name.toLowerCase() === invoice.statusLabel.toLowerCase())
     );
-    return matched ? matched.name : (invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1));
-  }, [invoiceStages, invoice.status]);
+  }, [invoiceStages, invoice?.currentStageId, invoice?.statusLabel]);
+
+  const currentInvoiceStageName = currentInvoiceStage ? currentInvoiceStage.name : "";
+
+  if (!invoice) return null;
+
+  const isAutomated = invoice.createdBy === "system";
+  const availableCredit = getClientCredit(invoice.clientId);
 
   const handleCopyLink = () => {
     if (invoice.paymentLinkUrl) {
@@ -293,6 +299,7 @@ export default function InvoiceDetailDrawer({
         <div className="-mx-6 -mt-6 mb-6 px-6 py-2.5 bg-white border-b border-slate-200">
           <ChevronStageRibbon
             stages={invoiceStages}
+            activeStageId={currentInvoiceStage?.id}
             activeStageName={currentInvoiceStageName}
             onStageClick={(stg) => {
               if (stg.systemCategory) {
@@ -304,6 +311,17 @@ export default function InvoiceDetailDrawer({
             }}
             showAddButton={true}
           />
+          {!currentInvoiceStage && (
+            <div className="mt-2.5 flex items-center justify-between px-3 py-1.5 bg-amber-50/90 border border-amber-200/90 rounded-lg text-xs font-medium text-amber-800">
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                Stage not marked — please build the automation first
+              </span>
+              <Link to="/automation" className="text-blue-600 hover:underline font-semibold text-xs ml-2">
+                Build automation &rarr;
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Tab Bar: General | Activity | Documents | Payments */}

@@ -259,6 +259,38 @@ export function deleteStepFromTree(steps: WorkflowStep[], stepId: string): Workf
 }
 
 /**
+ * Recursively updates a step in the tree by its ID.
+ */
+export function updateStepInTree(
+  steps: WorkflowStep[],
+  stepId: string,
+  updatedFields: Partial<WorkflowStep>
+): WorkflowStep[] {
+  const tree = cloneWorkflowTree(steps);
+
+  function mutate(list: WorkflowStep[]): boolean {
+    const idx = list.findIndex((s) => s.id === stepId);
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...updatedFields };
+      return true;
+    }
+    for (const s of list) {
+      if (isParallelStep(s) && s.branches) {
+        for (const b of s.branches) {
+          if (b.steps && mutate(b.steps)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  mutate(tree);
+  return tree;
+}
+
+/**
  * Adds a new branch to a ParallelNode.
  */
 export function addBranchToStep(steps: WorkflowStep[], parallelStepId: string): WorkflowStep[] {

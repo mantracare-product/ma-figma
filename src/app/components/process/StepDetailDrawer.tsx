@@ -138,9 +138,9 @@ export default function StepDetailDrawer({
       <div
         className="fixed top-0 right-0 h-screen z-[70] flex flex-col bg-white border-l border-border"
         style={{
-          width: "55vw",
-          minWidth: "55vw",
-          maxWidth: "55vw",
+          width: "35vw",
+          minWidth: "35vw",
+          maxWidth: "35vw",
           boxShadow: "-4px 0 24px rgba(0,0,0,0.12)",
         }}
       >

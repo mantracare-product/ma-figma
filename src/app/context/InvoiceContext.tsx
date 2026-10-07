@@ -7,15 +7,7 @@ import { mapInvoiceStatusToCategory, findStageForCategory } from "../../lib/enti
 import { invoiceService } from "../../lib/invoiceService";
 
 export function ensureInvoiceStage(inv: ClientInvoice): ClientInvoice {
-  if (inv.currentStageId && inv.statusLabel) return inv;
-  const invProc = DEFAULT_ENTITY_PROCESSES.invoice;
-  const cat = mapInvoiceStatusToCategory(inv.status || "draft");
-  const stage = findStageForCategory(invProc, cat);
-  return {
-    ...inv,
-    currentStageId: inv.currentStageId || stage?.id || "inv-1",
-    statusLabel: inv.statusLabel || stage?.name || "Draft",
-  };
+  return inv;
 }
 
 interface CreateInvoiceOptions {
@@ -79,252 +71,7 @@ const DEFAULT_FIELD_RULES: InvoiceFieldRulesMap = {
   },
 };
 
-const INITIAL_INVOICES: ClientInvoice[] = [
-  {
-    id: "INV-CL-1040",
-    clientId: "c-1",
-    clientName: "James Wilson",
-    clientEmail: "james.w@example.com",
-    clientPhone: "+1 (555) 123-4567",
-    appointmentId: "1",
-    appointmentTitle: "Initial Consultation",
-    status: "paid",
-    currency: "$",
-    paymentMode: "Card",
-    lineItems: [
-      { id: "li-1", source: "service", serviceId: "srv-1", description: "Initial Consultation", quantity: 1, unitPrice: 150 },
-    ],
-    subtotal: 150,
-    discountAmount: 0,
-    taxAmount: 12,
-    total: 162,
-    amountPaid: 162,
-    paymentType: "self_pay",
-    createdAt: "2026-05-12T09:00:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-05-26",
-    sentAt: "2026-05-12T09:05:00Z",
-    sentVia: "whatsapp",
-    paidAt: "2026-05-14T14:30:00Z",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1040",
-  },
-  {
-    id: "INV-CL-1041",
-    clientId: "c-2",
-    clientName: "Emma Brown",
-    clientEmail: "emma.b@example.com",
-    clientPhone: "+1 (555) 234-5678",
-    appointmentId: "2",
-    appointmentTitle: "Follow-up Visit",
-    status: "sent",
-    currency: "$",
-    paymentMode: "Bank Transfer",
-    lineItems: [
-      { id: "li-2", source: "service", serviceId: "srv-2", description: "Follow-up Visit", quantity: 1, unitPrice: 75 },
-    ],
-    subtotal: 75,
-    discountAmount: 0,
-    taxAmount: 6,
-    total: 81,
-    amountPaid: 0,
-    createdAt: "2026-05-12T10:30:00Z",
-    createdBy: "system",
-    dueDate: "2026-05-26",
-    sentAt: "2026-05-12T10:31:00Z",
-    sentVia: "whatsapp",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1041",
-  },
-  {
-    id: "INV-CL-1042",
-    clientId: "c-3",
-    clientName: "Oliver Davis",
-    clientEmail: "oliver.d@example.com",
-    clientPhone: "+1 (555) 345-6789",
-    appointmentId: "3",
-    appointmentTitle: "X-Ray Imaging",
-    status: "overdue",
-    currency: "$",
-    lineItems: [
-      { id: "li-3", source: "service", serviceId: "srv-4", description: "X-Ray Imaging", quantity: 1, unitPrice: 80 },
-      { id: "li-4", source: "manual", description: "Radiology Processing Fee", quantity: 1, unitPrice: 25 },
-    ],
-    subtotal: 105,
-    discountAmount: 5,
-    taxAmount: 8,
-    total: 108,
-    amountPaid: 0,
-    createdAt: "2026-05-13T14:00:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-05-27",
-    sentAt: "2026-05-13T14:05:00Z",
-    sentVia: "sms",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1042",
-  },
-  {
-    id: "INV-CL-1043",
-    clientId: "c-4",
-    clientName: "Priya Nair",
-    clientEmail: "priya.n@example.com",
-    clientPhone: "+1 (555) 987-6543",
-    status: "draft",
-    currency: "$",
-    lineItems: [
-      { id: "li-5", source: "service", serviceId: "srv-3", description: "Dental Cleaning", quantity: 1, unitPrice: 120 },
-    ],
-    subtotal: 120,
-    discountAmount: 10,
-    taxAmount: 8.8,
-    total: 118.8,
-    amountPaid: 0,
-    createdAt: "2026-08-10T15:00:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-08-25",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1043",
-  },
-  {
-    id: "INV-CL-1044",
-    clientId: "c-5",
-    clientName: "David Miller",
-    clientEmail: "dmiller@example.com",
-    clientPhone: "+1 (555) 432-1098",
-    status: "viewed",
-    currency: "$",
-    lineItems: [
-      { id: "li-6", source: "service", serviceId: "srv-5", description: "Physiotherapy Session", quantity: 2, unitPrice: 110 },
-    ],
-    subtotal: 220,
-    discountAmount: 20,
-    taxAmount: 16,
-    total: 216,
-    amountPaid: 0,
-    createdAt: "2026-08-05T08:45:00Z",
-    createdBy: "system",
-    dueDate: "2026-08-19",
-    sentAt: "2026-08-05T08:46:00Z",
-    sentVia: "email",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1044",
-  },
-  {
-    id: "INV-CL-1045",
-    clientId: "c-1",
-    clientName: "Sarah Jenkins",
-    clientEmail: "sarah.j@example.com",
-    clientPhone: "+1 (555) 234-5678",
-    status: "paid",
-    currency: "$",
-    lineItems: [
-      { id: "li-7", source: "service", serviceId: "srv-6", description: "Blood Test & Lab Panel", quantity: 1, unitPrice: 95 },
-    ],
-    subtotal: 95,
-    discountAmount: 0,
-    taxAmount: 7.6,
-    total: 102.6,
-    amountPaid: 102.6,
-    paymentType: "self_pay",
-    createdAt: "2026-07-20T14:20:00Z",
-    createdBy: "system",
-    dueDate: "2026-08-04",
-    sentAt: "2026-07-20T14:21:00Z",
-    sentVia: "whatsapp",
-    paidAt: "2026-07-22T09:15:00Z",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1045",
-  },
-  {
-    id: "INV-CL-1046",
-    clientId: "c-2",
-    clientName: "Michael Chang",
-    clientEmail: "m.chang@example.com",
-    clientPhone: "+1 (555) 876-5432",
-    status: "paid",
-    currency: "$",
-    lineItems: [
-      { id: "li-8", source: "service", serviceId: "srv-1", description: "Initial Consultation", quantity: 1, unitPrice: 150 },
-    ],
-    subtotal: 150,
-    discountAmount: 15,
-    taxAmount: 10.8,
-    total: 145.8,
-    amountPaid: 145.8,
-    paymentType: "self_pay",
-    createdAt: "2026-06-15T11:00:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-06-30",
-    sentAt: "2026-06-15T11:05:00Z",
-    sentVia: "whatsapp",
-    paidAt: "2026-06-16T16:00:00Z",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1046",
-  },
-  {
-    id: "INV-CL-1047",
-    clientId: "c-3",
-    clientName: "Elena Rostova",
-    clientEmail: "elena.r@example.com",
-    clientPhone: "+1 (555) 345-6789",
-    status: "void",
-    currency: "$",
-    lineItems: [
-      { id: "li-9", source: "service", serviceId: "srv-2", description: "Follow-up Visit", quantity: 1, unitPrice: 75 },
-    ],
-    subtotal: 75,
-    discountAmount: 0,
-    taxAmount: 6,
-    total: 81,
-    amountPaid: 0,
-    createdAt: "2026-06-10T09:00:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-06-24",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1047",
-  },
-  {
-    id: "INV-CL-1048",
-    clientId: "c-4",
-    clientName: "Priya Nair",
-    clientEmail: "priya.n@example.com",
-    clientPhone: "+1 (555) 987-6543",
-    status: "paid",
-    currency: "$",
-    lineItems: [
-      { id: "li-10", source: "service", serviceId: "srv-3", description: "Dental Cleaning", quantity: 1, unitPrice: 120 },
-      { id: "li-11", source: "service", serviceId: "srv-4", description: "X-Ray Imaging", quantity: 1, unitPrice: 80 },
-    ],
-    subtotal: 200,
-    discountAmount: 20,
-    taxAmount: 14.4,
-    total: 194.4,
-    amountPaid: 194.4,
-    paymentType: "self_pay",
-    createdAt: "2026-07-28T16:30:00Z",
-    createdBy: "system",
-    dueDate: "2026-08-11",
-    sentAt: "2026-07-28T16:31:00Z",
-    sentVia: "whatsapp",
-    paidAt: "2026-07-29T10:00:00Z",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1048",
-  },
-  {
-    id: "INV-CL-1049",
-    clientId: "c-5",
-    clientName: "David Miller",
-    clientEmail: "dmiller@example.com",
-    clientPhone: "+1 (555) 432-1098",
-    status: "sent",
-    currency: "$",
-    lineItems: [
-      { id: "li-12", source: "service", serviceId: "srv-1", description: "Initial Consultation", quantity: 1, unitPrice: 150 },
-    ],
-    subtotal: 150,
-    discountAmount: 0,
-    taxAmount: 12,
-    total: 162,
-    amountPaid: 0,
-    createdAt: "2026-08-08T13:10:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-08-22",
-    sentAt: "2026-08-08T13:12:00Z",
-    sentVia: "sms",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1049",
-  },
-];
+const INITIAL_INVOICES: ClientInvoice[] = [];
 
 
 // ─── Record-level mock rows used by the custom report engine ─────────────────
@@ -577,14 +324,14 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { getAllFields } = useFieldRegistry();
 
   const [invoices, setInvoices] = useState<ClientInvoice[]>(() => {
-    return invoiceService.getInvoices().map(ensureInvoiceStage);
+    return invoiceService.getInvoices();
   });
 
   useEffect(() => {
     // Check overdue on mount
     invoiceService.checkOverdueInvoices();
     return invoiceService.subscribe((updated) => {
-      setInvoices(updated.map(ensureInvoiceStage));
+      setInvoices(updated);
     });
   }, []);
 
@@ -605,11 +352,7 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return JSON.parse(saved);
       } catch {}
     }
-    return {
-      "c-1": 60,
-      "c-2": 35,
-      "c-4": 20,
-    };
+    return {};
   });
 
   const [payments, setPayments] = useState<Payment[]>(() => {
@@ -619,47 +362,7 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return JSON.parse(saved);
       } catch {}
     }
-    return [
-      {
-        id: "pmt-init-1040",
-        invoiceId: "INV-CL-1040",
-        clientId: "c-1",
-        amount: 162,
-        method: "card_on_file",
-        paymentType: "self_pay",
-        paymentDate: "2026-05-14",
-        note: "Initial payment on file",
-        receiptNumber: "REC-1040-01",
-        receiptFileName: "Receipt_INV_1040.pdf",
-        createdAt: "2026-05-14T14:30:00Z",
-      },
-      {
-        id: "pmt-init-1045",
-        invoiceId: "INV-CL-1045",
-        clientId: "c-1",
-        amount: 102.6,
-        method: "cash",
-        paymentType: "self_pay",
-        paymentDate: "2026-07-22",
-        note: "Cash settlement at frontdesk",
-        receiptNumber: "REC-1045-88",
-        receiptFileName: "Receipt_INV_1045.pdf",
-        createdAt: "2026-07-22T09:15:00Z",
-      },
-      {
-        id: "pmt-init-1046",
-        invoiceId: "INV-CL-1046",
-        clientId: "c-2",
-        amount: 145.8,
-        method: "bank_transfer",
-        paymentType: "self_pay",
-        paymentDate: "2026-06-16",
-        note: "Wire transfer wire-8920",
-        receiptNumber: "REC-1046-12",
-        receiptFileName: "Wire_Receipt_1046.pdf",
-        createdAt: "2026-06-16T16:00:00Z",
-      },
-    ];
+    return [];
   });
 
   const [reports, setReports] = useState<ReportDefinition[]>(() => {

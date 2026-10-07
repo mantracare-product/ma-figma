@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate, useLocation } from "react-router";
+import { useParams, useNavigate, useLocation, Link } from "react-router";
 import {
   Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
   MessageSquare, MessageCircle, LogIn, ArrowRightCircle, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
@@ -47,6 +47,8 @@ import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
 import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
 import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { ClientInvoice } from "../types/invoiceTypes";
+import { hasInvoiceAutomation } from "../../lib/invoiceService";
+import { hasAppointmentAutomation } from "../../lib/appointmentService";
 import DocumentsTab from "../components/profile/DocumentsTab";
 import TableComponent, { TableColumn } from "../components/ui/TableComponent";
 import AIScribeModal from "../components/scribe/AIScribeModal";
@@ -69,6 +71,7 @@ import {
   getCurrencySymbol, getStoredServices, addService, onServicesChanged,
   getClientProducts, assignProductToClient, unassignProductFromClient,
 } from "../../lib/servicesStore";
+import { eventBus } from "../../lib/eventBus";
 import { MOCK_SERVICES } from "../../lib/mockServicesData";
 
 const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
@@ -664,6 +667,38 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           return updated;
         })
       );
+
+      // Emit hot update event for Rule Engine & automations
+      const clientId = String(client.id);
+      const updatedClientData: Record<string, any> = {
+        ...client,
+        clientId,
+        clientName: key === "name" ? val : (clientName || client.name),
+        name: key === "name" ? val : (clientName || client.name),
+        email: key === "email" ? val : (clientEmail || client.email),
+        phone: key === "phone" ? val : (clientPhone || client.phone),
+        company: key === "company" ? val : (clientCompany || client.companyName),
+        companyName: key === "company" ? val : (clientCompany || client.companyName),
+        role: key === "role" ? val : (clientRole || client.jobPosition),
+        jobPosition: key === "role" ? val : (clientRole || client.jobPosition),
+        status: key === "status" ? val : (clientStatus || client.status),
+        location: key === "location" ? val : (clientLocation || client.location),
+        country: key === "country" ? val : (clientCountry || client.country),
+        ...dynamicFieldValues,
+        [key]: val,
+        fieldKey: key,
+        updatedField: key,
+        updatedFields: [key],
+        updatedValue: val,
+      };
+
+      try {
+        eventBus.emit("field.updated", "client", clientId, updatedClientData);
+        eventBus.emit("client.field_updated", "client", clientId, updatedClientData);
+        eventBus.emit("client.updated", "client", clientId, updatedClientData);
+      } catch (e) {
+        console.warn("[ClientProfile] Failed to emit field.updated:", e);
+      }
     }
 
     try {
@@ -2318,6 +2353,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   </div>
                   <button
                     onClick={() => {
+                      if (!hasAppointmentAutomation()) {
+                        toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
+                        return;
+                      }
                       setActivityBookingValues({
                         title: "Consultation Appointment",
                         description: "",
@@ -2340,6 +2379,18 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     <Plus className="w-4 h-4" /> Book Appointment
                   </button>
                 </div>
+
+                {!hasAppointmentAutomation() && (
+                  <div className="mb-4 px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                      Appointment booking is locked — please build the automation first in the Automation page.
+                    </span>
+                    <Link to="/automation" className="text-blue-600 hover:underline font-semibold text-xs ml-2">
+                      Build automation &rarr;
+                    </Link>
+                  </div>
+                )}
 
                 {/* Table */}
                 {filteredAppts.length === 0 ? (
@@ -2592,7 +2643,13 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     </button>
                     {/* + Create Invoice Button */}
                     <button
-                      onClick={() => setIsCreateInvoiceDrawerOpen(true)}
+                      onClick={() => {
+                        if (!hasInvoiceAutomation()) {
+                          toast.error("Please build an automation first before creating invoices. Navigate to Automation to configure workflow rules.");
+                          return;
+                        }
+                        setIsCreateInvoiceDrawerOpen(true);
+                      }}
                       className="px-4 py-2 bg-[#1F2937] hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
@@ -3090,6 +3147,31 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                     setClientProductList(getClientProducts(client.id));
                                     setShowAssignDropdown(false);
                                     setAssignSearch("");
+                                    // Trigger event for automations (e.g. invoice generation)
+                                    eventBus.emit("client.product_assigned", "client", String(client.id), {
+                                      clientId: String(client.id),
+                                      clientName: client.name,
+                                      clientEmail: client.email,
+                                      clientPhone: client.phone,
+                                      productId: svc.id,
+                                      productName: svc.name,
+                                      productPrice: svc.price,
+                                      currency: svc.currency,
+                                      product: svc,
+                                    });
+                                    appendActivity({
+                                      type: "field_update",
+                                      clientId: String(client.id),
+                                      processId: "services",
+                                      processName: "Client Services",
+                                      timestamp: new Date().toISOString(),
+                                      fieldLabel: "Product / Service",
+                                      newValue: svc.name,
+                                      details: {
+                                        primary: `Product assigned: ${svc.name}`,
+                                        secondary: `${getCurrencySymbol(svc.currency)}${svc.price} · ${svc.duration}m`,
+                                      },
+                                    });
                                     toast.success(`"${svc.name}" assigned to ${client.name}`);
                                   }}
                                   className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-blue-50 transition-colors text-left cursor-pointer"
@@ -3280,6 +3362,31 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                           assignProductToClient(client.id, created.id);
                           setGlobalServiceList(getStoredServices());
                           setClientProductList(getClientProducts(client.id));
+                          // Trigger event for automations (e.g. invoice generation)
+                          eventBus.emit("client.product_assigned", "client", String(client.id), {
+                            clientId: String(client.id),
+                            clientName: client.name,
+                            clientEmail: client.email,
+                            clientPhone: client.phone,
+                            productId: created.id,
+                            productName: created.name,
+                            productPrice: created.price,
+                            currency: created.currency,
+                            product: created,
+                          });
+                          appendActivity({
+                            type: "field_update",
+                            clientId: String(client.id),
+                            processId: "services",
+                            processName: "Client Services",
+                            timestamp: new Date().toISOString(),
+                            fieldLabel: "Product / Service",
+                            newValue: created.name,
+                            details: {
+                              primary: `Created & Assigned Product: ${created.name}`,
+                              secondary: `${getCurrencySymbol(created.currency)}${created.price} · Duration: ${created.duration}m`,
+                            },
+                          });
                           toast.success(`"${created.name}" created and assigned to ${client.name}`);
                           setShowNewProductDrawer(false);
                           setNewProductForm({ ...SVC_INIT_FORM });

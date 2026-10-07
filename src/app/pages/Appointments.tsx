@@ -28,7 +28,7 @@ import {
   List,
   CalendarClock,
 } from "lucide-react";
-import { appointmentService } from "../../lib/appointmentService";
+import { appointmentService, hasAppointmentAutomation } from "../../lib/appointmentService";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage } from "../../lib/useProcessStore";
 import { appendActivity } from "../../lib/activityEngine";
 import { logStageMove } from "../../lib/useAutomationStore";
@@ -44,7 +44,7 @@ import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppoin
 import TeamAvailabilityTab from "../components/appointments/TeamAvailabilityTab";
 import TargetUserLocationBar from "../components/appointments/TargetUserLocationBar";
 import AppointmentCalendarView from "../components/appointments/AppointmentCalendarView";
-import { useSearchParams } from "react-router";
+import { useSearchParams, useNavigate, Link } from "react-router";
 import { useInvoices } from "../context/InvoiceContext";
 import { initialClients } from "./ClientProfile";
 import { useTeamMembers } from "../../lib/teamStore";
@@ -97,6 +97,7 @@ const processStages: Record<string, string[]> = {
 };
 
 export default function Appointments() {
+  const navigate = useNavigate();
   const { invoices, createInvoiceFromAppointment, voidInvoice } = useInvoices();
   const { bookableMembers, teamMembers } = useTeamMembers();
 
@@ -309,7 +310,7 @@ export default function Appointments() {
   const [bookingStartMinute, setBookingStartMinute] = useState(0);
   const [drawerMode, setDrawerMode] = useState<"create" | "reschedule">("create");
   const [bookingServiceId, setBookingServiceId] = useState("");
-  const [bookingGenerateInvoice, setBookingGenerateInvoice] = useState(true);
+  const [bookingGenerateInvoice, setBookingGenerateInvoice] = useState(false);
   const [bookingLineItems, setBookingLineItems] = useState<any[]>([]);
   const [bookingDiscountAmount, setBookingDiscountAmount] = useState(0);
   const [bookingLocation, setBookingLocation] = useState("Main Clinic — Suite 400");
@@ -521,6 +522,12 @@ export default function Appointments() {
   };
 
   const handleBookingComplete = () => {
+    if (drawerMode !== "reschedule" && !hasAppointmentAutomation()) {
+      toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
+      navigate("/automation");
+      return;
+    }
+
     if (!selectedClient || !selectedProvider || !selectedDate || !bookingTitle.trim()) {
       toast.error("Please fill in all required fields");
       return;
@@ -583,6 +590,9 @@ export default function Appointments() {
     setBookingStartHour(9);
     setBookingStartMinute(0);
     setBookingLocation("Main Clinic — Suite 400");
+    setBookingGenerateInvoice(false);
+    setBookingLineItems([]);
+    setBookingDiscountAmount(0);
 
     // Reset client filters and search
     setClientSearchQuery("");
@@ -842,6 +852,18 @@ export default function Appointments() {
           </div>
         </PageHeader>
 
+        {!hasAppointmentAutomation() && (
+          <div className="flex items-center justify-between px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 shadow-2xs">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              Automated Appointment Booking is locked — please build the automation first in Automation to enable booking appointments and stage workflows.
+            </span>
+            <Link to="/automation" className="text-blue-600 hover:underline font-semibold text-xs ml-2">
+              Build automation &rarr;
+            </Link>
+          </div>
+        )}
+
         {/* Unified Search & Controls Toolbar powered by PageTopBar */}
         <PageTopBar
           modes={[
@@ -941,6 +963,11 @@ export default function Appointments() {
           primaryAction={{
             label: "Book Appointment",
             onClick: () => {
+              if (!hasAppointmentAutomation()) {
+                toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
+                navigate("/automation");
+                return;
+              }
               resetBookingWorkflow();
               setShowAddModal(true);
             },
@@ -960,6 +987,11 @@ export default function Appointments() {
             services={services}
             openBookingDrawerForReschedule={openBookingDrawerForReschedule}
             onBookForDate={(dateStr) => {
+              if (!hasAppointmentAutomation()) {
+                toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
+                navigate("/automation");
+                return;
+              }
               resetBookingWorkflow();
               setSelectedDate(dateStr);
               setShowAddModal(true);
@@ -1002,18 +1034,33 @@ export default function Appointments() {
                   header: "Stages",
                   accessorKey: "currentStageId",
                   align: "left",
-                  minWidth: 190,
+                  minWidth: 240,
                   render: (apt) => {
                     const stages = appointmentWorkflowStages;
-                    const matchedStage =
-                      stages.find(
-                        (s) =>
-                          s.id === apt.currentStageId ||
-                          s.id === apt.stageId ||
-                          s.name.toLowerCase() === (apt.statusLabel || "").toLowerCase() ||
-                          s.systemCategory === apt.status
-                      ) || stages[0];
-                    const activeIdx = stages.findIndex((s) => s.id === matchedStage?.id);
+                    const stageKey = (apt.currentStageId || apt.stageId || "").trim();
+                    const matchedStage = stageKey
+                      ? stages.find(
+                          (s) =>
+                            s.id.toLowerCase() === stageKey.toLowerCase() ||
+                            s.name.toLowerCase() === stageKey.toLowerCase() ||
+                            (apt.statusLabel && s.name.toLowerCase() === apt.statusLabel.toLowerCase())
+                        )
+                      : undefined;
+                    const activeIdx = matchedStage ? stages.findIndex((s) => s.id === matchedStage.id) : -1;
+
+                    if (!matchedStage || activeIdx === -1) {
+                      return (
+                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/80 tracking-tight"
+                            title="No stage marked — please build the automation first"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Please build the automation first
+                          </span>
+                        </div>
+                      );
+                    }
 
                     return (
                       <div className="flex items-center gap-2.5" onClick={(e) => e.stopPropagation()}>
@@ -1056,6 +1103,9 @@ export default function Appointments() {
                             );
                           })}
                         </div>
+                        <span className="text-[11px] font-medium text-slate-500 truncate max-w-[80px]">
+                          {matchedStage.name}
+                        </span>
                       </div>
                     );
                   },

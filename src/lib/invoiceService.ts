@@ -15,7 +15,7 @@
  */
 
 import { eventBus } from "./eventBus";
-import { logStageMove } from "./useAutomationStore";
+import { logStageMove, getStoredRules } from "./useAutomationStore";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage } from "./useProcessStore";
 import { ClientInvoice, InvoiceLineItem, InvoiceStatus, Payment } from "../app/types/invoiceTypes";
 import { addActivityEntry } from "./activityLog";
@@ -23,7 +23,7 @@ import { addActivityEntry } from "./activityLog";
 export interface CreateInvoiceOptions {
   appointmentId?: string;
   appointmentTitle?: string;
-  createdBy?: "system" | string;
+  createdBy?: "system" | "rule" | string;
   discountType?: "amount" | "percent";
   discountValue?: number;
   discountAmount?: number;
@@ -35,91 +35,76 @@ const INVOICES_STORAGE_KEY = "mantra_invoices_v1";
 const PAYMENTS_STORAGE_KEY = "mantra_payments_v1";
 const INVOICES_CHANGE_EVENT = "mantra_invoices_changed";
 
-const INITIAL_INVOICES: ClientInvoice[] = [
-  {
-    id: "INV-CL-1040",
-    clientId: "c-1",
-    clientName: "James Wilson",
-    clientEmail: "james.w@example.com",
-    clientPhone: "+1 (555) 123-4567",
-    appointmentId: "1",
-    appointmentTitle: "Initial Consultation",
-    currentStageId: "inv-5",
-    statusLabel: "Paid",
-    status: "paid",
-    currency: "$",
-    paymentMode: "Card",
-    lineItems: [
-      { id: "li-1", source: "service", serviceId: "srv-1", description: "Initial Consultation", quantity: 1, unitPrice: 150 },
-    ],
-    subtotal: 150,
-    discountAmount: 0,
-    taxAmount: 12,
-    total: 162,
-    amountPaid: 162,
-    paymentType: "self_pay",
-    createdAt: "2026-05-12T09:00:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-05-26",
-    sentAt: "2026-05-12T09:05:00Z",
-    sentVia: "whatsapp",
-    paidAt: "2026-05-14T14:30:00Z",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1040",
-  },
-  {
-    id: "INV-CL-1041",
-    clientId: "c-2",
-    clientName: "Emma Brown",
-    clientEmail: "emma.b@example.com",
-    clientPhone: "+1 (555) 234-5678",
-    appointmentId: "2",
-    appointmentTitle: "Follow-up Visit",
-    currentStageId: "inv-2",
-    statusLabel: "Sent",
-    status: "sent",
-    currency: "$",
-    paymentMode: "Bank Transfer",
-    lineItems: [
-      { id: "li-2", source: "service", serviceId: "srv-2", description: "Follow-up Visit", quantity: 1, unitPrice: 75 },
-    ],
-    subtotal: 75,
-    discountAmount: 0,
-    taxAmount: 6,
-    total: 81,
-    amountPaid: 0,
-    createdAt: "2026-05-12T10:30:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-05-26",
-    sentAt: "2026-05-12T10:35:00Z",
-    sentVia: "whatsapp",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1041",
-  },
-  {
-    id: "INV-CL-1042",
-    clientId: "c-3",
-    clientName: "Oliver Davis",
-    clientEmail: "oliver.d@example.com",
-    clientPhone: "+1 (555) 345-6789",
-    appointmentId: "3",
-    appointmentTitle: "X-Ray Imaging",
-    currentStageId: "inv-1",
-    statusLabel: "Draft",
-    status: "draft",
-    currency: "$",
-    lineItems: [
-      { id: "li-3", source: "service", serviceId: "srv-4", description: "X-Ray Imaging", quantity: 1, unitPrice: 80 },
-    ],
-    subtotal: 80,
-    discountAmount: 0,
-    taxAmount: 6.4,
-    total: 86.4,
-    amountPaid: 0,
-    createdAt: "2026-05-13T14:00:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-05-27",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1042",
-  },
-];
+export const SAMPLE_CLIENT_NAMES = new Set([
+  "james wilson",
+  "emma brown",
+  "oliver davis",
+  "sophia martinez",
+  "amanda clark",
+  "sarah jenkins",
+  "deepika nair",
+  "oliver thompson",
+  "ananya reddy",
+  "david miller",
+  "michael chang",
+  "elena rostova",
+  "priya nair",
+  "priya sharma",
+  "charlotte evans",
+  "vikram singh",
+  "john smith",
+  "sarah johnson",
+]);
+
+export function isSampleInvoice(inv: ClientInvoice): boolean {
+  if (!inv) return false;
+  const name = (inv.clientName || "").trim().toLowerCase();
+  return SAMPLE_CLIENT_NAMES.has(name);
+}
+
+export function hasInvoiceAutomation(): boolean {
+  try {
+    const rules = getStoredRules();
+    return rules.some((r) => {
+      if (!r.enabled) return false;
+      if (r.entityType === "invoice") return true;
+      if (
+        r.actions &&
+        r.actions.some((a) =>
+          ["generate_invoice", "generate-invoice", "create_invoice"].includes(a.stepKey || (a as any).type)
+        )
+      ) {
+        return true;
+      }
+      if (
+        r.action?.processId &&
+        (r.action.processId.includes("invoice") || r.action.processName?.toLowerCase().includes("invoice"))
+      ) {
+        return true;
+      }
+      return false;
+    });
+  } catch {
+    return false;
+  }
+}
+
+const INITIAL_INVOICES: ClientInvoice[] = [];
+
+if (typeof window !== "undefined") {
+  try {
+    const raw = localStorage.getItem(INVOICES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter((i) => !isSampleInvoice(i));
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify(cleaned));
+        }
+      }
+    }
+  } catch {}
+}
 
 class InvoiceService {
   private getInvoiceProcess(): Process {
@@ -135,7 +120,8 @@ class InvoiceService {
 
   private findStageById(stageId: string): Stage | undefined {
     const proc = this.getInvoiceProcess();
-    return proc.stages.find((s) => s.id === stageId);
+    const query = String(stageId).trim().toLowerCase();
+    return proc.stages.find((s) => s.id.toLowerCase() === query || s.name.toLowerCase() === query);
   }
 
   public getInvoices(): ClientInvoice[] {
@@ -147,8 +133,12 @@ class InvoiceService {
         return INITIAL_INVOICES;
       }
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter((i) => !isSampleInvoice(i));
+        if (cleaned.length !== parsed.length) {
+          this.saveInvoices(cleaned);
+        }
+        return cleaned;
       }
       return INITIAL_INVOICES;
     } catch {
@@ -185,6 +175,7 @@ class InvoiceService {
    * Create an invoice from an appointment (One Door)
    * STRICT IDEMPOTENCY: If an invoice for this appointment already exists (and is not void),
    * returns the existing invoice without creating duplicates!
+   * STRICT AUTOMATION GATE: Block creation unless an invoice automation rule is present!
    */
   public createInvoiceFromAppointment(
     appointment: {
@@ -198,6 +189,12 @@ class InvoiceService {
     lineItems: InvoiceLineItem[] = [],
     options?: CreateInvoiceOptions
   ): { invoice: ClientInvoice; alreadyExisted: boolean } {
+    // 0. Automation Check: Only allow invoice creation if automation rule exists or created by rule / system
+    if (!hasInvoiceAutomation() && options?.createdBy !== "rule" && options?.createdBy !== "system") {
+      console.warn("[InvoiceService] Invoice creation blocked: No invoice automation configured.");
+      return { invoice: null as any, alreadyExisted: false };
+    }
+
     const all = this.getInvoices();
 
     // 1. Idempotency Check: search by appointmentId
@@ -246,8 +243,10 @@ class InvoiceService {
     const total = Math.round((Math.max(0, subtotal - discount) + tax) * 100) / 100;
 
     const nextNumber = 1050 + all.length;
-    const draftStage = this.findStageByCategory("draft") || { id: "inv-1", name: "Draft" };
     const proc = this.getInvoiceProcess();
+    const initialStage = proc.stages[0];
+    const initialStageId = initialStage?.id || "";
+    const initialStageName = initialStage?.name || "";
 
     const newInvoice: ClientInvoice = {
       id: `INV-CL-${nextNumber}`,
@@ -257,8 +256,8 @@ class InvoiceService {
       clientPhone: appointment.clientPhone || "",
       appointmentId: appointment.id ? String(appointment.id) : undefined,
       appointmentTitle: appointment.title || "Scheduled Appointment",
-      currentStageId: draftStage.id,
-      statusLabel: draftStage.name,
+      currentStageId: "",
+      statusLabel: "",
       status: "draft",
       currency: "$",
       lineItems: items,
@@ -279,23 +278,7 @@ class InvoiceService {
     // 3. Save
     this.saveInvoices([newInvoice, ...all]);
 
-    // 4. Log Stage Move
-    logStageMove({
-      orgId: "default",
-      recordType: "invoice",
-      recordId: newInvoice.id,
-      fromStageId: undefined,
-      toStageId: draftStage.id,
-      toStageName: draftStage.name,
-      processId: proc.id,
-      processName: proc.name,
-      cause: {
-        type: options?.createdBy === "system" ? "rule" : "manual",
-        ruleName: "Invoice Generated (Draft)",
-      },
-    });
-
-    // 5. Emit event
+    // 4. Emit event (automations will drive stage move if defined)
     eventBus.emit("invoice.created", "invoice", newInvoice.id, newInvoice);
 
     // Activity log entry
@@ -316,7 +299,8 @@ class InvoiceService {
   }
 
   /**
-   * Send invoice (moves to Sent stage, emits invoice.sent)
+   * Send invoice
+   * Updates status without hardcoding stage. Stage movement is driven by automations on invoice.sent.
    */
   public sendInvoice(
     invoiceId: string,
@@ -326,32 +310,14 @@ class InvoiceService {
     const existing = all.find((i) => i.id === invoiceId);
     if (!existing) return null;
 
-    const previousStageId = existing.currentStageId;
-    const sentStage = this.findStageByCategory("sent") || { id: "inv-2", name: "Sent" };
-    const proc = this.getInvoiceProcess();
-
     const updated: ClientInvoice = {
       ...existing,
-      currentStageId: sentStage.id,
-      statusLabel: sentStage.name,
       status: "sent",
       sentAt: new Date().toISOString(),
       sentVia: channel,
     };
 
     this.saveInvoices(all.map((i) => (i.id === invoiceId ? updated : i)));
-
-    logStageMove({
-      orgId: "default",
-      recordType: "invoice",
-      recordId: invoiceId,
-      fromStageId: previousStageId,
-      toStageId: sentStage.id,
-      toStageName: sentStage.name,
-      processId: proc.id,
-      processName: proc.name,
-      cause: { type: "manual", ruleName: `Invoice Sent via ${channel}` },
-    });
 
     eventBus.emit("invoice.sent", "invoice", invoiceId, updated);
 
@@ -371,20 +337,12 @@ class InvoiceService {
     const existing = all.find((i) => i.id === invoiceId);
     if (!existing) return null;
 
-    const previousStageId = existing.currentStageId;
     const newAmountPaid = parseFloat(((existing.amountPaid || 0) + amount).toFixed(2));
     const isFullyPaid = newAmountPaid >= existing.total;
-
-    const paidStage = this.findStageByCategory("paid") || { id: "inv-5", name: "Paid" };
-    const partialStage = this.findStageByCategory("partially_paid") || { id: "inv-4", name: "Partially Paid" };
-    const targetStage = isFullyPaid ? paidStage : partialStage;
-    const proc = this.getInvoiceProcess();
 
     const updated: ClientInvoice = {
       ...existing,
       amountPaid: newAmountPaid,
-      currentStageId: targetStage.id,
-      statusLabel: targetStage.name,
       status: isFullyPaid ? "paid" : "partial",
       paidAt: isFullyPaid ? new Date().toISOString() : existing.paidAt,
     };
@@ -412,23 +370,10 @@ class InvoiceService {
       localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify([payment, ...pmts]));
     } catch {}
 
-    logStageMove({
-      orgId: "default",
-      recordType: "invoice",
-      recordId: invoiceId,
-      fromStageId: previousStageId,
-      toStageId: targetStage.id,
-      toStageName: targetStage.name,
-      processId: proc.id,
-      processName: proc.name,
-      cause: {
-        type: "manual",
-        ruleName: isFullyPaid ? `Payment Completed ($${amount.toFixed(2)})` : `Partial Payment Recorded ($${amount.toFixed(2)})`,
-      },
-    });
-
     if (isFullyPaid) {
       eventBus.emit("invoice.paid", "invoice", invoiceId, { ...updated, payment });
+    } else {
+      eventBus.emit("invoice.partially_paid", "invoice", invoiceId, { ...updated, payment });
     }
 
     addActivityEntry({
@@ -440,7 +385,7 @@ class InvoiceService {
       refId: invoiceId,
       details: {
         primary: `Payment of $${amount.toFixed(2)} received for ${invoiceId}`,
-        secondary: `Status: ${targetStage.name} | Total balance: $${(existing.total - newAmountPaid).toFixed(2)} remaining`,
+        secondary: `Total balance: $${(existing.total - newAmountPaid).toFixed(2)} remaining`,
       },
     });
 
@@ -508,30 +453,12 @@ class InvoiceService {
     const existing = all.find((i) => i.id === invoiceId);
     if (!existing) return null;
 
-    const previousStageId = existing.currentStageId;
-    const voidStage = this.findStageByCategory("void") || { id: "inv-7", name: "Void" };
-    const proc = this.getInvoiceProcess();
-
     const updated: ClientInvoice = {
       ...existing,
-      currentStageId: voidStage.id,
-      statusLabel: voidStage.name,
       status: "void",
     };
 
     this.saveInvoices(all.map((i) => (i.id === invoiceId ? updated : i)));
-
-    logStageMove({
-      orgId: "default",
-      recordType: "invoice",
-      recordId: invoiceId,
-      fromStageId: previousStageId,
-      toStageId: voidStage.id,
-      toStageName: voidStage.name,
-      processId: proc.id,
-      processName: proc.name,
-      cause: { type: "manual", ruleName: "Invoice Voided" },
-    });
 
     eventBus.emit("invoice.voided", "invoice", invoiceId, updated);
 
