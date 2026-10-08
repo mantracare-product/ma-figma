@@ -32,6 +32,9 @@ import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "..
 import { getStagesForProcess } from "../components/ui/ProcessStageSelect";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
+import { CHEVRON_PALETTE } from "../components/common/ChevronStageRibbon";
+import { logStageMove } from "../../lib/useAutomationStore";
+import { appendActivity } from "../../lib/activityEngine";
 
 interface CallLog {
   id: string;
@@ -856,17 +859,19 @@ export default function Deals() {
 
   // Comprehensive stage pipeline (dynamically including all processes built in the Processes / client entity)
   const stagePipeline = useMemo(() => {
-    const dynamicItems: Array<{ id: number | string; label: string; fullLabel: string; category: string }> = [];
+    const dynamicItems: Array<{ id: number | string; label: string; fullLabel: string; category: string; color?: string; isFinalStage?: boolean }> = [];
     let counter = 1;
 
     clientProcesses.forEach((proc) => {
       if (proc.stages && proc.stages.length > 0) {
-        proc.stages.forEach((stg) => {
+        proc.stages.forEach((stg, sIdx) => {
           dynamicItems.push({
             id: stg.id || `stg-${counter++}`,
             label: stg.name,
             fullLabel: `${proc.name}: ${stg.name}`,
             category: proc.name,
+            color: stg.color || CHEVRON_PALETTE[sIdx % CHEVRON_PALETTE.length],
+            isFinalStage: Boolean(stg.isFinalStage || stg.isFinal),
           });
         });
       }
@@ -874,16 +879,16 @@ export default function Deals() {
 
     const categoriesWithStages = new Set(dynamicItems.map((d) => d.category));
     const fallbackDefaults = [
-      { id: 101, label: "Initial Contact", fullLabel: "Client Intake: Initial Contact", category: "Client Intake" },
-      { id: 102, label: "Contacted", fullLabel: "Client Intake: Contacted", category: "Client Intake" },
-      { id: 103, label: "Interested", fullLabel: "Client Intake: Interested", category: "Client Intake" },
-      { id: 104, label: "Call Back Later", fullLabel: "Client Intake: Call Back Later", category: "Client Intake" },
-      { id: 105, label: "Not Interested", fullLabel: "Client Intake: Not Interested", category: "Client Intake" },
-      { id: 201, label: "Outreach", fullLabel: "Client Reactivation: Outreach", category: "Client Reactivation" },
-      { id: 202, label: "Contacted", fullLabel: "Client Reactivation: Contacted", category: "Client Reactivation" },
-      { id: 203, label: "Reactivated", fullLabel: "Client Reactivation: Reactivated", category: "Client Reactivation" },
-      { id: 204, label: "Call Back Later", fullLabel: "Client Reactivation: Call Back Later", category: "Client Reactivation" },
-      { id: 205, label: "Lost", fullLabel: "Client Reactivation: Lost", category: "Client Reactivation" },
+      { id: 101, label: "Initial Contact", fullLabel: "Client Intake: Initial Contact", category: "Client Intake", color: "#3B82F6", isFinalStage: false },
+      { id: 102, label: "Contacted", fullLabel: "Client Intake: Contacted", category: "Client Intake", color: "#06B6D4", isFinalStage: false },
+      { id: 103, label: "Interested", fullLabel: "Client Intake: Interested", category: "Client Intake", color: "#22C55E", isFinalStage: true },
+      { id: 104, label: "Not Interested", fullLabel: "Client Intake: Not Interested", category: "Client Intake", color: "#EF4444", isFinalStage: true },
+      { id: 105, label: "Call Back Later", fullLabel: "Client Intake: Call Back Later", category: "Client Intake", color: "#F59E0B", isFinalStage: true },
+      { id: 201, label: "Outreach", fullLabel: "Client Reactivation: Outreach", category: "Client Reactivation", color: "#3B82F6", isFinalStage: false },
+      { id: 202, label: "Contacted", fullLabel: "Client Reactivation: Contacted", category: "Client Reactivation", color: "#06B6D4", isFinalStage: false },
+      { id: 203, label: "Reactivated", fullLabel: "Client Reactivation: Reactivated", category: "Client Reactivation", color: "#10B981", isFinalStage: true },
+      { id: 204, label: "Call Back Later", fullLabel: "Client Reactivation: Call Back Later", category: "Client Reactivation", color: "#F59E0B", isFinalStage: true },
+      { id: 205, label: "Lost", fullLabel: "Client Reactivation: Lost", category: "Client Reactivation", color: "#EF4444", isFinalStage: true },
     ].filter((item) => !categoriesWithStages.has(item.category));
 
     return [...dynamicItems, ...fallbackDefaults];
@@ -953,30 +958,115 @@ export default function Deals() {
 
   const dealStageLabels = ["New", "Can't Contact", "Follow-up Later", "Interested", "Close Deal"];
 
-  const getStagesListForProcess = (processName: string, currentStageName?: string): string[] => {
-    if (!processName) return currentStageName ? [currentStageName] : [];
+  const getStageObjectsForProcess = (processName: string, currentStageName?: string): Array<{
+    id: string;
+    name: string;
+    color: string;
+    isFinalStage?: boolean;
+    isInitial?: boolean;
+  }> => {
+    if (!processName) {
+      return currentStageName
+        ? [{ id: "1", name: currentStageName, color: CHEVRON_PALETTE[0] }]
+        : [];
+    }
     const cleanName = processName.trim().toLowerCase();
 
-    // 1. Direct match in Process Settings stored processes
+    // 1. Direct match in Process Settings stored processes (workflow processes)
     const foundProc = storedProcesses.find(
       (p) => p.name.trim().toLowerCase() === cleanName || p.id === processName
     );
     if (foundProc && foundProc.stages && foundProc.stages.length > 0) {
-      return foundProc.stages.map((s) => s.name);
+      return foundProc.stages.map((s, idx) => ({
+        id: s.id || `stg-${idx}`,
+        name: s.name,
+        color: s.color || CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
+        isFinalStage: Boolean(s.isFinalStage || s.isFinal),
+        isInitial: s.isInitial,
+      }));
     }
 
     // 2. getStagesForProcess fallback
     const options = getStagesForProcess(processName);
     if (options && options.length > 0) {
-      return options.map((o) => o.label);
+      return options.map((o, idx) => ({
+        id: `stg-${idx}`,
+        name: o.label,
+        color: CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
+        isFinalStage: idx === options.length - 1,
+      }));
     }
 
     // 3. If single stage known for this row
     if (currentStageName) {
       const clean = currentStageName.includes(":") ? currentStageName.split(":")[1].trim() : currentStageName.trim();
-      return [clean];
+      return [{ id: "1", name: clean, color: CHEVRON_PALETTE[0] }];
     }
     return [];
+  };
+
+  const getStagesListForProcess = (processName: string, currentStageName?: string): string[] => {
+    return getStageObjectsForProcess(processName, currentStageName).map((s) => s.name);
+  };
+
+  const triggerStageMoveAutomation = ({
+    clientId,
+    clientName,
+    processName,
+    fromStageName,
+    toStageName,
+    cause = "manual",
+  }: {
+    clientId: string;
+    clientName: string;
+    processName: string;
+    fromStageName?: string;
+    toStageName: string;
+    cause?: "manual" | "rule";
+  }) => {
+    const procObj = storedProcesses.find(
+      (p) => p.name.trim().toLowerCase() === (processName || "").trim().toLowerCase() || p.id === processName
+    );
+    const fromStageObj = procObj?.stages?.find(
+      (s) => s.name.toLowerCase() === (fromStageName || "").toLowerCase() || s.id === fromStageName
+    );
+    const toStageObj = procObj?.stages?.find(
+      (s) => s.name.toLowerCase() === toStageName.toLowerCase() || s.id === toStageName
+    );
+
+    const orgIdStr = typeof activeOrganization === "string" ? activeOrganization : (activeOrganization as any)?.id || "default";
+
+    const moveResult = logStageMove({
+      orgId: orgIdStr,
+      recordType: (procObj?.entityType as any) || "client",
+      recordId: clientId || clientName,
+      fromStageId: fromStageObj?.id,
+      fromStageName: fromStageObj?.name || fromStageName,
+      toStageId: toStageObj?.id || toStageName,
+      toStageName: toStageObj?.name || toStageName,
+      processId: procObj?.id || processName,
+      processName: procObj?.name || processName,
+      cause: {
+        type: cause,
+        ruleName: `Stage changed to ${toStageName} from /deals`,
+      },
+    });
+
+    appendActivity({
+      clientId: clientId || clientName,
+      processId: procObj?.id || processName,
+      processName: procObj?.name || processName,
+      type: "stage_change",
+      fromStage: fromStageName || "Initial",
+      toStage: toStageName,
+      createdBy: "user",
+      details: {
+        primary: `Stage moved to ${toStageName}`,
+        secondary: fromStageName ? `From ${fromStageName} → ${toStageName}` : `Current stage: ${toStageName}`,
+      },
+    } as any);
+
+    return moveResult;
   };
 
   const getStageIndexForProcess = (processName: string, stageName: string): number => {
@@ -1521,6 +1611,81 @@ export default function Deals() {
     }
   };
 
+  const handleUpdateLogStage = (log: CallLog, stageName: string) => {
+    const clientObj = getClientObj(log.clientId, log.client);
+    const currentValues = {
+      client_name: log.client,
+      phone: clientObj?.phone || "9667283405",
+      email: clientObj?.email || "anshul@mantracare.com",
+      ...(clientObj || {}),
+      ...(log || {}),
+    };
+    const procFields = getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process);
+    const missing = getMissingRequiredProcessFields({
+      processId: (log as any)?.processId,
+      processName: log.process,
+      currentStageName: stageName,
+      allFields: procFields,
+      fieldValues: currentValues,
+    });
+
+    if (missing.length > 0) {
+      setRequiredFieldsModalState({
+        isOpen: true,
+        clientName: log.client,
+        clientId: log.clientId,
+        processName: log.process,
+        processId: (log as any)?.processId,
+        targetStageName: stageName,
+        missingFields: missing,
+        initialValues: currentValues,
+        onConfirm: (filledValues) => {
+          const oldStage = log.currentStage;
+          const updatedLog = { ...log, ...filledValues, currentStage: stageName };
+          setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
+          saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
+          updateProcessCallLogStage(log.clientId, log.process, stageName);
+          setDeals((prev) =>
+            prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
+          );
+          if (selectedLogForView && selectedLogForView.id === log.id) {
+            setSelectedLogForView(updatedLog);
+          }
+          triggerStageMoveAutomation({
+            clientId: log.clientId,
+            clientName: log.client,
+            processName: log.process,
+            fromStageName: oldStage,
+            toStageName: stageName,
+          });
+          setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
+          toast.success(`Stage moved to ${stageName} with required fields saved ✓`);
+        },
+      });
+      return;
+    }
+
+    const oldStage = log.currentStage;
+    const updatedLog = { ...log, currentStage: stageName };
+    setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
+    saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
+    updateProcessCallLogStage(log.clientId, log.process, stageName);
+    setDeals((prev) =>
+      prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
+    );
+    if (selectedLogForView && selectedLogForView.id === log.id) {
+      setSelectedLogForView(updatedLog);
+    }
+    triggerStageMoveAutomation({
+      clientId: log.clientId,
+      clientName: log.client,
+      processName: log.process,
+      fromStageName: oldStage,
+      toStageName: stageName,
+    });
+    toast.success(`Stage moved to ${stageName} ✓`);
+  };
+
   const dealColumns: TableColumn<CallLog>[] = [
     {
       key: "client",
@@ -1543,78 +1708,57 @@ export default function Deals() {
       key: "currentStage",
       header: "Stage",
       render: (log) => {
-        const stagesList = getStagesListForProcess(log.process, log.currentStage);
+        const stageObjs = getStageObjectsForProcess(log.process, log.currentStage);
         const activeIdx = getStageIndexForProcess(log.process, log.currentStage);
+        const cleanCurrentStage = (log.currentStage || "").includes(":")
+          ? log.currentStage.split(":")[1].trim().toLowerCase()
+          : (log.currentStage || "").trim().toLowerCase();
+
+        const currentStageObj = stageObjs.find((s) => s.name.trim().toLowerCase() === cleanCurrentStage);
+        const isCurrentFinal = Boolean(currentStageObj?.isFinalStage);
+        const lastSequentialIdx = stageObjs.reduce((acc, s, idx) => (!s.isFinalStage ? idx + 1 : acc), 0);
+
         return (
           <div className="flex items-center justify-center gap-[3px]">
-            {stagesList.map((stageName, i) => {
+            {stageObjs.map((stg, i) => {
+              const stageName = stg.name;
+              const stageColor = stg.color || CHEVRON_PALETTE[i % CHEVRON_PALETTE.length];
               const segIdx = i + 1;
-              const isCompleted = segIdx < activeIdx;
-              const isActive = segIdx === activeIdx;
+              const isThisFinal = Boolean(stg.isFinalStage);
+
+              let isCompleted = false;
+              let isActive = false;
+
+              if (segIdx === activeIdx) {
+                isActive = true;
+              } else if (isCurrentFinal) {
+                if (!isThisFinal && segIdx <= lastSequentialIdx) {
+                  isCompleted = true;
+                }
+              } else {
+                if (!isThisFinal && segIdx < activeIdx) {
+                  isCompleted = true;
+                }
+              }
+
               const isHovered = hoveredStageSegment?.logId === log.id && hoveredStageSegment?.segIdx === segIdx;
               return (
-                <div key={stageName} className="relative">
+                <div key={stg.id || stageName} className="relative">
                   {isHovered && (
                     <div
-                      className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 pointer-events-none rounded-none"
-                      style={{ backgroundColor: '#1A2B4A', color: '#fff', fontSize: '12px', zIndex: 200 }}
+                      className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-1 pointer-events-none rounded shadow-md z-[200] flex items-center gap-1.5"
+                      style={{ backgroundColor: '#1A2B4A', color: '#fff', fontSize: '12px' }}
                     >
-                      {stageName}
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stageColor }} />
+                      <span>{stageName}</span>
+                      {isActive && <span className="text-[10px] text-blue-300 font-semibold">(Current)</span>}
                     </div>
                   )}
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const clientObj = getClientObj(log.clientId, log.client);
-                      const currentValues = {
-                        client_name: log.client,
-                        phone: clientObj?.phone || "9667283405",
-                        email: clientObj?.email || "anshul@mantracare.com",
-                        ...(clientObj || {}),
-                        ...(log || {}),
-                      };
-                      const procFields = getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process);
-                      const missing = getMissingRequiredProcessFields({
-                        processId: (log as any)?.processId,
-                        processName: log.process,
-                        currentStageName: stageName,
-                        allFields: procFields,
-                        fieldValues: currentValues,
-                      });
-
-                      if (missing.length > 0) {
-                        setRequiredFieldsModalState({
-                          isOpen: true,
-                          clientName: log.client,
-                          clientId: log.clientId,
-                          processName: log.process,
-                          processId: (log as any)?.processId,
-                          targetStageName: stageName,
-                          missingFields: missing,
-                          initialValues: currentValues,
-                          onConfirm: (filledValues) => {
-                            const updatedLog = { ...log, ...filledValues, currentStage: stageName };
-                            setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
-                            saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
-                            updateProcessCallLogStage(log.clientId, log.process, stageName);
-                            setDeals((prev) =>
-                              prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
-                            );
-                            setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
-                            toast.success(`Stage moved to ${stageName} with required fields saved ✓`);
-                          },
-                        });
-                        return;
-                      }
-
-                      const updatedLog = { ...log, currentStage: stageName };
-                      setCallLogs(prev => prev.map(l => l.id === log.id ? updatedLog : l));
-                      saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
-                      updateProcessCallLogStage(log.clientId, log.process, stageName);
-                      setDeals(prev =>
-                        prev.map(d => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
-                      );
-                      toast.success(`Stage moved to ${stageName} ✓`);
+                      handleUpdateLogStage(log, stageName);
                     }}
                     onMouseEnter={() => setHoveredStageSegment({ logId: log.id, segIdx })}
                     onMouseLeave={() => setHoveredStageSegment(null)}
@@ -1622,14 +1766,16 @@ export default function Deals() {
                       width: '18px',
                       height: '8px',
                       borderRadius: '0px',
-                      backgroundColor: (isCompleted || isActive) ? '#1E88E5' : 'transparent',
-                      border: (isCompleted || isActive) ? 'none' : '1px solid #E8ECF0',
+                      backgroundColor: (isCompleted || isActive) ? stageColor : 'transparent',
+                      border: (isCompleted || isActive) ? `1px solid ${stageColor}` : '1px solid #CBD5E1',
+                      opacity: isActive ? 1 : isCompleted ? 0.75 : 0.45,
                       cursor: 'pointer',
                       display: 'block',
                       padding: 0,
                       flexShrink: 0,
-                      transition: 'background-color 0.2s ease',
+                      transition: 'all 0.2s ease',
                     }}
+                    title={`${stageName}${isActive ? ' (Current)' : ''}`}
                   />
                 </div>
               );
@@ -2609,8 +2755,18 @@ export default function Deals() {
                                   const updatedLog = { ...matchingLog, ...filledValues, currentStage: stageClean };
                                   setCallLogs((prev) => prev.map((l) => (l.id === matchingLog.id ? updatedLog : l)));
                                   saveCallLogs(getStoredCallLogs().map((l) => (l.id === matchingLog.id ? updatedLog : l)));
+                                  if (selectedLogForView && selectedLogForView.id === matchingLog.id) {
+                                    setSelectedLogForView(updatedLog);
+                                  }
                                 }
                                 updateProcessCallLogStage(clientId, procName, stageClean);
+                                triggerStageMoveAutomation({
+                                  clientId,
+                                  clientName: targetDeal.clientName,
+                                  processName: procName,
+                                  fromStageName: targetDeal.stage.split(":")[1]?.trim() || targetDeal.stage,
+                                  toStageName: stageClean,
+                                });
                                 setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
                                 toast.success(`Deal moved to ${stage.fullLabel} with required fields saved ✓`);
                               },
@@ -2630,7 +2786,17 @@ export default function Deals() {
                             const updatedLog = { ...matchingLog, currentStage: stageClean };
                             setCallLogs((prev) => prev.map((l) => (l.id === matchingLog.id ? updatedLog : l)));
                             saveCallLogs(getStoredCallLogs().map((l) => (l.id === matchingLog.id ? updatedLog : l)));
+                            if (selectedLogForView && selectedLogForView.id === matchingLog.id) {
+                              setSelectedLogForView(updatedLog);
+                            }
                           }
+                          triggerStageMoveAutomation({
+                            clientId,
+                            clientName: targetDeal.clientName,
+                            processName: procName,
+                            fromStageName: targetDeal.stage.split(":")[1]?.trim() || targetDeal.stage,
+                            toStageName: stageClean,
+                          });
                           toast.success(`Deal moved to ${stage.fullLabel} ✓`);
                         }
                         setDraggedDealId(null);
@@ -2638,14 +2804,17 @@ export default function Deals() {
                     }}
                   >
                     {/* Column header */}
-                    <div className="px-3 py-3" style={{ backgroundColor: '#1C2B4A' }}>
+                    <div className="px-3 py-3 relative" style={{ backgroundColor: '#1C2B4A', borderTop: `3px solid ${stage.color || '#3B82F6'}` }}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-white font-bold" style={{ fontSize: '14px', fontFamily: 'Outfit, sans-serif' }}>
-                          {stage.label}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color || '#3B82F6' }} />
+                          <span className="text-white font-bold truncate" style={{ fontSize: '14px', fontFamily: 'Outfit, sans-serif' }}>
+                            {stage.label}
+                          </span>
+                        </div>
                         <div
-                          className="px-2 py-0.5 rounded-full text-xs font-semibold"
-                          style={{ backgroundColor: '#06B6D4', color: '#FFFFFF', minWidth: '20px', textAlign: 'center' }}
+                          className="px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0 ml-1"
+                          style={{ backgroundColor: stage.color || '#06B6D4', color: '#FFFFFF', minWidth: '20px', textAlign: 'center' }}
                         >
                           {stageDeals.length}
                         </div>
@@ -3736,15 +3905,26 @@ export default function Deals() {
         onStageChange={(idx) => {
           if (!selectedLogForView) return;
           const newStage = getDealStageFromIndex(idx, selectedLogForView.process);
+          const oldStage = selectedLogForView.currentStage;
           setDrawerStageIdx(idx);
           toast.success(`Stage updated to ${newStage} ✓`);
+          const updatedLog = { ...selectedLogForView, currentStage: newStage };
+          setSelectedLogForView(updatedLog);
           setCallLogs((prev) =>
-            prev.map((l) => (l.id === selectedLogForView.id ? { ...l, currentStage: newStage } : l))
+            prev.map((l) => (l.id === selectedLogForView.id ? updatedLog : l))
           );
+          saveCallLogs(getStoredCallLogs().map((l) => (l.id === selectedLogForView.id ? updatedLog : l)));
           updateProcessCallLogStage(selectedLogForView.clientId, selectedLogForView.process, newStage);
           setDeals((allDeals) =>
             allDeals.map((d) => (d.clientName === selectedLogForView.client ? { ...d, stage: `${selectedLogForView.process}: ${newStage}` } : d))
           );
+          triggerStageMoveAutomation({
+            clientId: selectedLogForView.clientId,
+            clientName: selectedLogForView.client,
+            processName: selectedLogForView.process,
+            fromStageName: oldStage,
+            toStageName: newStage,
+          });
         }}
         visibleFieldKeys={drawerVisibleFields}
         onVisibleFieldKeysChange={(keys) => {

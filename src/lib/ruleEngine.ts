@@ -22,23 +22,67 @@ const executedIdempotencyKeys = new Set<string>();
 /**
  * Check if condition matches event data / record properties
  */
-export function evaluateCondition(condition: AutomationCondition, data: Record<string, any> = {}): boolean {
-  const actualValue = data[condition.field];
-  const targetValue = condition.value;
+export function evaluateCondition(condition: any, data: Record<string, any> = {}): boolean {
+  if (!condition) return true;
+  const fieldKey = condition.field || condition.fieldToFilter || condition.fieldKey || "";
+  if (!fieldKey) return true;
 
-  switch (condition.op) {
+  // Resolve actual value from event data
+  let actualValue = data[fieldKey];
+  if (actualValue === undefined && fieldKey.includes(".")) {
+    const parts = fieldKey.split(".");
+    actualValue = data[parts[parts.length - 1]];
+  }
+  if (actualValue === undefined) {
+    const lowerKey = fieldKey.toLowerCase();
+    const shortKey = fieldKey.includes(".") ? fieldKey.split(".").pop()?.toLowerCase() : lowerKey;
+    const foundKey = Object.keys(data).find(
+      (k) => k.toLowerCase() === lowerKey || (shortKey && k.toLowerCase() === shortKey)
+    );
+    if (foundKey) actualValue = data[foundKey];
+  }
+
+  const op = (condition.op || condition.operator || "equals").toLowerCase();
+  const targetValue = condition.value ?? condition.filterValue ?? condition.targetValue ?? "";
+
+  switch (op) {
     case "equals":
-      return String(actualValue ?? "").toLowerCase() === String(targetValue ?? "").toLowerCase();
+    case "equal_to":
+    case "is":
+      return String(actualValue ?? "").trim().toLowerCase() === String(targetValue ?? "").trim().toLowerCase();
     case "not_equals":
-      return String(actualValue ?? "").toLowerCase() !== String(targetValue ?? "").toLowerCase();
+    case "not_equal_to":
+    case "is_not":
+      return String(actualValue ?? "").trim().toLowerCase() !== String(targetValue ?? "").trim().toLowerCase();
     case "contains":
+    case "includes":
       return String(actualValue ?? "").toLowerCase().includes(String(targetValue ?? "").toLowerCase());
+    case "not_contains":
+      return !String(actualValue ?? "").toLowerCase().includes(String(targetValue ?? "").toLowerCase());
+    case "starts_with":
+      return String(actualValue ?? "").toLowerCase().startsWith(String(targetValue ?? "").toLowerCase());
+    case "ends_with":
+      return String(actualValue ?? "").toLowerCase().endsWith(String(targetValue ?? "").toLowerCase());
     case "greater_than":
+    case "gt":
       return Number(actualValue) > Number(targetValue);
     case "less_than":
+    case "lt":
       return Number(actualValue) < Number(targetValue);
+    case "greater_than_or_equal":
+    case "gte":
+      return Number(actualValue) >= Number(targetValue);
+    case "less_than_or_equal":
+    case "lte":
+      return Number(actualValue) <= Number(targetValue);
+    case "is_empty":
+    case "empty":
+      return actualValue === undefined || actualValue === null || String(actualValue).trim() === "";
+    case "is_not_empty":
+    case "not_empty":
+      return actualValue !== undefined && actualValue !== null && String(actualValue).trim() !== "";
     default:
-      return true;
+      return String(actualValue ?? "").trim().toLowerCase() === String(targetValue ?? "").trim().toLowerCase();
   }
 }
 
@@ -206,10 +250,20 @@ export async function executeRulesForEvent(
       continue;
     }
 
-    // 4. Evaluate Conditions
+    // 4. Evaluate Conditions & Trigger Conditions
     let conditionsPass = true;
     if (rule.conditions && rule.conditions.length > 0) {
       for (const cond of rule.conditions) {
+        if (!evaluateCondition(cond, event.data || {})) {
+          conditionsPass = false;
+          break;
+        }
+      }
+    }
+
+    const triggerConditions = rule.trigger.params?.triggerConditions || [];
+    if (conditionsPass && Array.isArray(triggerConditions) && triggerConditions.length > 0) {
+      for (const cond of triggerConditions) {
         if (!evaluateCondition(cond, event.data || {})) {
           conditionsPass = false;
           break;
@@ -284,6 +338,47 @@ export async function executeRulesForEvent(
     const allActions = flattenRuleSteps(rule.actions || []);
     for (const act of allActions) {
       const stepKey = (act.stepKey || "").toLowerCase();
+
+      // Condition Step Node: Gate downstream steps behind condition rules
+      if (stepKey === "condition") {
+        const rules = act.params?.conditionRules || [];
+        if (Array.isArray(rules) && rules.length > 0) {
+          const pass = rules.every((r: any) => evaluateCondition(r, event.data || {}));
+          if (!pass) {
+            console.log(`[RuleEngine] Condition step "${act.name || act.id}" evaluated to false. Halting flow for rule "${rule.name}".`);
+            break;
+          }
+        }
+      }
+
+      // Action: Field Update
+      if (stepKey === "fieldupdate" || stepKey === "field-update" || stepKey === "field_update") {
+        const blocks = act.params?.fieldUpdateBlocks || [];
+        if (Array.isArray(blocks) && blocks.length > 0) {
+          for (const block of blocks) {
+            const fieldKey = block.fieldToEdit || block.field;
+            const updateVal = block.updateValue !== undefined ? block.updateValue : block.value;
+            if (fieldKey) {
+              if (event.data) {
+                event.data[fieldKey] = updateVal;
+              }
+              appendActivity({
+                type: "field_update",
+                clientId: String(event.recordId),
+                processId: "general",
+                processName: "Field Update Automation",
+                timestamp: new Date().toISOString(),
+                fieldLabel: block.fieldLabel || fieldKey,
+                newValue: String(updateVal),
+                details: {
+                  primary: `Field ${block.fieldLabel || fieldKey} updated to "${updateVal}"`,
+                  secondary: `Via rule "${rule.name}"`,
+                },
+              });
+            }
+          }
+        }
+      }
 
       // Action: Update Stage / Move To Stage
       if (

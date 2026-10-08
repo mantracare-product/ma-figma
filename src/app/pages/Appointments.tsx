@@ -27,9 +27,11 @@ import {
   LayoutGrid,
   List,
   CalendarClock,
+  Check,
 } from "lucide-react";
 import { appointmentService, hasAppointmentAutomation } from "../../lib/appointmentService";
-import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage } from "../../lib/useProcessStore";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, isProcessMatchingOrg } from "../../lib/useProcessStore";
+import { useOrganization } from "../context/OrganizationContext";
 import { appendActivity } from "../../lib/activityEngine";
 import { logStageMove } from "../../lib/useAutomationStore";
 import PageHeader from "../components/layout/PageHeader";
@@ -100,6 +102,7 @@ export default function Appointments() {
   const navigate = useNavigate();
   const { invoices, createInvoiceFromAppointment, voidInvoice } = useInvoices();
   const { bookableMembers, teamMembers } = useTeamMembers();
+  const { activeOrganization } = useOrganization();
 
   // Dynamic bookable employees list
   const employees: Employee[] = useMemo(() => {
@@ -153,16 +156,51 @@ export default function Appointments() {
   const [selectedAppointmentForDrawer, setSelectedAppointmentForDrawer] = useState<Appointment | null>(null);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
 
-  // Dynamic appointment process and workflow stages
-  const appointmentProcess: Process = useMemo(() => {
+  // Process filter state for topbar - starts from the process directly, no "all"
+  const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>("");
+  const [showProcessesDropdown, setShowProcessesDropdown] = useState<boolean>(false);
+
+  // Dynamic scoped appointment processes based on client organization (category, industry, location)
+  const appointmentProcesses: Process[] = useMemo(() => {
     const procs = getStoredProcesses();
-    const found = procs.find((p) => p.entityType === "appointment");
-    return found || DEFAULT_ENTITY_PROCESSES.appointment;
-  }, []);
+    const apptProcs = procs.filter((p) => p.entityType === "appointment");
+    if (activeOrganization) {
+      const scoped = apptProcs.filter((p) => isProcessMatchingOrg(p, activeOrganization));
+      if (scoped.length > 0) return scoped;
+    }
+    return apptProcs.length > 0 ? apptProcs : [DEFAULT_ENTITY_PROCESSES.appointment];
+  }, [activeOrganization]);
+
+  // Auto-select first process if none selected or invalid
+  useEffect(() => {
+    if (appointmentProcesses.length > 0) {
+      if (!selectedProcessFilter || selectedProcessFilter === "all" || !appointmentProcesses.some((p) => p.id === selectedProcessFilter)) {
+        setSelectedProcessFilter(appointmentProcesses[0].id);
+      }
+    }
+  }, [appointmentProcesses, selectedProcessFilter]);
+
+  // Active appointment process (or selected process) for stages and execution
+  const appointmentProcess: Process = useMemo(() => {
+    if (selectedProcessFilter && selectedProcessFilter !== "all") {
+      const found = appointmentProcesses.find((p) => p.id === selectedProcessFilter);
+      if (found) return found;
+    }
+    return appointmentProcesses[0] || DEFAULT_ENTITY_PROCESSES.appointment;
+  }, [appointmentProcesses, selectedProcessFilter]);
 
   const appointmentWorkflowStages: Stage[] = useMemo(() => {
     return appointmentProcess.stages || DEFAULT_ENTITY_PROCESSES.appointment.stages;
   }, [appointmentProcess]);
+
+  // Dynamic process stages map for ScheduleAppointmentDrawer
+  const dynamicProcessStages = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    appointmentProcesses.forEach((p) => {
+      map[p.name] = (p.stages || []).map((s) => s.name);
+    });
+    return Object.keys(map).length > 0 ? map : processStages;
+  }, [appointmentProcesses]);
 
   const handleQuickStageChange = (apt: Appointment, targetStage: Stage) => {
     let newStatus: Appointment["status"] = apt.status;
@@ -558,6 +596,8 @@ export default function Appointments() {
         clientId: selectedClient.id ? String(selectedClient.id) : undefined,
         location: bookingLocation,
         sessionType,
+        processId: bookingProcessId || appointmentProcess.id,
+        stageId: bookingStageId || undefined,
         generateInvoice: bookingGenerateInvoice,
         lineItems: bookingLineItems && bookingLineItems.length > 0 ? bookingLineItems : undefined,
         source: "screen",
@@ -777,7 +817,12 @@ export default function Appointments() {
       (apt.statusLabel && apt.statusLabel.toLowerCase() === stageFilter.toLowerCase()) ||
       apt.status === stageFilter;
 
-    return matchesSearch && matchesEmployee && matchesTab && matchesStage;
+    const matchesProcess =
+      selectedProcessFilter === "all" ||
+      apt.processId === selectedProcessFilter ||
+      (!apt.processId && appointmentProcess.stages.some((s) => s.id === apt.currentStageId || s.id === apt.stageId));
+
+    return matchesSearch && matchesEmployee && matchesTab && matchesStage && matchesProcess;
   });
 
   const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentDate);
@@ -866,6 +911,56 @@ export default function Appointments() {
 
         {/* Unified Search & Controls Toolbar powered by PageTopBar */}
         <PageTopBar
+          leftElement={
+            <div className="flex items-center gap-1.5">
+              {/* Process Filter Dropdown */}
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors cursor-pointer"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  title="Select Process"
+                >
+                  <span className="truncate max-w-[160px] font-semibold text-gray-800">
+                    {appointmentProcesses.find((p) => p.id === selectedProcessFilter)?.name || appointmentProcesses[0]?.name || "Select Process"}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                </button>
+
+                {showProcessesDropdown && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowProcessesDropdown(false)}
+                    />
+                    <div className="absolute top-full left-0 mt-1.5 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                      {appointmentProcesses.map((proc) => (
+                        <button
+                          key={proc.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedProcessFilter(proc.id);
+                            setStageFilter("all");
+                            setShowProcessesDropdown(false);
+                          }}
+                          className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                            selectedProcessFilter === proc.id ? "bg-blue-50/80 text-blue-600 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                          }`}
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          <span className="truncate">{proc.name}</span>
+                          {selectedProcessFilter === proc.id && (
+                            <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          }
           modes={[
             { id: "list", label: "List", icon: <List className="w-3.5 h-3.5" /> },
             { id: "calendar", label: "Calendar", icon: <CalendarIcon className="w-3.5 h-3.5" /> },
@@ -893,20 +988,6 @@ export default function Appointments() {
             })),
           ]}
           filterFields={[
-            {
-              id: "stage",
-              label: "Stage",
-              type: "select",
-              options: [
-                { label: `All Stages (${statsSource.length})`, value: "all" },
-                ...appointmentProcess.stages.map((stg) => ({
-                  label: `${stg.name} (${statsSource.filter((a) => a.currentStageId === stg.id || a.status === stg.systemCategory).length})`,
-                  value: stg.id,
-                })),
-              ],
-              value: stageFilter,
-              onChange: (v) => setStageFilter(v),
-            },
             ...(devUserRole !== "provider"
               ? [
                   {
@@ -923,43 +1004,6 @@ export default function Appointments() {
                 ]
               : []),
           ]}
-          secondaryActions={
-            view !== "availability" ? (
-              <div className="flex items-center gap-2">
-                <select
-                  value={stageFilter}
-                  onChange={(e) => setStageFilter(e.target.value)}
-                  className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                  title="Filter by Stage"
-                >
-                  <option value="all">All Stages ({statsSource.length})</option>
-                  {appointmentProcess.stages.map((stg) => (
-                    <option key={stg.id} value={stg.id}>
-                      {stg.name} ({statsSource.filter((a) => a.currentStageId === stg.id || a.status === stg.systemCategory).length})
-                    </option>
-                  ))}
-                </select>
-
-                {devUserRole !== "provider" && (
-                  <select
-                    value={selectedEmployee}
-                    onChange={(e) => setSelectedEmployee(e.target.value === "all" ? "all" : Number(e.target.value))}
-                    className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                    title="Filter by Provider"
-                  >
-                    <option value="all">All Providers</option>
-                    {employees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            ) : null
-          }
           primaryAction={{
             label: "Book Appointment",
             onClick: () => {
@@ -1302,7 +1346,7 @@ export default function Appointments() {
         onSave={handleBookingComplete}
         employees={employees}
         clients={clients}
-        processStages={processStages}
+        processStages={dynamicProcessStages}
         customFields={appointmentCustomFields}
         visibleCustomFieldKeys={apptVisibleFieldKeys}
         customFieldValues={customFieldValues}

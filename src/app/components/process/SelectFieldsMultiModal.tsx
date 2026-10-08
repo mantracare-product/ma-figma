@@ -18,6 +18,7 @@ export interface SelectFieldsMultiModalProps {
   title?: string;
   subtitle?: string;
   scopingRules?: ScopingRule[];
+  singleSelect?: boolean;
 }
 
 export default function SelectFieldsMultiModal({
@@ -28,6 +29,7 @@ export default function SelectFieldsMultiModal({
   title = "Select Fields",
   subtitle = "Select fields to watch for changes",
   scopingRules,
+  singleSelect = false,
 }: SelectFieldsMultiModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedKeys, setSelectedKeys] = useState<string[]>(initialSelectedKeys);
@@ -50,13 +52,27 @@ export default function SelectFieldsMultiModal({
       const allModuleFields = getAllFields(module);
       const scopedFields = (scopingRules && scopingRules.length > 0)
         ? allModuleFields.filter((f) => {
-            const firstRule = scopingRules[0];
-            const scopeOrg = {
-              industryCategory: firstRule.industryCategory,
-              industry: firstRule.industries?.[0],
-              location: firstRule.locations?.[0],
-            };
-            return isFieldMatchingOrg(f, scopeOrg);
+            return scopingRules.some((rule) => {
+              const cat = rule.industryCategory;
+              const industries = (rule.industries && rule.industries.length > 0) ? rule.industries : [undefined];
+              const locations = (rule.locations && rule.locations.length > 0) ? rule.locations : [undefined];
+
+              if (!cat && industries.every((i) => !i || i === "All") && locations.every((l) => !l || l === "All")) {
+                return true;
+              }
+
+              return industries.some((ind) =>
+                locations.some((loc) => {
+                  const scopeOrg = {
+                    industryCategory: cat,
+                    industry: ind,
+                    location: loc,
+                    locations: rule.locations,
+                  };
+                  return isFieldMatchingOrg(f, scopeOrg);
+                })
+              );
+            });
           })
         : allModuleFields;
 
@@ -86,12 +102,17 @@ export default function SelectFieldsMultiModal({
   };
 
   const handleToggleKey = (key: string) => {
-    setSelectedKeys((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
-    );
+    if (singleSelect) {
+      setSelectedKeys((prev) => (prev.includes(key) ? [] : [key]));
+    } else {
+      setSelectedKeys((prev) =>
+        prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+      );
+    }
   };
 
   const handleSelectAllInGroup = (keys: string[]) => {
+    if (singleSelect) return;
     const allSelected = keys.every((k) => selectedKeys.includes(k));
     if (allSelected) {
       setSelectedKeys((prev) => prev.filter((k) => !keys.includes(k)));
@@ -185,13 +206,15 @@ export default function SelectFieldsMultiModal({
                   </button>
 
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleSelectAllInGroup(groupKeys)}
-                      className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
-                    >
-                      {allSelectedInGroup ? "Deselect All" : "Select All"}
-                    </button>
+                    {!singleSelect && (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectAllInGroup(groupKeys)}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+                      >
+                        {allSelectedInGroup ? "Deselect All" : "Select All"}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => toggleSection(group.module)}
@@ -214,6 +237,12 @@ export default function SelectFieldsMultiModal({
                         return (
                           <label
                             key={`${group.module}-${f.key}`}
+                            onDoubleClick={() => {
+                              if (singleSelect) {
+                                onApply([f.key]);
+                                onClose();
+                              }
+                            }}
                             className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors border select-none ${
                               isChecked
                                 ? "bg-blue-50/80 border-blue-200 text-blue-950"
@@ -221,7 +250,8 @@ export default function SelectFieldsMultiModal({
                             }`}
                           >
                             <input
-                              type="checkbox"
+                              type={singleSelect ? "radio" : "checkbox"}
+                              name={singleSelect ? "field-selection-radio" : undefined}
                               checked={isChecked}
                               onChange={() => handleToggleKey(f.key)}
                               className="w-3.5 h-3.5 rounded text-blue-600 accent-blue-600 cursor-pointer"
@@ -256,7 +286,9 @@ export default function SelectFieldsMultiModal({
         {/* Footer */}
         <div className="p-3.5 border-t border-slate-200 bg-white flex items-center justify-between flex-shrink-0">
           <span className="text-xs text-slate-600 font-semibold">
-            {selectedKeys.length} field{selectedKeys.length === 1 ? "" : "s"} selected
+            {selectedKeys.length === 0
+              ? "No field selected"
+              : `${selectedKeys.length} field${selectedKeys.length === 1 ? "" : "s"} selected`}
           </span>
 
           <div className="flex items-center gap-2">

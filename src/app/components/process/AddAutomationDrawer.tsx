@@ -75,6 +75,8 @@ import { AdminScopingRulesEditor } from "../../pages/admin/components/AdminScopi
 import { AdminControlAccordion } from "../../pages/admin/components/AdminControlAccordion";
 
 export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
+  condition: ["stage", "incall", "inchat", "postcall"],
+  wait: ["stage", "incall", "inchat", "postcall"],
   parallel: ["stage", "incall", "inchat", "postcall"],
   whatsapp: ["stage", "incall", "inchat", "postcall"],
   sms: ["stage", "incall", "inchat", "postcall"],

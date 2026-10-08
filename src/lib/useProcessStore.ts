@@ -98,6 +98,7 @@ export interface ScopingRule {
   industryCategory?: string;
   industries?: string[];
   locations?: string[];
+  entities?: string[];
 }
 
 export interface ProcessPermissions {
@@ -122,6 +123,7 @@ export interface Process {
   scopingRules?: ScopingRule[];
   permissions?: ProcessPermissions;
   source?: "system" | "template" | "custom";
+  draft?: boolean;
 }
 
 export function isProcessMatchingScope(
@@ -411,6 +413,21 @@ export function getEntityProcess(
     return entityProcs[0];
   }
   return entityProcs[0] || DEFAULT_ENTITY_PROCESSES[entityType];
+}
+
+export function getEntityProcesses(
+  processes: Process[],
+  entityType: EntityType,
+  org?: { industryCategory?: string; industry?: string; location?: string; locations?: string[] } | null
+): Process[] {
+  const entityProcs = processes.filter((p) => (p.entityType || "client") === entityType);
+  if (org) {
+    const matching = entityProcs.filter((p) => isProcessMatchingOrg(p, org));
+    if (matching.length > 0) return matching;
+  }
+  return entityProcs.length > 0
+    ? entityProcs
+    : (entityType !== "client" && DEFAULT_ENTITY_PROCESSES[entityType] ? [DEFAULT_ENTITY_PROCESSES[entityType]] : []);
 }
 
 export const DEFAULT_INITIAL_PROCESSES: Process[] = [

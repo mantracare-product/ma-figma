@@ -423,7 +423,19 @@ export default function AdminAutomations() {
           setIsCreatingNewRule(false);
         }}
         isAdmin={true}
-        initialScopingRules={activeRule?.scopingRules || pendingScopingRules}
+        initialScopingRules={
+          (activeRule?.scopingRules && activeRule.scopingRules.length > 0)
+            ? activeRule.scopingRules
+            : (pendingScopingRules && pendingScopingRules.length > 0)
+            ? pendingScopingRules
+            : (selectedCategoryFilter && selectedCategoryFilter !== "All")
+            ? [{
+                industryCategory: selectedCategoryFilter,
+                industries: selectedIndustryFilter !== "All" ? [selectedIndustryFilter] : [],
+                locations: selectedLocationFilter !== "All" ? [selectedLocationFilter] : [],
+              }]
+            : []
+        }
         onScopingRulesChange={(newRules) => setPendingScopingRules(newRules)}
         scope="global"
         defaultView="library"

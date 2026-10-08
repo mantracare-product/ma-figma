@@ -339,6 +339,79 @@ async function runTest() {
   }
 
   console.log("✓ Admin-created automation renders in matching client automations and correctly excludes non-matching tenants!");
+
+  // Test 6: Verify Multiple Appointment Processes for an Industry Category, Industry & Location in Client
+  console.log("\n[Test 6] Testing multiple appointment processes in client for a specific category, industry and location...");
+  const { getEntityProcesses } = await import("../lib/useProcessStore");
+
+  const apptProc1 = {
+    id: "proc-appt-health-consult",
+    name: "Initial Health Consultation Flow",
+    description: "Doctor initial assessment",
+    assignedToUserId: 1,
+    entityType: "appointment" as const,
+    industryCategory: "Healthcare",
+    industry: "Cardiologist",
+    locations: ["California"],
+    scopingRules: healthcareScopeRules,
+    stages: [
+      { id: "st-c1", name: "Consultation Booked", description: "", status: "active", systemCategory: "booked" },
+      { id: "st-c2", name: "Consultation Done", description: "", status: "active", systemCategory: "completed" },
+    ],
+    aiSettings: { platform: "OpenAI - GPT-4o", voiceSpeed: 1.0 },
+  };
+
+  const apptProc2 = {
+    id: "proc-appt-health-followup",
+    name: "Cardiac Follow-up Appointment Flow",
+    description: "Recurring checkups for cardiology patients",
+    assignedToUserId: 1,
+    entityType: "appointment" as const,
+    industryCategory: "Healthcare",
+    industry: "Cardiologist",
+    locations: ["California"],
+    scopingRules: healthcareScopeRules,
+    stages: [
+      { id: "st-f1", name: "Follow-up Scheduled", description: "", status: "active", systemCategory: "booked" },
+      { id: "st-f2", name: "Follow-up Completed", description: "", status: "active", systemCategory: "completed" },
+    ],
+    aiSettings: { platform: "OpenAI - GPT-4o", voiceSpeed: 1.0 },
+  };
+
+  const apptProcAuto = {
+    id: "proc-appt-auto-service",
+    name: "Auto Maintenance Booking",
+    description: "Oil change and tune up",
+    assignedToUserId: 1,
+    entityType: "appointment" as const,
+    industryCategory: "Automobile",
+    industry: "Auto Dealership & Service",
+    locations: ["Texas"],
+    scopingRules: automobileScopeRules,
+    stages: [
+      { id: "st-a1", name: "Service Booked", description: "", status: "active", systemCategory: "booked" },
+      { id: "st-a2", name: "Vehicle Ready", description: "", status: "active", systemCategory: "completed" },
+    ],
+    aiSettings: { platform: "OpenAI - GPT-4o", voiceSpeed: 1.0 },
+  };
+
+  const allProcesses = [apptProc1, apptProc2, apptProcAuto];
+  const healthcareAppointmentProcesses = getEntityProcesses(allProcesses, "appointment", healthcareOrg);
+
+  if (healthcareAppointmentProcesses.length !== 2) {
+    throw new Error(`Expected exactly 2 appointment processes for Healthcare org, got ${healthcareAppointmentProcesses.length}`);
+  }
+  if (!healthcareAppointmentProcesses.some((p) => p.id === "proc-appt-health-consult")) {
+    throw new Error("Missing 'proc-appt-health-consult' in Healthcare client appointment processes!");
+  }
+  if (!healthcareAppointmentProcesses.some((p) => p.id === "proc-appt-health-followup")) {
+    throw new Error("Missing 'proc-appt-health-followup' in Healthcare client appointment processes!");
+  }
+  if (healthcareAppointmentProcesses.some((p) => p.id === "proc-appt-auto-service")) {
+    throw new Error("Automobile appointment process must NOT be visible in Healthcare org!");
+  }
+
+  console.log("✓ Multiple appointment processes properly scoped and accessible in client workflow & appointments!");
   console.log("\n🎉 ALL ADMIN WORKFLOWS & AUTOMATIONS TESTS PASSED! 🎉\n");
 }
 

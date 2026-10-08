@@ -66,7 +66,7 @@ import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/u
 import { getStagesForProcess } from "../ui/ProcessStageSelect";
 import DocumentsTab from "../profile/DocumentsTab";
 import { TableComponent } from "../ui/TableComponent";
-import { ChevronStageRibbon, ChevronStage } from "../common/ChevronStageRibbon";
+import { ChevronStageRibbon, ChevronStage, CHEVRON_PALETTE } from "../common/ChevronStageRibbon";
 import { getStoredClientDocuments } from "../../../lib/clientDocumentsStore";
 import {
   appendActivity,
@@ -74,6 +74,7 @@ import {
   subscribeToActivity,
   formatTimestamp,
 } from "../../../lib/activityEngine";
+import { logStageMove } from "../../../lib/useAutomationStore";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../../lib/processFieldValidation";
 import { updateProcessCallLogFields, updateProcessCallLogStage, getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../../lib/processLogsStore";
 import RequiredFieldsModal from "./RequiredFieldsModal";
@@ -639,18 +640,19 @@ export default function ProcessDetailDrawer({
 
   const drawerStages: ChevronStage[] = useMemo(() => {
     if (matchedProc?.stages && matchedProc.stages.length > 0) {
-      return matchedProc.stages.map((s) => ({
+      return matchedProc.stages.map((s, idx) => ({
         id: s.id,
         name: s.name,
-        color: s.color,
-        isFinalStage: s.isFinalStage,
-        isFinal: s.isFinal,
+        color: s.color || CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
+        isFinalStage: Boolean(s.isFinalStage || s.isFinal),
+        isFinal: Boolean(s.isFinalStage || s.isFinal),
         systemCategory: s.systemCategory,
       }));
     }
     return activeStageList.map((label, idx) => ({
       id: `stage-${idx}`,
       name: label,
+      color: CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
       isFinalStage: idx === activeStageList.length - 1,
     }));
   }, [matchedProc, activeStageList]);
@@ -747,6 +749,51 @@ export default function ProcessDetailDrawer({
     missingFields: [],
   });
 
+  const runStageAutomation = (targetStageName: string) => {
+    if (!log) return;
+    const procObj = storedProcesses.find(
+      (p) => p.name.trim().toLowerCase() === (log.process || "").trim().toLowerCase() || p.id === log.process
+    );
+    const fromStageObj = procObj?.stages?.find(
+      (s) => s.name.toLowerCase() === (currentStageName || "").toLowerCase() || s.id === currentStageName
+    );
+    const toStageObj = procObj?.stages?.find(
+      (s) => s.name.toLowerCase() === targetStageName.toLowerCase() || s.id === targetStageName
+    );
+
+    const orgIdStr = typeof activeOrganization === "string" ? activeOrganization : (activeOrganization as any)?.id || "default";
+
+    logStageMove({
+      orgId: orgIdStr,
+      recordType: (procObj?.entityType as any) || "client",
+      recordId: clientId || log.id,
+      fromStageId: fromStageObj?.id,
+      fromStageName: fromStageObj?.name || currentStageName,
+      toStageId: toStageObj?.id || targetStageName,
+      toStageName: toStageObj?.name || targetStageName,
+      processId: procObj?.id || log.process,
+      processName: procObj?.name || log.process,
+      cause: {
+        type: "manual",
+        ruleName: `Stage changed to ${targetStageName} in Process View`,
+      },
+    });
+
+    appendActivity({
+      clientId: clientId || log.id,
+      processId: procObj?.id || log.process,
+      processName: procObj?.name || log.process,
+      type: "stage_change",
+      fromStage: currentStageName || "Initial",
+      toStage: targetStageName,
+      createdBy: "user",
+      details: {
+        primary: `Stage moved to ${targetStageName}`,
+        secondary: `From ${currentStageName || "Initial"} → ${targetStageName}`,
+      },
+    } as any);
+  };
+
   const handleStageClick = (newStageIdx: number) => {
     const targetStageName = activeStageList[newStageIdx - 1] || "";
     const missingForTarget = getMissingRequiredProcessFields({
@@ -767,6 +814,10 @@ export default function ProcessDetailDrawer({
       return;
     }
 
+    if (clientId && log?.process) {
+      updateProcessCallLogStage(clientId, log.process, targetStageName);
+    }
+    runStageAutomation(targetStageName);
     onStageChange(newStageIdx);
   };
 
@@ -1364,6 +1415,7 @@ export default function ProcessDetailDrawer({
           setLocalEditedValues((prev) => ({ ...prev, ...filledValues }));
           if (clientId && log?.process) {
             updateProcessCallLogFields(clientId, log.process, filledValues);
+            updateProcessCallLogStage(clientId, log.process, requiredFieldsModalState.targetStageName);
           }
           Object.entries(filledValues).forEach(([k, v]) => {
             onFieldSave?.(k, v);
@@ -1371,6 +1423,7 @@ export default function ProcessDetailDrawer({
           try {
             window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
           } catch {}
+          runStageAutomation(requiredFieldsModalState.targetStageName);
           onStageChange(requiredFieldsModalState.targetStageIdx);
           setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
           toast.success(`Stage moved to ${requiredFieldsModalState.targetStageName} with required fields saved ✓`);

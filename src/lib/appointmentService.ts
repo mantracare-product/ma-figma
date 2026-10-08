@@ -93,6 +93,7 @@ export interface CreateAppointmentPayload {
   clientId?: string;
   location?: string;
   sessionType?: "video" | "inPerson";
+  processId?: string;
   stageId?: string;
   generateInvoice?: boolean;
   lineItems?: any[];
@@ -258,6 +259,7 @@ class AppointmentService {
       tags: payload.tags,
       currentStageId: initialStageId,
       statusLabel: initialStageName,
+      processId: payload.processId || this.getAppointmentProcess().id,
       clientId: payload.clientId,
       location: payload.location,
       sessionType: payload.sessionType || "video",

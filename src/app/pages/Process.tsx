@@ -281,6 +281,9 @@ interface ChevronStageItemProps {
   isLast: boolean;
   color?: string;
   isLastStage?: boolean;
+  isCompact?: boolean;
+  isFlexible?: boolean;
+  onHoverStage?: (info: { name: string; x: number; y: number } | null) => void;
 }
 
 const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
@@ -296,6 +299,9 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
   isLast,
   color,
   isLastStage,
+  isCompact = false,
+  isFlexible = false,
+  onHoverStage,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -341,77 +347,101 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
   return (
     <div
       ref={ref}
-      onClick={() => onSelect(stage)}
-      onDoubleClick={() => onEdit(stage)}
-      className={`relative group flex items-center h-10 select-none cursor-pointer transition-all flex-shrink-0 ${
-        isFirst ? "rounded-l-md" : "-ml-3.5"
-      } ${isDragging ? "opacity-35 scale-95" : "opacity-100"} ${
-        isOver ? "ring-2 ring-white scale-105 z-20" : ""
-      } ${isSelected ? "brightness-110 shadow-md ring-2 ring-white/80 z-20" : "hover:brightness-105 hover:z-10"}`}
-      style={{
-        backgroundColor: color || stage.color || CHEVRON_PALETTE[index % CHEVRON_PALETTE.length],
-        clipPath: chevronClip,
-        minWidth: "140px",
-        paddingLeft: isFirst ? "14px" : "24px",
-        paddingRight: "24px",
+      className={`relative group flex items-center ${
+        isFlexible ? "flex-1 min-w-0" : "flex-shrink-0"
+      } ${isFirst ? "" : "-ml-3.5"}`}
+      onMouseEnter={(e) => {
+        if (isCompact && onHoverStage) {
+          const rect = e.currentTarget.getBoundingClientRect();
+          onHoverStage({ name: stage.name, x: rect.left + rect.width / 2, y: rect.top });
+        }
       }}
-      title={`Stage: ${stage.name} (Drag to reorder, click to view, double click to edit)`}
+      onMouseLeave={() => {
+        if (isCompact && onHoverStage) {
+          onHoverStage(null);
+        }
+      }}
     >
-      {!isLast && (
-        <svg
-          className="absolute right-0 top-0 h-full w-[15px] pointer-events-none z-10"
-          viewBox="0 0 15 40"
-          preserveAspectRatio="none"
-          fill="none"
-        >
-          <path
-            d="M 1 0 L 14 20 L 1 40"
-            stroke="white"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      )}
-
+      {/* Chevron Ribbon Body */}
       <div
-        className="cursor-grab active:cursor-grabbing p-0.5 -ml-1 mr-1 shrink-0 transition-colors text-white/70 group-hover:text-white"
-        title="Drag to reorder"
+        onClick={() => onSelect(stage)}
+        onDoubleClick={() => onEdit(stage)}
+        className={`relative flex items-center h-10 select-none cursor-pointer transition-all ${
+          isFlexible ? "w-full min-w-0" : "flex-shrink-0"
+        } ${isFirst ? "rounded-l-md" : ""} ${isDragging ? "opacity-35 scale-95" : "opacity-100"} ${
+          isOver ? "ring-2 ring-white scale-105 z-20" : ""
+        } ${isSelected ? "brightness-110 shadow-md ring-2 ring-white/80 z-20" : "hover:brightness-105 hover:z-10"}`}
+        style={{
+          backgroundColor: color || stage.color || CHEVRON_PALETTE[index % CHEVRON_PALETTE.length],
+          clipPath: chevronClip,
+          ...(isCompact
+            ? { width: "38px", minWidth: "38px", paddingLeft: isFirst ? "8px" : "14px", paddingRight: "6px" }
+            : isFlexible
+            ? { minWidth: "0px", width: "100%", paddingLeft: isFirst ? "14px" : "24px", paddingRight: "24px" }
+            : { minWidth: "140px", paddingLeft: isFirst ? "14px" : "24px", paddingRight: "24px" }),
+        }}
+        title={`Stage: ${stage.name} (Click to view, double click to edit)`}
       >
-        <GripVertical className="w-3.5 h-3.5" />
-      </div>
+        {!isLast && (
+          <svg
+            className="absolute right-0 top-0 h-full w-[15px] pointer-events-none z-10"
+            viewBox="0 0 15 40"
+            preserveAspectRatio="none"
+            fill="none"
+          >
+            <path
+              d="M 1 0 L 14 20 L 1 40"
+              stroke="white"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
 
-      <span
-        className="text-xs font-semibold tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1 text-white"
-        style={{ fontFamily: "Outfit, sans-serif" }}
-      >
-        {isLastStage && <span className="text-[10px] opacity-90">🏁</span>}
-        <span className="truncate">{stage.name}</span>
-      </span>
+        {!isCompact && (
+          <>
+            <div
+              className="cursor-grab active:cursor-grabbing p-0.5 -ml-1 mr-1 shrink-0 transition-colors text-white/70 group-hover:text-white"
+              title="Drag to reorder"
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+            </div>
 
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 -mr-2">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit(stage);
-          }}
-          className="p-1 rounded transition-all text-white/80 hover:text-white hover:bg-black/20"
-          title="Edit stage"
-        >
-          <Edit className="w-3 h-3" />
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove(stage.id);
-          }}
-          className="p-1 rounded transition-all text-white/80 hover:text-rose-200 hover:bg-rose-500/30"
-          title="Delete stage"
-        >
-          <Trash2 className="w-3 h-3" />
-        </button>
+            <span
+              className="text-xs font-semibold tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1 text-white"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {isLastStage && <span className="text-[10px] opacity-90">🏁</span>}
+              <span className="truncate">{stage.name}</span>
+            </span>
+
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 -mr-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(stage);
+                }}
+                className="p-1 rounded transition-all text-white/80 hover:text-white hover:bg-black/20"
+                title="Edit stage"
+              >
+                <Edit className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(stage.id);
+                }}
+                className="p-1 rounded transition-all text-white/80 hover:text-rose-200 hover:bg-rose-500/30"
+                title="Delete stage"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -919,7 +949,7 @@ export default function Process() {
         id: tab.id,
         label: tab.label,
         icon: <Icon className="w-3.5 h-3.5" />,
-        badge: tab.id === "client" && count > 1 ? count : undefined,
+        badge: (tab.id === "client" || tab.id === "appointment") && count > 1 ? count : undefined,
       };
     });
   }, [processes]);
@@ -949,7 +979,14 @@ export default function Process() {
       if (p.permissions?.canHide === false) return false;
       return isProcessMatchingOrg(p, organization);
     });
-    // For non-client entities (appointment, invoice, insurance, claim), display one process matching the organization's industry & category
+    // For appointment entity, allow multiple processes matching the client organization's category, industry, and location
+    if (selectedEntity === "appointment") {
+      if (matching.length > 0) {
+        return matching;
+      }
+      return entityFilteredProcesses.length > 0 ? entityFilteredProcesses : [DEFAULT_ENTITY_PROCESSES.appointment];
+    }
+    // For other non-client entities (invoice, insurance, claim), display one process matching the organization's industry & category
     if (selectedEntity !== "client") {
       if (matching.length > 0) {
         return [matching[0]];
@@ -1000,6 +1037,7 @@ export default function Process() {
   const [stageVoiceSpeed, setStageVoiceSpeed] = useState<number>(1.0);
   const [stageVoice, setStageVoice] = useState<string>("Nova");
   const [configuredVoices, setConfiguredVoices] = useState<VoiceConfigItem[]>(getStoredVoices);
+  const [hoveredStageTooltip, setHoveredStageTooltip] = useState<{ name: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
     const handleVoiceUpdate = () => setConfiguredVoices(getStoredVoices());
@@ -2292,7 +2330,7 @@ export default function Process() {
   // Form states
   const [newProcess, setNewProcess] = useState({ name: "", description: "" });
   const [newStage, setNewStage] = useState({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "AI Receives Calls" });
-  const [newStagePosition, setNewStagePosition] = useState<"initial" | "final" | null>(null);
+  const [newStagePosition, setNewStagePosition] = useState<"initial" | "final" | "sequential" | null>(null);
   const [newStageSelectedNumbers, setNewStageSelectedNumbers] = useState<string[]>([]);
   const [showHowToReceiveCallModal, setShowHowToReceiveCallModal] = useState(false);
   const [applyAdvancedSettingsToAllStages, setApplyAdvancedSettingsToAllStages] = useState(false);
@@ -2455,11 +2493,35 @@ export default function Process() {
       return;
     }
 
+    const isAppointment = selectedEntity === "appointment";
+    const newProcessId = `proc-${selectedEntity}-${Date.now()}`;
+    const initialStages: Stage[] = isAppointment
+      ? DEFAULT_ENTITY_PROCESSES.appointment.stages.map((st, sIdx) => ({
+          ...st,
+          id: `${newProcessId}-${sIdx + 1}`,
+        }))
+      : [];
+
     const process: Process = {
-      id: String(processes.length + 1),
+      id: newProcessId,
       ...newProcess,
       assignedToUserId: 1,
-      stages: [],
+      stages: initialStages,
+      entityType: isAppointment ? "appointment" : "client",
+      industryCategory: organization?.industryCategory || "All",
+      industry: organization?.industry || "All",
+      locations: organization?.location ? [organization.location] : (organization?.locations || ["All"]),
+      scopingRules: organization?.industryCategory
+        ? [
+            {
+              id: `rule_${Date.now()}`,
+              industryCategory: organization.industryCategory,
+              industries: organization.industry ? [organization.industry] : [],
+              locations: organization.location ? [organization.location] : [],
+              entities: isAppointment ? ["appointment"] : ["client", "process"],
+            },
+          ]
+        : undefined,
       aiSettings: {
         platform: "OpenAI - GPT-4o",
         voiceSpeed: 1.0,
@@ -2476,7 +2538,7 @@ export default function Process() {
     setViewMode("process");
     setNewProcess({ name: "", description: "" });
     setShowAddProcessModal(false);
-    toast.success("Process added successfully");
+    toast.success(`${isAppointment ? "Appointment process" : "Process"} added successfully`);
   };
 
   const handleUpdateProcess = (field: string, value: any) => {
@@ -2491,8 +2553,16 @@ export default function Process() {
 
   const handleDeleteProcess = (processId: string) => {
     const target = processes.find((p) => p.id === processId);
-    if (target?.entityType && target.entityType !== "client") {
+    if (target?.entityType && target.entityType !== "client" && target.entityType !== "appointment") {
       toast.error("Standard entity processes cannot be deleted.");
+      return;
+    }
+    if (
+      target?.entityType === "appointment" &&
+      target.id === DEFAULT_ENTITY_PROCESSES.appointment.id &&
+      processes.filter((p) => p.entityType === "appointment").length <= 1
+    ) {
+      toast.error("Default appointment process cannot be deleted when it is the only process.");
       return;
     }
     setProcesses(processes.filter((p) => p.id !== processId));
@@ -2864,6 +2934,8 @@ export default function Process() {
       return;
     }
 
+    const isFinal = newStagePosition === "final";
+
     const stage: Stage = {
       id: `${selectedProcess}-${Date.now()}`,
       name: newStage.name.trim(),
@@ -2872,11 +2944,29 @@ export default function Process() {
       stageType: newStage.type || "Receive Inbound Calls",
       status: "active",
       callTriggerSettings: getDefaultCallTriggerSettings(),
+      isFinalStage: isFinal,
+      isFinal: isFinal,
     };
 
-    const updatedStages = newStagePosition === "initial"
-      ? [stage, ...selectedProc.stages]
-      : [...selectedProc.stages, stage];
+    let updatedStages: Stage[];
+    if (newStagePosition === "initial") {
+      updatedStages = [stage, ...selectedProc.stages];
+    } else if (isFinal) {
+      // Added from second + : Add into Lost stages
+      updatedStages = [...selectedProc.stages, stage];
+    } else {
+      // Added from first + (sequential) : Add into Won side (before first final/lost stage)
+      const firstFinalIdx = selectedProc.stages.findIndex((s) => s.isFinalStage || s.isFinal);
+      if (firstFinalIdx >= 0) {
+        updatedStages = [
+          ...selectedProc.stages.slice(0, firstFinalIdx),
+          stage,
+          ...selectedProc.stages.slice(firstFinalIdx),
+        ];
+      } else {
+        updatedStages = [...selectedProc.stages, stage];
+      }
+    }
 
     setProcesses(
       processes.map((p) =>
@@ -3052,7 +3142,7 @@ export default function Process() {
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search processes..."
           filterPresets={
-            selectedEntity === "client"
+            selectedEntity === "client" || selectedEntity === "appointment"
               ? [
                 {
                   id: "all",
@@ -3089,11 +3179,14 @@ export default function Process() {
             },
           ]}
           primaryAction={
-            selectedEntity === "client"
+            selectedEntity === "client" || selectedEntity === "appointment"
               ? {
-                label: "Add New Process",
+                label: selectedEntity === "appointment" ? "Add Appointment Process" : "Add New Process",
                 icon: <Plus className="w-3.5 h-3.5" />,
-                onClick: () => setShowAddProcessModal(true),
+                onClick: () => {
+                  setNewProcess({ name: "", description: "" });
+                  setShowAddProcessModal(true);
+                },
               }
               : undefined
           }
@@ -3101,7 +3194,7 @@ export default function Process() {
 
         <div className="flex gap-6 min-h-[calc(100vh-270px)]">
           {/* Left Panel - Process List */}
-          <div className="w-80 bg-[#F4F6F8] rounded-2xl border border-gray-200/80 p-3 h-[calc(100vh-270px)] overflow-y-auto flex-shrink-0 space-y-3">
+          <div className="w-80 h-[calc(100vh-270px)] overflow-y-auto flex-shrink-0 space-y-3 pr-1">
             {filteredProcesses.length === 0 ? (
               <div className="p-4 text-center rounded-xl bg-white border border-dashed border-gray-200">
                 <p className="text-xs text-gray-500 font-medium">
@@ -3326,7 +3419,6 @@ export default function Process() {
                       )}
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
-                      <HowItWorksButton label="How Process Works" onClick={() => setShowProcessHowItWorksModal(true)} />
                       <Tooltip text="Temporary Disable">
                         <label className="relative inline-flex items-center cursor-pointer">
                           <input
@@ -3362,97 +3454,147 @@ export default function Process() {
                         const lastSeqStage = sequentialStages[sequentialStages.length - 1];
 
                         return (
-                          <div className="flex items-center gap-2 overflow-x-auto py-1 px-0.5 scrollbar-thin scrollbar-thumb-gray-200">
-                            {/* Sequential Stages */}
-                            <div className="flex items-center flex-shrink-0">
-                              {sequentialStages.map((stage, sIdx) => {
-                                const originalIndex = allStages.findIndex((s) => s.id === stage.id);
-                                return (
-                                  <ChevronStageItem
-                                    key={stage.id}
-                                    stage={stage}
-                                    index={originalIndex >= 0 ? originalIndex : sIdx}
-                                    totalStages={allStages.length}
-                                    moveStage={moveStage}
-                                    onRemove={handleRemoveStage}
-                                    onEdit={handleEditStage}
-                                    onSelect={(s) => {
-                                      setExpandedStage(s.id);
-                                      setViewMode("stage");
-                                    }}
-                                    isSelected={expandedStage === stage.id}
-                                    isFirst={sIdx === 0}
-                                    isLast={sIdx === sequentialStages.length - 1}
-                                    color={stage.color || CHEVRON_PALETTE[sIdx % CHEVRON_PALETTE.length]}
-                                  />
-                                );
-                              })}
+                          <div className="space-y-1">
+                            {/* Non-overlapping clean grey Won | Lost indicator header */}
+                            <div className="w-full flex items-center gap-2 px-0.5 select-none">
+                              {/* Won directly above the last stage before the + */}
+                              <div className="flex-1 min-w-0 flex items-center">
+                                {sequentialStages.length > 1 && (
+                                  <div style={{ flex: sequentialStages.length - 1 }} />
+                                )}
+                                <div className="flex-1 min-w-0 text-center">
+                                  <span className="text-[11px] font-semibold tracking-wider text-gray-400 uppercase">
+                                    Won
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Spacer matching the first + button */}
+                              <div className="w-6 flex-shrink-0" />
+
+                              {/* Lost directly above the lost stages */}
+                              {finalStageOptions.length > 0 ? (
+                                <div
+                                  className="flex items-center justify-center flex-shrink-0 ml-1 text-center"
+                                  style={{ width: `${finalStageOptions.length * 24 + 14}px` }}
+                                >
+                                  <span className="text-[11px] font-semibold tracking-wider text-gray-400 uppercase">
+                                    Lost
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="w-20 flex-shrink-0 ml-1 text-center">
+                                  <span className="text-[11px] font-semibold tracking-wider text-gray-400 uppercase">
+                                    Lost
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Spacer matching the second + button */}
+                              <div className="w-6 flex-shrink-0" />
                             </div>
 
-                            {/* + Icon to Add Sequential Stage */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setNewStagePosition("final");
-                                setShowAddStageModal(true);
-                              }}
-                              className="flex items-center justify-center w-8 h-10 rounded-md bg-gray-50 hover:bg-blue-50 text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-300 transition-all shadow-2xs hover:shadow-xs flex-shrink-0 cursor-pointer"
-                              title="Add sequential stage"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
+                            <div className="w-full flex items-center gap-2 py-1 px-0.5">
+                              {/* Sequential Stages (Won area) - occupy full remaining width dynamically */}
+                              <div className="flex-1 min-w-0 flex items-center">
+                                {sequentialStages.map((stage, sIdx) => {
+                                  const originalIndex = allStages.findIndex((s) => s.id === stage.id);
+                                  return (
+                                    <ChevronStageItem
+                                      key={stage.id}
+                                      stage={stage}
+                                      index={originalIndex >= 0 ? originalIndex : sIdx}
+                                      totalStages={allStages.length}
+                                      moveStage={moveStage}
+                                      onRemove={handleRemoveStage}
+                                      onEdit={handleEditStage}
+                                      onSelect={(s) => {
+                                        setExpandedStage(s.id);
+                                        setViewMode("stage");
+                                      }}
+                                      isSelected={expandedStage === stage.id}
+                                      isFirst={sIdx === 0}
+                                      isLast={sIdx === sequentialStages.length - 1}
+                                      color={stage.color || CHEVRON_PALETTE[sIdx % CHEVRON_PALETTE.length]}
+                                      isFlexible={true}
+                                    />
+                                  );
+                                })}
+                              </div>
 
-                            {/* Last Stages in the exact same chevron style */}
-                            {finalStageOptions.length > 0 ? (
-                              <>
-                                <div className="flex items-center flex-shrink-0 ml-1">
-                                  {finalStageOptions.map((fStage, fIdx) => {
-                                    const originalIndex = allStages.findIndex((s) => s.id === fStage.id);
-                                    return (
-                                      <ChevronStageItem
-                                        key={fStage.id}
-                                        stage={fStage}
-                                        index={originalIndex >= 0 ? originalIndex : sequentialStages.length + fIdx}
-                                        totalStages={allStages.length}
-                                        moveStage={moveStage}
-                                        onRemove={handleRemoveStage}
-                                        onEdit={handleOpenEditLastStageModal}
-                                        onSelect={(s) => {
-                                          setExpandedStage(s.id);
-                                          setViewMode("stage");
-                                        }}
-                                        isSelected={expandedStage === fStage.id}
-                                        isFirst={fIdx === 0}
-                                        isLast={fIdx === finalStageOptions.length - 1}
-                                        color={fStage.color || CHEVRON_PALETTE[(sequentialStages.length + fIdx) % CHEVRON_PALETTE.length] || "#EC4899"}
-                                        isLastStage={true}
-                                      />
-                                    );
-                                  })}
-                                </div>
-
-                                {/* + Icon to Add another Last Stage Option */}
-                                <button
-                                  type="button"
-                                  onClick={handleOpenAddLastStageModal}
-                                  className="flex items-center justify-center w-8 h-10 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-600 hover:text-purple-700 border border-purple-200 hover:border-purple-300 transition-all shadow-2xs hover:shadow-xs flex-shrink-0 cursor-pointer"
-                                  title="Add last stage option"
-                                >
-                                  <Plus className="w-4 h-4" />
-                                </button>
-                              </>
-                            ) : (
-                              /* When NO last stage is added: + Add Last Stage button */
+                              {/* + Icon to Add Sequential Stage (Small Grey) */}
                               <button
                                 type="button"
-                                onClick={handleOpenAddLastStageModal}
-                                className="flex items-center gap-1.5 px-3 h-10 rounded-md border border-dashed border-purple-300 hover:border-purple-400 bg-purple-50/50 hover:bg-purple-100/50 text-purple-700 text-xs font-semibold transition-all shadow-2xs flex-shrink-0 cursor-pointer ml-1"
-                                title="Add last stage option"
+                                onClick={() => {
+                                  setNewStagePosition("sequential");
+                                  setShowAddStageModal(true);
+                                }}
+                                className="flex items-center justify-center w-6 h-7 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-600 border border-gray-200/80 transition-all shadow-2xs hover:shadow-xs flex-shrink-0 cursor-pointer"
+                                title="Add sequential stage"
                               >
                                 <Plus className="w-3.5 h-3.5" />
-                                <span>Add Last Stage</span>
                               </button>
-                            )}
+
+                              {/* Last Stages in compact chevron ribbons with hover name */}
+                              {finalStageOptions.length > 0 ? (
+                                <>
+                                  <div className="flex items-center flex-shrink-0 ml-1">
+                                    {finalStageOptions.map((fStage, fIdx) => {
+                                      const originalIndex = allStages.findIndex((s) => s.id === fStage.id);
+                                      return (
+                                        <ChevronStageItem
+                                          key={fStage.id}
+                                          stage={fStage}
+                                          index={originalIndex >= 0 ? originalIndex : sequentialStages.length + fIdx}
+                                          totalStages={allStages.length}
+                                          moveStage={moveStage}
+                                          onRemove={handleRemoveStage}
+                                          onEdit={handleOpenEditLastStageModal}
+                                          onSelect={(s) => {
+                                            setExpandedStage(s.id);
+                                            setViewMode("stage");
+                                          }}
+                                          isSelected={expandedStage === fStage.id}
+                                          isFirst={fIdx === 0}
+                                          isLast={fIdx === finalStageOptions.length - 1}
+                                          color={fStage.color || CHEVRON_PALETTE[(sequentialStages.length + fIdx) % CHEVRON_PALETTE.length] || "#EC4899"}
+                                          isLastStage={true}
+                                          isCompact={true}
+                                          onHoverStage={setHoveredStageTooltip}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+
+                                  {/* + Icon to Add another Last Stage Option (Small Grey) */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewStagePosition("final");
+                                      setShowAddStageModal(true);
+                                    }}
+                                    className="flex items-center justify-center w-6 h-7 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-600 border border-gray-200/80 transition-all shadow-2xs hover:shadow-xs flex-shrink-0 cursor-pointer"
+                                    title="Add last stage option"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                /* When NO last stage is added: + Add Last Stage button (Small Grey) */
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNewStagePosition("final");
+                                    setShowAddStageModal(true);
+                                  }}
+                                  className="flex items-center gap-1 px-2 h-7 rounded-md border border-dashed border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100 text-gray-500 text-xs font-medium transition-all shadow-2xs flex-shrink-0 cursor-pointer ml-1"
+                                  title="Add last stage option"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  <span>Add Last Stage</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         );
                       })()}
@@ -6695,7 +6837,7 @@ export default function Process() {
             setShowAddProcessModal(false);
             setNewProcess({ name: "", description: "" });
           }}
-          title="Add New Process"
+          title={selectedEntity === "appointment" ? "Add Appointment Process" : "Add New Process"}
           footer={
             <>
               <Button variant="outline" onClick={() => {
@@ -6718,7 +6860,7 @@ export default function Process() {
               label="Process Name"
               value={newProcess.name}
               onChange={(e) => setNewProcess({ ...newProcess, name: e.target.value })}
-              placeholder="Enter process name"
+              placeholder={selectedEntity === "appointment" ? "e.g., Clinical Consultation Workflow" : "Enter process name"}
             />
             <div>
               <label className="block text-sm font-medium mb-2">Process Description</label>
@@ -8787,6 +8929,20 @@ export default function Process() {
           onWorkflowStepsChange={setWorkflowSteps}
           stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
         />
+
+        {/* Page-relative Stage Hover Tooltip */}
+        {hoveredStageTooltip && (
+          <div
+            className="fixed z-[9999] pointer-events-none transform -translate-x-1/2 -translate-y-full mb-2 px-2.5 py-1 text-xs font-semibold text-white bg-gray-900 rounded-md shadow-lg whitespace-nowrap"
+            style={{
+              left: `${hoveredStageTooltip.x}px`,
+              top: `${hoveredStageTooltip.y - 8}px`,
+            }}
+          >
+            {hoveredStageTooltip.name}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+          </div>
+        )}
 
       </div>
     </div>
