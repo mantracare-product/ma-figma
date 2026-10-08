@@ -1,3 +1,8 @@
+import type { ScopingRule } from "../app/context/FieldRegistryContext";
+
+export type { ScopingRule };
+export type TemplateEntity = "client" | "process" | "appointment" | "invoice";
+
 export interface DocumentTemplateFieldMapping {
   templateField: string;    // e.g. "client_name" or "email" (extracted from {client_name})
   mappedFieldKey: string;   // e.g. "name", "email", "phone", "companyName", "location", "responsible", "status"
@@ -16,6 +21,9 @@ export interface DocumentTemplate {
   createdBy: string;
   rawDocxBase64?: string;
   htmlPreviewTemplate?: string;
+  // Scoping & Entity Support
+  entities?: TemplateEntity[]; // e.g. ["client", "process", "appointment", "invoice"]
+  scopingRules?: ScopingRule[];
 }
 
 export const DOCUMENT_TEMPLATES_EVENT = "documentTemplates_updated";
@@ -59,6 +67,7 @@ Doctor Signature: {responsible} (License #MC-88219)`,
       { templateField: "current_date", mappedFieldKey: "date", label: "Current Date" },
       { templateField: "responsible", mappedFieldKey: "responsible", label: "Attending Doctor" },
     ],
+    entities: ["appointment", "client"],
     createdAt: "2024-05-18 11:20",
     createdBy: "Clinical Desk",
   },
@@ -97,6 +106,7 @@ Provider Signature: {responsible}`,
       { templateField: "current_date", mappedFieldKey: "date", label: "Current Date" },
       { templateField: "responsible", mappedFieldKey: "responsible", label: "Specialist" },
     ],
+    entities: ["appointment", "process"],
     createdAt: "2024-05-17 14:00",
     createdBy: "Clinical Desk",
   },
@@ -128,6 +138,7 @@ Witness / Staff: {responsible}`,
       { templateField: "consent_signature", mappedFieldKey: "consent_signature", label: "Consent Signature" },
       { templateField: "current_date", mappedFieldKey: "date", label: "Current Date" },
     ],
+    entities: ["client", "process"],
     createdAt: "2024-05-16 09:30",
     createdBy: "Legal Dept",
   },
@@ -164,6 +175,7 @@ Patient Signature: ______________________`,
       { templateField: "responsible", mappedFieldKey: "responsible", label: "Responsible Officer" },
       { templateField: "current_date", mappedFieldKey: "date", label: "Date" },
     ],
+    entities: ["client", "process"],
     createdAt: "2024-05-15 09:00",
     createdBy: "Medical Desk",
   },
@@ -200,6 +212,7 @@ Verification Officer Signature: {responsible}`,
       { templateField: "responsible", mappedFieldKey: "responsible", label: "Responsible Staff" },
       { templateField: "current_date", mappedFieldKey: "date", label: "Current Date" },
     ],
+    entities: ["client"],
     createdAt: "2024-05-01 10:00",
     createdBy: "System Admin",
   },
@@ -239,10 +252,286 @@ Account Manager: {responsible}`,
       { templateField: "responsible", mappedFieldKey: "responsible", label: "Responsible Staff" },
       { templateField: "status", mappedFieldKey: "status", label: "Status" },
     ],
+    entities: ["client", "process"],
     createdAt: "2024-05-10 14:30",
     createdBy: "Legal Dept",
   },
+  {
+    id: "tpl-inv-1",
+    name: "Tax Invoice & Billing Statement",
+    category: "General",
+    fileName: "tax_invoice_statement.docx",
+    templateText: `OFFICIAL TAX INVOICE & BILLING STATEMENT
+
+Invoice Number: {invoice_number}
+Invoice Date: {current_date}
+Due Date: {due_date}
+Total Amount: {total_amount}
+
+Billed To:
+Client Name: {client_name}
+Email: {email}
+Phone: {phone}
+Address: {location}
+
+Service Breakdown & Itemized Charges:
+{items}
+
+Tax & Totals:
+Subtotal: {subtotal}
+Tax: {tax_amount}
+Total Due: {total_amount}
+Payment Status: {payment_status}
+
+Issued By: {responsible}
+Organization: MantraCare Healthcare Services`,
+    extractedFields: ["invoice_number", "current_date", "due_date", "total_amount", "client_name", "email", "phone", "location", "items", "subtotal", "tax_amount", "payment_status", "responsible"],
+    fieldMappings: [
+      { templateField: "invoice_number", mappedFieldKey: "invoice_number", label: "Invoice Number" },
+      { templateField: "current_date", mappedFieldKey: "date", label: "Invoice Date" },
+      { templateField: "client_name", mappedFieldKey: "name", label: "Client Full Name" },
+      { templateField: "total_amount", mappedFieldKey: "total_amount", label: "Total Amount" },
+      { templateField: "responsible", mappedFieldKey: "responsible", label: "Billing Officer" },
+    ],
+    entities: ["invoice"],
+    createdAt: "2024-05-20 16:00",
+    createdBy: "Finance Dept",
+  },
+  {
+    id: "tpl-inv-receipt",
+    name: "Payment Receipt & Proof of Payment",
+    category: "General",
+    fileName: "payment_receipt.docx",
+    templateText: `PAYMENT RECEIPT & ACKNOWLEDGMENT
+
+Receipt Number: {receipt_number}
+Date of Payment: {current_date}
+Payment Method: {payment_method}
+Amount Paid: {amount_paid}
+
+Received From:
+Client Name: {client_name}
+Email: {email}
+Phone: {phone}
+
+Transaction Summary:
+Transaction Reference: {transaction_ref}
+Associated Invoice: {invoice_number}
+Balance Remaining: {balance_remaining}
+
+Status: CONFIRMED & SETTLED
+Cashier / Officer: {responsible}`,
+    extractedFields: ["receipt_number", "current_date", "payment_method", "amount_paid", "client_name", "email", "phone", "transaction_ref", "invoice_number", "balance_remaining", "responsible"],
+    fieldMappings: [
+      { templateField: "receipt_number", mappedFieldKey: "receipt_number", label: "Receipt Number" },
+      { templateField: "current_date", mappedFieldKey: "date", label: "Receipt Date" },
+      { templateField: "client_name", mappedFieldKey: "name", label: "Client Full Name" },
+      { templateField: "amount_paid", mappedFieldKey: "total_amount", label: "Amount Paid" },
+      { templateField: "responsible", mappedFieldKey: "responsible", label: "Billing Officer" },
+    ],
+    entities: ["invoice"],
+    createdAt: "2024-05-21 11:00",
+    createdBy: "Finance Dept",
+  },
+  {
+    id: "tpl-proc-sop",
+    name: "Process SOP & Stage Execution Checklist",
+    category: "General",
+    fileName: "stage_sop_checklist.docx",
+    templateText: `PROCESS SOP & STAGE EXECUTION PROTOCOL
+
+Process Name: {process_name}
+Current Stage: {stage_name}
+Responsible Specialist: {responsible}
+Execution Date: {current_date}
+
+Client Information:
+Client Name: {client_name}
+Location: {location}
+Phone: {phone}
+
+Stage Checklist:
+1. [ ] Verification of client profile and contact validity
+2. [ ] Mandatory intake documentation completed and archived
+3. [ ] Stakeholder communication sent via preferred channel
+4. [ ] Stage milestone review signed off
+
+Stage Handover Status: {status}
+Sign-off: {responsible}`,
+    extractedFields: ["process_name", "stage_name", "responsible", "current_date", "client_name", "location", "phone", "status"],
+    fieldMappings: [
+      { templateField: "process_name", mappedFieldKey: "process_name", label: "Process Name" },
+      { templateField: "stage_name", mappedFieldKey: "stage_name", label: "Stage Name" },
+      { templateField: "responsible", mappedFieldKey: "responsible", label: "Responsible Specialist" },
+      { templateField: "current_date", mappedFieldKey: "date", label: "Current Date" },
+      { templateField: "client_name", mappedFieldKey: "name", label: "Client Name" },
+      { templateField: "location", mappedFieldKey: "location", label: "Location" },
+    ],
+    entities: ["process"],
+    createdAt: "2024-05-22 14:15",
+    createdBy: "Operations Dept",
+  },
+  {
+    id: "tpl-appt-confirm",
+    name: "Appointment Confirmation & Preparation Guide",
+    category: "General",
+    fileName: "appointment_confirmation.docx",
+    templateText: `APPOINTMENT CONFIRMATION & PREPARATION GUIDE
+
+Dear {client_name},
+
+Your appointment has been confirmed. Below are your consultation details:
+
+Appointment Date & Time: {appointment_date} at {appointment_time}
+Provider / Specialist: {responsible}
+Clinic / Location: {location}
+Service Type: {service_name}
+
+Important Preparation Guidelines:
+- Please arrive 10 minutes prior to your scheduled time.
+- Bring any relevant identification and medical records.
+- If you need to reschedule, notify us at least 24 hours in advance.
+
+Contact: {phone} | {email}
+Issued By: MantraCare Scheduling Center`,
+    extractedFields: ["client_name", "appointment_date", "appointment_time", "responsible", "location", "service_name", "phone", "email"],
+    fieldMappings: [
+      { templateField: "client_name", mappedFieldKey: "name", label: "Client Full Name" },
+      { templateField: "appointment_date", mappedFieldKey: "date", label: "Appointment Date" },
+      { templateField: "appointment_time", mappedFieldKey: "time", label: "Appointment Time" },
+      { templateField: "responsible", mappedFieldKey: "responsible", label: "Provider Name" },
+      { templateField: "location", mappedFieldKey: "location", label: "Clinic Location" },
+    ],
+    entities: ["appointment"],
+    createdAt: "2024-05-23 09:45",
+    createdBy: "Front Desk",
+  },
 ];
+
+/** Helper to filter document templates against entity and admin scope rules */
+export function isDocumentTemplateMatchingScope(
+  template: DocumentTemplate,
+  scope: { category?: string; industry?: string; location?: string; entity?: string }
+): boolean {
+  // Check entity match
+  if (scope.entity && scope.entity !== "all" && scope.entity !== "All") {
+    const templateEntities = template.entities || ["client", "process", "appointment", "invoice"];
+    if (templateEntities.length > 0 && !templateEntities.includes(scope.entity as TemplateEntity)) {
+      return false;
+    }
+  }
+
+  // Check scoping rules
+  if (!template.scopingRules || template.scopingRules.length === 0) {
+    return true; // No scoping restrictions = global
+  }
+
+  const { category = "All", industry = "All", location = "All" } = scope;
+  if (category === "All" && industry === "All" && location === "All") {
+    return true;
+  }
+
+  return template.scopingRules.some((rule) => {
+    // 1. Industry Category
+    if (category !== "All" && category !== "All Categories" && rule.industryCategory && rule.industryCategory !== "All" && rule.industryCategory !== "All Categories") {
+      if (rule.industryCategory.trim().toLowerCase() !== category.trim().toLowerCase()) {
+        return false;
+      }
+    }
+
+    // 2. Industries
+    if (industry !== "All" && industry !== "All Industries" && rule.industries && rule.industries.length > 0) {
+      const hasInd = rule.industries.some(
+        (i) => i.trim().toLowerCase() === industry.trim().toLowerCase()
+      );
+      if (!hasInd) return false;
+    }
+
+    // 3. Locations
+    if (location !== "All" && location !== "All Locations" && rule.locations && rule.locations.length > 0) {
+      const hasLoc = rule.locations.some(
+        (l) => l.trim().toLowerCase() === location.trim().toLowerCase()
+      );
+      if (!hasLoc) return false;
+    }
+
+    return true;
+  });
+}
+
+/** Robust scope rule matching for automations that take ScopingRule[] */
+export function isDocumentTemplateMatchingScopeRules(
+  template: DocumentTemplate,
+  stepRules: ScopingRule[] = [],
+  entity?: TemplateEntity
+): boolean {
+  // 1. Check entity match
+  if (entity && entity !== "all" as any) {
+    const templateEntities = template.entities || ["client", "process", "appointment", "invoice"];
+    if (templateEntities.length > 0 && !templateEntities.includes(entity)) {
+      return false;
+    }
+  }
+
+  // 2. Filter stepRules to only active/specific rules
+  const activeStepRules = (stepRules || []).filter((r) => {
+    const hasCategory = r.industryCategory && r.industryCategory !== "All" && r.industryCategory !== "All Categories";
+    const hasInd = r.industries && r.industries.length > 0 && !r.industries.includes("All") && !r.industries.includes("All Industries");
+    const hasLoc = r.locations && r.locations.length > 0 && !r.locations.includes("All") && !r.locations.includes("All Locations");
+    return hasCategory || hasInd || hasLoc;
+  });
+
+  // If automation step has no specific scope rules, all templates for this entity match
+  if (activeStepRules.length === 0) {
+    return true;
+  }
+
+  // If the template has no scoping rules, it is global and available across all scopes!
+  if (!template.scopingRules || template.scopingRules.length === 0) {
+    return true;
+  }
+
+  // 3. Check if at least one active step rule overlaps with at least one template scoping rule
+  return activeStepRules.some((stepRule) => {
+    return template.scopingRules!.some((tplRule) => {
+      // Industry Category check
+      if (
+        stepRule.industryCategory &&
+        tplRule.industryCategory &&
+        stepRule.industryCategory !== "All" &&
+        stepRule.industryCategory !== "All Categories" &&
+        tplRule.industryCategory !== "All" &&
+        tplRule.industryCategory !== "All Categories"
+      ) {
+        if (stepRule.industryCategory.trim().toLowerCase() !== tplRule.industryCategory.trim().toLowerCase()) {
+          return false;
+        }
+      }
+
+      // Industries check
+      const stepInds = (stepRule.industries || []).filter((i) => i !== "All" && i !== "All Industries");
+      const tplInds = (tplRule.industries || []).filter((i) => i !== "All" && i !== "All Industries");
+      if (stepInds.length > 0 && tplInds.length > 0) {
+        const hasCommonInd = stepInds.some((si) =>
+          tplInds.some((ti) => ti.trim().toLowerCase() === si.trim().toLowerCase())
+        );
+        if (!hasCommonInd) return false;
+      }
+
+      // Locations check
+      const stepLocs = (stepRule.locations || []).filter((l) => l !== "All" && l !== "All Locations");
+      const tplLocs = (tplRule.locations || []).filter((l) => l !== "All" && l !== "All Locations");
+      if (stepLocs.length > 0 && tplLocs.length > 0) {
+        const hasCommonLoc = stepLocs.some((sl) =>
+          tplLocs.some((tl) => tl.trim().toLowerCase() === sl.trim().toLowerCase())
+        );
+        if (!hasCommonLoc) return false;
+      }
+
+      return true;
+    });
+  });
+}
 
 export function getStoredDocumentTemplates(): DocumentTemplate[] {
   try {

@@ -15,7 +15,12 @@ import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
 import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES } from "../../../lib/useProcessStore";
 import { MOCK_SERVICES } from "../../../lib/mockServicesData";
 import { getStoredServices } from "../../../lib/servicesStore";
-import { getStoredDocumentTemplates } from "../../../lib/documentTemplatesStore";
+import {
+  getStoredDocumentTemplates,
+  isDocumentTemplateMatchingScopeRules,
+  DocumentTemplate,
+  TemplateEntity,
+} from "../../../lib/documentTemplatesStore";
 
 const availableEmployees = [
   { id: "1", name: "Sarah Johnson" },
@@ -3052,64 +3057,40 @@ export default function StepParametersFields({
 
             {/* ───────────── GENERATE DOCUMENT AUTOMATION STEP ───────────── */}
             {(stepKey === "generate_document" || stepKey === "generate-document") && (() => {
-              const selectedEntity = params.entity || "client";
+              const selectedEntity = ((params.entity as TemplateEntity) || "client");
               const storedTemplates = getStoredDocumentTemplates();
 
-              // Predefined templates by entity
-              const ENTITY_TEMPLATES: Record<string, Array<{ id: string; name: string; category: string; desc: string }>> = {
-                client: [
-                  { id: "tpl-client-onboarding", name: "Client Onboarding & Intake Agreement", category: "Client", desc: "Full onboarding paperwork and intake disclosure" },
-                  { id: "tpl-1", name: "Client KYC & Identification Verification Form", category: "Client", desc: "Identity KYC verification checklist" },
-                  { id: "tpl-cf-1", name: "General Medical & Treatment Consent Form", category: "Client", desc: "Informed consent for services and assessments" },
-                  { id: "tpl-client-summary", name: "Client Medical Profile & Registration Summary", category: "Client", desc: "Complete demographic and case summary" },
-                ],
-                process: [
-                  { id: "tpl-proc-sop", name: "Process SOP & Stage Execution Checklist", category: "Process", desc: "Standard operating procedure for current stage" },
-                  { id: "tpl-proc-transition", name: "Stage Transition Handover Brief", category: "Process", desc: "Handover document for next responsible team member" },
-                  { id: "tpl-proc-assessment", name: "Service & Workflow Assessment Protocol", category: "Process", desc: "Evaluation of process progress and milestones" },
-                  { id: "tpl-proc-summary", name: "Process Progress & Milestone Summary Sheet", category: "Process", desc: "Summary sheet of activities completed" },
-                ],
-                appointment: [
-                  { id: "tpl-appt-confirm", name: "Appointment Confirmation & Preparation Guide", category: "Appointment", desc: "Session timing, provider details, and prep guidelines" },
-                  { id: "tpl-sn-1", name: "Clinical Consultation & Session Notes", category: "Appointment", desc: "SOAP notes, provider assessment, and clinical review" },
-                  { id: "tpl-rx-1", name: "Prescription & Medication Order", category: "Appointment", desc: "Doctor prescription and instructions" },
-                  { id: "tpl-appt-aftercare", name: "Post-Appointment Care Instructions & Follow-up", category: "Appointment", desc: "Patient discharge notes and care protocol" },
-                ],
-                invoice: [
-                  { id: "tpl-inv-tax", name: "Tax Invoice & Billing Statement", category: "Invoice", desc: "Official PDF tax invoice with itemized services" },
-                  { id: "tpl-inv-receipt", name: "Payment Receipt & Proof of Payment", category: "Invoice", desc: "Paid receipt acknowledgment document" },
-                  { id: "tpl-inv-itemized", name: "Itemized Service Summary & Claim Breakdown", category: "Invoice", desc: "Itemized CPT and service code statement" },
-                  { id: "tpl-inv-credit", name: "Credit Note & Account Statement Adjustment", category: "Invoice", desc: "Adjustment voucher and statement" },
-                ],
-              };
+              // Filter stored templates by entity AND active scopingRules
+              const availableTemplates = storedTemplates.filter((t) =>
+                isDocumentTemplateMatchingScopeRules(t, scopingRules, selectedEntity)
+              );
 
-              // Merge predefined with matching user-created templates
-              const availableTemplates = [
-                ...(ENTITY_TEMPLATES[selectedEntity] || ENTITY_TEMPLATES.client),
-                ...storedTemplates.filter(t => !["tpl-1", "tpl-cf-1", "tpl-sn-1", "tpl-rx-1"].includes(t.id)).map(t => ({
-                  id: t.id,
-                  name: t.name,
-                  category: t.category || "Custom",
-                  desc: `Custom template (${t.extractedFields?.length || 0} fields)`,
-                })),
-              ];
+              // Active scope summary for display
+              const activeRule = scopingRules?.find(
+                (r) =>
+                  (r.industryCategory && r.industryCategory !== "All" && r.industryCategory !== "All Categories") ||
+                  (r.industries && r.industries.length > 0 && !r.industries.includes("All") && !r.industries.includes("All Industries")) ||
+                  (r.locations && r.locations.length > 0 && !r.locations.includes("All") && !r.locations.includes("All Locations"))
+              );
 
               const currentTemplateId = params.templateId || availableTemplates[0]?.id || "";
-              const activeTemplate = availableTemplates.find(t => t.id === currentTemplateId) || availableTemplates[0];
+              const activeTemplate = availableTemplates.find((t) => t.id === currentTemplateId) || availableTemplates[0];
 
-              const handleEntityChange = (newEntity: string) => {
-                const nextTemplates = ENTITY_TEMPLATES[newEntity] || ENTITY_TEMPLATES.client;
+              const handleEntityChange = (newEntity: TemplateEntity) => {
+                const nextTemplates = storedTemplates.filter((t) =>
+                  isDocumentTemplateMatchingScopeRules(t, scopingRules, newEntity)
+                );
                 const firstTpl = nextTemplates[0];
                 onChange({
                   entity: newEntity,
-                  templateId: firstTpl.id,
-                  templateName: firstTpl.name,
-                  documentName: `{client_name} - ${firstTpl.name}`,
+                  templateId: firstTpl?.id || "",
+                  templateName: firstTpl?.name || "",
+                  documentName: firstTpl ? `{client_name} - ${firstTpl.name}` : `{client_name} - Document`,
                 });
               };
 
               const handleTemplateSelect = (tplId: string) => {
-                const found = availableTemplates.find(t => t.id === tplId);
+                const found = availableTemplates.find((t) => t.id === tplId);
                 onChange({
                   templateId: tplId,
                   templateName: found?.name || "",
@@ -3119,51 +3100,133 @@ export default function StepParametersFields({
 
               const docName = params.documentName || (activeTemplate ? `{client_name} - ${activeTemplate.name}` : "Generated Document");
 
+              const ENTITY_CONFIG = [
+                { key: "client" as TemplateEntity, label: "Client", icon: User },
+                { key: "process" as TemplateEntity, label: "Process", icon: Briefcase },
+                { key: "appointment" as TemplateEntity, label: "Appointment", icon: Calendar },
+                { key: "invoice" as TemplateEntity, label: "Invoice", icon: Receipt },
+              ];
+
               return (
                 <div className="space-y-4">
-                  {/* Select Entity - moved to clean dropdown */}
-                  {renderField("Select Entity *",
-                    <select
-                      value={selectedEntity}
-                      onChange={(e) => handleEntityChange(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs font-semibold text-gray-800 focus:border-blue-500 outline-none"
-                    >
-                      <option value="client">Client</option>
-                      <option value="process">Process</option>
-                      <option value="appointment">Appointment</option>
-                      <option value="invoice">Invoice</option>
-                    </select>
+                  {/* Select Entity Dice */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-semibold text-gray-700">Select Entity *</label>
+                      <span className="text-[11px] text-gray-400">Target entity for template</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {ENTITY_CONFIG.map(({ key, label, icon: Icon }) => {
+                        const isSelected = selectedEntity === key;
+                        const entityCount = storedTemplates.filter((t) =>
+                          isDocumentTemplateMatchingScopeRules(t, scopingRules, key)
+                        ).length;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => handleEntityChange(key)}
+                            className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 ${
+                              isSelected
+                                ? "bg-blue-50/80 border-blue-500 text-blue-700 shadow-sm ring-1 ring-blue-500/30 font-semibold"
+                                : "bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                            }`}
+                          >
+                            <Icon className={`w-4 h-4 ${isSelected ? "text-blue-600" : "text-slate-400"}`} />
+                            <span className="text-xs leading-none">{label}</span>
+                            <span
+                              className={`text-[10px] font-semibold px-1.5 py-0.2 rounded-full ${
+                                isSelected ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {entityCount}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Scope Feedback Badge */}
+                  {activeRule ? (
+                    <div className="flex items-center justify-between px-3 py-2 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs text-amber-900">
+                      <div className="flex items-center gap-2">
+                        <Sliders className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span className="font-medium text-[11px]">
+                          Filtered by Scope: <strong className="font-bold text-amber-950">{activeRule.industryCategory}</strong>
+                          {activeRule.industries && activeRule.industries.length > 0 && ` • ${activeRule.industries.join(", ")}`}
+                          {activeRule.locations && activeRule.locations.length > 0 && ` • ${activeRule.locations.join(", ")}`}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold bg-amber-100/90 text-amber-800 px-2 py-0.5 rounded-md">
+                        {availableTemplates.length} matching
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                      <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                        Global Scope (All industries & locations)
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                        {availableTemplates.length} templates
+                      </span>
+                    </div>
                   )}
 
                   {/* Respective Template */}
-                  {renderField(
-                    <div className="flex items-center justify-between">
-                      <span>Select Template ({selectedEntity.toUpperCase()})</span>
-                      <span className="text-[11px] text-gray-500 font-normal">
-                        {availableTemplates.length} templates available
-                      </span>
-                    </div>,
-                    <select
-                      value={currentTemplateId}
-                      onChange={(e) => handleTemplateSelect(e.target.value)}
-                      className="w-full px-3 py-2.5 bg-white border border-border rounded-xl text-xs font-medium focus:border-blue-500 outline-none"
-                    >
-                      {availableTemplates.map((tpl) => (
-                        <option key={tpl.id} value={tpl.id}>
-                          {tpl.name} ({tpl.category})
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                  {availableTemplates.length > 0 ? (
+                    <>
+                      {renderField(
+                        <div className="flex items-center justify-between">
+                          <span>Select Template ({selectedEntity.toUpperCase()})</span>
+                          <span className="text-[11px] text-gray-500 font-normal">
+                            {availableTemplates.length} available
+                          </span>
+                        </div>,
+                        <select
+                          value={currentTemplateId}
+                          onChange={(e) => handleTemplateSelect(e.target.value)}
+                          className="w-full px-3 py-2.5 bg-white border border-border rounded-xl text-xs font-medium focus:border-blue-500 outline-none"
+                        >
+                          {availableTemplates.map((tpl) => (
+                            <option key={tpl.id} value={tpl.id}>
+                              {tpl.name} ({tpl.category}) {tpl.scopingRules && tpl.scopingRules.length > 0 ? "• Scoped" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      )}
 
-                  {/* Selected Template Description Card */}
-                  {activeTemplate && (
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-2.5">
-                      <FileCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-slate-800">{activeTemplate.name}</p>
-                        <p className="text-[11px] text-slate-500 mt-0.5">{activeTemplate.desc}</p>
-                      </div>
+                      {/* Selected Template Description Card */}
+                      {activeTemplate && (
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-2.5">
+                          <FileCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-slate-800">{activeTemplate.name}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              {activeTemplate.extractedFields?.length || 0} fillable fields mapped • Category: {activeTemplate.category}
+                              {activeTemplate.scopingRules && activeTemplate.scopingRules.length > 0
+                                ? ` • Scoped to ${activeTemplate.scopingRules.map((r) => r.industryCategory).filter(Boolean).join(", ")}`
+                                : " • Global Scope"}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center space-y-2">
+                      <FileCheck className="w-6 h-6 text-slate-400 mx-auto" />
+                      <p className="text-xs font-semibold text-slate-700">No {selectedEntity} templates match this scope</p>
+                      <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                        No templates for entity "{selectedEntity}" match the active scope rule ({activeRule?.industryCategory || "specified scope"}).
+                      </p>
+                      <Link
+                        to="/admin/document-templates"
+                        target="_blank"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 underline pt-1"
+                      >
+                        Manage Document Templates <ExternalLink className="w-3 h-3" />
+                      </Link>
                     </div>
                   )}
 

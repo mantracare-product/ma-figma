@@ -90,6 +90,7 @@ export interface Stage {
   intentDescription?: string;
   endPipelineOnReach?: boolean; // System setting to end this pipeline and move to next pipeline
   nextProcessTransitions?: ProcessTransitionTarget[];
+  scopingRules?: ScopingRule[];
 }
 
 export interface ScopingRule {

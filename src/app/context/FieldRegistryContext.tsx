@@ -371,6 +371,7 @@ export interface ScopingRule {
   industryCategory?: string;  // Scoped to category e.g. "Healthcare", empty or "All" = global
   industries?: string[];      // Multiple industries e.g. ["Cardiologist", "Dentist"], empty = all in category
   locations?: string[];       // Multiple locations e.g. ["California", "New York"], empty = all
+  entities?: string[];        // Multiple entities e.g. ["client", "process", "appointment", "invoice"]
 }
 
 export interface FieldPermissions {

@@ -22,6 +22,7 @@ import {
 } from "../../../lib/useAutomationStore";
 import { useProcessStore } from "../../../lib/useProcessStore";
 import { AdminScopingRulesEditor } from "./components/AdminScopingRulesEditor";
+import { AdminControlAccordion } from "./components/AdminControlAccordion";
 import type { ScopingRule } from "../../context/FieldRegistryContext";
 import {
   INITIAL_CATEGORIES,
@@ -580,14 +581,14 @@ export default function AdminAutomations() {
             </div>
 
             <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-              <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Define which tenant industry categories, industries, and locations have visibility and execution rights for this automation rule.
-              </p>
-
-              <AdminScopingRulesEditor
-                rules={pendingScopingRules}
-                onChange={(rules) => setPendingScopingRules(rules)}
-                showHeader={true}
+              <AdminControlAccordion
+                scopingRules={pendingScopingRules}
+                onScopingRulesChange={(rules) => setPendingScopingRules(rules)}
+                defaultAdminControlOpen={true}
+                defaultScopeOpen={true}
+                defaultPermissionsOpen={false}
+                scopeTooltip="Define which tenant industry categories, industries, and locations have visibility and execution rights for this automation rule."
+                permissionsTooltip="Configure what tenant users are permitted to do with this automation rule."
               />
             </div>
 

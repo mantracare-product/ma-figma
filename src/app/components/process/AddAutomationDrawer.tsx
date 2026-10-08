@@ -72,6 +72,7 @@ import { toast } from "sonner";
 import { getStoredProcesses, isProcessMatchingScopingRules } from "../../../lib/useProcessStore";
 import type { ScopingRule } from "../../context/FieldRegistryContext";
 import { AdminScopingRulesEditor } from "../../pages/admin/components/AdminScopingRulesEditor";
+import { AdminControlAccordion } from "../../pages/admin/components/AdminControlAccordion";
 
 export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   parallel: ["stage", "incall", "inchat", "postcall"],
@@ -365,11 +366,25 @@ export default function AddAutomationDrawer({
   initialStepIdToConfigure,
 }: AddAutomationDrawerProps) {
   // Scoping rules state (Admin Scope Rule)
-  const [drawerScopingRules, setDrawerScopingRules] = useState<ScopingRule[]>(
-    initialScopingRules && initialScopingRules.length > 0
-      ? initialScopingRules
-      : (initialAutomation as any)?.scopingRules || []
-  );
+  const [drawerScopingRules, setDrawerScopingRules] = useState<ScopingRule[]>(() => {
+    if (initialScopingRules && initialScopingRules.length > 0) return initialScopingRules;
+    if ((initialAutomation as any)?.scopingRules?.length > 0) return (initialAutomation as any).scopingRules;
+    if (stageRef?.processId) {
+      const allProcs = (processes && processes.length > 0) ? processes : getStoredProcesses();
+      const p = allProcs.find((proc: any) => proc.id === stageRef.processId);
+      const st = p?.stages?.find((s: any) => s.id === stageRef.stageId);
+      if (st?.scopingRules && st.scopingRules.length > 0) return st.scopingRules;
+      if (p?.scopingRules && p.scopingRules.length > 0) return p.scopingRules;
+      if (p?.industryCategory && p.industryCategory !== "All") {
+        return [{
+          industryCategory: p.industryCategory,
+          industries: p.industry && p.industry !== "All" ? [p.industry] : [],
+          locations: p.locations && !p.locations.includes("All") ? p.locations : [],
+        }];
+      }
+    }
+    return [];
+  });
 
   // Determine effective scope and scoped processes
   const allAvailableProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
@@ -441,10 +456,27 @@ export default function AddAutomationDrawer({
         setIsCanvasView(defaultView === "flowbuilder");
         setIsAddStepOpen(false);
         setIsChoosingGlobalTrigger(false);
-        const initRules =
+        let initRules: ScopingRule[] =
           initialScopingRules && initialScopingRules.length > 0
             ? initialScopingRules
             : (initialAutomation as any)?.scopingRules || [];
+
+        if (initRules.length === 0 && stageRef?.processId) {
+          const allProcs = (processes && processes.length > 0) ? processes : getStoredProcesses();
+          const p = allProcs.find((proc: any) => proc.id === stageRef.processId);
+          const st = p?.stages?.find((s: any) => s.id === stageRef.stageId);
+          if (st?.scopingRules && st.scopingRules.length > 0) {
+            initRules = st.scopingRules;
+          } else if (p?.scopingRules && p.scopingRules.length > 0) {
+            initRules = p.scopingRules;
+          } else if (p?.industryCategory && p.industryCategory !== "All") {
+            initRules = [{
+              industryCategory: p.industryCategory,
+              industries: p.industry && p.industry !== "All" ? [p.industry] : [],
+              locations: p.locations && !p.locations.includes("All") ? p.locations : [],
+            }];
+          }
+        }
         setDrawerScopingRules(initRules);
 
         if (initialAutomation) {
@@ -862,6 +894,7 @@ export default function AddAutomationDrawer({
                 workflowSteps={steps}
                 onWorkflowStepsChange={(newSteps) => updateSteps(newSteps)}
                 stepAllowedTriggers={stepAllowedTriggers}
+                scopingRules={drawerScopingRules}
                 scope={effectiveScope}
                 triggerType={effectiveScope === "global" ? globalTriggerType : "stage"}
                 triggerEvent={effectiveScope === "global" ? globalTriggerEvent : stageTriggerWhen}
@@ -933,38 +966,27 @@ export default function AddAutomationDrawer({
                 />
               </div>
 
-              {/* 2b. Admin Scope Rule (Admin Only) */}
+              {/* 2b. Admin Control (Scope Rules & Permissions) */}
               {isAdmin && (
-                <div className="space-y-2 p-4 rounded-xl border border-slate-200 bg-slate-50/70 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Globe className="w-3.5 h-3.5 text-blue-600" />
-                      <label className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
-                        Admin Scope Rule
-                      </label>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-                        Admin Only
-                      </span>
+                <div className="space-y-2">
+                  {effectiveScope === "stage" && (
+                    <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50/90 border border-blue-200/80 text-xs text-blue-700 font-semibold shadow-2xs">
+                      <Sparkles className="w-3.5 h-3.5 shrink-0 text-blue-600" />
+                      <span>Pre-applied from Process &gt; Stage scope rule</span>
                     </div>
-                    {drawerScopingRules.length > 0 && (
-                      <span className="text-[11px] font-medium text-blue-600">
-                        {drawerScopingRules.length} scope rule{drawerScopingRules.length > 1 ? "s" : ""} active
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Define tenant scope rules. Configurations below (processes, appointments, invoices, and fields) will automatically adapt to this scope.
-                  </p>
-                  <div className="pt-1">
-                    <AdminScopingRulesEditor
-                      rules={drawerScopingRules}
-                      onChange={(newRules) => {
-                        setDrawerScopingRules(newRules);
-                        onScopingRulesChange?.(newRules);
-                      }}
-                      showHeader={false}
-                    />
-                  </div>
+                  )}
+                  <AdminControlAccordion
+                    scopingRules={drawerScopingRules}
+                    onScopingRulesChange={(newRules) => {
+                      setDrawerScopingRules(newRules);
+                      onScopingRulesChange?.(newRules);
+                    }}
+                    defaultAdminControlOpen={true}
+                    defaultScopeOpen={true}
+                    defaultPermissionsOpen={false}
+                    scopeTooltip={effectiveScope === "stage" ? "Pre-applied from Process > Stage scope rules. Restricts visibility by tenant industry category, industries, and locations." : "Define tenant scope rules. Configurations below (processes, appointments, invoices, and fields) will automatically adapt to this scope."}
+                    permissionsTooltip="Configure what tenant users are permitted to do with this automation rule."
+                  />
                 </div>
               )}
 

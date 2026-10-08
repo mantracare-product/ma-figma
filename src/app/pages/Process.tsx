@@ -258,14 +258,14 @@ const FORM_TEMPLATES = [
 ];
 
 const CHEVRON_PALETTE = [
-  "#5A6578", // Slate
-  "#EF4444", // Coral Red
-  "#22C55E", // Emerald Green
-  "#8B5CF6", // Purple / Violet
   "#3B82F6", // Royal Blue
+  "#06B6D4", // Cyan
+  "#10B981", // Emerald Green
+  "#EF4444", // Coral Red
+  "#F59E0B", // Amber
+  "#8B5CF6", // Purple
+  "#EC4899", // Pink
   "#2563EB", // Cobalt Blue
-  "#0284C7", // Sky Blue
-  "#6366F1", // Indigo
 ];
 
 interface ChevronStageItemProps {
@@ -347,9 +347,9 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
         isFirst ? "rounded-l-md" : "-ml-3.5"
       } ${isDragging ? "opacity-35 scale-95" : "opacity-100"} ${
         isOver ? "ring-2 ring-white scale-105 z-20" : ""
-      } ${isSelected ? "brightness-105 shadow-md ring-2 ring-blue-500/50 z-20" : "hover:bg-slate-300/80 hover:text-slate-900 hover:z-10"}`}
+      } ${isSelected ? "brightness-110 shadow-md ring-2 ring-white/80 z-20" : "hover:brightness-105 hover:z-10"}`}
       style={{
-        backgroundColor: isSelected ? (color || stage.color || "#3B82F6") : "#E2E8F0",
+        backgroundColor: color || stage.color || CHEVRON_PALETTE[index % CHEVRON_PALETTE.length],
         clipPath: chevronClip,
         minWidth: "140px",
         paddingLeft: isFirst ? "14px" : "24px",
@@ -375,18 +375,14 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
       )}
 
       <div
-        className={`cursor-grab active:cursor-grabbing p-0.5 -ml-1 mr-1 shrink-0 transition-colors ${
-          isSelected ? "text-white/70 group-hover:text-white" : "text-slate-400 group-hover:text-slate-600"
-        }`}
+        className="cursor-grab active:cursor-grabbing p-0.5 -ml-1 mr-1 shrink-0 transition-colors text-white/70 group-hover:text-white"
         title="Drag to reorder"
       >
         <GripVertical className="w-3.5 h-3.5" />
       </div>
 
       <span
-        className={`text-xs font-semibold tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1 ${
-          isSelected ? "text-white" : "text-slate-600 group-hover:text-slate-900"
-        }`}
+        className="text-xs font-semibold tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1 text-white"
         style={{ fontFamily: "Outfit, sans-serif" }}
       >
         {isLastStage && <span className="text-[10px] opacity-90">🏁</span>}
@@ -400,9 +396,7 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
             e.stopPropagation();
             onEdit(stage);
           }}
-          className={`p-1 rounded transition-all ${
-            isSelected ? "text-white/80 hover:text-white hover:bg-black/20" : "text-slate-500 hover:text-slate-800 hover:bg-slate-300"
-          }`}
+          className="p-1 rounded transition-all text-white/80 hover:text-white hover:bg-black/20"
           title="Edit stage"
         >
           <Edit className="w-3 h-3" />
@@ -413,9 +407,7 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
             e.stopPropagation();
             onRemove(stage.id);
           }}
-          className={`p-1 rounded transition-all ${
-            isSelected ? "text-white/80 hover:text-white hover:bg-black/20" : "text-slate-500 hover:text-rose-600 hover:bg-rose-100"
-          }`}
+          className="p-1 rounded transition-all text-white/80 hover:text-rose-200 hover:bg-rose-500/30"
           title="Delete stage"
         >
           <Trash2 className="w-3 h-3" />
@@ -3278,9 +3270,6 @@ export default function Process() {
                             >
                               <Edit className="w-4.5 h-4.5" />
                             </button>
-                            <span className="text-sm px-4 py-1.5 bg-blue-100 text-blue-700 rounded-full font-semibold whitespace-nowrap">
-                              Process
-                            </span>
                           </div>
                           <p
                             className="text-base whitespace-pre-wrap mt-1"
@@ -3435,7 +3424,7 @@ export default function Process() {
                                         isSelected={expandedStage === fStage.id}
                                         isFirst={fIdx === 0}
                                         isLast={fIdx === finalStageOptions.length - 1}
-                                        color={fStage.color || "#EC4899"}
+                                        color={fStage.color || CHEVRON_PALETTE[(sequentialStages.length + fIdx) % CHEVRON_PALETTE.length] || "#EC4899"}
                                         isLastStage={true}
                                       />
                                     );

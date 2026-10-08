@@ -34,6 +34,7 @@ import {
   INITIAL_INDUSTRIES,
 } from "../../../data/industryReferenceData";
 import TableComponent, { TableColumn } from "../../components/ui/TableComponent";
+import PageHeader from "../../components/layout/PageHeader";
 
 export type { IndustryCategory, IndustryItem };
 
@@ -306,16 +307,12 @@ export function AdminIndustries() {
   };
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-200">
-      {/* ── Page Title ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-[22px] font-bold text-[#111827] leading-tight">Industries</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Manage industries, domain workflows, and industry categories for organization provisioning.
-          </p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7 animate-in fade-in duration-200">
+        <PageHeader
+          title="Industries"
+          subtitle="Manage industries, domain workflows, and industry categories for organization provisioning"
+        />
 
       {/* ── Sub-nav Pill Toggle & Search Row ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -981,6 +978,7 @@ export function AdminIndustries() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

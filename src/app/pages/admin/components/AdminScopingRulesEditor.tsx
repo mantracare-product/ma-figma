@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Trash2, Globe, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Globe, ChevronDown, User, Zap, Calendar, Receipt, Check } from "lucide-react";
 import type { ScopingRule } from "../../../context/FieldRegistryContext";
 import {
   INITIAL_CATEGORIES,
@@ -15,6 +15,7 @@ interface AdminScopingRulesEditorProps {
   onChange: (rules: ScopingRule[]) => void;
   isReadOnly?: boolean;
   showHeader?: boolean;
+  allowEntities?: boolean;
 }
 
 export function AdminScopingRulesEditor({
@@ -22,6 +23,7 @@ export function AdminScopingRulesEditor({
   onChange,
   isReadOnly = false,
   showHeader = false,
+  allowEntities = false,
 }: AdminScopingRulesEditorProps) {
   const [openRuleIds, setOpenRuleIds] = useState<Record<string, boolean>>({});
 
@@ -44,6 +46,7 @@ export function AdminScopingRulesEditor({
       industryCategory: INITIAL_CATEGORIES[0]?.name || "Automobile",
       industries: [],
       locations: [],
+      ...(allowEntities ? { entities: ["client", "process", "appointment", "invoice"] } : {}),
     };
     setOpenRuleIds((prev) => ({ ...prev, [newId]: true }));
     onChange([...rules, newRule]);
@@ -212,6 +215,66 @@ export function AdminScopingRulesEditor({
                         customInputPlaceholder="Add other country..."
                       />
                     </div>
+
+                    {/* Step 4: Entity Availability (Multiple selection) */}
+                    {allowEntities && (
+                      <div>
+                        <div className="flex items-center mb-1.5">
+                          <label className="block text-[11px] font-medium text-gray-700">
+                            4. Entity Availability
+                          </label>
+                          <InfoTooltip text="Choose one or more entities this rule applies to: Client, Process, Appointment, or Invoice." size="sm" />
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {[
+                            { key: "client", label: "Client", icon: User },
+                            { key: "process", label: "Process", icon: Zap },
+                            { key: "appointment", label: "Appointment", icon: Calendar },
+                            { key: "invoice", label: "Invoice", icon: Receipt },
+                          ].map((ent) => {
+                            const currentEntities = rule.entities && rule.entities.length > 0
+                              ? rule.entities
+                              : ["client", "process", "appointment", "invoice"];
+                            const isSelected = currentEntities.includes(ent.key);
+                            const Icon = ent.icon;
+
+                            return (
+                              <button
+                                key={ent.key}
+                                type="button"
+                                disabled={isReadOnly}
+                                onClick={() => {
+                                  if (isReadOnly) return;
+                                  let next: string[];
+                                  if (isSelected) {
+                                    next = currentEntities.filter((k) => k !== ent.key);
+                                    if (next.length === 0) {
+                                      next = [ent.key]; // keep at least 1 selected
+                                    }
+                                  } else {
+                                    next = [...currentEntities, ent.key];
+                                  }
+                                  handleUpdateRule(idx, { entities: next });
+                                }}
+                                className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer select-none ${
+                                  isSelected
+                                    ? "bg-blue-50/80 border-blue-500 text-blue-700 ring-1 ring-blue-500/15"
+                                    : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50 hover:border-gray-300"
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                                  <span className="truncate">{ent.label}</span>
+                                </div>
+                                {isSelected && (
+                                  <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-1" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

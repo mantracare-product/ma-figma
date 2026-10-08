@@ -26,6 +26,10 @@ import { WorkflowStep } from "../../types/workflow";
 import VariablePickerButton, { FETCH_FIELD_SOURCES, FIELDS_BY_SOURCE_MAP } from "../../components/process/VariablePickerButton";
 import StepParametersFields from "../../components/process/StepParametersFields";
 import StepDetailDrawer from "../../components/process/StepDetailDrawer";
+import AddAutomationDrawer from "../../components/process/AddAutomationDrawer";
+import { getStoredVoices, VoiceConfigItem, VOICE_STORE_EVENT } from "../../../lib/useVoiceStore";
+import { getActiveAIModels, AI_MODELS_STORE_EVENT, AIModelConfig } from "../../../lib/aiModelsStore";
+import { SelectFieldsModal } from "../../components/help/FieldManager";
 import { assignNumberToStage } from "../../../lib/useStageNumberRouting";
 import TestProcessChatDrawer from "../../components/process/TestProcessChatDrawer";
 import CallTriggerDrawer from "../../components/process/CallTriggerDrawer";
@@ -34,6 +38,7 @@ import { useFieldRegistry } from "../../context/FieldRegistryContext";
 import { useProcessTemplates } from "../../context/ProcessTemplateContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { AdminScopingRulesEditor } from "./components/AdminScopingRulesEditor";
+import { AdminControlAccordion } from "./components/AdminControlAccordion";
 import {
   INITIAL_CATEGORIES,
   INITIAL_INDUSTRIES,
@@ -100,6 +105,7 @@ export interface Stage {
   workflowSteps?: WorkflowStep[];
   enableCalling?: boolean;
   callTriggerSettings?: CallTriggerSettings;
+  scopingRules?: ScopingRule[];
 }
 
 export interface Process {
@@ -262,9 +268,47 @@ interface DraggableStageProps {
   onEdit: (stage: Stage) => void;
 }
 
-const DraggableStage = ({ stage, index, totalStages = 1, moveStage, onRemove, onEdit }: DraggableStageProps) => {
+export const CHEVRON_PALETTE = [
+  "#3B82F6", // Royal Blue
+  "#06B6D4", // Cyan
+  "#10B981", // Emerald Green
+  "#EF4444", // Coral Red
+  "#F59E0B", // Amber
+  "#8B5CF6", // Purple
+  "#EC4899", // Pink
+  "#2563EB", // Cobalt Blue
+];
+
+interface ChevronStageItemProps {
+  stage: Stage;
+  index: number;
+  totalStages: number;
+  moveStage: (dragIndex: number, hoverIndex: number) => void;
+  onRemove: (stageId: string) => void;
+  onEdit: (stage: Stage) => void;
+  onSelect: (stage: Stage) => void;
+  isSelected?: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  color?: string;
+  isLastStage?: boolean;
+}
+
+const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
+  stage,
+  index,
+  totalStages,
+  moveStage,
+  onRemove,
+  onEdit,
+  onSelect,
+  isSelected,
+  isFirst,
+  isLast,
+  color,
+  isLastStage,
+}) => {
   const ref = useRef<HTMLDivElement>(null);
-  const isFinal = totalStages > 0 && index === totalStages - 1;
 
   const [{ isDragging }, drag] = useDrag({
     type: "STAGE",
@@ -301,41 +345,83 @@ const DraggableStage = ({ stage, index, totalStages = 1, moveStage, onRemove, on
 
   drag(drop(ref));
 
+  const chevronClip = isFirst
+    ? "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)"
+    : "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 14px 50%)";
+
   return (
-    <div className="relative flex-shrink-0 group">
+    <div
+      ref={ref}
+      onClick={() => onSelect(stage)}
+      onDoubleClick={() => onEdit(stage)}
+      className={`relative group flex items-center h-10 select-none cursor-pointer transition-all flex-shrink-0 ${
+        isFirst ? "rounded-l-md" : "-ml-3.5"
+      } ${isDragging ? "opacity-35 scale-95" : "opacity-100"} ${
+        isOver ? "ring-2 ring-white scale-105 z-20" : ""
+      } ${isSelected ? "brightness-110 shadow-md ring-2 ring-white/80 z-20 scale-[1.02]" : "hover:brightness-105 hover:z-10"}`}
+      style={{
+        backgroundColor: color || stage.color || CHEVRON_PALETTE[index % CHEVRON_PALETTE.length],
+        clipPath: chevronClip,
+        minWidth: "140px",
+        paddingLeft: isFirst ? "14px" : "24px",
+        paddingRight: "24px",
+      }}
+      title={`Stage: ${stage.name} (Drag to reorder, click to view, double click to edit)`}
+    >
+      {!isLast && (
+        <svg
+          className="absolute right-0 top-0 h-full w-[15px] pointer-events-none z-10"
+          viewBox="0 0 15 40"
+          preserveAspectRatio="none"
+          fill="none"
+        >
+          <path
+            d="M 1 0 L 14 20 L 1 40"
+            stroke="white"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+
       <div
-        ref={ref}
-        className={`relative flex items-center gap-2 px-4 py-3 cursor-grab active:cursor-grabbing transition-all shadow-md hover:shadow-lg select-none ${
-          isOver ? "ring-2 ring-white scale-105" : ""
-        }`}
-        style={{
-          backgroundColor: stage.color || (isFinal ? "#EC4899" : "#22D3EE"),
-          opacity: isDragging ? 0.35 : 1,
-          minWidth: "170px",
-          clipPath: "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)",
-        }}
-        onDoubleClick={() => onEdit(stage)}
-        title={isFinal ? "Final Stage (Completion Point) - Double click to edit" : "Drag to reorder stage, or click edit"}
+        className="cursor-grab active:cursor-grabbing p-0.5 -ml-1 mr-1 shrink-0 transition-colors text-white/70 group-hover:text-white"
+        title="Drag to reorder"
       >
-        <GripVertical className="w-3.5 h-3.5 text-white/70 group-hover:text-white shrink-0" />
-        <span className="text-sm font-semibold text-white pr-1.5 flex-1 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-          {stage.name}
-        </span>
-        {isFinal && (
-          <span className="text-[10px] font-bold bg-black/35 text-white px-1.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs whitespace-nowrap">
-            🏁 Final
-          </span>
-        )}
+        <GripVertical className="w-3.5 h-3.5" />
+      </div>
+
+      <span
+        className="text-xs font-semibold tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1 text-white"
+        style={{ fontFamily: "Outfit, sans-serif" }}
+      >
+        {isLastStage && <span className="text-[10px] opacity-90">🏁</span>}
+        <span className="truncate">{stage.name}</span>
+      </span>
+
+      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 -mr-2">
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             onEdit(stage);
           }}
-          className="text-white/90 hover:text-white transition-colors hover:scale-110 p-0.5"
-          title="Edit Stage"
+          className="p-1 rounded transition-all text-white/80 hover:text-white hover:bg-black/20"
+          title="Edit stage"
         >
-          <Edit className="w-3.5 h-3.5" />
+          <Edit className="w-3 h-3" />
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(stage.id);
+          }}
+          className="p-1 rounded transition-all text-white/80 hover:text-rose-200 hover:bg-rose-500/30"
+          title="Delete stage"
+        >
+          <Trash2 className="w-3 h-3" />
         </button>
       </div>
     </div>
@@ -692,8 +778,8 @@ export default function AdminProcessTemplates() {
     saveStoredProcesses(processes);
   }, [processes]);
 
-  // Entity Modes and selected entity tab matching Process.tsx
-  const [selectedEntity, setSelectedEntity] = useState<EntityType>("client");
+  // Entity dropdown filter state matching Client Workflow entities (no client entity; process, appointment, invoice, insurance, claim)
+  const [selectedEntityFilter, setSelectedEntityFilter] = useState<string>("process");
 
   // Ensure default entity processes exist for all non-client entities
   useEffect(() => {
@@ -711,43 +797,26 @@ export default function AdminProcessTemplates() {
     });
   }, []);
 
-  const ENTITY_TABS: Array<{ id: EntityType; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-    { id: "client", label: "Processes", icon: GitBranch },
-    { id: "appointment", label: "Appointments", icon: Calendar },
-    { id: "invoice", label: "Invoices", icon: FileText },
-    { id: "insurance", label: "Insurance", icon: Shield },
-    { id: "claim", label: "Claims", icon: ClipboardList },
-  ];
-
-  const entityModes = useMemo(() => {
-    return ENTITY_TABS.map((tab) => {
-      const Icon = tab.icon;
-      const count = processes.filter((p) => (p.entityType || "client") === tab.id).length;
-      return {
-        id: tab.id,
-        label: tab.label,
-        icon: <Icon className="w-3.5 h-3.5" />,
-        badge: count > 0 ? count : undefined,
-      };
+  // Entity counts for the dropdown matching Client Workflow modules
+  const entityCounts = useMemo(() => {
+    const counts = {
+      all: processes.length,
+      process: 0,
+      appointment: 0,
+      invoice: 0,
+      insurance: 0,
+      claim: 0,
+    };
+    processes.forEach((p) => {
+      const ent = (p.entityType || "client").toLowerCase();
+      if (ent === "appointment") counts.appointment++;
+      else if (ent === "invoice") counts.invoice++;
+      else if (ent === "insurance") counts.insurance++;
+      else if (ent === "claim") counts.claim++;
+      else counts.process++; // "client" and "process" map to Processes
     });
+    return counts;
   }, [processes]);
-
-  const handleEntityModeChange = (modeId: string) => {
-    const nextEntity = modeId as EntityType;
-    setSelectedEntity(nextEntity);
-    const firstOfEntity = processes.find((p) => (p.entityType || "client") === nextEntity);
-    if (firstOfEntity) {
-      setSelectedProcess(firstOfEntity.id);
-      setViewMode("process");
-      setExpandedStage(null);
-    } else {
-      setSelectedProcess(null);
-    }
-  };
-
-  const entityFilteredProcesses = useMemo(() => {
-    return processes.filter((p) => (p.entityType || "client") === selectedEntity);
-  }, [processes, selectedEntity]);
 
   // Scope Filter states for Admin left panel
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
@@ -768,24 +837,38 @@ export default function AdminProcessTemplates() {
   const [targetProcessForScope, setTargetProcessForScope] = useState<Process | null>(null);
   const [editProcessScopingRules, setEditProcessScopingRules] = useState<ScopingRule[]>([]);
 
-  // Filtered processes based on entity, admin category, industry, and location filters + search query
+  // Filtered processes based on entity dropdown, admin category, industry, and location filters + search query
   const filteredProcesses = useMemo(() => {
-    return entityFilteredProcesses.filter((p) => {
+    return processes.filter((p) => {
+      // 1. Entity Filter matching client workflow (Processes, Appointments, Invoices, Insurance, Claims)
+      const ent = (p.entityType || "client").toLowerCase();
+      const ruleEntities = (p.scopingRules || []).flatMap((r: any) => r.entities || []).map((e: string) => e.toLowerCase());
+      const isProcessCategory = selectedEntityFilter === "process" || selectedEntityFilter === "client";
+      const matchesEntity = isProcessCategory
+        ? (ent === "process" || ent === "client" || ruleEntities.includes("process") || ruleEntities.includes("client"))
+        : (ent === selectedEntityFilter.toLowerCase() || ruleEntities.includes(selectedEntityFilter.toLowerCase()));
+      if (!matchesEntity) return false;
+
+      // 2. Scope match
       const matchesScope = isProcessMatchingScope(p, {
         category: selectedCategoryFilter,
         industry: selectedIndustryFilter,
         location: selectedLocationFilter,
       });
       if (!matchesScope) return false;
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase().trim();
-      return (
-        p.name.toLowerCase().includes(q) ||
-        (p.description && p.description.toLowerCase().includes(q)) ||
-        p.stages.some((s) => s.name.toLowerCase().includes(q))
-      );
+
+      // 3. Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        return (
+          p.name.toLowerCase().includes(q) ||
+          (p.description && p.description.toLowerCase().includes(q)) ||
+          p.stages.some((s) => s.name.toLowerCase().includes(q))
+        );
+      }
+      return true;
     });
-  }, [entityFilteredProcesses, selectedCategoryFilter, selectedIndustryFilter, selectedLocationFilter, searchQuery]);
+  }, [processes, selectedEntityFilter, selectedCategoryFilter, selectedIndustryFilter, selectedLocationFilter, searchQuery]);
 
   // Modal scoping rules & permissions state
   const [modalScopingRules, setModalScopingRules] = useState<ScopingRule[]>([]);
@@ -803,6 +886,17 @@ export default function AdminProcessTemplates() {
   const { getAllFields } = useFieldRegistry();
 
   const [selectedProcess, setSelectedProcess] = useState<string | null>(null);
+
+  // Sync selected process when filtered list changes
+  useEffect(() => {
+    if (filteredProcesses.length > 0) {
+      if (!selectedProcess || !filteredProcesses.some((p) => p.id === selectedProcess)) {
+        setSelectedProcess(filteredProcesses[0].id);
+      }
+    } else {
+      setSelectedProcess(null);
+    }
+  }, [filteredProcesses, selectedProcess]);
   const [showProcessPreviewDrawer, setShowProcessPreviewDrawer] = useState(false);
   const [previewProcess, setPreviewProcess] = useState<Process | null>(null);
   const [previewDrawerTab, setPreviewDrawerTab] = useState<"general" | "activity" | "history" | "documents">("general");
@@ -837,16 +931,16 @@ export default function AdminProcessTemplates() {
   const previewClient = useMemo(() => {
     if (!previewProcess) return undefined;
     return {
-      id: "preview-client-sarah",
-      name: "Sarah Johnson",
-      email: "sarah.j@email.com",
-      phone: "5551234567",
-      country: "United States",
+      id: "preview-client-placeholder",
+      name: "Client Data",
+      email: "Client Data",
+      phone: "Client Data",
+      country: "Client Data",
       countryCode: "US",
-      countryFlag: "🇺🇸",
+      countryFlag: "🌐",
       processes: [previewProcess.name],
-      responsible: "John Smith",
-      source: "Inbound Web / WhatsApp",
+      responsible: "Responsible Person",
+      source: "Client Data",
     } as any;
   }, [previewProcess]);
 
@@ -856,90 +950,28 @@ export default function AdminProcessTemplates() {
     const currentStageName = stages[previewStageIdx - 1]?.name || stages[0]?.name || "Initial Contact";
     return {
       id: `preview-log-${previewProcess.id}`,
-      client: "Sarah Johnson",
-      clientId: "preview-client-sarah",
-      type: "Outbound Call",
-      status: "Completed",
+      client: "Client Data",
+      clientId: "preview-client-placeholder",
+      type: "Process Stage",
+      status: "Active",
       process: previewProcess.name,
       processId: previewProcess.id,
       processName: previewProcess.name,
       currentStage: currentStageName,
-      duration: "4m 12s",
-      date: "Apr 13, 2024, 2:50 PM",
-      hasRecording: true,
-      hasTranscript: true,
+      duration: "—",
+      date: "—",
+      hasRecording: false,
+      hasTranscript: false,
       hasScheduledCall: false,
       relationshipReason: "Stage Change" as const,
-      phone: "5551234567",
+      phone: "Client Data",
     };
   }, [previewProcess, previewStageIdx]);
 
   const previewActivity: ActivityLogEntry[] = useMemo(() => {
-    if (!previewProcess || !previewLog) return [];
-    return [
-      {
-        id: `act-completed-${previewLog.id}`,
-        type: "process_completed",
-        timestamp: "Apr 13, 2024, 2:50 PM",
-        status: "success",
-        sourceStepName: "Deal Closed",
-        refId: previewLog.id,
-        details: {
-          primary: `Final Stage: ${previewLog.currentStage}`,
-          secondary: `Process: ${previewProcess.name}`,
-        },
-      },
-      {
-        id: `act-apt-${previewLog.id}`,
-        type: "appointment_booked",
-        timestamp: "Apr 12, 2024, 3:00 PM",
-        status: "success",
-        sourceStepName: "Schedule Appointment Step",
-        refId: `apt-${previewLog.id}`,
-        details: {
-          primary: "Slot: 10:00 AM – 10:30 AM",
-          secondary: "Location: Main Clinic",
-        },
-      },
-      {
-        id: `act-email-${previewLog.id}`,
-        type: "email",
-        timestamp: "Apr 12, 2024, 9:30 AM",
-        status: "success",
-        sourceStepName: "Welcome Email Campaign",
-        refId: `msg-${previewLog.id}`,
-        details: {
-          primary: "Template: welcome_onboarding",
-          secondary: "Sent to sarah.j@email.com",
-        },
-      },
-      {
-        id: `act-stage-1-${previewLog.id}`,
-        type: "stage_update",
-        timestamp: "Apr 11, 2024, 2:00 PM",
-        status: "success",
-        sourceStepName: "Pipeline Automation",
-        refId: previewLog.id,
-        details: {
-          primary: `Moved to ${previewLog.currentStage}`,
-          secondary: `Process: ${previewProcess.name}`,
-        },
-      },
-      {
-        id: `act-call-${previewLog.id}`,
-        type: "call",
-        direction: "outbound",
-        timestamp: "Apr 10, 2024, 11:30 AM",
-        status: "success",
-        sourceStepName: "Outbound Call Step",
-        refId: previewLog.id,
-        details: {
-          primary: "Duration 4m 12s",
-          secondary: "Status: Completed",
-        },
-      },
-    ];
-  }, [previewProcess, previewLog]);
+    // Admin workflow detail preview - no fake/sample activities
+    return [];
+  }, []);
 
   const [isEditingProcessInfo, setIsEditingProcessInfo] = useState(false);
   const [draftProcessName, setDraftProcessName] = useState("");
@@ -968,12 +1000,52 @@ export default function AdminProcessTemplates() {
       setSelectedProcess(null);
     }
   }, [filteredProcesses, selectedProcess]);
-  const [activeTab, setActiveTab] = useState<string>("basic");
+  const [activeTab, setActiveTab] = useState<string>("general");
   const [expandedProcesses, setExpandedProcesses] = useState<string[]>(["1"]); // Expand Patient Intake by default
   const [selectedAIModel, setSelectedAIModel] = useState("Gemini 2.5 Flash");
+  const [activeAIModels, setActiveAIModels] = useState<AIModelConfig[]>(getActiveAIModels);
+  const [configuredVoices, setConfiguredVoices] = useState<VoiceConfigItem[]>(getStoredVoices);
+
+  useEffect(() => {
+    const handleVoiceUpdate = () => setConfiguredVoices(getStoredVoices());
+    window.addEventListener(VOICE_STORE_EVENT, handleVoiceUpdate);
+    window.addEventListener("storage", handleVoiceUpdate);
+    return () => {
+      window.removeEventListener(VOICE_STORE_EVENT, handleVoiceUpdate);
+      window.removeEventListener("storage", handleVoiceUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleModelUpdate = () => {
+      const active = getActiveAIModels();
+      setActiveAIModels(active);
+      if (!active.some((m) => m.name === selectedAIModel) && active.length > 0) {
+        setSelectedAIModel(active[0].name);
+      }
+    };
+    window.addEventListener(AI_MODELS_STORE_EVENT, handleModelUpdate);
+    window.addEventListener("storage", handleModelUpdate);
+    return () => {
+      window.removeEventListener(AI_MODELS_STORE_EVENT, handleModelUpdate);
+      window.removeEventListener("storage", handleModelUpdate);
+    };
+  }, [selectedAIModel]);
+
   const [aiModelExpanded, setAiModelExpanded] = useState(false);
   const [stageVoiceSpeed, setStageVoiceSpeed] = useState<number>(1.0);
   const [stageVoice, setStageVoice] = useState<string>("Ava");
+
+  const activeConfiguredVoices = useMemo(() => {
+    const active = configuredVoices.filter((v) => v.status === true);
+    return active.length > 0 ? active : configuredVoices;
+  }, [configuredVoices]);
+
+  useEffect(() => {
+    if (activeConfiguredVoices.length > 0 && !activeConfiguredVoices.some((v) => v.name === stageVoice)) {
+      setStageVoice(activeConfiguredVoices[0].name);
+    }
+  }, [activeConfiguredVoices, stageVoice]);
 
   // Advanced tab section states
   // Retry Rules state
@@ -1138,6 +1210,7 @@ export default function AdminProcessTemplates() {
   const [workflowStepSearch, setWorkflowStepSearch] = useState("");
   const [selectedWorkflowStepCard, setSelectedWorkflowStepCard] = useState<string | null>(null);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
+
   const [stepDetailDrawerOpen, setStepDetailDrawerOpen] = useState(false);
   const [currentEditingStep, setCurrentEditingStep] = useState<WorkflowStep | null>(null);
 
@@ -1871,6 +1944,66 @@ export default function AdminProcessTemplates() {
   const [callerPitchMode, setCallerPitchMode] = useState<"single" | "comprehensive">("single");
   const [enableCalling, setEnableCalling] = useState<boolean>(true);
   const [showCallTriggerDrawer, setShowCallTriggerDrawer] = useState(false);
+  const [editingAutomationStepId, setEditingAutomationStepId] = useState<string | undefined>(undefined);
+  const callerPitchRef = useRef<HTMLTextAreaElement>(null);
+  const greetingIntroRef = useRef<HTMLTextAreaElement>(null);
+  const objectiveTextRef = useRef<HTMLTextAreaElement>(null);
+  const [pitchFieldPickerTarget, setPitchFieldPickerTarget] = useState<"callerPitch" | "greetingIntro" | "objective" | null>(null);
+
+  const handleInsertPitchFields = (keys: string[]) => {
+    if (!pitchFieldPickerTarget || keys.length === 0) {
+      setPitchFieldPickerTarget(null);
+      return;
+    }
+    const tokenStr = keys.map((k) => `{{${k}}}`).join(" ");
+
+    if (pitchFieldPickerTarget === "callerPitch") {
+      const el = callerPitchRef.current;
+      if (el) {
+        const start = el.selectionStart ?? callerPitch.length;
+        const end = el.selectionEnd ?? callerPitch.length;
+        const next = callerPitch.slice(0, start) + tokenStr + callerPitch.slice(end);
+        setCallerPitch(next);
+        setTimeout(() => {
+          el.focus();
+          el.setSelectionRange(start + tokenStr.length, start + tokenStr.length);
+        }, 0);
+      } else {
+        setCallerPitch((prev) => (prev ? `${prev} ${tokenStr}` : tokenStr));
+      }
+    } else if (pitchFieldPickerTarget === "greetingIntro") {
+      const el = greetingIntroRef.current;
+      if (el) {
+        const start = el.selectionStart ?? greetingIntroMessage.length;
+        const end = el.selectionEnd ?? greetingIntroMessage.length;
+        const next = greetingIntroMessage.slice(0, start) + tokenStr + greetingIntroMessage.slice(end);
+        setGreetingIntroMessage(next);
+        setTimeout(() => {
+          el.focus();
+          el.setSelectionRange(start + tokenStr.length, start + tokenStr.length);
+        }, 0);
+      } else {
+        setGreetingIntroMessage((prev) => (prev ? `${prev} ${tokenStr}` : tokenStr));
+      }
+    } else if (pitchFieldPickerTarget === "objective") {
+      const el = objectiveTextRef.current;
+      if (el) {
+        const start = el.selectionStart ?? objectiveText.length;
+        const end = el.selectionEnd ?? objectiveText.length;
+        const next = objectiveText.slice(0, start) + tokenStr + objectiveText.slice(end);
+        setObjectiveText(next);
+        setTimeout(() => {
+          el.focus();
+          el.setSelectionRange(start + tokenStr.length, start + tokenStr.length);
+        }, 0);
+      } else {
+        setObjectiveText((prev) => (prev ? `${prev} ${tokenStr}` : tokenStr));
+      }
+    }
+
+    setPitchFieldPickerTarget(null);
+    toast.success(`Inserted ${keys.length} field${keys.length > 1 ? "s" : ""}`);
+  };
 
   // When to move accordion state
   const [whenToMoveExpanded, setWhenToMoveExpanded] = useState(false);
@@ -2086,6 +2219,7 @@ export default function AdminProcessTemplates() {
 
   // Form states
   const [newProcess, setNewProcess] = useState({ name: "", description: "" });
+  const [newProcessEntityType, setNewProcessEntityType] = useState<EntityType>("client");
   const [newStage, setNewStage] = useState({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "AI Receives Calls" });
   const [newStagePosition, setNewStagePosition] = useState<"initial" | "final" | null>(null);
   const [newStageSelectedNumbers, setNewStageSelectedNumbers] = useState<string[]>([]);
@@ -2243,6 +2377,32 @@ export default function AdminProcessTemplates() {
 
   const selectedProcessData = processes.find((p) => p.id === selectedProcess);
 
+  // Pre-applied scoping rules for stage-level automations based on Process > Stage scope rules
+  const stageScopeRules: ScopingRule[] = useMemo(() => {
+    const currentStage = selectedProcessData?.stages.find((s) => s.id === expandedStage);
+    if (currentStage?.scopingRules && currentStage.scopingRules.length > 0) {
+      return currentStage.scopingRules;
+    }
+    if (selectedProcessData?.scopingRules && selectedProcessData.scopingRules.length > 0) {
+      return selectedProcessData.scopingRules;
+    }
+    if (selectedProcessData?.industryCategory && selectedProcessData.industryCategory !== "All") {
+      return [{
+        industryCategory: selectedProcessData.industryCategory,
+        industries: selectedProcessData.industry && selectedProcessData.industry !== "All" ? [selectedProcessData.industry] : [],
+        locations: selectedProcessData.locations && !selectedProcessData.locations.includes("All") ? selectedProcessData.locations : [],
+      }];
+    }
+    if (selectedCategoryFilter && selectedCategoryFilter !== "All") {
+      return [{
+        industryCategory: selectedCategoryFilter,
+        industries: selectedIndustryFilter !== "All" ? [selectedIndustryFilter] : [],
+        locations: selectedLocationFilter !== "All" ? [selectedLocationFilter] : [],
+      }];
+    }
+    return [];
+  }, [selectedProcessData, expandedStage, selectedCategoryFilter, selectedIndustryFilter, selectedLocationFilter]);
+
   const handleAddProcess = () => {
     const firstRule = modalScopingRules[0];
 
@@ -2252,7 +2412,7 @@ export default function AdminProcessTemplates() {
       return;
     }
 
-    const entityDefault = selectedEntity !== "client" ? DEFAULT_ENTITY_PROCESSES[selectedEntity as Exclude<EntityType, "client">] : null;
+    const entityDefault = newProcessEntityType !== "client" ? DEFAULT_ENTITY_PROCESSES[newProcessEntityType as Exclude<EntityType, "client">] : null;
     const process: Process = {
       id: String(Date.now()),
       ...newProcess,
@@ -2263,7 +2423,7 @@ export default function AdminProcessTemplates() {
             id: `${Date.now()}-${sIdx + 1}`,
           }))
         : [],
-      entityType: selectedEntity,
+      entityType: newProcessEntityType,
       aiSettings: {
         platform: "OpenAI - GPT-4o",
         voiceSpeed: 1.0,
@@ -2285,6 +2445,7 @@ export default function AdminProcessTemplates() {
     setExpandedStage(null);
     setViewMode("process");
     setNewProcess({ name: "", description: "" });
+    setNewProcessEntityType("client");
     setModalScopingRules([]);
     setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
     setShowAddProcessModal(false);
@@ -2626,16 +2787,27 @@ export default function AdminProcessTemplates() {
           }
         />
 
-        {/* Top Control Bar using standard PageTopBar with Entity Modes matching Process.tsx */}
+        {/* Top Control Bar using standard PageTopBar with Entity dropdown matching AdminDocumentTemplates.tsx */}
         <PageTopBar
-          modes={entityModes}
-          activeMode={selectedEntity}
-          onModeChange={handleEntityModeChange}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search processes..."
           leftElement={
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Entity Filter Dropdown in Top Bar matching Client Workflow entities (no Client, specific entities only) */}
+              <select
+                value={selectedEntityFilter}
+                onChange={(e) => setSelectedEntityFilter(e.target.value)}
+                className="h-[36px] px-3 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs hover:border-gray-300"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="process">Processes ({entityCounts.process})</option>
+                <option value="appointment">Appointments ({entityCounts.appointment})</option>
+                <option value="invoice">Invoices ({entityCounts.invoice})</option>
+                <option value="insurance">Insurance ({entityCounts.insurance})</option>
+                <option value="claim">Claims ({entityCounts.claim})</option>
+              </select>
+
               {/* 1. Industry Category */}
               <select
                 value={selectedCategoryFilter}
@@ -2685,87 +2857,13 @@ export default function AdminProcessTemplates() {
               </select>
             </div>
           }
-          filterPresets={[
-            {
-              id: "all",
-              label: `All ${selectedEntity === "client" ? "Processes" : selectedEntity.charAt(0).toUpperCase() + selectedEntity.slice(1) + "s"}`,
-              count: entityFilteredProcesses.length,
-              isActive: selectedCategoryFilter === "All" && selectedIndustryFilter === "All" && selectedLocationFilter === "All",
-              onClick: () => {
-                setSelectedCategoryFilter("All");
-                setSelectedIndustryFilter("All");
-                setSelectedLocationFilter("All");
-                setSearchQuery("");
-              },
-            },
-            {
-              id: "healthcare",
-              label: "Healthcare",
-              count: entityFilteredProcesses.filter((p: any) => p.category === "Healthcare" || p.industryCategory === "Healthcare").length,
-              isActive: selectedCategoryFilter === "Healthcare",
-              onClick: () => {
-                setSelectedCategoryFilter("Healthcare");
-                setSelectedIndustryFilter("All");
-              },
-            },
-            {
-              id: "dental",
-              label: "Dental Care",
-              count: entityFilteredProcesses.filter((p: any) => p.category === "Dental Care" || p.industryCategory === "Dental Care").length,
-              isActive: selectedCategoryFilter === "Dental Care",
-              onClick: () => {
-                setSelectedCategoryFilter("Dental Care");
-                setSelectedIndustryFilter("All");
-              },
-            },
-          ]}
-          filterFields={[
-            {
-              id: "name",
-              label: "Process Name",
-              type: "text",
-              placeholder: "Filter by name...",
-              value: searchQuery,
-              onChange: (val) => setSearchQuery(val || ""),
-            },
-            {
-              id: "category",
-              label: "Category",
-              type: "select",
-              value: selectedCategoryFilter,
-              onChange: (val) => {
-                setSelectedCategoryFilter(val || "All");
-                setSelectedIndustryFilter("All");
-              },
-              options: [
-                { label: "All Categories", value: "All" },
-                ...INITIAL_CATEGORIES.map((cat) => ({ label: cat.name, value: cat.name })),
-              ],
-            },
-            {
-              id: "industry",
-              label: "Industry",
-              type: "select",
-              value: selectedIndustryFilter,
-              onChange: (val) => setSelectedIndustryFilter(val || "All"),
-              options: [
-                { label: "All Industries", value: "All" },
-                ...availableIndustriesForFilter.map((ind) => ({ label: ind, value: ind })),
-              ],
-            },
-          ]}
-          onClearAllFilters={() => {
-            setSelectedCategoryFilter("All");
-            setSelectedIndustryFilter("All");
-            setSelectedLocationFilter("All");
-            setSearchQuery("");
-          }}
           primaryAction={{
-            label: selectedEntity === "client" ? "Add New Process" : `Add New ${selectedEntity.charAt(0).toUpperCase() + selectedEntity.slice(1)} Process`,
+            label: "Add Process Template",
             icon: <Plus className="w-3.5 h-3.5" />,
             onClick: () => {
               setModalScopingRules([]);
               setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
+              setNewProcessEntityType((selectedEntityFilter === "process" ? "client" : selectedEntityFilter) as EntityType);
               setShowAddProcessModal(true);
             },
           }}
@@ -2779,6 +2877,7 @@ export default function AdminProcessTemplates() {
                 <p className="text-xs text-gray-500 font-medium">No processes match active filters or search</p>
                 <button
                   onClick={() => {
+                    setSelectedEntityFilter("process");
                     setSelectedCategoryFilter("All");
                     setSelectedIndustryFilter("All");
                     setSelectedLocationFilter("All");
@@ -2849,21 +2948,6 @@ export default function AdminProcessTemplates() {
                           {process.stages.length}
                         </div>
 
-                        {/* Configure Scope Button */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setTargetProcessForScope(process);
-                            setEditProcessScopingRules(process.scopingRules ? [...process.scopingRules] : []);
-                            setShowProcessScopeModal(true);
-                          }}
-                          className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                          title="Configure Admin Scope Rules"
-                        >
-                          <Sliders className="w-3.5 h-3.5" />
-                        </button>
-
                         {/* Preview Eye Button */}
                         <button
                           type="button"
@@ -2878,19 +2962,6 @@ export default function AdminProcessTemplates() {
                           <Eye className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    </div>
-
-                    {/* Scope Badges */}
-                    <div className="flex items-center gap-1.5 mt-1.5 pl-6 flex-wrap">
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                        <Globe className="w-2.5 h-2.5 text-gray-500" />
-                        <span>{process.industryCategory || "All Industries"}</span>
-                      </span>
-                      {process.industry && process.industry !== "All" && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                          {process.industry}
-                        </span>
-                      )}
                     </div>
 
                     {/* Process Description */}
@@ -2987,11 +3058,6 @@ export default function AdminProcessTemplates() {
                             >
                               <Edit className="w-4.5 h-4.5" />
                             </button>
-                            <span className="text-sm px-4 py-1.5 bg-blue-100 text-blue-700 rounded-full font-semibold whitespace-nowrap">
-                              {selectedProcessData.entityType && selectedProcessData.entityType !== "client"
-                                ? selectedProcessData.entityType.charAt(0).toUpperCase() + selectedProcessData.entityType.slice(1)
-                                : "Process"}
-                            </span>
                             <button
                               type="button"
                               onClick={() => {
@@ -3004,18 +3070,6 @@ export default function AdminProcessTemplates() {
                             >
                               <Globe className="w-3.5 h-3.5 text-blue-600" />
                               <span>{selectedProcessData.industryCategory || "All Industries"}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPreviewProcess(selectedProcessData);
-                                setShowProcessPreviewDrawer(true);
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
-                              title="Preview Process Layout & Required Fields"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                              <span>Preview Process View</span>
                             </button>
                           </div>
                           <p
@@ -3073,7 +3127,6 @@ export default function AdminProcessTemplates() {
                       )}
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
-                      <HowItWorksButton label="How Process Works" onClick={() => setShowProcessHowItWorksModal(true)} />
                       <Tooltip text="Temporary Disable">
                         <label className="relative inline-flex items-center cursor-pointer">
                           <input
@@ -3094,145 +3147,120 @@ export default function AdminProcessTemplates() {
 
                 <div className="flex-1 overflow-y-auto">
                   <div className="p-8 space-y-6">
-                    {/* Stage Management */}
-                    <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-                      <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Stages</h3>
-                          <span className="text-xs bg-blue-50 text-blue-700 font-semibold px-2.5 py-0.5 rounded-full border border-blue-200">
-                            {selectedProcessData.stages.length} Stages
-                          </span>
-                        </div>
-                      </div>
+                    {/* Clean Pipeline Stages Ribbon matching client workflow */}
+                    <div className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-200/90 shadow-2xs space-y-4">
 
-                      <div className="flex items-center gap-3 overflow-x-auto overflow-y-hidden pb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                        {/* Process's own stages */}
-                        {selectedProcessData.stages.map((stage, index) => (
-                          <DraggableStage
-                            key={stage.id}
-                            stage={stage}
-                            index={index}
-                            totalStages={selectedProcessData.stages.length}
-                            moveStage={moveStage}
-                            onRemove={handleRemoveStage}
-                            onEdit={handleEditStage}
-                          />
-                        ))}
-                        <button
-                          onClick={handleQuickAddStage}
-                          className="flex items-center justify-center w-11 h-11 rounded-full bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 transition-all flex-shrink-0 shadow-md hover:shadow-lg"
-                          title="Add new stage to this process template"
-                        >
-                          <Plus className="w-5 h-5 text-white" />
-                        </button>
+                      {(() => {
+                        const allStages = selectedProcessData.stages;
+                        const hasExplicitFinal = allStages.some((s) => s.isFinalStage || s.isFinal);
+                        const sequentialStages = hasExplicitFinal
+                          ? allStages.filter((s) => !s.isFinalStage && !s.isFinal)
+                          : (allStages.length > 1 ? allStages.slice(0, -1) : allStages);
+                        const finalStageOptions = hasExplicitFinal
+                          ? allStages.filter((s) => s.isFinalStage || s.isFinal)
+                          : (allStages.length > 1 ? allStages.slice(-1) : []);
 
-                        {/* Visual Handoff Divider */}
-                        <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0 border-l-2 border-dashed border-slate-300 bg-slate-100/80 rounded-r-xl my-1 select-none">
-                          <span className="text-xs font-bold text-slate-700 whitespace-nowrap flex items-center gap-1">
-                            <span>Next Process Handoff</span>
-                            <span className="text-slate-400 font-normal">→</span>
-                          </span>
-                        </div>
-
-                        {/* Other Stages (Handoff Target Stages from Other Processes) */}
-                        {(() => {
-                          const finalStage = selectedProcessData.stages[selectedProcessData.stages.length - 1];
-                          const stagesWithTransitions = selectedProcessData.stages.filter(
-                            (s) => s.nextProcessTransitions && s.nextProcessTransitions.length > 0
-                          );
-                          const allTransitions = stagesWithTransitions.flatMap((s) =>
-                            (s.nextProcessTransitions || []).map((t, idx) => ({
-                              ...t,
-                              sourceStageId: s.id,
-                              sourceStageName: finalStage ? finalStage.name : s.name,
-                              transitionIndex: idx,
-                            }))
-                          );
-
-                          return (
-                            <>
-                              {allTransitions.map((trans, tIdx) => {
-                                const targetProc = processes.find(
-                                  (p) => p.id === trans.targetProcessId || p.name === trans.targetProcessName
-                                );
-                                const targetStageIdx = targetProc?.stages.findIndex(
-                                  (s) => s.id === trans.targetStageId || s.name === trans.targetStageName
-                                ) ?? -1;
-                                const targetStageObj = targetStageIdx !== -1 && targetProc ? targetProc.stages[targetStageIdx] : undefined;
-                                const isTargetFinal = targetProc && targetStageIdx !== -1 && targetStageIdx === targetProc.stages.length - 1;
-                                const assignedStageColor = targetStageObj?.color || (isTargetFinal ? "#EC4899" : "#22D3EE");
-
+                        return (
+                          <div className="flex items-center gap-2 overflow-x-auto py-1 px-0.5 scrollbar-thin scrollbar-thumb-gray-200">
+                            {/* Sequential Stages */}
+                            <div className="flex items-center flex-shrink-0">
+                              {sequentialStages.map((stage, sIdx) => {
+                                const originalIndex = allStages.findIndex((s) => s.id === stage.id);
                                 return (
-                                  <div
-                                    key={`trans-${tIdx}-${trans.targetProcessId}-${trans.targetStageName}`}
-                                    className="relative flex-shrink-0 group flex items-center gap-2.5 text-white rounded-xl px-4 py-2.5 shadow-md hover:shadow-lg transition-all border border-white/20 select-none"
-                                    style={{
-                                      backgroundColor: assignedStageColor,
-                                      minWidth: "210px",
-                                      clipPath: "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)",
+                                  <ChevronStageItem
+                                    key={stage.id}
+                                    stage={stage}
+                                    index={originalIndex >= 0 ? originalIndex : sIdx}
+                                    totalStages={allStages.length}
+                                    moveStage={moveStage}
+                                    onRemove={handleRemoveStage}
+                                    onEdit={handleEditStage}
+                                    onSelect={(s) => {
+                                      setExpandedStage(s.id);
+                                      setViewMode("stage");
                                     }}
-                                  >
-                                    <div className="flex flex-col flex-1 min-w-0 pr-1">
-                                      <div className="flex items-center gap-1 text-[9px] text-white/80 font-bold uppercase tracking-wider">
-                                        <span>From: {trans.sourceStageName}</span>
-                                      </div>
-                                      <div className="flex items-center gap-1.5 font-bold text-xs text-white truncate">
-                                        <span className="text-white/80">🔀</span>
-                                        <span className="text-white/90 truncate font-semibold">{trans.targetProcessName || "Process"}:</span>
-                                        <span className="text-white underline underline-offset-2 truncate font-extrabold">{trans.targetStageName}</span>
-                                        {isTargetFinal && (
-                                          <span className="ml-1 text-[9px] bg-black/25 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider whitespace-nowrap">
-                                            Final
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-1 pr-2 opacity-90 group-hover:opacity-100">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const srcStage = selectedProcessData.stages.find((s) => s.id === trans.sourceStageId);
-                                          if (srcStage) handleEditStage(srcStage);
-                                        }}
-                                        className="p-1 hover:bg-black/20 rounded transition-colors text-white"
-                                        title="Edit Stage"
-                                      >
-                                        <Edit className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveTransitionFromStage(trans.sourceStageId, trans.transitionIndex)}
-                                        className="p-1 hover:bg-red-500/50 rounded transition-colors text-white hover:text-red-100"
-                                        title="Remove transition"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
+                                    isSelected={expandedStage === stage.id}
+                                    isFirst={sIdx === 0}
+                                    isLast={sIdx === sequentialStages.length - 1}
+                                    color={stage.color || CHEVRON_PALETTE[sIdx % CHEVRON_PALETTE.length]}
+                                  />
                                 );
                               })}
+                            </div>
 
-                              {/* Button to connect / add next process stage transition */}
+                            {/* + Icon to Add Sequential Stage */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewStagePosition("final");
+                                setShowAddStageModal(true);
+                              }}
+                              className="flex items-center justify-center w-8 h-10 rounded-md bg-gray-50 hover:bg-blue-50 text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-300 transition-all shadow-2xs hover:shadow-xs flex-shrink-0 cursor-pointer"
+                              title="Add sequential stage"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+
+                            {/* Last Stages in the exact same chevron style */}
+                            {finalStageOptions.length > 0 ? (
+                              <>
+                                <div className="flex items-center flex-shrink-0 ml-1">
+                                  {finalStageOptions.map((fStage, fIdx) => {
+                                    const originalIndex = allStages.findIndex((s) => s.id === fStage.id);
+                                    return (
+                                      <ChevronStageItem
+                                        key={fStage.id}
+                                        stage={fStage}
+                                        index={originalIndex >= 0 ? originalIndex : sequentialStages.length + fIdx}
+                                        totalStages={allStages.length}
+                                        moveStage={moveStage}
+                                        onRemove={handleRemoveStage}
+                                        onEdit={handleEditStage}
+                                        onSelect={(s) => {
+                                          setExpandedStage(s.id);
+                                          setViewMode("stage");
+                                        }}
+                                        isSelected={expandedStage === fStage.id}
+                                        isFirst={fIdx === 0}
+                                        isLast={fIdx === finalStageOptions.length - 1}
+                                        color={fStage.color || CHEVRON_PALETTE[(sequentialStages.length + fIdx) % CHEVRON_PALETTE.length] || "#EC4899"}
+                                        isLastStage={true}
+                                      />
+                                    );
+                                  })}
+                                </div>
+
+                                {/* + Icon to Add another Last Stage Option */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNewStagePosition("final");
+                                    setShowAddStageModal(true);
+                                  }}
+                                  className="flex items-center justify-center w-8 h-10 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-600 hover:text-purple-700 border border-purple-200 hover:border-purple-300 transition-all shadow-2xs hover:shadow-xs flex-shrink-0 cursor-pointer"
+                                  title="Add last stage option"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                              </>
+                            ) : (
+                              /* When NO last stage is added: + Add Last Stage button */
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const finalStage = selectedProcessData.stages[selectedProcessData.stages.length - 1];
-                                  if (finalStage) {
-                                    handleOpenTransitionModal(finalStage.id);
-                                  } else {
-                                    toast.error("Please add a stage first");
-                                  }
+                                  setNewStagePosition("final");
+                                  setShowAddStageModal(true);
                                 }}
-                                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-dashed border-purple-300 transition-all text-xs font-semibold flex-shrink-0 shadow-2xs hover:shadow-xs cursor-pointer"
-                                title="Connect a stage from another process"
+                                className="flex items-center gap-1.5 px-3 h-10 rounded-md border border-dashed border-purple-300 hover:border-purple-400 bg-purple-50/50 hover:bg-purple-100/50 text-purple-700 text-xs font-semibold transition-all shadow-2xs flex-shrink-0 cursor-pointer ml-1"
+                                title="Add last stage option"
                               >
-                                <Plus className="w-4 h-4 text-purple-600" />
-                                <span>Connect Next Stage</span>
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Add Last Stage</span>
                               </button>
-                            </>
-                          );
-                        })()}
-                      </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Knowledge Base */}
@@ -3246,28 +3274,10 @@ export default function AdminProcessTemplates() {
                             Knowledge Base
                           </h3>
                           <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                            Give the AI reference material scoped to this process. The scope will be pre-selected for you.
+                            Give the AI reference material scoped to this process. Reference documents are managed across tenant scopes.
                           </p>
                         </div>
                       </div>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (!selectedProcessData) return;
-                          navigate("/knowledge-base", {
-                            state: {
-                              prefillProcess: {
-                                id: selectedProcessData.id,
-                                name: selectedProcessData.name,
-                                stages: selectedProcessData.stages.map((s) => ({ id: s.id, name: s.name })),
-                              },
-                            },
-                          });
-                        }}
-                      >
-                        <Database className="w-4 h-4" />
-                        Add Knowledge Base
-                      </Button>
                     </div>
 
                     {/* Advanced Settings */}
@@ -4165,74 +4175,78 @@ export default function AdminProcessTemplates() {
 
                 return (
                   <div className="h-full flex flex-col">
-                    {/* Stage Header */}
-                    <div className="px-6 py-4 border-b border-border">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <h2 className="text-2xl font-bold" style={{ fontFamily: 'DM Sans, sans-serif' }}>{stage.name}</h2>
-                            <span className="text-sm px-3 py-1 bg-secondary/10 text-secondary rounded-full" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Stage
-                            </span>
-                          </div>
-                          <p className="text-sm mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{stage.description}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Tooltip text="Temporarily disable this stage">
-                            <label className="relative inline-flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={temporaryDisableEnabled}
-                                onChange={(e) => {
-                                  setTemporaryDisableEnabled(e.target.checked);
-                                  toast.success(e.target.checked ? "Stage temporarily disabled" : "Stage re-enabled");
-                                }}
-                              />
-                              <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                            </label>
-                          </Tooltip>
-                          <HowItWorksButton label="How Stage Works" onClick={() => setShowStageHowItWorksModal(true)} />
-                          <Tooltip text="Delete Stage">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setStageToDelete(stage);
-                                setShowDeleteStageModal(true);
-                              }}
+                    {/* Stage Header: Tabs + Corner Automations Button matching Client Workflow */}
+                    <div className="px-6 py-3.5 border-b border-border bg-white flex items-center justify-between">
+                      {/* Left: General & AI Agent Tabs */}
+                      <div className="flex items-center gap-2">
+                        {[
+                          { id: "general", label: "General" },
+                          { id: "ai-agent", label: "AI Agent" },
+                        ].map((tab) => {
+                          const isActive =
+                            activeTab === tab.id ||
+                            (tab.id === "general" && (activeTab === "basic" || activeTab === "automation")) ||
+                            (tab.id === "ai-agent" && activeTab === "advanced");
+                          return (
+                            <button
+                              key={tab.id}
+                              onClick={() => setActiveTab(tab.id)}
+                              className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all cursor-pointer ${
+                                isActive
+                                  ? "bg-primary text-primary-foreground shadow-xs"
+                                  : "text-muted-foreground hover:bg-muted hover:text-gray-900"
+                              }`}
+                              style={{ fontFamily: 'DM Sans, sans-serif' }}
                             >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          </Tooltip>
-                        </div>
+                              {tab.label}
+                            </button>
+                          );
+                        })}
                       </div>
 
-                      {/* Stage Tabs */}
-                      <div className="flex gap-2 mt-4">
-                        {[
-                          { id: "basic", label: "Basic" },
-                          { id: "automation", label: "Automation" },
-                          { id: "flowbuilder", label: "Flow Builder" },
-                        ].map((tab) => (
-                          <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === tab.id
-                              ? "bg-primary text-primary-foreground"
-                              : "text-muted-foreground hover:bg-muted"
-                              }`}
+                      {/* Right Corner: Automation Icon Label Button + Stage Delete */}
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedWorkflowStepCard(null);
+                            setWorkflowStepsDrawerOpen(true);
+                          }}
+                          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-gray-800 bg-white hover:bg-gray-50 border border-gray-200 shadow-2xs hover:shadow-xs transition-all cursor-pointer group"
+                          style={{ fontFamily: 'DM Sans, sans-serif' }}
+                          title="View and configure automations for this stage"
+                        >
+                          <div className="w-5 h-5 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                            <Zap className="w-3.5 h-3.5" />
+                          </div>
+                          <span>Automations</span>
+                          {workflowSteps.length > 0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                              {workflowSteps.length}
+                            </span>
+                          )}
+                        </button>
+
+                        <Tooltip text="Delete Stage">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 w-9 p-0 hover:bg-red-50 hover:border-red-200"
+                            onClick={() => {
+                              setStageToDelete(stage);
+                              setShowDeleteStageModal(true);
+                            }}
                           >
-                            {tab.label}
-                          </button>
-                        ))}
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </Tooltip>
                       </div>
                     </div>
 
                     {/* Stage Content */}
                     <div className="flex-1 overflow-y-auto p-6">
-                      {/* Basic Tab */}
-                      {activeTab === "basic" && (
+                      {/* General Tab */}
+                      {(activeTab === "general" || activeTab === "basic") && (
                         <div className="space-y-6">
                           {/* Stage Configuration Section */}
                           <div className="space-y-4">
@@ -4535,462 +4549,6 @@ export default function AdminProcessTemplates() {
                               )}
                             </div>
 
-                            {/* Caller Pitch - Hide completely when Type is "Transfer to Human" or "No Call Activity" */}
-                            {stageType !== "Transfer to Human" && stageType !== "No Call Activity" && (
-                              <div className="rounded-lg border border-border overflow-hidden">
-                                {/* Collapsible Header */}
-                                <button
-                                  onClick={() => setCallerPitchExpanded(!callerPitchExpanded)}
-                                  className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-                                >
-                                  <div className="flex flex-col items-start gap-1">
-                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Caller Pitch
-                                    </span>
-                                    <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                      Script or instruction used when initiating outbound calls.
-                                    </span>
-                                  </div>
-                                  <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${callerPitchExpanded ? "rotate-180" : ""}`} />
-                                </button>
-
-                                {/* Expanded Content */}
-                                {callerPitchExpanded && (
-                                  <div className="p-6 border-t border-border">
-                                    {/* Mode Toggle */}
-                                    <div className="flex items-center gap-3 mb-6">
-                                      <div className="flex gap-2 bg-muted/30 p-1 rounded-lg w-fit">
-                                        <button
-                                          onClick={() => setCallerPitchMode("single")}
-                                          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${callerPitchMode === "single"
-                                            ? "bg-primary text-white"
-                                            : "text-gray-600 hover:text-gray-900"
-                                            }`}
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          Single Prompt
-                                        </button>
-                                        <button
-                                          onClick={() => setCallerPitchMode("comprehensive")}
-                                          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${callerPitchMode === "comprehensive"
-                                            ? "bg-primary text-white"
-                                            : "text-gray-600 hover:text-gray-900"
-                                            }`}
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          Comprehensive
-                                        </button>
-                                      </div>
-                                      {callerPitchMode === "single" ? (
-                                        <InfoTooltip text="Single Prompt lets you write the entire outbound script as one open text box, with a Generate with AI shortcut — the fastest option for a simple stage." />
-                                      ) : (
-                                        <InfoTooltip text="Comprehensive mode lets you set a separate greeting, objective, business info, and languages instead of one combined script." />
-                                      )}
-                                    </div>
-
-                                    {/* Single Prompt Mode */}
-                                    {callerPitchMode === "single" && (
-                                      <div>
-                                        <textarea
-                                          value={callerPitch}
-                                          onChange={(e) => setCallerPitch(e.target.value)}
-                                          className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
-                                          style={{ fontFamily: 'Outfit, sans-serif', minHeight: '120px' }}
-                                        />
-                                        <div className="flex items-center justify-end mt-2">
-                                          <button
-                                            onClick={() => {
-                                              toast.success("AI generation coming soon!");
-                                            }}
-                                            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                                          >
-                                            <Zap className="w-4 h-4" />
-                                            Generate with AI
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Comprehensive Mode */}
-                                    {callerPitchMode === "comprehensive" && (
-                                      <div className="space-y-3">
-                                        {/* A. Greeting / Intro Message */}
-                                        <div className="rounded-lg border border-border overflow-hidden">
-                                          <button
-                                            onClick={() => setGreetingIntroExpanded(!greetingIntroExpanded)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-muted/20 transition-colors"
-                                          >
-                                            <div className="flex flex-col items-start gap-0.5">
-                                              <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Greeting / Intro Message
-                                              </span>
-                                              {!greetingIntroExpanded && greetingIntroMessage && (
-                                                <span className="text-xs truncate max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                  {greetingIntroMessage.slice(0, 80)}...
-                                                </span>
-                                              )}
-                                              {!greetingIntroExpanded && !greetingIntroMessage && (
-                                                <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                                  Not configured
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${greetingIntroExpanded ? "rotate-180" : ""}`} />
-                                          </button>
-
-                                          {greetingIntroExpanded && (
-                                            <div className="p-4 border-t border-border">
-                                              <textarea
-                                                value={greetingIntroMessage}
-                                                onChange={(e) => setGreetingIntroMessage(e.target.value)}
-                                                placeholder="Hi, this is Alex. Who do I have the pleasure of speaking with today?"
-                                                className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
-                                                style={{ fontFamily: 'Outfit, sans-serif', minHeight: '100px' }}
-                                              />
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* B. Objective */}
-                                        <div className="rounded-lg border border-border overflow-hidden">
-                                          <button
-                                            onClick={() => setObjectiveExpanded(!objectiveExpanded)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-muted/20 transition-colors"
-                                          >
-                                            <div className="flex flex-col items-start gap-0.5">
-                                              <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Objective
-                                              </span>
-                                              {!objectiveExpanded && objectiveText && (
-                                                <span className="text-xs truncate max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                  {objectiveText.slice(0, 80)}...
-                                                </span>
-                                              )}
-                                              {!objectiveExpanded && !objectiveText && (
-                                                <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                                  Not configured
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${objectiveExpanded ? "rotate-180" : ""}`} />
-                                          </button>
-
-                                          {objectiveExpanded && (
-                                            <div className="p-4 border-t border-border">
-                                              <textarea
-                                                value={objectiveText}
-                                                onChange={(e) => setObjectiveText(e.target.value)}
-                                                placeholder="You are an AI assistant. Your role is to answer general inquiries, schedule appointments, and provide information about our services."
-                                                className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
-                                                style={{ fontFamily: 'Outfit, sans-serif', minHeight: '100px' }}
-                                              />
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* C. Business Information */}
-                                        <div className="rounded-lg border border-border overflow-hidden">
-                                          <button
-                                            onClick={() => setBusinessInfoExpanded(!businessInfoExpanded)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-muted/20 transition-colors"
-                                          >
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Business Information
-                                              </span>
-                                              {!businessInfoExpanded && businessInfoItems.length > 0 && (
-                                                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-200 text-gray-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                  {businessInfoItems.length} {businessInfoItems.length === 1 ? 'item' : 'items'}
-                                                </span>
-                                              )}
-                                              {!businessInfoExpanded && businessInfoItems.length === 0 && (
-                                                <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                                  No data added
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${businessInfoExpanded ? "rotate-180" : ""}`} />
-                                          </button>
-
-                                          {businessInfoExpanded && (
-                                            <div className="p-4 border-t border-border space-y-3">
-                                              <p className="text-sm mb-3" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                Add business information that the AI should know while speaking with callers.
-                                              </p>
-
-                                              {/* Existing Business Info Items */}
-                                              {businessInfoItems.map((item) => (
-                                                <div key={item.id} className="p-3 border border-border rounded-lg bg-muted/20">
-                                                  <div className="flex items-start justify-between mb-2">
-                                                    <div className="flex items-center gap-2">
-                                                      <span className="text-sm font-bold" style={{ color: '#111827', fontFamily: 'DM Sans, sans-serif' }}>
-                                                        {item.title}
-                                                      </span>
-                                                      {item.active && (
-                                                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                          Active
-                                                        </span>
-                                                      )}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                      <button
-                                                        onClick={() => {
-                                                          setEditingBusinessInfoId(item.id);
-                                                          setBusinessInfoFormData({
-                                                            title: item.title,
-                                                            information: item.information,
-                                                            active: item.active
-                                                          });
-                                                          setShowBusinessInfoForm(true);
-                                                        }}
-                                                        className="text-blue-600 hover:text-blue-700"
-                                                      >
-                                                        <Edit className="w-4 h-4" />
-                                                      </button>
-                                                      <button
-                                                        onClick={() => {
-                                                          setBusinessInfoItems(businessInfoItems.filter(i => i.id !== item.id));
-                                                          toast.success("Information deleted");
-                                                        }}
-                                                        className="text-red-600 hover:text-red-700"
-                                                      >
-                                                        <Trash2 className="w-4 h-4" />
-                                                      </button>
-                                                    </div>
-                                                  </div>
-                                                  <p className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                                                    {item.information}
-                                                  </p>
-                                                </div>
-                                              ))}
-
-                                              {/* Inline Add/Edit Form */}
-                                              {showBusinessInfoForm && (
-                                                <div className="p-4 border border-primary/30 rounded-lg bg-blue-50/30 space-y-3">
-                                                  <div>
-                                                    <label className="block text-xs font-medium mb-1" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                                      Title
-                                                    </label>
-                                                    <input
-                                                      type="text"
-                                                      value={businessInfoFormData.title}
-                                                      onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, title: e.target.value })}
-                                                      placeholder="Example: Clinic Timings"
-                                                      className="w-full p-2 bg-white border border-input rounded-lg text-sm"
-                                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                    />
-                                                  </div>
-                                                  <div>
-                                                    <label className="block text-xs font-medium mb-1" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                                      Information
-                                                    </label>
-                                                    <textarea
-                                                      value={businessInfoFormData.information}
-                                                      onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, information: e.target.value })}
-                                                      placeholder="Example: Our clinic is open Monday to Saturday from 9 AM to 7 PM."
-                                                      className="w-full p-2 bg-white border border-input rounded-lg resize-none text-sm"
-                                                      style={{ fontFamily: 'Outfit, sans-serif', minHeight: '80px' }}
-                                                    />
-                                                  </div>
-                                                  <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                      <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                        Active
-                                                      </label>
-                                                      <label className="relative inline-flex items-center cursor-pointer">
-                                                        <input
-                                                          type="checkbox"
-                                                          className="sr-only peer"
-                                                          checked={businessInfoFormData.active}
-                                                          onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, active: e.target.checked })}
-                                                        />
-                                                        <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                                                      </label>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                      <button
-                                                        onClick={() => {
-                                                          setShowBusinessInfoForm(false);
-                                                          setEditingBusinessInfoId(null);
-                                                          setBusinessInfoFormData({ title: "", information: "", active: true });
-                                                        }}
-                                                        className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                      >
-                                                        Cancel
-                                                      </button>
-                                                      <button
-                                                        onClick={() => {
-                                                          if (businessInfoFormData.title && businessInfoFormData.information) {
-                                                            if (editingBusinessInfoId !== null) {
-                                                              // Edit existing
-                                                              setBusinessInfoItems(businessInfoItems.map(item =>
-                                                                item.id === editingBusinessInfoId
-                                                                  ? { ...item, ...businessInfoFormData }
-                                                                  : item
-                                                              ));
-                                                              toast.success("Information updated");
-                                                            } else {
-                                                              // Add new
-                                                              setBusinessInfoItems([...businessInfoItems, {
-                                                                id: Date.now(),
-                                                                ...businessInfoFormData
-                                                              }]);
-                                                              toast.success("Information added");
-                                                            }
-                                                            setShowBusinessInfoForm(false);
-                                                            setEditingBusinessInfoId(null);
-                                                            setBusinessInfoFormData({ title: "", information: "", active: true });
-                                                          }
-                                                        }}
-                                                        className="px-4 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary-hover"
-                                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                      >
-                                                        Done
-                                                      </button>
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                              )}
-
-                                              {/* Add Information Button */}
-                                              {!showBusinessInfoForm && (
-                                                <button
-                                                  onClick={() => setShowBusinessInfoForm(true)}
-                                                  className="w-full px-4 py-2 border border-dashed border-gray-400 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium"
-                                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                >
-                                                  <Plus className="w-4 h-4" />
-                                                  Add Information
-                                                </button>
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* D. Languages */}
-                                        <div className="rounded-lg border border-border overflow-hidden">
-                                          <button
-                                            type="button"
-                                            onClick={() => setLanguagesExpanded(!languagesExpanded)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-muted/20 transition-colors"
-                                          >
-                                            <div className="flex flex-col items-start gap-0.5">
-                                              <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Languages
-                                              </span>
-                                              {!languagesExpanded && (primaryLanguage || secondaryLanguages.length > 0) && (
-                                                <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                  {primaryLanguage && `Primary: ${primaryLanguage}`}
-                                                  {primaryLanguage && secondaryLanguages.length > 0 && ' · '}
-                                                  {secondaryLanguages.length > 0 && `Secondary: ${secondaryLanguages.join(', ')}`}
-                                                </span>
-                                              )}
-                                              {!languagesExpanded && !primaryLanguage && secondaryLanguages.length === 0 && (
-                                                <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                                  Not configured
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${languagesExpanded ? "rotate-180" : ""}`} />
-                                          </button>
-
-                                          {languagesExpanded && (
-                                            <div className="p-4 border-t border-border space-y-4">
-                                              {/* Primary Language */}
-                                              <div>
-                                                <div className="flex items-center gap-2 mb-2">
-                                                  <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Primary Language *
-                                                  </label>
-                                                  <Tooltip text="The default language your AI Receptionist will speak on all calls for this stage.">
-                                                    <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                                                  </Tooltip>
-                                                </div>
-                                                <Select value={primaryLanguage} onValueChange={setPrimaryLanguage}>
-                                                  <SelectTrigger className="w-full">
-                                                    <SelectValue placeholder="Select primary language" />
-                                                  </SelectTrigger>
-                                                  <SelectContent>
-                                                    <SelectItem value="English">English</SelectItem>
-                                                    <SelectItem value="Spanish">Spanish</SelectItem>
-                                                    <SelectItem value="French">French</SelectItem>
-                                                    <SelectItem value="German">German</SelectItem>
-                                                    <SelectItem value="Italian">Italian</SelectItem>
-                                                    <SelectItem value="Portuguese">Portuguese</SelectItem>
-                                                    <SelectItem value="Chinese">Chinese</SelectItem>
-                                                    <SelectItem value="Japanese">Japanese</SelectItem>
-                                                    <SelectItem value="Korean">Korean</SelectItem>
-                                                    <SelectItem value="Arabic">Arabic</SelectItem>
-                                                  </SelectContent>
-                                                </Select>
-                                              </div>
-
-                                              {/* Secondary Languages (multi-add) */}
-                                              <div>
-                                                <div className="flex items-center gap-2 mb-2">
-                                                  <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Secondary Languages
-                                                  </label>
-                                                  <Tooltip text="Fallback language(s) the AI can switch to if the caller requests it or if their language differs from the primary. You can add multiple.">
-                                                    <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                                                  </Tooltip>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                  <Select value={secondaryLanguageDraft} onValueChange={setSecondaryLanguageDraft}>
-                                                    <SelectTrigger className="flex-1">
-                                                      <SelectValue placeholder="Select a fallback language (optional)" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                      {["English", "Spanish", "French", "German", "Italian", "Portuguese", "Chinese", "Japanese", "Korean", "Arabic"]
-                                                        .filter(lang => lang !== primaryLanguage && !secondaryLanguages.includes(lang))
-                                                        .map(lang => (
-                                                          <SelectItem key={lang} value={lang}>{lang}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                  </Select>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      if (secondaryLanguageDraft) {
-                                                        setSecondaryLanguages([...secondaryLanguages, secondaryLanguageDraft]);
-                                                        setSecondaryLanguageDraft("");
-                                                      }
-                                                    }}
-                                                    disabled={!secondaryLanguageDraft}
-                                                    className="w-9 h-9 flex items-center justify-center rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                                                  >
-                                                    <Plus className="w-4 h-4 text-white" />
-                                                  </button>
-                                                </div>
-                                                {secondaryLanguages.length > 0 && (
-                                                  <div className="flex flex-wrap gap-2 mt-2">
-                                                    {secondaryLanguages.map((lang) => (
-                                                      <span key={lang} className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">
-                                                        {lang}
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => setSecondaryLanguages(secondaryLanguages.filter(l => l !== lang))}
-                                                          className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
-                                                        >
-                                                          <X className="w-3 h-3" />
-                                                        </button>
-                                                      </span>
-                                                    ))}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
                             {/* Call Action - Hidden when Action is Handle By Human (Transfer to Human) or No Action (No Call Activity) */}
                             {stageType !== "Transfer to Human" && stageType !== "No Call Activity" && (
                               <div className="space-y-3 pt-2">
@@ -5060,547 +4618,178 @@ export default function AdminProcessTemplates() {
                             )}
 
                           </div>
-
-
-
-
                         </div>
                       )}
 
-                      {/* Automation Tab */}
-                      {activeTab === "automation" && (
+                      {/* AI Agent Tab */}
+                      {activeTab === "ai-agent" && (
                         <div className="space-y-6">
-                          {/* Automation - Collapsible */}
-                          <div className="mt-8 rounded-lg border border-border overflow-hidden">
-                            <button
-                              onClick={() => setWorkflowStepsExpanded(!workflowStepsExpanded)}
-                              className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-                            >
-                              <div className="flex flex-col items-start gap-1">
-                                <div className="flex items-center gap-2">
-                                  <Zap className="w-4 h-4" style={{ color: '#020817' }} />
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Automation
-                                  </span>
-                                </div>
-                                <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                  Configure the automated steps that run for this stage.
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span onClick={(e) => e.stopPropagation()}>
-                                  <HowItWorksButton
-                                    label="How Automations Works"
-                                    onClick={() => setShowAutomationHowItWorksModal(true)}
-                                  />
-                                </span>
-                                <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${workflowStepsExpanded ? "rotate-180" : ""}`} />
-                              </div>
-                            </button>
+                          {/* 1. AI Model Settings Section */}
+                          <div className="space-y-3">
+                            <div>
+                              <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                AI Model Settings
+                              </h3>
+                              <p className="text-xs text-gray-500 mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Fine-tune the technical execution of the AI agent's voice and intelligence.
+                              </p>
+                            </div>
 
-                            {workflowStepsExpanded && (
-                              <div className="border-t border-border p-4 space-y-3">
-                                {workflowSteps.length === 0 ? (
-                                  <div className="text-center py-6">
-                                    <p className="text-sm" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>No workflow steps added yet.</p>
-                                  </div>
-                                ) : (() => {
-                                  const stageSteps = workflowSteps.filter(s => !s.trigger || s.trigger === "stage");
-                                  const inCallSteps = workflowSteps.filter(s => s.trigger === "incall");
-                                  const inChatSteps = workflowSteps.filter(s => s.trigger === "inchat");
-                                  const postCallSteps = workflowSteps.filter(s => s.trigger === "postcall");
-                                  const isBlockedCallType = stageType === "No Call Activity" || stageType === "Transfer to Human";
-
-                                  const StepIcon = ({ iconKey }: { iconKey: string }) => {
-                                    const map: Record<string, React.ReactNode> = {
-                                      clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
-                                      chevronright: <ChevronRight className="w-4 h-4 text-white" />, zap: <Zap className="w-4 h-4 text-white" />,
-                                      edit: <Edit className="w-4 h-4 text-white" />, usercheck: <UserCheck className="w-4 h-4 text-white" />,
-                                      phonecall: <PhoneCall className="w-4 h-4 text-white" />, messagecircle: <MessageCircle className="w-4 h-4 text-white" />,
-                                      messagesquare: <MessageSquare className="w-4 h-4 text-white" />, mail: <Mail className="w-4 h-4 text-white" />,
-                                      filetext: <FileText className="w-4 h-4 text-white" />, clipboardlist: <ClipboardList className="w-4 h-4 text-white" />,
-                                      globe: <Globe className="w-4 h-4 text-white" />, calendar: <Calendar className="w-4 h-4 text-white" />,
-                                      refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
-                                      lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
-                                      layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
-                                      gitbranch: <GitBranch className="w-4 h-4 text-white" />,
-                                      volume2: <Volume2 className="w-4 h-4 text-white" />,
-                                    };
-                                    return <>{map[iconKey]}</>;
-                                  };
-
-                                  const moveStageStep = (dragIndex: number, hoverIndex: number) => {
-                                    const updatedStageSteps = [...stageSteps];
-                                    const [removed] = updatedStageSteps.splice(dragIndex, 1);
-                                    updatedStageSteps.splice(hoverIndex, 0, removed);
-
-                                    let stageIdx = 0;
-                                    const newWorkflowSteps = workflowSteps.map(s => {
-                                      if (!s.trigger || s.trigger === "stage") {
-                                        return updatedStageSteps[stageIdx++];
-                                      }
-                                      return s;
-                                    });
-                                    setWorkflowSteps(newWorkflowSteps);
-                                  };
-
-                                  return (
-                                    <div className="space-y-4">
-                                      {/* On Stage Entry List */}
-                                      {stageSteps.length > 0 && (
-                                        <div className="space-y-2">
-                                          <div className="flex items-center gap-1.5">
-                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                              On Stage Entry
-                                            </p>
-                                            <InfoTooltip text="These steps run automatically the moment a client enters this stage, before any call starts." />
-                                          </div>
-                                          <div className="space-y-2">
-                                            {stageSteps.map((step, idx) => (
-                                              <DraggableWorkflowStep
-                                                key={step.id}
-                                                step={step}
-                                                index={idx}
-                                                moveStep={moveStageStep}
-                                                onEdit={() => {
-                                                  resetStepDetailState();
-                                                  setCurrentEditingStep(step);
-                                                  setIsCreatingNewStep(false);
-                                                  setStepTrigger(step.trigger ?? "stage");
-                                                  setExecutionType(step.executionType ?? "wait");
-                                                  setDelayValue(step.delayValue ?? 5);
-                                                  setDelayUnit(step.delayUnit ?? "Minute");
-                                                  restoreStepParams(step.stepKey, step.params);
-                                                  setStepDetailDrawerOpen(true);
-                                                }}
-                                                onDuplicate={() => {
-                                                  const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                  const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                  if (fullIdx !== -1) {
-                                                    setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                  }
-                                                  toast.success("Step duplicated successfully");
-                                                }}
-                                                onDelete={() => {
-                                                  setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                  toast.success("Step removed successfully");
-                                                }}
-                                                StepIcon={StepIcon}
-                                                connectAfterLabel={(() => {
-                                                  if (!step.connectAfterId || step.connectAfterId === 'start') return 'from Start';
-                                                  const pred = workflowSteps.find(s => s.id === step.connectAfterId);
-                                                  return pred ? `after ${pred.name}` : undefined;
-                                                })()}
-                                              />
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {/* In Call List */}
-                                      {inCallSteps.length > 0 && (
-                                        <div className="relative">
-                                          <div className={`space-y-2 ${isBlockedCallType ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                                            <div className="flex items-center gap-1.5">
-                                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                                In Call
-                                              </p>
-                                              <InfoTooltip text="These steps run live during the conversation, based on what the caller says." />
-                                            </div>
-                                            <div className="space-y-2">
-                                              {inCallSteps.map((step) => (
-                                                <div
-                                                  key={step.id}
-                                                  className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-muted/10 transition-colors"
-                                                  onClick={(e) => {
-                                                    if ((e.target as HTMLElement).closest('button')) {
-                                                      return;
-                                                    }
-                                                    resetStepDetailState();
-                                                    setCurrentEditingStep(step);
-                                                    setIsCreatingNewStep(false);
-                                                    setStepTrigger(step.trigger ?? "stage");
-                                                    setExecutionType(step.executionType ?? "wait");
-                                                    setDelayValue(step.delayValue ?? 5);
-                                                    setDelayUnit(step.delayUnit ?? "Minute");
-                                                    restoreStepParams(step.stepKey, step.params);
-                                                    setStepDetailDrawerOpen(true);
-                                                  }}
-                                                >
-                                                  <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#2563EB' }}>
-                                                    <StepIcon iconKey={step.iconKey} />
-                                                  </div>
-                                                  <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
-                                                    <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Event Driven</p>
-                                                  </div>
-                                                  <div className="flex items-center gap-1 flex-shrink-0">
-                                                    <button
-                                                      className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                      title="Duplicate"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                        const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                        if (fullIdx !== -1) {
-                                                          setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                        }
-                                                        toast.success("Step duplicated successfully");
-                                                      }}
-                                                    >
-                                                      <Copy className="w-4 h-4 text-muted-foreground" />
-                                                    </button>
-                                                    <button
-                                                      className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                      title="Edit"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        resetStepDetailState();
-                                                        setCurrentEditingStep(step);
-                                                        setIsCreatingNewStep(false);
-                                                        setConnectAfterId(step.connectAfterId);
-                                                        setStepTrigger(step.trigger ?? "stage");
-                                                        setExecutionType(step.executionType ?? "wait");
-                                                        setDelayValue(step.delayValue ?? 5);
-                                                        setDelayUnit(step.delayUnit ?? "Minute");
-                                                        restoreStepParams(step.stepKey, step.params);
-                                                        setStepDetailDrawerOpen(true);
-                                                      }}
-                                                    >
-                                                      <Pencil className="w-4 h-4 text-muted-foreground" />
-                                                    </button>
-                                                    <button
-                                                      className="p-1.5 rounded hover:bg-red-50 transition-colors"
-                                                      title="Delete"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                        toast.success("Step removed successfully");
-                                                      }}
-                                                    >
-                                                      <Trash2 className="w-4 h-4 text-red-500" />
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                          {isBlockedCallType && (
-                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                              <span className="px-3 py-1.5 rounded-full text-xs font-medium border border-border shadow-sm flex items-center gap-1.5" style={{ backgroundColor: '#F1F5F9', color: '#64748B', borderColor: '#E2E8F0', fontFamily: 'DM Sans, sans-serif' }}>
-                                                <Ban className="w-3.5 h-3.5" />
-                                                Not available for this call type
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* In Chat List */}
-                                      {inChatSteps.length > 0 && (
-                                        <div className="space-y-2">
-                                          <div className="flex items-center gap-1.5">
-                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                              In Chat
-                                            </p>
-                                            <InfoTooltip text="These steps fire when the client sends a message in a chat channel (WhatsApp, SMS, or Website) during this stage." />
-                                          </div>
-                                          <div className="space-y-2">
-                                            {inChatSteps.map((step) => (
-                                              <div
-                                                key={step.id}
-                                                className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-muted/10 transition-colors"
-                                                onClick={(e) => {
-                                                  if ((e.target as HTMLElement).closest('button')) return;
-                                                  resetStepDetailState();
-                                                  setCurrentEditingStep(step);
-                                                  setIsCreatingNewStep(false);
-                                                  setStepTrigger(step.trigger ?? "stage");
-                                                  setExecutionType(step.executionType ?? "wait");
-                                                  setDelayValue(step.delayValue ?? 5);
-                                                  setDelayUnit(step.delayUnit ?? "Minute");
-                                                  restoreStepParams(step.stepKey, step.params);
-                                                  setStepDetailDrawerOpen(true);
-                                                }}
-                                              >
-                                                <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#7C3AED' }}>
-                                                  <StepIcon iconKey={step.iconKey} />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
-                                                  <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Message Driven</p>
-                                                </div>
-                                                <div className="flex items-center gap-1 flex-shrink-0">
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                    title="Duplicate"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                      const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                      if (fullIdx !== -1) setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                      toast.success("Step duplicated successfully");
-                                                    }}
-                                                  >
-                                                    <Copy className="w-4 h-4 text-muted-foreground" />
-                                                  </button>
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                    title="Edit"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      resetStepDetailState();
-                                                      setCurrentEditingStep(step);
-                                                      setIsCreatingNewStep(false);
-                                                      setConnectAfterId(step.connectAfterId);
-                                                      setStepTrigger(step.trigger ?? "stage");
-                                                      setExecutionType(step.executionType ?? "wait");
-                                                      setDelayValue(step.delayValue ?? 5);
-                                                      setDelayUnit(step.delayUnit ?? "Minute");
-                                                      restoreStepParams(step.stepKey, step.params);
-                                                      setStepDetailDrawerOpen(true);
-                                                    }}
-                                                  >
-                                                    <Pencil className="w-4 h-4 text-muted-foreground" />
-                                                  </button>
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-red-50 transition-colors"
-                                                    title="Delete"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                      toast.success("Step removed successfully");
-                                                    }}
-                                                  >
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                  </button>
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {/* Post Call List */}
-                                      {postCallSteps.length > 0 && (() => {
-                                        const movePostCallStep = (dragIndex: number, hoverIndex: number) => {
-                                          const updatedPostCallSteps = [...postCallSteps];
-                                          const [removed] = updatedPostCallSteps.splice(dragIndex, 1);
-                                          updatedPostCallSteps.splice(hoverIndex, 0, removed);
-
-                                          let pcIdx = 0;
-                                          const newWorkflowSteps = workflowSteps.map(s => {
-                                            if (s.trigger === "postcall") {
-                                              return updatedPostCallSteps[pcIdx++];
-                                            }
-                                            return s;
-                                          });
-                                          setWorkflowSteps(newWorkflowSteps);
-                                        };
-
-                                        return (
-                                          <div className="relative">
-                                            <div className={`space-y-2 ${isBlockedCallType ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                                              <div className="flex items-center gap-1.5">
-                                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                                  Post Call
-                                                </p>
-                                                <InfoTooltip text="These steps run after the call ends — send a follow-up text, update a field, or move the client to the next stage." />
-                                              </div>
-                                              <div className="space-y-2">
-                                                {postCallSteps.map((step, idx) => (
-                                                  <DraggableWorkflowStep
-                                                    key={step.id}
-                                                    step={step}
-                                                    index={idx}
-                                                    moveStep={movePostCallStep}
-                                                    onEdit={() => {
-                                                      resetStepDetailState();
-                                                      setCurrentEditingStep(step);
-                                                      setIsCreatingNewStep(false);
-                                                      setStepTrigger(step.trigger ?? "stage");
-                                                      setExecutionType(step.executionType ?? "wait");
-                                                      setDelayValue(step.delayValue ?? 5);
-                                                      setDelayUnit(step.delayUnit ?? "Minute");
-                                                      restoreStepParams(step.stepKey, step.params);
-                                                      setStepDetailDrawerOpen(true);
-                                                    }}
-                                                    onDuplicate={() => {
-                                                      const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                      const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                      if (fullIdx !== -1) {
-                                                        setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                      }
-                                                      toast.success("Step duplicated successfully");
-                                                    }}
-                                                    onDelete={() => {
-                                                      setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                      toast.success("Step removed successfully");
-                                                    }}
-                                                    StepIcon={StepIcon}
-                                                    connectAfterLabel={(() => {
-                                                      if (!step.connectAfterId || step.connectAfterId === "start") return "from Start";
-                                                      const pred = workflowSteps.find(s => s.id === step.connectAfterId);
-                                                      return pred ? `after ${pred.name}` : undefined;
-                                                    })()}
-                                                  />
-                                                ))}
-                                              </div>
-                                            </div>
-                                            {isBlockedCallType && (
-                                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                <span className="px-3 py-1.5 rounded-full text-xs font-medium border border-border shadow-sm flex items-center gap-1.5" style={{ backgroundColor: '#F1F5F9', color: '#64748B', borderColor: '#E2E8F0', fontFamily: 'DM Sans, sans-serif' }}>
-                                                  <Ban className="w-3.5 h-3.5" />
-                                                  Not available for this call type
-                                                </span>
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })()}
-                                    </div>
-                                  );
-                                })()}
-                                <Button
-                                  variant="primary"
-                                  onClick={() => {
-                                    setSelectedWorkflowStepCard(null);
-                                    setWorkflowStepsDrawerOpen(true);
-                                  }}
-                                  className="w-full mt-3"
-                                >
-                                  <Plus className="w-4 h-4 mr-2" />
-                                  Add Step
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Advanced Tab */}
-                      {activeTab === "advanced" && (
-                        <div className="space-y-4">
-                          {/* AI Model */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-                            <button
-                              onClick={() => setAiModelExpanded(!aiModelExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                  <Bot className="w-5 h-5 text-blue-600" />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    AI Voice & Model
-                                  </span>
-                                  <Tooltip
-                                    text="Choose the AI model that powers your receptionist. Different models offer varying levels of capabilities and performance."
-                                    placement="top"
-                                  >
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    window.location.href = '/settings?tab=voice-config';
-                                  }}
-                                  className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
-                                >
-                                  <Settings className="w-4 h-4 text-gray-500" />
-                                </button>
-                                <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${aiModelExpanded ? 'rotate-180' : ''}`}
-                                />
-                              </div>
-                            </button>
-
-                            {aiModelExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-5 bg-gray-50/40">
-                                {/* AI Model Select */}
-                                <div>
-                                  <label className="block text-sm font-semibold mb-2 text-gray-700">AI Model</label>
-                                  <select
-                                    value={selectedAIModel}
-                                    onChange={(e) => {
-                                      setSelectedAIModel(e.target.value);
-                                      toast.success("AI Model updated successfully");
-                                    }}
-                                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
-                                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                                  >
-                                    <option value="Gemini 2.5 Flash">Gemini 2.5 Flash</option>
-                                    <option value="GPT-4o Mini">GPT-4o Mini</option>
-                                    <option value="Deepseek V4 Flash">Deepseek V4 Flash</option>
-                                  </select>
-                                </div>
-
-                                {/* Voice Speed Slider */}
-                                <div>
-                                  <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-1.5">
-                                      <label className="text-sm font-semibold text-gray-700">Voice Speed</label>
-                                      <Tooltip text="Controls how fast the AI speaks during calls.">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
-                                    <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-bold rounded-lg">
-                                      {stageVoiceSpeed}x
+                            <div className="rounded-2xl border border-gray-200/80 bg-white p-6 md:p-7 shadow-xs space-y-6">
+                              {/* Row 1: AI Model & Speech Speed */}
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                                {/* AI Model */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-blue-500 font-mono font-bold text-sm leading-none">&gt;_</span>
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      AI Model
                                     </span>
+                                    <Tooltip text="Select the underlying LLM that powers the conversational logic.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
                                   </div>
-                                  <input
-                                    type="range"
-                                    min="0.5"
-                                    max="2"
-                                    step="0.1"
-                                    value={stageVoiceSpeed}
-                                    onChange={(e) => setStageVoiceSpeed(parseFloat(e.target.value))}
-                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                                  />
-                                  <div className="flex justify-between text-xs mt-2 text-gray-500 font-medium">
-                                    <span>0.5x</span>
-                                    <span>2.0x</span>
-                                  </div>
-                                </div>
-
-                                {/* Voice / Tone / Style — 3-column grid */}
-                                <div className="grid grid-cols-3 gap-3">
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-semibold text-gray-700">Voice</label>
-                                      <Tooltip text="Choose the voice your AI receptionist uses on calls.">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
+                                  <div className="relative">
                                     <select
-                                      value={stageVoice}
-                                      onChange={(e) => setStageVoice(e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
+                                      value={selectedAIModel}
+                                      onChange={(e) => {
+                                        if (e.target.value === "__view_more_models__") {
+                                          navigate('/settings?tab=voice-config&sub=models');
+                                          return;
+                                        }
+                                        setSelectedAIModel(e.target.value);
+                                        toast.success(`AI Model updated to ${e.target.value}`);
+                                      }}
+                                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-10 cursor-pointer shadow-2xs"
                                       style={{ fontFamily: 'Outfit, sans-serif' }}
                                     >
-                                      <option value="Ava">Ava</option>
-                                      <option value="Eva">Eva</option>
-                                      <option value="Aria">Aria</option>
-                                      <option value="Sam">Sam</option>
-                                      <option value="Jack">Jack</option>
-                                      <option value="Mango">Mango</option>
+                                      {activeAIModels.map((m) => (
+                                        <option key={m.id} value={m.name}>
+                                          {m.name} ({m.provider})
+                                        </option>
+                                      ))}
+                                      <option disabled value="">──────────</option>
+                                      <option value="__view_more_models__" className="text-blue-600 font-semibold">
+                                        Choose from library →
+                                      </option>
                                     </select>
+                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                                   </div>
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-semibold text-gray-700">Tone</label>
-                                      <Tooltip text="Select the default tone of voice the AI will use during calls (e.g. Professional, Friendly).">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                </div>
+
+                                {/* Speech Speed */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5">
+                                      <Volume2 className="w-4 h-4 text-amber-500" />
+                                      <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                        Speech Speed
+                                      </span>
+                                      <Tooltip text="Adjust how fast the AI speaks to ensure a natural conversational rhythm. Speech speed significantly affects naturalness — 1.0x (Natural) is highly recommended.">
+                                        <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
                                       </Tooltip>
                                     </div>
+                                    <span className="text-xs font-semibold text-gray-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      {stageVoiceSpeed.toFixed(1)}x
+                                    </span>
+                                  </div>
+                                  <div className="space-y-2 pt-1">
+                                    <input
+                                      type="range"
+                                      min="0.5"
+                                      max="1.5"
+                                      step="0.1"
+                                      value={stageVoiceSpeed}
+                                      onChange={(e) => setStageVoiceSpeed(parseFloat(e.target.value))}
+                                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                    />
+                                    <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 tracking-wider">
+                                      <span>SLOW</span>
+                                      <span>NATURAL</span>
+                                      <span>FAST</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Row 2: Voice Engine, Tone, Style in same row */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100 items-start">
+                                {/* Voice Engine */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <Mic className="w-4 h-4 text-emerald-500" />
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      Voice Engine
+                                    </span>
+                                    <Tooltip text="Choose the vocal personality that best represents your brand's tone.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="relative flex-1">
+                                      <select
+                                        value={stageVoice}
+                                        onChange={(e) => {
+                                          if (e.target.value === "__view_more_voices__") {
+                                            navigate('/settings?tab=voice-config&sub=voices');
+                                            return;
+                                          }
+                                          setStageVoice(e.target.value);
+                                          toast.success(`Voice updated to ${e.target.value}`);
+                                        }}
+                                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-7 cursor-pointer shadow-2xs"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      >
+                                        {activeConfiguredVoices.map((v) => (
+                                          <option key={v.id || v.name} value={v.name}>
+                                            {v.name} ({v.country}, {v.gender})
+                                          </option>
+                                        ))}
+                                        <option disabled value="">──────────</option>
+                                        <option value="__view_more_voices__" className="text-blue-600 font-semibold">
+                                          Choose from library →
+                                        </option>
+                                      </select>
+                                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        toast.success(`Playing preview for ${stageVoice || activeConfiguredVoices[0]?.name || "Nova"}...`);
+                                        if ("speechSynthesis" in window) {
+                                          window.speechSynthesis.cancel();
+                                          const utterance = new SpeechSynthesisUtterance("Hello! This is how your AI voice sounds.");
+                                          utterance.rate = stageVoiceSpeed;
+                                          window.speechSynthesis.speak(utterance);
+                                        }
+                                      }}
+                                      className="flex items-center gap-1.5 px-3.5 py-2.5 border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/40 rounded-xl text-sm font-semibold text-gray-800 transition-all cursor-pointer shadow-2xs group flex-shrink-0"
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      <Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
+                                      <span className="group-hover:text-emerald-700 text-xs">Test</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Tone */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      Tone
+                                    </span>
+                                    <Tooltip text="Set the emotional tone used by the AI assistant.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <div className="relative">
                                     <select
                                       value={stageTone}
-                                      onChange={(e) => setStageTone(e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
+                                      onChange={(e) => {
+                                        setStageTone(e.target.value);
+                                        toast.success(`Tone updated to ${e.target.value}`);
+                                      }}
+                                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-8 cursor-pointer shadow-2xs"
                                       style={{ fontFamily: 'Outfit, sans-serif' }}
                                     >
                                       <option value="Professional">Professional</option>
@@ -5608,718 +4797,563 @@ export default function AdminProcessTemplates() {
                                       <option value="Empathetic">Empathetic</option>
                                       <option value="Casual">Casual</option>
                                       <option value="Persuasive">Persuasive</option>
+                                      <option value="Authoritative">Authoritative</option>
                                     </select>
+                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                                   </div>
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-semibold text-gray-700">Style</label>
-                                      <Tooltip text="Select the conversational style (e.g. Concise, Detailed).">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
+                                </div>
+
+                                {/* Style */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      Style
+                                    </span>
+                                    <Tooltip text="Select conversational phrasing style (concise vs detailed).">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <div className="relative">
                                     <select
                                       value={stageStyle}
-                                      onChange={(e) => setStageStyle(e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
+                                      onChange={(e) => {
+                                        setStageStyle(e.target.value);
+                                        toast.success(`Style updated to ${e.target.value}`);
+                                      }}
+                                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-8 cursor-pointer shadow-2xs"
                                       style={{ fontFamily: 'Outfit, sans-serif' }}
                                     >
                                       <option value="Balanced">Balanced</option>
                                       <option value="Concise">Concise</option>
                                       <option value="Detailed">Detailed</option>
+                                      <option value="Warm">Warm</option>
+                                      <option value="Expressive">Expressive</option>
                                     </select>
+                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                                   </div>
                                 </div>
                               </div>
-                            )}
-                          </div>
-
-                          {/* ──────────────────────────── RECORD CALLS ───────────────────────── */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-                            <div className="w-full flex items-center justify-between px-4 py-3">
-                              <div className="flex items-center gap-3">
-                                <Mic className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className="text-sm font-medium"
-                                    style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Record Calls
-                                  </span>
-                                  <Tooltip text="Enable call recording for this stage." placement="top">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  className="sr-only peer"
-                                  checked={advancedSettings.recordCalls}
-                                  onChange={(e) => {
-                                    setAdvancedSettings({ ...advancedSettings, recordCalls: e.target.checked });
-                                    toast.success(e.target.checked ? 'Call recording enabled' : 'Call recording disabled');
-                                  }}
-                                />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                              </label>
                             </div>
                           </div>
 
-                          {/* Note: Advanced settings items in Stage section reference the same state as Process section */}
-
-                          {/* ──────────────────────────── CALL DURATION ───────────────────────── */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-                            {/* Header Row */}
-                            <button
-                              onClick={() => setCallDurationExpanded(!callDurationExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <Clock className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Call Duration
-                                  </span>
-                                  <Tooltip text="Set the maximum call length and when the AI should start wrapping up the conversation.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <ChevronDown
-                                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${callDurationExpanded ? 'rotate-180' : ''
-                                  }`}
-                              />
-                            </button>
-
-                            {/* Expanded Content */}
-                            {callDurationExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-
-                                {/* Call Duration + Hangup Window in one row */}
-                                <div className="flex items-end gap-4">
-                                  {/* Call Duration */}
-                                  <div className="flex-1">
-                                    <label className="block text-sm font-medium mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Call Duration (min)
-                                    </label>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      value={callDurationMinutes}
-                                      onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 1;
-                                        setCallDurationMinutes(val);
-                                        if (hangupWindowMinutes >= val) {
-                                          setHangupWindowMinutes(val - 1 > 0 ? val - 1 : 1);
-                                        }
-                                      }}
-                                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
-                                  </div>
-
-                                  {/* Hangup Window */}
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                        Hangup Window
-                                      </label>
-                                      <Tooltip
-                                        text="During the last X minutes of the total call duration, the AI will proactively try to wrap up the conversation and end the call gracefully. The hangup window must be less than the total call duration."
-                                        placement="top"
-                                      >
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
-                                      </Tooltip>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm text-gray-500 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Last</span>
-                                      <input
-                                        type="number"
-                                        min={1}
-                                        max={callDurationMinutes - 1}
-                                        value={hangupWindowMinutes}
-                                        onChange={(e) => {
-                                          const val = parseInt(e.target.value) || 1;
-                                          if (val >= callDurationMinutes) {
-                                            toast.error(`Hangup window must be less than the call duration (${callDurationMinutes} min)`);
-                                            return;
-                                          }
-                                          setHangupWindowMinutes(val);
-                                        }}
-                                        className="flex-1 min-w-0 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                      />
-                                      <span className="text-sm text-gray-500 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                        {hangupWindowMinutes === 1 ? 'minute' : 'minutes'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {hangupWindowMinutes >= callDurationMinutes && (
-                                  <p className="text-xs text-red-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                    Hangup window must be less than call duration ({callDurationMinutes} min).
-                                  </p>
-                                )}
-
-                                <div className="flex justify-end">
-                                  <button
-                                    onClick={() => toast.success("Call duration settings saved")}
-                                    className="text-xs font-semibold px-3 py-1.5 rounded-md text-white"
-                                    style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Save
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* ───────────────────────────── RETRY RULES ───────────────────────────── */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-                            {/* Header Row */}
-                            <button
-                              onClick={() => setRetryRulesExpanded(!retryRulesExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <RefreshCw className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span
-                                    className="text-sm font-medium"
-                                    style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Retry Rules
-                                  </span>
-                                  <Tooltip text="Automatically retry the call if it fails, based on the rules below.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${retryRulesEnabled
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'bg-gray-100 text-gray-500'
-                                    }`}
-                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                >
-                                  {retryRulesEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${retryRulesExpanded ? 'rotate-180' : ''
-                                    }`}
-                                />
-                              </div>
-                            </button>
-
-                            {/* Expanded Content */}
-                            {retryRulesExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                {/* Enable Toggle Row */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      className="text-sm font-medium"
-                                      style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      Enable Retry Rules
-                                    </span>
-                                    <Tooltip text="If call fails, automatically retry calling based on rules configured below.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={retryRulesEnabled}
-                                      onChange={(e) => {
-                                        setRetryRulesEnabled(e.target.checked);
-                                        toast.success(e.target.checked ? 'Retry rules enabled' : 'Retry rules disabled');
-                                      }}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-
-                                {/* Retry Attempts */}
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label
-                                      className="text-sm font-medium"
-                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                    >
-                                      Retry Attempts
-                                    </label>
-                                    <Tooltip text="Number of call retry attempts to make before failing permanently.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={10}
-                                    value={retryAttempts}
-                                    onChange={(e) => setRetryAttempts(parseInt(e.target.value) || 1)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  />
-                                </div>
-
-                                {/* Delay Between Retries */}
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label
-                                      className="text-sm font-medium"
-                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                    >
-                                      Delay Between Retries (minutes)
-                                    </label>
-                                    <Tooltip text="Time to wait between each retry attempt.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    value={retryDelay}
-                                    onChange={(e) => setRetryDelay(parseInt(e.target.value) || 1)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  />
-                                </div>
-
-                                {/* Fallback Stage */}
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label
-                                      className="text-sm font-medium"
-                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                    >
-                                      Fallback Stage
-                                    </label>
-                                    <Tooltip text="Workflow stage to transition call task to if all retry attempts fail.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <select
-                                    value={retryFallbackStage}
-                                    onChange={(e) => setRetryFallbackStage(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors appearance-none"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  >
-                                    <option value="Do Nothing">Do Nothing</option>
-                                    {selectedProcessData?.stages.map((s) => (
-                                      <option key={s.id} value={s.name}>
-                                        {s.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* ─────────────────────────── SKIP DAY RULES ──────────────────────────── */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-                            {/* Header Row */}
-                            <button
-                              onClick={() => setSkipDayRulesExpanded(!skipDayRulesExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <Calendar className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span
-                                    className="text-sm font-medium"
-                                    style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Skip Day Rules
-                                  </span>
-                                  <Tooltip text="Avoid placing outbound calls on selected days or dates.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${skipDayRulesEnabled
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'bg-gray-100 text-gray-500'
-                                    }`}
-                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                >
-                                  {skipDayRulesEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${skipDayRulesExpanded ? 'rotate-180' : ''
-                                    }`}
-                                />
-                              </div>
-                            </button>
-
-                            {/* Expanded Content */}
-                            {skipDayRulesExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                {/* Enable Toggle Row */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      className="text-sm font-medium"
-                                      style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      Enable Skip Day Rules
-                                    </span>
-                                    <Tooltip text="Avoid making automated outbound calls on selected days/dates.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={skipDayRulesEnabled}
-                                      onChange={(e) => {
-                                        setSkipDayRulesEnabled(e.target.checked);
-                                        toast.success(
-                                          e.target.checked ? 'Skip day rules enabled' : 'Skip day rules disabled'
-                                        );
-                                      }}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-
-                                {/* Weekly Off Days */}
-                                <div>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <label
-                                      className="text-sm font-medium"
-                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                    >
-                                      Weekly Off Days
-                                    </label>
-                                    <Tooltip text="Days of the week to skip automated calling.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => {
-                                      const isActive = weeklyOffDays.includes(day);
-                                      return (
-                                        <button
-                                          key={day}
-                                          type="button"
-                                          onClick={() =>
-                                            setWeeklyOffDays((prev) =>
-                                              isActive ? prev.filter((d) => d !== day) : [...prev, day]
-                                            )
-                                          }
-                                          className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-all ${isActive
-                                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                                            : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600'
-                                            }`}
-                                          style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                        >
-                                          {day}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                {/* Custom Off Dates */}
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label
-                                      className="text-sm font-medium"
-                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                    >
-                                      Custom Off Dates
-                                    </label>
-                                    <Tooltip text="Specific calendar dates on which no calls will be placed.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="date"
-                                      value={customOffDate}
-                                      onChange={(e) => setCustomOffDate(e.target.value)}
-                                      className="flex-1 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (customOffDate && !customOffDatesList.includes(customOffDate)) {
-                                          setCustomOffDatesList((prev) => [...prev, customOffDate]);
-                                          setCustomOffDate('');
-                                        }
-                                      }}
-                                      className="w-9 h-9 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors flex-shrink-0"
-                                    >
-                                      <Plus className="w-4 h-4 text-white" />
-                                    </button>
-                                  </div>
-
-                                  {/* List of added custom dates */}
-                                  {customOffDatesList.length > 0 && (
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                      {customOffDatesList.map((date) => (
-                                        <span
-                                          key={date}
-                                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-medium"
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          {date}
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setCustomOffDatesList((prev) => prev.filter((d) => d !== date))
-                                            }
-                                            className="hover:text-blue-900 transition-colors"
-                                          >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-
-                                  <p
-                                    className="mt-2 text-xs"
-                                    style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}
-                                  >
-                                    Calls will not be scheduled on selected days and dates.
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* ──────────────────────────── DETECT VOICEMAIL ───────────────────────── */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-                            {/* Header Row */}
-                            <button
-                              onClick={() => setDetectVoicemailExpanded(!detectVoicemailExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <Voicemail className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span
-                                    className="text-sm font-medium"
-                                    style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Detect Voicemail
-                                  </span>
-                                  <Tooltip
-                                    text="This allows AI to detect if the caller is on leave voice mail and disconnect the call"
-                                    placement="top"
-                                  >
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${detectVoicemailEnabled
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'bg-gray-100 text-gray-500'
-                                    }`}
-                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                >
-                                  {detectVoicemailEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${detectVoicemailExpanded ? 'rotate-180' : ''
-                                    }`}
-                                />
-                              </div>
-                            </button>
-
-                            {/* Expanded Content */}
-                            {detectVoicemailExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 bg-gray-50/40">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      className="text-sm font-medium"
-                                      style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      Enable Voicemail Detection
-                                    </span>
-                                    <Tooltip
-                                      text="This allows AI to detect if the caller is on leave voice mail and disconnect the call"
-                                      placement="top"
-                                    >
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={detectVoicemailEnabled}
-                                      onChange={(e) => {
-                                        setDetectVoicemailEnabled(e.target.checked);
-                                        toast.success(
-                                          e.target.checked
-                                            ? 'Voicemail detection enabled'
-                                            : 'Voicemail detection disabled'
-                                        );
-                                      }}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Business Hours */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
+                          {/* 2. Caller Pitch Card */}
+                          <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-xs">
+                            {/* Collapsible Header */}
                             <button
                               type="button"
-                              onClick={() => setBusinessHoursExpanded(!businessHoursExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+                              onClick={() => setCallerPitchExpanded(!callerPitchExpanded)}
+                              className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50/70 transition-colors"
                             >
                               <div className="flex items-center gap-3">
-                                <Clock className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Business Hours
+                                <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 text-emerald-600">
+                                  <Sparkles className="w-5 h-5" />
+                                </div>
+                                <div className="flex flex-col items-start text-left">
+                                  <span className="text-base font-semibold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                    Caller Pitch
                                   </span>
-                                  <Tooltip text="Restrict when the AI actively receives calls/messages or makes outbound calls to specific hours per day.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
+                                  <span className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Script or instructions used by the AI agent when conversing on calls in this stage.
+                                  </span>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${businessHoursEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                  {businessHoursEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${businessHoursExpanded ? 'rotate-180' : ''}`} />
-                              </div>
+                              <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${callerPitchExpanded ? "rotate-180" : ""}`} />
                             </button>
 
-                            {businessHoursExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                {/* Enable toggle */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
-                                      Enable Business Hours
-                                    </span>
-                                    <Tooltip text="When enabled, this process/stage will only actively operate within the hours defined below.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
+                            {/* Expanded Content */}
+                            {callerPitchExpanded && (
+                              <div className="p-6 border-t border-gray-100 space-y-6">
+                                {/* Mode Toggle */}
+                                <div className="flex items-center gap-3">
+                                  <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl w-fit">
+                                    <button
+                                      type="button"
+                                      onClick={() => setCallerPitchMode("single")}
+                                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${callerPitchMode === "single"
+                                        ? "bg-primary text-white shadow-xs"
+                                        : "text-gray-600 hover:text-gray-900"
+                                        }`}
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      Single Prompt
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setCallerPitchMode("comprehensive")}
+                                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${callerPitchMode === "comprehensive"
+                                        ? "bg-primary text-white shadow-xs"
+                                        : "text-gray-600 hover:text-gray-900"
+                                        }`}
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      Comprehensive
+                                    </button>
                                   </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={businessHoursEnabled}
-                                      onChange={(e) => setBusinessHoursEnabled(e.target.checked)}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-
-                                {/* Timezone */}
-                                <div>
-                                  <label className="text-sm font-medium block mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>Timezone</label>
-                                  <select
-                                    value={businessHoursTimezone}
-                                    onChange={(e) => setBusinessHoursTimezone(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                  >
-                                    <option value="America/New_York">Eastern Time (ET)</option>
-                                    <option value="America/Chicago">Central Time (CT)</option>
-                                    <option value="America/Denver">Mountain Time (MT)</option>
-                                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                                    <option value="Asia/Kolkata">India Standard Time (IST)</option>
-                                    <option value="Europe/London">GMT / London</option>
-                                  </select>
-                                </div>
-
-                                {/* Per-day hours */}
-                                <div className="space-y-2">
-                                  <label className="text-sm font-medium block" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>Hours by Day</label>
-                                  {(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const).map((day) => {
-                                    const dayData = businessHoursByDay[day];
-                                    return (
-                                      <div key={day} className="flex items-center gap-3 p-2.5 bg-white border border-gray-200 rounded-lg">
-                                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                                          <input
-                                            type="checkbox"
-                                            className="sr-only peer"
-                                            checked={dayData.enabled}
-                                            onChange={(e) =>
-                                              setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], enabled: e.target.checked } }))
-                                            }
-                                          />
-                                          <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
-                                        </label>
-                                        <span className="text-sm font-semibold w-10 shrink-0" style={{ fontFamily: 'DM Sans, sans-serif', color: dayData.enabled ? '#020817' : '#9CA3AF' }}>
-                                          {day}
-                                        </span>
-                                        <input
-                                          type="time"
-                                          value={dayData.start}
-                                          disabled={!dayData.enabled}
-                                          onChange={(e) =>
-                                            setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], start: e.target.value } }))
-                                          }
-                                          className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 disabled:bg-gray-50"
-                                        />
-                                        <span className="text-xs text-gray-400">to</span>
-                                        <input
-                                          type="time"
-                                          value={dayData.end}
-                                          disabled={!dayData.enabled}
-                                          onChange={(e) =>
-                                            setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], end: e.target.value } }))
-                                          }
-                                          className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 disabled:bg-gray-50"
-                                        />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-
-                                {/* Outside-hours behavior */}
-                                <div>
-                                  <label className="text-sm font-medium block mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                    When contacted outside business hours
-                                  </label>
-                                  <select
-                                    value={outsideHoursAction}
-                                    onChange={(e) => setOutsideHoursAction(e.target.value as typeof outsideHoursAction)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors mb-3"
-                                  >
-                                    <option value="message">Play/Send a custom message</option>
-                                    <option value="voicemail">Route to voicemail</option>
-                                    <option value="queue">Queue until next business hours</option>
-                                  </select>
-                                  {outsideHoursAction === "message" && (
-                                    <textarea
-                                      value={outsideHoursMessage}
-                                      onChange={(e) => setOutsideHoursMessage(e.target.value)}
-                                      rows={3}
-                                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:border-blue-500 transition-colors"
-                                      placeholder="We're currently closed. Our business hours are..."
-                                    />
+                                  {callerPitchMode === "single" ? (
+                                    <InfoTooltip text="Single Prompt lets you write the entire outbound script as one open text box, with a Generate with AI shortcut — the fastest option for a simple stage." />
+                                  ) : (
+                                    <InfoTooltip text="Comprehensive mode lets you set a separate greeting, objective, business info, and languages instead of one combined script." />
                                   )}
                                 </div>
+
+                                {/* Single Prompt Mode */}
+                                {callerPitchMode === "single" && (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <label className="text-xs font-bold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                        Pitch Script / Prompt
+                                      </label>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPitchFieldPickerTarget("callerPitch")}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors cursor-pointer"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        Select Field
+                                      </button>
+                                    </div>
+
+                                    <textarea
+                                      ref={callerPitchRef}
+                                      value={callerPitch}
+                                      onChange={(e) => setCallerPitch(e.target.value)}
+                                      className="w-full p-4 bg-gray-50/50 border border-input rounded-xl resize-none text-sm text-gray-900 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors leading-relaxed"
+                                      style={{ fontFamily: 'Outfit, sans-serif', minHeight: '140px' }}
+                                      placeholder="Write your caller script or instructions here... Use Select Field in the top right to insert dynamic variables."
+                                    />
+                                    <div className="flex items-center justify-end">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          toast.success("AI is generating optimized caller pitch...");
+                                          setCallerPitch("Hi {{name}}, this is your dedicated assistant from {{organization.name}}. I'm reaching out to follow up on your recent inquiry and help answer any questions you might have about our services. Do you have a quick moment to speak?");
+                                        }}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      >
+                                        <Zap className="w-4 h-4 text-amber-500" />
+                                        Generate with AI
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Comprehensive Mode */}
+                                {callerPitchMode === "comprehensive" && (
+                                  <div className="space-y-4">
+                                    {/* A. Greeting / Intro Message */}
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setGreetingIntroExpanded(!greetingIntroExpanded)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                                      >
+                                        <div className="flex flex-col items-start gap-0.5">
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Greeting / Intro Message
+                                          </span>
+                                          {!greetingIntroExpanded && greetingIntroMessage && (
+                                            <span className="text-xs truncate max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                              {greetingIntroMessage.slice(0, 80)}...
+                                            </span>
+                                          )}
+                                          {!greetingIntroExpanded && !greetingIntroMessage && (
+                                            <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                                              Not configured
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${greetingIntroExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+
+                                      {greetingIntroExpanded && (
+                                        <div className="p-4 border-t border-border space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                              Greeting Text
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setPitchFieldPickerTarget("greetingIntro")}
+                                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors cursor-pointer"
+                                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                                            >
+                                              <Plus className="w-3.5 h-3.5" />
+                                              Select Field
+                                            </button>
+                                          </div>
+                                          <textarea
+                                            ref={greetingIntroRef}
+                                            value={greetingIntroMessage}
+                                            onChange={(e) => setGreetingIntroMessage(e.target.value)}
+                                            placeholder="Hi, this is Alex from {{organization.name}}. Who do I have the pleasure of speaking with today?"
+                                            className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
+                                            style={{ fontFamily: 'Outfit, sans-serif', minHeight: '100px' }}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* B. Objective */}
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setObjectiveExpanded(!objectiveExpanded)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                                      >
+                                        <div className="flex flex-col items-start gap-0.5">
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Objective
+                                          </span>
+                                          {!objectiveExpanded && objectiveText && (
+                                            <span className="text-xs truncate max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                              {objectiveText.slice(0, 80)}...
+                                            </span>
+                                          )}
+                                          {!objectiveExpanded && !objectiveText && (
+                                            <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                                              Not configured
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${objectiveExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+
+                                      {objectiveExpanded && (
+                                        <div className="p-4 border-t border-border space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                              Objective Instructions
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setPitchFieldPickerTarget("objective")}
+                                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors cursor-pointer"
+                                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                                            >
+                                              <Plus className="w-3.5 h-3.5" />
+                                              Select Field
+                                            </button>
+                                          </div>
+                                          <textarea
+                                            ref={objectiveTextRef}
+                                            value={objectiveText}
+                                            onChange={(e) => setObjectiveText(e.target.value)}
+                                            placeholder="You are an AI assistant for {{organization.name}}. Your role is to answer general inquiries, schedule appointments, and provide information about our services."
+                                            className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
+                                            style={{ fontFamily: 'Outfit, sans-serif', minHeight: '100px' }}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* C. Business Information */}
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setBusinessInfoExpanded(!businessInfoExpanded)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Business Information
+                                          </span>
+                                          {!businessInfoExpanded && businessInfoItems.length > 0 && (
+                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-200 text-gray-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                              {businessInfoItems.length} {businessInfoItems.length === 1 ? 'item' : 'items'}
+                                            </span>
+                                          )}
+                                          {!businessInfoExpanded && businessInfoItems.length === 0 && (
+                                            <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                                              No data added
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${businessInfoExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+
+                                      {businessInfoExpanded && (
+                                        <div className="p-4 border-t border-border space-y-3">
+                                          <p className="text-sm mb-3" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                            Add business information that the AI should know while speaking with callers.
+                                          </p>
+
+                                          {/* Existing Business Info Items */}
+                                          {businessInfoItems.map((item) => (
+                                            <div key={item.id} className="p-3 border border-border rounded-lg bg-muted/20">
+                                              <div className="flex items-start justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-sm font-bold" style={{ color: '#111827', fontFamily: 'DM Sans, sans-serif' }}>
+                                                    {item.title}
+                                                  </span>
+                                                  {item.active && (
+                                                    <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                      Active
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setEditingBusinessInfoId(item.id);
+                                                      setBusinessInfoFormData({
+                                                        title: item.title,
+                                                        information: item.information,
+                                                        active: item.active
+                                                      });
+                                                      setShowBusinessInfoForm(true);
+                                                    }}
+                                                    className="text-blue-600 hover:text-blue-700"
+                                                  >
+                                                    <Edit className="w-4 h-4" />
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setBusinessInfoItems(businessInfoItems.filter(i => i.id !== item.id));
+                                                      toast.success("Information deleted");
+                                                    }}
+                                                    className="text-red-600 hover:text-red-700"
+                                                  >
+                                                    <Trash2 className="w-4 h-4" />
+                                                  </button>
+                                                </div>
+                                              </div>
+                                              <p className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                                                {item.information}
+                                              </p>
+                                            </div>
+                                          ))}
+
+                                          {/* Inline Add/Edit Form */}
+                                          {showBusinessInfoForm && (
+                                            <div className="p-4 border border-primary/30 rounded-lg bg-blue-50/30 space-y-3">
+                                              <div>
+                                                <label className="block text-xs font-medium mb-1" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                                  Title
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={businessInfoFormData.title}
+                                                  onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, title: e.target.value })}
+                                                  placeholder="Example: Clinic Timings"
+                                                  className="w-full p-2 bg-white border border-input rounded-lg text-sm"
+                                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                />
+                                              </div>
+                                              <div>
+                                                <label className="block text-xs font-medium mb-1" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                                  Information
+                                                </label>
+                                                <textarea
+                                                  value={businessInfoFormData.information}
+                                                  onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, information: e.target.value })}
+                                                  placeholder="Example: Our clinic is open Monday to Saturday from 9 AM to 7 PM."
+                                                  className="w-full p-2 bg-white border border-input rounded-lg resize-none text-sm"
+                                                  style={{ fontFamily: 'Outfit, sans-serif', minHeight: '80px' }}
+                                                />
+                                              </div>
+                                              <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                  <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                    Active
+                                                  </label>
+                                                  <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      className="sr-only peer"
+                                                      checked={businessInfoFormData.active}
+                                                      onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, active: e.target.checked })}
+                                                    />
+                                                    <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                                                  </label>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setShowBusinessInfoForm(false);
+                                                      setEditingBusinessInfoId(null);
+                                                      setBusinessInfoFormData({ title: "", information: "", active: true });
+                                                    }}
+                                                    className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                                                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                  >
+                                                    Cancel
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      if (businessInfoFormData.title && businessInfoFormData.information) {
+                                                        if (editingBusinessInfoId !== null) {
+                                                          setBusinessInfoItems(businessInfoItems.map(item =>
+                                                            item.id === editingBusinessInfoId
+                                                              ? { ...item, ...businessInfoFormData }
+                                                              : item
+                                                          ));
+                                                          toast.success("Information updated");
+                                                        } else {
+                                                          setBusinessInfoItems([...businessInfoItems, {
+                                                            id: Date.now(),
+                                                            ...businessInfoFormData
+                                                          }]);
+                                                          toast.success("Information added");
+                                                        }
+                                                        setShowBusinessInfoForm(false);
+                                                        setEditingBusinessInfoId(null);
+                                                        setBusinessInfoFormData({ title: "", information: "", active: true });
+                                                      }
+                                                    }}
+                                                    className="px-4 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary-hover"
+                                                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                  >
+                                                    Done
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Add Information Button */}
+                                          {!showBusinessInfoForm && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setShowBusinessInfoForm(true)}
+                                              className="w-full px-4 py-2 border border-dashed border-gray-400 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium"
+                                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                                            >
+                                              <Plus className="w-4 h-4" />
+                                              Add Information
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* D. Languages */}
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setLanguagesExpanded(!languagesExpanded)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                                      >
+                                        <div className="flex flex-col items-start gap-0.5">
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Languages
+                                          </span>
+                                          {!languagesExpanded && (primaryLanguage || secondaryLanguages.length > 0) && (
+                                            <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                              {primaryLanguage && `Primary: ${primaryLanguage}`}
+                                              {primaryLanguage && secondaryLanguages.length > 0 && ' · '}
+                                              {secondaryLanguages.length > 0 && `Secondary: ${secondaryLanguages.join(', ')}`}
+                                            </span>
+                                          )}
+                                          {!languagesExpanded && !primaryLanguage && secondaryLanguages.length === 0 && (
+                                            <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                                              Not configured
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${languagesExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+
+                                      {languagesExpanded && (
+                                        <div className="p-4 border-t border-border space-y-4">
+                                          {/* Primary Language */}
+                                          <div>
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                Primary Language *
+                                              </label>
+                                              <Tooltip text="The default language your AI Receptionist will speak on all calls for this stage.">
+                                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                                              </Tooltip>
+                                            </div>
+                                            <Select value={primaryLanguage} onValueChange={setPrimaryLanguage}>
+                                              <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="Select primary language" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="English">English</SelectItem>
+                                                <SelectItem value="Spanish">Spanish</SelectItem>
+                                                <SelectItem value="French">French</SelectItem>
+                                                <SelectItem value="German">German</SelectItem>
+                                                <SelectItem value="Italian">Italian</SelectItem>
+                                                <SelectItem value="Portuguese">Portuguese</SelectItem>
+                                                <SelectItem value="Chinese">Chinese</SelectItem>
+                                                <SelectItem value="Japanese">Japanese</SelectItem>
+                                                <SelectItem value="Korean">Korean</SelectItem>
+                                                <SelectItem value="Arabic">Arabic</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+
+                                          {/* Secondary Languages */}
+                                          <div>
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                Secondary Languages
+                                              </label>
+                                              <Tooltip text="Fallback language(s) the AI can switch to if the caller requests it or if their language differs from the primary. You can add multiple.">
+                                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                                              </Tooltip>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <Select value={secondaryLanguageDraft} onValueChange={setSecondaryLanguageDraft}>
+                                                <SelectTrigger className="flex-1">
+                                                  <SelectValue placeholder="Select a fallback language (optional)" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  {["English", "Spanish", "French", "German", "Italian", "Portuguese", "Chinese", "Japanese", "Korean", "Arabic"]
+                                                    .filter(lang => lang !== primaryLanguage && !secondaryLanguages.includes(lang))
+                                                    .map(lang => (
+                                                      <SelectItem key={lang} value={lang}>{lang}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                              </Select>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  if (secondaryLanguageDraft) {
+                                                    setSecondaryLanguages([...secondaryLanguages, secondaryLanguageDraft]);
+                                                    setSecondaryLanguageDraft("");
+                                                  }
+                                                }}
+                                                disabled={!secondaryLanguageDraft}
+                                                className="w-9 h-9 flex items-center justify-center rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                                              >
+                                                <Plus className="w-4 h-4 text-white" />
+                                              </button>
+                                            </div>
+                                            {secondaryLanguages.length > 0 && (
+                                              <div className="flex flex-wrap gap-2 mt-2">
+                                                {secondaryLanguages.map((lang) => (
+                                                  <span key={lang} className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">
+                                                    {lang}
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setSecondaryLanguages(secondaryLanguages.filter(l => l !== lang))}
+                                                      className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
+                                                    >
+                                                      <X className="w-3 h-3" />
+                                                    </button>
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
                         </div>
                       )}
-
 
                       {/* Flow Builder Tab */}
                       {activeTab === "flowbuilder" && (
@@ -6332,203 +5366,112 @@ export default function AdminProcessTemplates() {
                             workflowSteps={workflowSteps}
                             onWorkflowStepsChange={setWorkflowSteps}
                             stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
+                            scopingRules={
+                              (selectedProcessData?.scopingRules && selectedProcessData.scopingRules.length > 0)
+                                ? selectedProcessData.scopingRules
+                                : (selectedCategoryFilter && selectedCategoryFilter !== "All")
+                                  ? [{ industryCategory: selectedCategoryFilter, industries: selectedIndustryFilter !== "All" ? [selectedIndustryFilter] : [], locations: selectedLocationFilter !== "All" ? [selectedLocationFilter] : [] }]
+                                  : []
+                            }
                           />
                         </div>
                       )}
 
                       {/* Automation Side Drawer */}
-                      {workflowStepsDrawerOpen && (
-                        <>
-                          {/* Backdrop */}
-                          <div
-                            className="fixed inset-0 z-40"
-                            style={{ backgroundColor: 'rgba(0,0,0,0.30)' }}
-                            onClick={() => setWorkflowStepsDrawerOpen(false)}
-                          />
-                          {/* Drawer panel — 75vw, full height, anchored right */}
-                          <div
-                            className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border"
-                            style={{ width: '55vw', minWidth: '55vw', maxWidth: '55vw', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)' }}
-                          >
-                            {/* Header */}
-                            <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border">
-                              <div className="flex items-start justify-between mb-1">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <Zap className="w-5 h-5" style={{ color: '#020817' }} />
-                                    <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Add Automation</h2>
-                                  </div>
-                                  <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Choose and configure the step before adding it to this stage.</p>
-                                </div>
-                                <button onClick={() => setWorkflowStepsDrawerOpen(false)} className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0">
-                                  <X className="w-5 h-5 text-muted-foreground" />
-                                </button>
-                              </div>
-                              {/* Search */}
-                              <div className="relative mt-4">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                <input
-                                  type="text"
-                                  value={workflowStepSearch}
-                                  onChange={e => setWorkflowStepSearch(e.target.value)}
-                                  placeholder="Search workflow steps..."
-                                  className="w-full pl-9 pr-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                />
-                              </div>
-                            </div>
-
-                            {/* Body — two column layout */}
-                            <div className="flex flex-1 overflow-hidden">
-                              {/* Left Sidebar */}
-                              <div className="w-[220px] flex-shrink-0 border-r border-border overflow-y-auto py-2 flex flex-col gap-1">
-                                {[
-                                  { key: "all", icon: <Sparkles className="w-4 h-4" />, name: "All" },
-                                  { key: "workflow", icon: <GitBranch className="w-4 h-4" />, name: "Workflow Logic" },
-                                  { key: "callerengagement", icon: <Phone className="w-4 h-4" />, name: "Caller Engagement" },
-                                  { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
-                                  { key: "records", icon: <FileText className="w-4 h-4" />, name: "Records" },
-                                  { key: "data", icon: <Database className="w-4 h-4" />, name: "Data & Assignment" },
-                                  { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
-                                ].map((cat) => {
-                                  const active = workflowStepCategory === cat.key;
-                                  return (
-                                    <button
-                                      key={cat.key}
-                                      onClick={() => setWorkflowStepCategory(cat.key)}
-                                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-l-2 hover:bg-muted/40"
-                                      style={{
-                                        borderLeftColor: active ? '#2563EB' : 'transparent',
-                                        backgroundColor: active ? '#EFF6FF' : 'transparent',
-                                      }}
-                                    >
-                                      <span className="flex-shrink-0" style={{ color: active ? '#2563EB' : '#64748B' }}>
-                                        {cat.icon}
-                                      </span>
-                                      <span
-                                        className="text-sm font-semibold"
-                                        style={{
-                                          color: active ? '#2563EB' : '#020817',
-                                          fontFamily: 'DM Sans, sans-serif'
-                                        }}
-                                      >
-                                        {cat.name}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-
-                              {/* Right Steps List */}
-                              <div className="flex-1 overflow-y-auto">
-                                {(() => {
-                                  const currentStage = selectedProcessData?.stages.find((s) => s.id === expandedStage);
-                                  const currentStageIndex = selectedProcessData?.stages.findIndex((s) => s.id === expandedStage);
-                                  const isCurrentStageLast = Boolean(
-                                    currentStage?.isFinal ||
-                                    (selectedProcessData && currentStageIndex !== undefined && currentStageIndex !== -1 && currentStageIndex === selectedProcessData.stages.length - 1)
-                                  );
-
-                                  const allSteps = [
-                                    { key: "processmovement", name: "Move to Process / Stage", desc: "Move the contact to a specific process and stage.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
-                                    { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
-                                    { key: "callhangup", name: "Auto Hangup", desc: "Automatically end the call after the AI completes its interaction, with an optional closing message.", iconKey: "phoneoff", cats: ["all", "callerengagement"], popular: false },
-                                    { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "callerengagement"], popular: false },
-                                    { key: "idlemessages", name: "Idle Messages", desc: "Configure messages the AI speaks when the caller has not responded.", iconKey: "messagesquare", cats: ["all", "callerengagement"], popular: false },
-                                    { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
-                                    { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
-                                    { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
-                                    { key: "generate_invoice", name: "Generate Invoice", desc: "Automatically generate an invoice in Draft for this appointment or record.", iconKey: "filetext", cats: ["all", "records"], popular: true },
-                                    { key: "send_payment", name: "Send Payment", desc: "Dispatch a payment request or checkout link to the client.", iconKey: "creditcard", cats: ["all", "records"], popular: false },
-                                    { key: "send-invoice", name: "Send Invoice", desc: "Send the generated invoice to the client via WhatsApp, SMS, or Email.", iconKey: "filetext", cats: ["all", "communication"], popular: false },
-                                    { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "data"], popular: false },
-                                    { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
-                                    { key: "wh_trigger", name: "API Automation", desc: "Trigger actions in external systems using your connected API integrations.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
-                                    { key: "webhook_trigger", name: "Webhook Automation", desc: "Send an event payload to a connected webhook when this step runs.", iconKey: "webhook", cats: ["all", "webhook"], popular: false },
-                                  ];
-                                  const iconMap: Record<string, React.ReactNode> = {
-                                    clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
-                                    chevronright: <ChevronRight className="w-4 h-4 text-white" />, zap: <Zap className="w-4 h-4 text-white" />,
-                                    edit: <Edit className="w-4 h-4 text-white" />, usercheck: <UserCheck className="w-4 h-4 text-white" />,
-                                    phonecall: <PhoneCall className="w-4 h-4 text-white" />, messagecircle: <MessageCircle className="w-4 h-4 text-white" />,
-                                    messagesquare: <MessageSquare className="w-4 h-4 text-white" />, mail: <Mail className="w-4 h-4 text-white" />,
-                                    filetext: <FileText className="w-4 h-4 text-white" />, clipboardlist: <ClipboardList className="w-4 h-4 text-white" />,
-                                    creditcard: <CreditCard className="w-4 h-4 text-white" />,
-                                    globe: <Globe className="w-4 h-4 text-white" />, calendar: <Calendar className="w-4 h-4 text-white" />,
-                                    refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
-                                    lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
-                                    layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
-                                    gitbranch: <GitBranch className="w-4 h-4 text-white" />,
-                                    volume2: <Volume2 className="w-4 h-4 text-white" />,
-                                    webhook: <Webhook className="w-4 h-4 text-white" />,
-                                    phoneoff: <PhoneOff className="w-4 h-4 text-white" />,
-                                  };
-                                  const filtered = allSteps.filter(s =>
-                                    s.cats.includes(workflowStepCategory) &&
-                                    (workflowStepSearch === "" || s.name.toLowerCase().includes(workflowStepSearch.toLowerCase()) || s.desc.toLowerCase().includes(workflowStepSearch.toLowerCase()))
-                                  );
-
-                                  return filtered.map((step, i) => {
-                                    const isSelected = selectedWorkflowStepCard === step.key;
-                                    const allowedTriggers = STEP_ALLOWED_TRIGGERS[step.key] || [];
-                                    const isOnlyInCall = allowedTriggers.length === 1 && allowedTriggers[0] === "incall";
-                                    const isUnavailable = isOnlyInCall && (stageType === "No Call Activity" || stageType === "Transfer to Human");
-
-                                    const buttonElement = (
-                                      <button
-                                        key={step.key}
-                                        onClick={isUnavailable ? undefined : () => {
-                                          resetStepDetailState();
-                                          setCurrentEditingStep({ id: `${step.key}-${Date.now()}`, name: step.name, description: step.desc, iconKey: step.iconKey, stepKey: step.key });
-                                          setIsCreatingNewStep(true);
-                                          setWorkflowStepsDrawerOpen(false);
-                                          setStepDetailDrawerOpen(true);
-                                        }}
-                                        className={`w-full flex items-start gap-4 px-5 py-4 text-left transition-colors ${isUnavailable ? "opacity-40 pointer-events-none cursor-not-allowed select-none" : ""}`}
-                                        style={{
-                                          borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none',
-                                          outline: isSelected ? '2px solid #2563EB' : 'none',
-                                          outlineOffset: '-2px',
-                                          backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
-                                        }}
-                                        onMouseEnter={e => { if (!isUnavailable && !isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFF'; }}
-                                        onMouseLeave={e => { if (!isUnavailable) (e.currentTarget as HTMLElement).style.backgroundColor = isSelected ? '#EFF6FF' : 'transparent'; }}
-                                      >
-                                        <div className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: '#2563EB' }}>
-                                          {iconMap[step.iconKey]}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</span>
-                                            {step.popular && (
-                                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold text-white" style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Popular</span>
-                                            )}
-                                            {isUnavailable && (
-                                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-600 border border-red-100" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                                In-Call only — unavailable
-                                              </span>
-                                            )}
-                                          </div>
-                                          <p className="text-sm mt-0.5 leading-snug" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{step.desc}</p>
-                                        </div>
-                                        <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
-                                      </button>
-                                    );
-
-                                    return isUnavailable ? (
-                                      <Tooltip key={step.key} text="In-Call only — unavailable" placement="top">
-                                        <div className="w-full pointer-events-auto">
-                                          {buttonElement}
-                                        </div>
-                                      </Tooltip>
-                                    ) : buttonElement;
-                                  });
-                                })()}
-                              </div>
-                            </div>
-                          </div>
-                        </>
-                      )}
+                      {/* Refactored Scope-Aware Automation Drawer (Stage Scope) */}
+                      <AddAutomationDrawer
+                        isOpen={workflowStepsDrawerOpen}
+                        onClose={() => {
+                          setWorkflowStepsDrawerOpen(false);
+                          setEditingAutomationStepId(undefined);
+                        }}
+                        scope="stage"
+                        isAdmin={true}
+                        initialScopingRules={stageScopeRules}
+                        onScopingRulesChange={(newRules) => {
+                          if (selectedProcess && expandedStage) {
+                            setProcesses((prev) =>
+                              prev.map((p) =>
+                                p.id !== selectedProcess
+                                  ? p
+                                  : {
+                                      ...p,
+                                      stages: p.stages.map((s) =>
+                                        s.id !== expandedStage ? s : { ...s, scopingRules: newRules }
+                                      ),
+                                    }
+                              )
+                            );
+                          }
+                        }}
+                        stageRef={{
+                          processId: selectedProcess || "",
+                          stageId: expandedStage || "",
+                          stageName: selectedProcessData?.stages.find((s) => s.id === expandedStage)?.name,
+                          processName: selectedProcessData?.name,
+                        }}
+                        processName={selectedProcessData?.name}
+                        stageName={selectedProcessData?.stages.find((s) => s.id === expandedStage)?.name}
+                        stageColor={selectedProcessData?.stages.find((s) => s.id === expandedStage)?.color}
+                        stageType={selectedProcessData?.stages.find((s) => s.id === expandedStage)?.stageType}
+                        processes={processes}
+                        currentProcessId={selectedProcess || undefined}
+                        workflowSteps={workflowSteps}
+                        onWorkflowStepsChange={(newSteps) => {
+                          setWorkflowSteps(newSteps);
+                          if (selectedProcess && expandedStage) {
+                            setProcesses((prev) =>
+                              prev.map((p) =>
+                                p.id !== selectedProcess
+                                  ? p
+                                  : {
+                                      ...p,
+                                      stages: p.stages.map((s) =>
+                                        s.id !== expandedStage ? s : { ...s, workflowSteps: newSteps }
+                                      ),
+                                    }
+                              )
+                            );
+                          }
+                        }}
+                        stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
+                        initialStepIdToConfigure={editingAutomationStepId}
+                        onSaveAutomation={(savedAuto) => {
+                          const updated = savedAuto.steps.map((s) => ({
+                            id: s.id,
+                            name: s.name,
+                            description: s.description || "",
+                            iconKey: s.iconKey || "zap",
+                            stepKey: s.stepKey,
+                            params: s.params || {},
+                            delayValue: s.delay?.value || 0,
+                            delayUnit: (s.delay?.unit as any) || "minutes",
+                            executionType: "wait" as const,
+                            trigger: savedAuto.trigger.type === "stage" && (savedAuto.trigger as any).when === "exit" ? "exit_stage" : "stage",
+                          }));
+                          setWorkflowSteps(updated);
+                          if (selectedProcess && expandedStage) {
+                            setProcesses((prev) =>
+                              prev.map((p) =>
+                                p.id !== selectedProcess
+                                  ? p
+                                  : {
+                                      ...p,
+                                      stages: p.stages.map((s) =>
+                                        s.id !== expandedStage
+                                          ? s
+                                          : {
+                                              ...s,
+                                              workflowSteps: updated,
+                                              scopingRules: (savedAuto as any).scopingRules || s.scopingRules || stageScopeRules,
+                                            }
+                                      ),
+                                    }
+                              )
+                            );
+                          }
+                        }}
+                      />
 
                       {/* Step Detail Drawer */}
                       <StepDetailDrawer
@@ -6537,6 +5480,13 @@ export default function AdminProcessTemplates() {
                         isCreatingNewStep={isCreatingNewStep}
                         stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
                         processes={processes}
+                        scopingRules={
+                          (selectedProcessData?.scopingRules && selectedProcessData.scopingRules.length > 0)
+                            ? selectedProcessData.scopingRules
+                            : (selectedCategoryFilter && selectedCategoryFilter !== "All")
+                              ? [{ industryCategory: selectedCategoryFilter, industries: selectedIndustryFilter !== "All" ? [selectedIndustryFilter] : [], locations: selectedLocationFilter !== "All" ? [selectedLocationFilter] : [] }]
+                              : []
+                        }
                         stepTrigger={stepTrigger}
                         onStepTriggerChange={setStepTrigger}
                         executionType={executionType}
@@ -6685,6 +5635,7 @@ export default function AdminProcessTemplates() {
           onClose={() => {
             setShowAddProcessModal(false);
             setNewProcess({ name: "", description: "" });
+            setNewProcessEntityType("client");
             setModalScopingRules([]);
             setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
           }}
@@ -6694,6 +5645,7 @@ export default function AdminProcessTemplates() {
               <Button variant="outline" onClick={() => {
                 setShowAddProcessModal(false);
                 setNewProcess({ name: "", description: "" });
+                setNewProcessEntityType("client");
                 setModalScopingRules([]);
                 setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
               }}>
@@ -6716,7 +5668,9 @@ export default function AdminProcessTemplates() {
               placeholder="Enter process name"
             />
             <div>
-              <label className="block text-sm font-medium mb-2">Process Description</label>
+              <label className="block text-sm font-medium mb-2 text-gray-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Process Description
+              </label>
               <textarea
                 value={newProcess.description}
                 onChange={(e) => setNewProcess({ ...newProcess, description: e.target.value })}
@@ -6725,123 +5679,42 @@ export default function AdminProcessTemplates() {
               />
             </div>
 
-            {/* Admin Control Accordion for New Process */}
-            <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs mt-4">
-              <button
-                type="button"
-                onClick={() => setModalAdminControlOpen((v) => !v)}
-                className="w-full px-4 py-3 bg-gray-50/80 hover:bg-gray-100/70 flex items-center justify-between text-left transition-colors cursor-pointer"
+            {/* Entity Type Selector */}
+            <div>
+              <label className="block text-sm font-medium mb-1.5 text-gray-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Entity Type
+              </label>
+              <select
+                value={newProcessEntityType}
+                onChange={(e) => setNewProcessEntityType(e.target.value as EntityType)}
+                className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-gray-800 font-medium"
+                style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <div className="flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span className="text-sm font-semibold text-gray-900">
-                    Admin Control
-                  </span>
-                  <span className="text-[11px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                    Scope &amp; Permissions
-                  </span>
-                </div>
-                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ${modalAdminControlOpen ? "rotate-180" : ""}`} />
-              </button>
+                <option value="client">Processes</option>
+                <option value="appointment">Appointments</option>
+                <option value="invoice">Invoices</option>
+                <option value="insurance">Insurance</option>
+                <option value="claim">Claims</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Specify which entity this workflow process belongs to.
+              </p>
+            </div>
 
-              {modalAdminControlOpen && (
-                <div className="p-4 space-y-3 border-t border-gray-100 bg-gray-50/30">
-                  {/* 1. Scope Rules */}
-                  <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-2xs">
-                    <button
-                      type="button"
-                      onClick={() => setModalScopeDropdownOpen((v) => !v)}
-                      className="w-full px-3 py-2 bg-gray-50/70 hover:bg-gray-100/60 flex items-center justify-between text-left transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <Globe className="w-3.5 h-3.5 text-gray-600 shrink-0" />
-                        <span className="text-xs font-semibold text-gray-800">
-                          Scope Rules
-                        </span>
-                        <InfoTooltip text="Define which tenant industry categories, industries, and locations have access to this process." size="sm" />
-                      </div>
-                      <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${modalScopeDropdownOpen ? "rotate-180" : ""}`} />
-                    </button>
-
-                    {modalScopeDropdownOpen && (
-                      <div className="p-3 border-t border-gray-100 bg-white">
-                        <AdminScopingRulesEditor
-                          rules={modalScopingRules}
-                          onChange={(rules) => setModalScopingRules(rules)}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 2. Tenant Permissions */}
-                  <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-2xs">
-                    <button
-                      type="button"
-                      onClick={() => setModalPermissionsDropdownOpen((v) => !v)}
-                      className="w-full px-3 py-2 bg-gray-50/70 hover:bg-gray-100/60 flex items-center justify-between text-left transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <Lock className="w-3.5 h-3.5 text-gray-600 shrink-0" />
-                        <span className="text-xs font-semibold text-gray-800">
-                          Tenant Permissions
-                        </span>
-                        <InfoTooltip text="Configure what tenant users are permitted to do with this process." size="sm" />
-                      </div>
-                      <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${modalPermissionsDropdownOpen ? "rotate-180" : ""}`} />
-                    </button>
-
-                    {modalPermissionsDropdownOpen && (
-                      <div className="p-3 border-t border-gray-100 bg-white">
-                        <div className="grid grid-cols-2 gap-4">
-                          <label className="flex items-center gap-2 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={modalPermissions.canHide !== false}
-                              onChange={(e) => setModalPermissions((p) => ({ ...p, canHide: e.target.checked }))}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                            />
-                            <span className="text-xs font-medium text-gray-800">Hide</span>
-                            <InfoTooltip text="Tenant users can choose to show or hide this process in their workspace." size="sm" />
-                          </label>
-
-                          <label className="flex items-center gap-2 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={modalPermissions.canEdit !== false}
-                              onChange={(e) => setModalPermissions((p) => ({ ...p, canEdit: e.target.checked }))}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                            />
-                            <span className="text-xs font-medium text-gray-800">Edit</span>
-                            <InfoTooltip text="Tenant users can edit process settings, stages, and prompts." size="sm" />
-                          </label>
-
-                          <label className="flex items-center gap-2 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={modalPermissions.canAdd !== false}
-                              onChange={(e) => setModalPermissions((p) => ({ ...p, canAdd: e.target.checked }))}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                            />
-                            <span className="text-xs font-medium text-gray-800">Add Stages</span>
-                            <InfoTooltip text="Tenant users can add new stages and steps to this process." size="sm" />
-                          </label>
-
-                          <label className="flex items-center gap-2 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={modalPermissions.canDelete !== false}
-                              onChange={(e) => setModalPermissions((p) => ({ ...p, canDelete: e.target.checked }))}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                            />
-                            <span className="text-xs font-medium text-gray-800">Delete</span>
-                            <InfoTooltip text="Tenant users can delete this process from their workspace." size="sm" />
-                          </label>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+            {/* Admin Control (Scope Rules & Permissions) */}
+            <div className="mt-4">
+              <AdminControlAccordion
+                scopingRules={modalScopingRules}
+                onScopingRulesChange={(rules) => setModalScopingRules(rules)}
+                allowEntities={false}
+                permissions={modalPermissions}
+                onPermissionsChange={(newPerms) => setModalPermissions((p) => ({ ...p, ...newPerms }))}
+                defaultAdminControlOpen={modalAdminControlOpen}
+                defaultScopeOpen={modalScopeDropdownOpen}
+                defaultPermissionsOpen={modalPermissionsDropdownOpen}
+                scopeTooltip="Define entity availability and restrict visibility by tenant industry category, industries, and locations."
+                permissionsTooltip="Configure what tenant users are permitted to do with this process."
+              />
             </div>
           </div>
         </Modal>
@@ -8316,6 +7189,7 @@ export default function AdminProcessTemplates() {
           log={previewLog}
           client={previewClient}
           activeTab={previewDrawerTab}
+          isAdminPreview={true}
           onTabChange={(tab) => setPreviewDrawerTab(tab)}
           activity={previewActivity}
           onOpenActivity={(entry) => {
@@ -8454,14 +7328,15 @@ export default function AdminProcessTemplates() {
               </div>
 
               <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-                <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Define which tenant industry categories, industries, and locations have visibility to this process in the client app.
-                </p>
-
-                <AdminScopingRulesEditor
-                  rules={editProcessScopingRules}
-                  onChange={(rules) => setEditProcessScopingRules(rules)}
-                  showHeader={true}
+                <AdminControlAccordion
+                  scopingRules={editProcessScopingRules}
+                  onScopingRulesChange={(rules) => setEditProcessScopingRules(rules)}
+                  allowEntities={false}
+                  defaultAdminControlOpen={true}
+                  defaultScopeOpen={true}
+                  defaultPermissionsOpen={false}
+                  scopeTooltip="Define entity availability and restrict visibility by tenant industry categories, industries, and locations."
+                  permissionsTooltip="Configure what tenant users are permitted to do with this process."
                 />
               </div>
 
@@ -8501,6 +7376,18 @@ export default function AdminProcessTemplates() {
             </div>
           </div>
         )}
+
+      {pitchFieldPickerTarget && (
+        <SelectFieldsModal
+          initiallySelected={[]}
+          activeProcessId={selectedProcess || undefined}
+          activeProcessName={selectedProcessData?.name}
+          processStages={selectedProcessData?.stages?.map((s) => ({ id: s.id, name: s.name, color: s.color }))}
+          onClose={() => setPitchFieldPickerTarget(null)}
+          onApply={handleInsertPitchFields}
+          isAdmin={true}
+        />
+      )}
 
       </div>
     </div>

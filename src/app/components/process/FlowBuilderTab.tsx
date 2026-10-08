@@ -34,6 +34,7 @@ import { FETCH_FIELD_SOURCES } from "./VariablePickerButton";
 import { toast } from "sonner";
 import { HowItWorksModal, HowItWorksButton } from "../help/HowItWorksModal";
 import { InfoTooltip } from "../help/InfoTooltip";
+import { ScopingRule } from "../../context/FieldRegistryContext";
 
 const buildConditionSummary = (step: WorkflowStep, laneKey: string): string => {
   if (laneKey === "incall") {
@@ -124,6 +125,7 @@ interface FlowBuilderTabProps {
   }) => void;
   onTriggerClick?: () => void;
   onSave?: () => void;
+  scopingRules?: ScopingRule[];
 }
 
 export interface TriggerCatalogItem {
@@ -562,6 +564,7 @@ export default function FlowBuilderTab({
   onTriggerChange,
   onTriggerClick,
   onSave,
+  scopingRules = [],
 }: FlowBuilderTabProps) {
   const effectiveProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
   // Drawer execution/timing controls (seeded on openConfig)
@@ -2657,6 +2660,7 @@ export default function FlowBuilderTab({
               isCreatingNewStep={false}
               stepAllowedTriggers={stepAllowedTriggers}
               processes={effectiveProcesses}
+              scopingRules={scopingRules}
               stepTrigger={drawerTrigger}
               onStepTriggerChange={setDrawerTrigger}
               executionType={drawerExecType}

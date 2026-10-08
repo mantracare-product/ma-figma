@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   UploadCloud, FileText, CheckCircle2, Settings, AlertCircle, Loader2,
   LayoutTemplate, Layers, ChevronDown, ChevronRight, Check, Users, Hash, X, Search, Plus,
-  Sparkles, RotateCcw, Code, Eye, Folder, Tag, Info, HelpCircle
+  Sparkles, RotateCcw, Code, Eye, Folder, Tag, Info, HelpCircle,
+  User, Zap, Calendar, Receipt, SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import mammoth from "mammoth";
@@ -14,7 +15,12 @@ import {
   getStoredTemplateCategories,
   saveTemplateCategory,
   DOCUMENT_CATEGORIES_EVENT,
+  TemplateEntity,
+  ScopingRule,
 } from "../../../lib/documentTemplatesStore";
+import { AdminScopingRulesEditor } from "../../pages/admin/components/AdminScopingRulesEditor";
+import { AdminControlAccordion } from "../../pages/admin/components/AdminControlAccordion";
+import { isFieldMatchingOrg } from "../../context/FieldRegistryContext";
 import { CreateFieldModal } from "../help/FieldManager";
 import {
   useFieldRegistry,
@@ -28,6 +34,8 @@ interface AddDocumentTemplateDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onTemplateCreated?: (template: DocumentTemplate) => void;
+  initialTemplate?: DocumentTemplate | null;
+  isAdminMode?: boolean;
 }
 
 const SYSTEM_FIELDS_BY_MODULE = [
@@ -94,6 +102,18 @@ const SYSTEM_FIELDS_BY_MODULE = [
       { key: "org_name", label: "Organization Name" },
       { key: "tax_id", label: "Tax ID / Registration" },
       { key: "payment_terms", label: "Payment Terms" },
+    ],
+  },
+  {
+    module: "INVOICES & BILLING",
+    fields: [
+      { key: "invoice_number", label: "Invoice Number" },
+      { key: "due_date", label: "Invoice Due Date" },
+      { key: "total_amount", label: "Invoice Total Amount" },
+      { key: "subtotal", label: "Subtotal" },
+      { key: "tax_amount", label: "Tax Amount" },
+      { key: "payment_status", label: "Payment Status" },
+      { key: "items", label: "Itemized Charges & Services" },
     ],
   },
   {
@@ -205,11 +225,14 @@ const TEMPLATE_MODE_OPTIONS = [
 function MappedFieldSelector({
   value,
   onChange,
+  availableGroups,
 }: {
   value: string;
   onChange: (newKey: string) => void;
+  availableGroups?: typeof SYSTEM_FIELDS_BY_MODULE;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const groupsToDisplay = availableGroups || SYSTEM_FIELDS_BY_MODULE;
 
   // Find currently selected option definition
   const selectedOpt = SYSTEM_FIELDS_OPTIONS.find((o) => o.key === value) || {
@@ -255,7 +278,7 @@ function MappedFieldSelector({
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
             <div className="space-y-1">
-              {SYSTEM_FIELDS_BY_MODULE.map((group) => {
+              {groupsToDisplay.map((group) => {
                 const isExpanded = expandedCategory === group.module;
                 const hasSelected = group.fields.some((f) => f.key === value);
 
@@ -366,6 +389,8 @@ export default function AddDocumentTemplateDrawer({
   isOpen,
   onClose,
   onTemplateCreated,
+  initialTemplate,
+  isAdminMode = false,
 }: AddDocumentTemplateDrawerProps) {
   // Mode Selection: "device" | "webforms" | "canvas"
   const [templateMode, setTemplateMode] = useState<"device" | "webforms" | "canvas">("device");
@@ -379,6 +404,23 @@ export default function AddDocumentTemplateDrawer({
   const [isExtracting, setIsExtracting] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
 
+  // Admin Scoping Rules (Entity availability is configured per scope rule)
+  const [scopingRules, setScopingRules] = useState<ScopingRule[]>([]);
+
+  // Derived selected entities across active scope rules
+  const selectedEntities: TemplateEntity[] = useMemo(() => {
+    if (!scopingRules || scopingRules.length === 0) {
+      return ["client", "process", "appointment", "invoice"];
+    }
+    const allEnts = scopingRules.flatMap((r) =>
+      r.entities && r.entities.length > 0
+        ? (r.entities as TemplateEntity[])
+        : (["client", "process", "appointment", "invoice"] as TemplateEntity[])
+    );
+    const unique = Array.from(new Set(allEnts));
+    return unique.length > 0 ? unique : ["client", "process", "appointment", "invoice"];
+  }, [scopingRules]);
+
   // Category state
   const [categories, setCategories] = useState<string[]>(getStoredTemplateCategories);
   const [category, setCategory] = useState<string>("Prescription");
@@ -390,6 +432,33 @@ export default function AddDocumentTemplateDrawer({
     window.addEventListener(DOCUMENT_CATEGORIES_EVENT, handleCatUpdate);
     return () => window.removeEventListener(DOCUMENT_CATEGORIES_EVENT, handleCatUpdate);
   }, []);
+
+  // Initialize or reset when opened
+  useEffect(() => {
+    if (isOpen) {
+      if (initialTemplate) {
+        setTemplateName(initialTemplate.name || "");
+        setCategory(initialTemplate.category || "General");
+        setTemplateText(initialTemplate.templateText || "");
+        setFileName(initialTemplate.fileName || "");
+        setRawDocxBase64(initialTemplate.rawDocxBase64);
+        setFieldMappings(initialTemplate.fieldMappings || []);
+        const rules = (initialTemplate.scopingRules || []).map((r) => ({
+          ...r,
+          entities: r.entities || initialTemplate.entities || ["client", "process", "appointment", "invoice"],
+        }));
+        setScopingRules(rules);
+      } else {
+        setTemplateName("");
+        setCategory("Prescription");
+        setTemplateText("");
+        setFileName("");
+        setRawDocxBase64(undefined);
+        setFieldMappings([]);
+        setScopingRules([]);
+      }
+    }
+  }, [isOpen, initialTemplate]);
 
   // Webform selection state
   const [selectedWebFormId, setSelectedWebFormId] = useState<string>("");
@@ -404,19 +473,57 @@ export default function AddDocumentTemplateDrawer({
 
   const { getAllFields } = useFieldRegistry();
 
-  // Compile fields grouped by module
-  const targetModules: Exclude<FieldModule, "deal">[] = ALL_MODULES;
-  const groupedFieldsList = targetModules.map((module) => {
-    const fields = getAllFields(module).filter((f) =>
-      f.label.toLowerCase().includes(fieldSearchQuery.toLowerCase()) ||
-      f.key.toLowerCase().includes(fieldSearchQuery.toLowerCase())
+  // Compile fields grouped by module based on selected entities & scope rule
+  const targetModules: Exclude<FieldModule, "deal">[] = useMemo(() => {
+    const modules: Exclude<FieldModule, "deal">[] = [];
+    if (selectedEntities.includes("client")) modules.push("client");
+    if (selectedEntities.includes("process")) modules.push("process");
+    if (selectedEntities.includes("appointment")) modules.push("appointment");
+    if (selectedEntities.includes("invoice")) {
+      modules.push("service");
+    }
+    // If none selected, default to ALL_MODULES
+    if (modules.length === 0) return ALL_MODULES;
+    return modules;
+  }, [selectedEntities]);
+
+  const groupedFieldsList = useMemo(() => {
+    return targetModules.map((module) => {
+      let fields = getAllFields(module);
+      // Filter custom fields by active scope rules if configured
+      if (scopingRules && scopingRules.length > 0) {
+        const firstRule = scopingRules[0];
+        const scopeOrg = {
+          industryCategory: firstRule.industryCategory,
+          industry: firstRule.industries?.[0],
+          location: firstRule.locations?.[0],
+        };
+        fields = fields.filter((f) => f.source !== "custom" || isFieldMatchingOrg(f, scopeOrg));
+      }
+      const filtered = fields.filter((f) =>
+        f.label.toLowerCase().includes(fieldSearchQuery.toLowerCase()) ||
+        f.key.toLowerCase().includes(fieldSearchQuery.toLowerCase())
+      );
+      return {
+        module,
+        label: MODULE_NOUN[module]?.plural.toUpperCase() || module.toUpperCase(),
+        fields: filtered,
+      };
+    }).filter((g) => g.fields.length > 0);
+  }, [targetModules, getAllFields, scopingRules, fieldSearchQuery]);
+
+  const filteredSystemFieldsOptions = useMemo(() => {
+    return SYSTEM_FIELDS_BY_MODULE.filter((group) => {
+      if (group.module === "SYSTEM METADATA") return true;
+      if (selectedEntities.includes("client") && group.module === "CLIENTS") return true;
+      if (selectedEntities.includes("process") && group.module === "PROCESSES & DEALS") return true;
+      if (selectedEntities.includes("appointment") && group.module === "APPOINTMENTS") return true;
+      if (selectedEntities.includes("invoice") && (group.module === "INVOICES & BILLING" || group.module === "SERVICES & PRODUCTS")) return true;
+      return false;
+    }).flatMap((group) =>
+      group.fields.map((f) => ({ key: f.key, label: f.label, module: group.module }))
     );
-    return {
-      module,
-      label: MODULE_NOUN[module]?.plural.toUpperCase() || module.toUpperCase(),
-      fields,
-    };
-  }).filter((g) => g.fields.length > 0);
+  }, [selectedEntities]);
 
   const totalFilteredCount = groupedFieldsList.reduce((acc, curr) => acc + curr.fields.length, 0);
 
@@ -694,7 +801,7 @@ export default function AddDocumentTemplateDrawer({
 
     const extracted = extractTemplateFields(templateText);
     const newTemplate: DocumentTemplate = {
-      id: `tpl-${Date.now()}`,
+      id: initialTemplate?.id || `tpl-${Date.now()}`,
       name: templateName.trim(),
       category: category.trim() || "General",
       fileName: fileName || `${templateName.trim().toLowerCase().replace(/\s+/g, "_")}.docx`,
@@ -702,8 +809,10 @@ export default function AddDocumentTemplateDrawer({
       extractedFields: extracted,
       fieldMappings,
       rawDocxBase64,
-      createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-      createdBy: "Admin User",
+      createdAt: initialTemplate?.createdAt || new Date().toISOString().replace("T", " ").substring(0, 16),
+      createdBy: initialTemplate?.createdBy || "Admin User",
+      entities: selectedEntities.length > 0 ? selectedEntities : ["client"],
+      scopingRules,
     };
 
     saveDocumentTemplate(newTemplate);
@@ -762,6 +871,18 @@ export default function AddDocumentTemplateDrawer({
               style={{ fontFamily: "DM Sans, sans-serif" }}
             />
           </div>
+
+          {/* Admin Control (Scope Rules & Permissions) */}
+          <AdminControlAccordion
+            scopingRules={scopingRules}
+            onScopingRulesChange={setScopingRules}
+            allowEntities={true}
+            defaultAdminControlOpen={true}
+            defaultScopeOpen={true}
+            defaultPermissionsOpen={false}
+            scopeTooltip="Define entity availability and restrict visibility by tenant industry category, industries, and locations."
+            permissionsTooltip="Configure what tenant users are permitted to do with this document template."
+          />
 
           {/* Assign Category Section */}
           <div>
@@ -1389,6 +1510,14 @@ export default function AddDocumentTemplateDrawer({
                             <MappedFieldSelector
                               value={m.mappedFieldKey}
                               onChange={(newKey) => handleMappingChange(m.templateField, newKey)}
+                              availableGroups={SYSTEM_FIELDS_BY_MODULE.filter((group) => {
+                                if (group.module === "SYSTEM METADATA") return true;
+                                if (selectedEntities.includes("client") && group.module === "CLIENTS") return true;
+                                if (selectedEntities.includes("process") && group.module === "PROCESSES & DEALS") return true;
+                                if (selectedEntities.includes("appointment") && group.module === "APPOINTMENTS") return true;
+                                if (selectedEntities.includes("invoice") && (group.module === "INVOICES & BILLING" || group.module === "SERVICES & PRODUCTS")) return true;
+                                return false;
+                              })}
                             />
                           </td>
                         </tr>
