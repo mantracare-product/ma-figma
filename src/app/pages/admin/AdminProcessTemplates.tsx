@@ -467,6 +467,7 @@ interface SidebarDraggableStageProps {
   isSelected: boolean;
   onSelect: () => void;
   onMoveStage: (processId: string, dragIndex: number, hoverIndex: number) => void;
+  onRemove?: (stageId: string) => void;
 }
 
 const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
@@ -477,6 +478,7 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
   isSelected,
   onSelect,
   onMoveStage,
+  onRemove,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const isFinal = totalStages > 0 && index === totalStages - 1;
@@ -550,6 +552,19 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
       <span className="flex-1 truncate font-medium">
         {stage.name}
       </span>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(stage.id);
+          }}
+          className="opacity-0 group-hover/stage:opacity-100 p-1 text-gray-400 hover:text-red-500 rounded hover:bg-red-50 transition-all cursor-pointer shrink-0"
+          title="Delete stage"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
     </div>
   );
 };
@@ -2443,17 +2458,11 @@ export default function AdminProcessTemplates() {
       return;
     }
 
-    const entityDefault = newProcessEntityType !== "client" ? DEFAULT_ENTITY_PROCESSES[newProcessEntityType as Exclude<EntityType, "client">] : null;
     const process: Process = {
       id: String(Date.now()),
       ...newProcess,
       assignedToUserId: 1,
-      stages: entityDefault
-        ? entityDefault.stages.map((st, sIdx) => ({
-            ...st,
-            id: `${Date.now()}-${sIdx + 1}`,
-          }))
-        : [],
+      stages: [], // Newly added process has no predefined stages
       entityType: newProcessEntityType,
       aiSettings: {
         platform: "OpenAI - GPT-4o",
@@ -3058,6 +3067,16 @@ export default function AdminProcessTemplates() {
                                   setViewMode("stage");
                                 }}
                                 onMoveStage={moveStageForProcess}
+                                onRemove={(stgId) => {
+                                  setProcesses((prev) =>
+                                    prev.map((p) =>
+                                      p.id === process.id
+                                        ? { ...p, stages: p.stages.filter((s) => s.id !== stgId) }
+                                        : p
+                                    )
+                                  );
+                                  toast.success("Stage removed");
+                                }}
                               />
                             );
                           })
@@ -3204,7 +3223,46 @@ export default function AdminProcessTemplates() {
                     <div className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-200/90 shadow-2xs space-y-4">
 
                       {(() => {
-                        const allStages = selectedProcessData.stages;
+                        const allStages = selectedProcessData.stages || [];
+                        if (allStages.length === 0) {
+                          return (
+                            <div className="py-8 px-4 flex flex-col items-center justify-center text-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/60">
+                              <p className="text-sm font-semibold text-gray-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                No stages defined for this process yet
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1 mb-4 max-w-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                Define your workflow by adding sequential stages or final outcome stages (Won / Lost).
+                              </p>
+                              <div className="flex items-center gap-2.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNewStagePosition("sequential");
+                                    setShowAddStageModal(true);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs hover:shadow-sm transition-all cursor-pointer"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>+ Add Sequential Stage</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNewStagePosition("final");
+                                    setShowAddStageModal(true);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-lg text-xs font-semibold shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>+ Add Final Stage</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+
                         const hasExplicitFinal = allStages.some((s) => s.isFinalStage || s.isFinal);
                         const sequentialStages = hasExplicitFinal
                           ? allStages.filter((s) => !s.isFinalStage && !s.isFinal)

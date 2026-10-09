@@ -185,6 +185,24 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
     );
   };
 
+  if (!stages || stages.length === 0) {
+    return (
+      <div className={`w-full flex items-center justify-between py-2.5 px-3.5 border border-dashed border-gray-200 rounded-xl bg-gray-50/60 text-xs text-gray-400 ${className}`}>
+        <span>No stages defined for this process</span>
+        {showAddButton && onAddStage && (
+          <button
+            type="button"
+            onClick={() => onAddStage()}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 text-blue-600 border border-gray-200 text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Stage</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={`w-full ${className}`}>
       <div className="w-full flex items-center py-0.5 px-0.5">
