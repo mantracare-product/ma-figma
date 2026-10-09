@@ -30,7 +30,9 @@ import {
   Check,
 } from "lucide-react";
 import { appointmentService, hasAppointmentAutomation } from "../../lib/appointmentService";
-import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, isProcessMatchingOrg } from "../../lib/useProcessStore";
+import { hasInvoiceAutomation } from "../../lib/invoiceService";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, isProcessMatchingOrg, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
+import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
 import { useOrganization } from "../context/OrganizationContext";
 import { appendActivity } from "../../lib/activityEngine";
 import { logStageMove } from "../../lib/useAutomationStore";
@@ -139,6 +141,17 @@ export default function Appointments() {
     return appointmentService.subscribe((updated) => {
       setAppointments(updated as any);
     });
+  }, []);
+
+  const [, setStoreTick] = useState(0);
+  useEffect(() => {
+    const handleStoreChange = () => setStoreTick((t) => t + 1);
+    window.addEventListener(AUTOMATION_STORE_EVENT, handleStoreChange);
+    window.addEventListener(PROCESS_STORE_EVENT, handleStoreChange);
+    return () => {
+      window.removeEventListener(AUTOMATION_STORE_EVENT, handleStoreChange);
+      window.removeEventListener(PROCESS_STORE_EVENT, handleStoreChange);
+    };
   }, []);
 
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -352,7 +365,7 @@ export default function Appointments() {
   const [bookingStartMinute, setBookingStartMinute] = useState(0);
   const [drawerMode, setDrawerMode] = useState<"create" | "reschedule">("create");
   const [bookingServiceId, setBookingServiceId] = useState("");
-  const [bookingGenerateInvoice, setBookingGenerateInvoice] = useState(false);
+  const [bookingGenerateInvoice, setBookingGenerateInvoice] = useState(() => hasInvoiceAutomation());
   const [bookingLineItems, setBookingLineItems] = useState<any[]>([]);
   const [bookingDiscountAmount, setBookingDiscountAmount] = useState(0);
   const [bookingLocation, setBookingLocation] = useState("Main Clinic — Suite 400");
@@ -564,7 +577,7 @@ export default function Appointments() {
   };
 
   const handleBookingComplete = () => {
-    if (drawerMode !== "reschedule" && !hasAppointmentAutomation()) {
+    if (drawerMode !== "reschedule" && !hasAppointmentAutomation(bookingProcessId || (selectedProcessFilter !== "all" ? selectedProcessFilter : undefined))) {
       toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
       navigate("/automation");
       return;
@@ -586,7 +599,7 @@ export default function Appointments() {
     } else {
       const targetProc = bookingProcessId
         ? appointmentProcesses.find((p) => p.id === bookingProcessId || p.name === bookingProcessId)
-        : undefined;
+        : (appointmentProcess || appointmentProcesses[0]);
 
       const targetStage = targetProc?.stages?.find(
         (s) => s.id === bookingStageId || s.name === bookingStageId
@@ -608,9 +621,9 @@ export default function Appointments() {
         clientId: selectedClient.id ? String(selectedClient.id) : undefined,
         location: bookingLocation,
         sessionType,
-        processId: targetProc?.id,
-        stageId: targetStage?.id || undefined,
-        generateInvoice: bookingGenerateInvoice,
+        processId: targetProc?.id || bookingProcessId,
+        stageId: targetStage?.id || bookingStageId || undefined,
+        generateInvoice: bookingGenerateInvoice ?? hasInvoiceAutomation(targetProc?.id),
         lineItems: bookingLineItems && bookingLineItems.length > 0 ? bookingLineItems : undefined,
         source: "screen",
       });
@@ -646,7 +659,7 @@ export default function Appointments() {
     setBookingStartHour(9);
     setBookingStartMinute(0);
     setBookingLocation("Main Clinic — Suite 400");
-    setBookingGenerateInvoice(false);
+    setBookingGenerateInvoice(hasInvoiceAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined));
     setBookingLineItems([]);
     setBookingDiscountAmount(0);
 
@@ -934,7 +947,7 @@ export default function Appointments() {
           </div>
         </PageHeader>
 
-        {!hasAppointmentAutomation() && (
+        {!hasAppointmentAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined) && (
           <div className="flex items-center justify-between px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 shadow-2xs">
             <span className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
@@ -1063,7 +1076,7 @@ export default function Appointments() {
           primaryAction={{
             label: "Book Appointment",
             onClick: () => {
-              if (!hasAppointmentAutomation()) {
+              if (!hasAppointmentAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined)) {
                 toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
                 navigate("/automation");
                 return;
@@ -1087,7 +1100,7 @@ export default function Appointments() {
             services={services}
             openBookingDrawerForReschedule={openBookingDrawerForReschedule}
             onBookForDate={(dateStr) => {
-              if (!hasAppointmentAutomation()) {
+              if (!hasAppointmentAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined)) {
                 toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
                 navigate("/automation");
                 return;
@@ -1136,7 +1149,8 @@ export default function Appointments() {
                   align: "left",
                   minWidth: 240,
                   render: (apt) => {
-                    const stages = appointmentWorkflowStages;
+                    const aptProc = appointmentProcesses.find((p) => p.id === apt.processId || p.name === apt.processId) || appointmentProcess;
+                    const stages = aptProc.stages && aptProc.stages.length > 0 ? aptProc.stages : appointmentWorkflowStages;
                     const stageKey = (apt.currentStageId || apt.stageId || "").trim();
                     const matchedStage = stageKey
                       ? stages.find(
@@ -1145,7 +1159,7 @@ export default function Appointments() {
                             s.name.toLowerCase() === stageKey.toLowerCase() ||
                             (apt.statusLabel && s.name.toLowerCase() === apt.statusLabel.toLowerCase())
                         )
-                      : undefined;
+                      : (stages.find((s) => apt.statusLabel && s.name.toLowerCase() === apt.statusLabel.toLowerCase()) || (hasAppointmentAutomation(apt.processId || aptProc.id) ? stages[0] : undefined));
                     const activeIdx = matchedStage ? stages.findIndex((s) => s.id === matchedStage.id) : -1;
 
                     if (!matchedStage || activeIdx === -1) {

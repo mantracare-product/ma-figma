@@ -105,6 +105,67 @@ export default function AdminAutomations() {
     return activeRule.actions || [];
   }, [activeRule, isCreatingNewRule]);
 
+  const drawerInitialScopingRules = useMemo(() => {
+    if (activeRule?.scopingRules && activeRule.scopingRules.length > 0) {
+      return activeRule.scopingRules;
+    }
+    if (activeRule?.industryCategory && activeRule.industryCategory !== "All") {
+      return [
+        {
+          industryCategory: activeRule.industryCategory,
+          industries: activeRule.industry && activeRule.industry !== "All" ? [activeRule.industry] : [],
+          locations: activeRule.locations && !activeRule.locations.includes("All") ? activeRule.locations : [],
+        },
+      ];
+    }
+    if (pendingScopingRules && pendingScopingRules.length > 0) {
+      return pendingScopingRules;
+    }
+    if (selectedCategoryFilter && selectedCategoryFilter !== "All") {
+      return [
+        {
+          industryCategory: selectedCategoryFilter,
+          industries: selectedIndustryFilter !== "All" ? [selectedIndustryFilter] : [],
+          locations: selectedLocationFilter !== "All" ? [selectedLocationFilter] : [],
+        },
+      ];
+    }
+    return [];
+  }, [activeRule, pendingScopingRules, selectedCategoryFilter, selectedIndustryFilter, selectedLocationFilter]);
+
+  const drawerInitialAutomation = useMemo(() => {
+    if (isCreatingNewRule || !activeRule) return null;
+    return {
+      id: activeRule.id,
+      orgId: activeRule.orgId || "default",
+      name: activeRule.name,
+      description: activeRule.description,
+      scope: "global" as const,
+      status: activeRule.enabled ? ("active" as const) : ("draft" as const),
+      scopingRules: activeRule.scopingRules || [],
+      trigger: {
+        type: (GLOBAL_TRIGGER_CATALOG.find((c) =>
+          c.events.some((e) => e.event === activeRule.trigger.event)
+        )?.type || "call") as EventTriggerType,
+        event: activeRule.trigger.event,
+      },
+      steps: (activeRule.actions || []).map((s, idx) => ({
+        id: s.id,
+        name: s.name,
+        stepKey: s.stepKey,
+        iconKey: s.iconKey,
+        kind: "wait" as const,
+        delay:
+          (s.delayValue ?? 0) > 0
+            ? { value: s.delayValue!, unit: (s.delayUnit as any) || "minutes" }
+            : undefined,
+        params: s.params || {},
+        order: idx + 1,
+      })),
+      updatedAt: activeRule.updatedAt || "",
+    };
+  }, [isCreatingNewRule, activeRule]);
+
   const handleCreateNewRule = () => {
     setIsCreatingNewRule(true);
     setActiveRuleId(null);
@@ -416,71 +477,22 @@ export default function AdminAutomations() {
       </div>
 
       {/* Add Automation Drawer (Admin Global Scope) */}
-      <AddAutomationDrawer
-        isOpen={isAddAutomationDrawerOpen}
-        onClose={() => {
-          setIsAddAutomationDrawerOpen(false);
-          setIsCreatingNewRule(false);
-        }}
-        isAdmin={true}
-        initialScopingRules={
-          (activeRule?.scopingRules && activeRule.scopingRules.length > 0)
-            ? activeRule.scopingRules
-            : (activeRule?.industryCategory && activeRule.industryCategory !== "All")
-            ? [{
-                industryCategory: activeRule.industryCategory,
-                industries: activeRule.industry && activeRule.industry !== "All" ? [activeRule.industry] : [],
-                locations: activeRule.locations && !activeRule.locations.includes("All") ? activeRule.locations : [],
-              }]
-            : (pendingScopingRules && pendingScopingRules.length > 0)
-            ? pendingScopingRules
-            : (selectedCategoryFilter && selectedCategoryFilter !== "All")
-            ? [{
-                industryCategory: selectedCategoryFilter,
-                industries: selectedIndustryFilter !== "All" ? [selectedIndustryFilter] : [],
-                locations: selectedLocationFilter !== "All" ? [selectedLocationFilter] : [],
-              }]
-            : []
-        }
-        onScopingRulesChange={(newRules) => setPendingScopingRules(newRules)}
-        scope="global"
-        defaultView="library"
-        processes={processes}
-        initialAutomation={
-          !isCreatingNewRule && activeRule
-            ? {
-                id: activeRule.id,
-                orgId: activeRule.orgId || "default",
-                name: activeRule.name,
-                description: activeRule.description,
-                scope: "global",
-                status: activeRule.enabled ? "active" : "draft",
-                scopingRules: activeRule.scopingRules || [],
-                trigger: {
-                  type: (GLOBAL_TRIGGER_CATALOG.find((c) =>
-                    c.events.some((e) => e.event === activeRule.trigger.event)
-                  )?.type || "call") as EventTriggerType,
-                  event: activeRule.trigger.event,
-                },
-                steps: (activeRule.actions || []).map((s, idx) => ({
-                  id: s.id,
-                  name: s.name,
-                  stepKey: s.stepKey,
-                  iconKey: s.iconKey,
-                  kind: "wait",
-                  delay:
-                    (s.delayValue ?? 0) > 0
-                      ? { value: s.delayValue!, unit: (s.delayUnit as any) || "minutes" }
-                      : undefined,
-                  params: s.params || {},
-                  order: idx + 1,
-                })),
-                updatedAt: activeRule.updatedAt || new Date().toISOString(),
-              }
-            : null
-        }
-        processName={!isCreatingNewRule && activeRule ? activeRule.name : "New Global Automation"}
-        workflowSteps={!isCreatingNewRule && activeRule ? activeWorkflowSteps : []}
+      {isAddAutomationDrawerOpen && (
+        <AddAutomationDrawer
+          isOpen={isAddAutomationDrawerOpen}
+          onClose={() => {
+            setIsAddAutomationDrawerOpen(false);
+            setIsCreatingNewRule(false);
+          }}
+          isAdmin={true}
+          initialScopingRules={drawerInitialScopingRules}
+          onScopingRulesChange={(newRules) => setPendingScopingRules(newRules)}
+          scope="global"
+          defaultView="library"
+          processes={processes}
+          initialAutomation={drawerInitialAutomation}
+          processName={!isCreatingNewRule && activeRule ? activeRule.name : "New Global Automation"}
+          workflowSteps={!isCreatingNewRule && activeRule ? activeWorkflowSteps : []}
         onSaveAutomation={(saved) => {
           const catalogEvt = GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
             (e) => e.event === (saved.trigger as any).event
@@ -577,6 +589,7 @@ export default function AdminAutomations() {
         }}
         stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
       />
+      )}
 
       {/* Admin Scope Rules Configuration Modal */}
       {showScopeConfigModal && (

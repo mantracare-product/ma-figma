@@ -51,11 +51,18 @@ console.log("✓ All condition operators (equals, contains, greater_than, less_t
 const testRules: AutomationRule[] = [
   {
     id: "rule-test-trigger-conditions",
+    orgId: "default",
     name: "Appointment Trigger with Conditions",
     enabled: true,
     entityType: "appointment",
+    createdAt: "2026-10-09T00:00:00Z",
+    updatedAt: "2026-10-09T00:00:00Z",
+    action: {
+      type: "moveToStage",
+      processId: "",
+      stageId: "",
+    },
     trigger: {
-      type: "appointment",
       event: "appointment.booked",
       label: "Appointment Booked",
       params: {
@@ -69,6 +76,8 @@ const testRules: AutomationRule[] = [
       {
         id: "act-fup",
         name: "Field Update",
+        description: "",
+        iconKey: "zap",
         stepKey: "fieldupdate",
         params: {
           fieldUpdateBlocks: [

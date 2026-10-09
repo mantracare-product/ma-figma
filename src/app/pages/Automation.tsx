@@ -87,6 +87,38 @@ export default function Automation() {
     return activeRule.actions || [];
   }, [activeRule, isCreatingNewRule]);
 
+  const initialAutomationData = useMemo(() => {
+    if (isCreatingNewRule || !activeRule) return null;
+    return {
+      id: activeRule.id,
+      orgId: activeRule.orgId || "default",
+      name: activeRule.name,
+      description: activeRule.description,
+      scope: "global" as const,
+      status: activeRule.enabled ? ("active" as const) : ("draft" as const),
+      trigger: {
+        type: (GLOBAL_TRIGGER_CATALOG.find((c) =>
+          c.events.some((e) => e.event === activeRule.trigger.event)
+        )?.type || "call") as EventTriggerType,
+        event: activeRule.trigger.event,
+      },
+      steps: (activeRule.actions || []).map((s, idx) => ({
+        id: s.id,
+        name: s.name,
+        stepKey: s.stepKey,
+        iconKey: s.iconKey,
+        kind: "wait" as const,
+        delay:
+          (s.delayValue ?? 0) > 0
+            ? { value: s.delayValue!, unit: (s.delayUnit as any) || "minutes" }
+            : undefined,
+        params: s.params || {},
+        order: idx + 1,
+      })),
+      updatedAt: activeRule.updatedAt || "",
+    };
+  }, [isCreatingNewRule, activeRule]);
+
   // Open flow builder view in creation mode without saving until the user explicitly clicks Save
   const handleCreateNewRule = () => {
     setIsCreatingNewRule(true);
@@ -263,50 +295,20 @@ export default function Automation() {
       </div>
 
       {/* Add Automation Drawer (Global Scope) */}
-      <AddAutomationDrawer
-        isOpen={isAddAutomationDrawerOpen}
-        onClose={() => {
-          setIsAddAutomationDrawerOpen(false);
-          setIsCreatingNewRule(false);
-        }}
-        scope="global"
-        defaultView="library"
-        processes={clientProcesses}
-        initialAutomation={
-          !isCreatingNewRule && activeRule
-            ? {
-                id: activeRule.id,
-                orgId: activeRule.orgId || "default",
-                name: activeRule.name,
-                description: activeRule.description,
-                scope: "global",
-                status: activeRule.enabled ? "active" : "draft",
-                trigger: {
-                  type: (GLOBAL_TRIGGER_CATALOG.find((c) =>
-                    c.events.some((e) => e.event === activeRule.trigger.event)
-                  )?.type || "call") as EventTriggerType,
-                  event: activeRule.trigger.event,
-                },
-                steps: (activeRule.actions || []).map((s, idx) => ({
-                  id: s.id,
-                  name: s.name,
-                  stepKey: s.stepKey,
-                  iconKey: s.iconKey,
-                  kind: "wait",
-                  delay:
-                    (s.delayValue ?? 0) > 0
-                      ? { value: s.delayValue!, unit: (s.delayUnit as any) || "minutes" }
-                      : undefined,
-                  params: s.params || {},
-                  order: idx + 1,
-                })),
-                updatedAt: activeRule.updatedAt || new Date().toISOString(),
-              }
-            : null
-        }
-        processName={!isCreatingNewRule && activeRule ? activeRule.name : "New Global Automation"}
-        workflowSteps={!isCreatingNewRule && activeRule ? activeWorkflowSteps : []}
-        onSaveAutomation={(saved) => {
+      {isAddAutomationDrawerOpen && (
+        <AddAutomationDrawer
+          isOpen={isAddAutomationDrawerOpen}
+          onClose={() => {
+            setIsAddAutomationDrawerOpen(false);
+            setIsCreatingNewRule(false);
+          }}
+          scope="global"
+          defaultView="library"
+          processes={clientProcesses}
+          initialAutomation={initialAutomationData}
+          processName={!isCreatingNewRule && activeRule ? activeRule.name : "New Global Automation"}
+          workflowSteps={!isCreatingNewRule && activeRule ? activeWorkflowSteps : []}
+          onSaveAutomation={(saved) => {
           const catalogEvt = GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
             (e) => e.event === (saved.trigger as any).event
           );
@@ -388,6 +390,7 @@ export default function Automation() {
         }}
         stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
       />
+      )}
     </div>
   );
 }

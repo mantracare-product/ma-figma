@@ -49,6 +49,8 @@ import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { ClientInvoice } from "../types/invoiceTypes";
 import { hasInvoiceAutomation } from "../../lib/invoiceService";
 import { appointmentService, hasAppointmentAutomation } from "../../lib/appointmentService";
+import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
+import { PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import DocumentsTab from "../components/profile/DocumentsTab";
 import TableComponent, { TableColumn } from "../components/ui/TableComponent";
 import AIScribeModal from "../components/scribe/AIScribeModal";
@@ -813,6 +815,17 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [appointmentSearchQuery, setAppointmentSearchQuery] = useState("");
   const [appointmentStatusFilter, setAppointmentStatusFilter] = useState<string>("all");
   const [appointmentRefreshKey, setAppointmentRefreshKey] = useState(0);
+  const [automationVersion, setAutomationVersion] = useState(0);
+
+  useEffect(() => {
+    const handleUpdate = () => setAutomationVersion((v) => v + 1);
+    window.addEventListener(AUTOMATION_STORE_EVENT, handleUpdate);
+    window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
+    return () => {
+      window.removeEventListener(AUTOMATION_STORE_EVENT, handleUpdate);
+      window.removeEventListener(PROCESS_STORE_EVENT, handleUpdate);
+    };
+  }, []);
 
   const handleUpdateApptStatus = (apptId: any, newStatus: string) => {
     const stored = sessionStorage.getItem("appointments_v1");
@@ -880,6 +893,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       sessionType: activityBookingValues.sessionType,
       processId: activityBookingValues.processId,
       stageId: activityBookingValues.stageId,
+      generateInvoice: activityBookingValues.generateInvoice ?? hasInvoiceAutomation(activityBookingValues.processId || client.processes?.[0]),
+      lineItems: activityBookingValues.lineItems,
+      discountAmount: activityBookingValues.discountAmount,
       source: "screen",
     });
     setAppointmentRefreshKey((k) => k + 1);
@@ -2341,36 +2357,45 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       <option value="cancelled">Cancelled</option>
                     </select>
                   </div>
-                  <button
-                    onClick={() => {
-                      if (!hasAppointmentAutomation()) {
-                        toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
-                        return;
-                      }
-                      setActivityBookingValues({
-                        title: "Consultation Appointment",
-                        description: "",
-                        note: "",
-                        tags: "",
-                        processId: client.processes?.[0] || "",
-                        stageId: "",
-                        date: new Date().toISOString().split("T")[0],
-                        startHour: 10,
-                        startMinute: 0,
-                        sessionType: "video",
-                        client: { id: client.id, name: client.name, email: client.email || "", phone: client.phone || "" },
-                        provider: { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
-                      });
-                      setShowScheduleApptFromActivity(true);
-                    }}
-                    className="px-4 py-2 bg-[#1F2937] hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <Plus className="w-4 h-4" /> Book Appointment
-                  </button>
+                  {(() => {
+                    const clientProcId = client.processes?.[0];
+                    const apptAutoConfigured = hasAppointmentAutomation(clientProcId);
+                    return (
+                      <>
+                        <button
+                          onClick={() => {
+                            if (!apptAutoConfigured) {
+                              toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
+                              return;
+                            }
+                            setActivityBookingValues({
+                              title: "Consultation Appointment",
+                              description: "",
+                              note: "",
+                              tags: "",
+                              processId: clientProcId || "",
+                              stageId: "",
+                              date: new Date().toISOString().split("T")[0],
+                              startHour: 10,
+                              startMinute: 0,
+                              sessionType: "video",
+                              client: { id: client.id, name: client.name, email: client.email || "", phone: client.phone || "" },
+                              provider: { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
+                              generateInvoice: hasInvoiceAutomation(clientProcId),
+                            });
+                            setShowScheduleApptFromActivity(true);
+                          }}
+                          className="px-4 py-2 bg-[#1F2937] hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <Plus className="w-4 h-4" /> Book Appointment
+                        </button>
+                      </>
+                    );
+                  })()}
                 </div>
 
-                {!hasAppointmentAutomation() && (
+                {!hasAppointmentAutomation(client.processes?.[0]) && (
                   <div className="mb-4 px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 flex items-center justify-between">
                     <span className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
@@ -2634,7 +2659,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     {/* + Create Invoice Button */}
                     <button
                       onClick={() => {
-                        if (!hasInvoiceAutomation()) {
+                        if (!hasInvoiceAutomation(client.processes?.[0])) {
                           toast.error("Please build an automation first before creating invoices. Navigate to Automation to configure workflow rules.");
                           return;
                         }

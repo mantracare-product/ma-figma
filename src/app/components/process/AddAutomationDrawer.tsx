@@ -388,30 +388,6 @@ export default function AddAutomationDrawer({
     return [];
   });
 
-  useEffect(() => {
-    if (initialScopingRules && initialScopingRules.length > 0) {
-      setDrawerScopingRules(initialScopingRules);
-    } else if ((initialAutomation as any)?.scopingRules?.length > 0) {
-      setDrawerScopingRules((initialAutomation as any).scopingRules);
-    } else if (stageRef?.processId) {
-      const allProcs = (processes && processes.length > 0) ? processes : getStoredProcesses();
-      const p = allProcs.find((proc: any) => proc.id === stageRef.processId);
-      const st = p?.stages?.find((s: any) => s.id === stageRef.stageId);
-      if (st?.scopingRules && st.scopingRules.length > 0) setDrawerScopingRules(st.scopingRules);
-      else if (p?.scopingRules && p.scopingRules.length > 0) setDrawerScopingRules(p.scopingRules);
-      else if (p?.industryCategory && p.industryCategory !== "All") {
-        setDrawerScopingRules([{
-          industryCategory: p.industryCategory,
-          industries: p.industry && p.industry !== "All" ? [p.industry] : [],
-          locations: p.locations && !p.locations.includes("All") ? p.locations : [],
-        }]);
-      } else {
-        setDrawerScopingRules([]);
-      }
-    } else {
-      setDrawerScopingRules([]);
-    }
-  }, [initialScopingRules, initialAutomation, stageRef, processes]);
 
   // Determine effective scope and scoped processes
   const allAvailableProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();

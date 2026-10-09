@@ -73,6 +73,8 @@ describe("Appointment Process Automation Scoping & Condition Triggering", () => 
       name: "Booked -> Cataract Process Stage",
       entityType: "appointment",
       enabled: true,
+      createdAt: "2026-10-09T00:00:00Z",
+      updatedAt: "2026-10-09T00:00:00Z",
       trigger: {
         event: "appointment.booked",
       },
@@ -103,6 +105,8 @@ describe("Appointment Process Automation Scoping & Condition Triggering", () => 
       name: "Booked -> Cataract Process Stage",
       entityType: "appointment",
       enabled: true,
+      createdAt: "2026-10-09T00:00:00Z",
+      updatedAt: "2026-10-09T00:00:00Z",
       trigger: {
         event: "appointment.booked",
       },
@@ -139,6 +143,8 @@ describe("Appointment Process Automation Scoping & Condition Triggering", () => 
       name: "Cataract Condition Rule",
       entityType: "appointment",
       enabled: true,
+      createdAt: "2026-10-09T00:00:00Z",
+      updatedAt: "2026-10-09T00:00:00Z",
       trigger: {
         event: "appointment.booked",
       },

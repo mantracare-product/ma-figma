@@ -58,21 +58,28 @@ export const SAMPLE_CLIENT_NAMES = new Set([
 
 export function isSampleInvoice(inv: ClientInvoice): boolean {
   if (!inv) return false;
-  const name = (inv.clientName || "").trim().toLowerCase();
-  return SAMPLE_CLIENT_NAMES.has(name);
+  if ((inv as any).isSample === true || (inv as any).source === "sample_seed") return true;
+  return false;
 }
 
-export function hasInvoiceAutomation(): boolean {
+export function hasInvoiceAutomation(processId?: string): boolean {
   try {
     const rules = getStoredRules();
-    return rules.some((r) => {
+    const hasGlobalRule = rules.some((r) => {
       if (!r.enabled) return false;
       if (r.entityType === "invoice") return true;
+      if (r.trigger?.event && (r.trigger.event.startsWith("invoice.") || r.trigger.event.includes("invoice"))) return true;
       if (
         r.actions &&
-        r.actions.some((a) =>
-          ["generate_invoice", "generate-invoice", "create_invoice"].includes(a.stepKey || (a as any).type)
-        )
+        r.actions.some((a) => {
+          const key = (a.stepKey || (a as any).type || (a as any).name || "").toLowerCase();
+          return (
+            ["generate_invoice", "generate-invoice", "create_invoice", "send_invoice", "send-invoice", "sendinvoice"].includes(key) ||
+            key.includes("invoice") ||
+            (a.params?.autoGenerateInvoice === true) ||
+            (key.includes("appointment") && a.params?.autoGenerateInvoice !== false)
+          );
+        })
       ) {
         return true;
       }
@@ -82,8 +89,52 @@ export function hasInvoiceAutomation(): boolean {
       ) {
         return true;
       }
+      if (r.name && r.name.toLowerCase().includes("invoice")) {
+        return true;
+      }
       return false;
     });
+
+    if (hasGlobalRule) return true;
+
+    // Check process stage workflowSteps & automations
+    const processes = getStoredProcesses();
+    const targetProcesses = processId
+      ? processes.filter((p) => p.id === processId || p.name === processId)
+      : processes;
+
+    for (const proc of targetProcesses) {
+      const hasStageInv = proc.stages?.some((s) => {
+        const steps = (s as any).workflowSteps || (s as any).automations || [];
+        return steps.some((step: any) => {
+          const key = (step.stepKey || step.type || step.name || "").toLowerCase();
+          return (
+            ["generate_invoice", "generate-invoice", "create_invoice", "send_invoice", "send-invoice", "sendinvoice"].includes(key) ||
+            key.includes("invoice") ||
+            (step.params?.autoGenerateInvoice === true) ||
+            (key.includes("appointment") && step.params?.autoGenerateInvoice !== false)
+          );
+        });
+      });
+      if (hasStageInv) return true;
+
+      const hasRuleForProc = rules.some(
+        (r) =>
+          r.enabled &&
+          (r.action?.processId === proc.id ||
+            r.action?.processName === proc.name ||
+            r.actions?.some(
+              (a) =>
+                a.params?.processId === proc.id ||
+                a.params?.processName === proc.name ||
+                a.params?.stepDetailProcess === proc.id ||
+                a.params?.targetProcessId === proc.id
+            ))
+      );
+      if (hasRuleForProc) return true;
+    }
+
+    return false;
   } catch {
     return false;
   }

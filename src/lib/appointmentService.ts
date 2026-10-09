@@ -18,18 +18,32 @@ import { logStageMove, getStoredRules } from "./useAutomationStore";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, getActiveOrganizationSync, isProcessMatchingOrg } from "./useProcessStore";
 import { invoiceService, hasInvoiceAutomation, SAMPLE_CLIENT_NAMES } from "./invoiceService";
 
-export function hasAppointmentAutomation(): boolean {
+export function hasAppointmentAutomation(processId?: string): boolean {
   try {
     const rules = getStoredRules();
-    return rules.some((r) => {
+    const hasGlobalRule = rules.some((r) => {
       if (!r.enabled) return false;
       if (r.entityType === "appointment") return true;
-      if (r.trigger?.event && r.trigger.event.startsWith("appointment.")) return true;
+      if (r.trigger?.event && (r.trigger.event.startsWith("appointment.") || r.trigger.event.includes("appointment") || r.trigger.event.includes("booking"))) return true;
       if (
         r.actions &&
         r.actions.some((a) => {
-          const key = (a.stepKey || (a as any).type || "").toLowerCase();
-          if (["book_appointment", "schedule_appointment", "book-appointment"].includes(key)) return true;
+          const key = (a.stepKey || (a as any).type || (a as any).name || "").toLowerCase();
+          if (
+            [
+              "book_appointment",
+              "schedule_appointment",
+              "book-appointment",
+              "scheduleappointment",
+              "reschedule-appointment",
+              "generate_invoice",
+              "generate-invoice",
+            ].includes(key) ||
+            key.includes("appointment") ||
+            key.includes("booking")
+          ) {
+            return true;
+          }
           if (a.params?.stageEntity === "appointment") return true;
           return false;
         })
@@ -42,8 +56,53 @@ export function hasAppointmentAutomation(): boolean {
       ) {
         return true;
       }
+      if (r.name && (r.name.toLowerCase().includes("appointment") || r.name.toLowerCase().includes("booking"))) {
+        return true;
+      }
       return false;
     });
+
+    if (hasGlobalRule) return true;
+
+    // Check process stages workflowSteps & automations
+    const processes = getStoredProcesses();
+    const targetProcesses = processId
+      ? processes.filter((p) => p.id === processId || p.name === processId)
+      : processes.filter((p) => p.entityType === "appointment");
+
+    for (const proc of targetProcesses) {
+      const hasStageAutomations = proc.stages?.some((s) => {
+        const steps = (s as any).workflowSteps || (s as any).automations || [];
+        return steps.length > 0;
+      });
+      if (hasStageAutomations) return true;
+
+      const hasRuleForProc = rules.some(
+        (r) =>
+          r.enabled &&
+          (r.action?.processId === proc.id ||
+            r.action?.processName === proc.name ||
+            r.actions?.some(
+              (a) =>
+                a.params?.processId === proc.id ||
+                a.params?.processName === proc.name ||
+                a.params?.stepDetailProcess === proc.id ||
+                a.params?.targetProcessId === proc.id
+            ))
+      );
+      if (hasRuleForProc) return true;
+    }
+
+    if (!processId) {
+      const anyApptProcHasAuto = processes
+        .filter((p) => p.entityType === "appointment")
+        .some((p) =>
+          p.stages?.some((s) => ((s as any).workflowSteps || (s as any).automations || []).length > 0)
+        );
+      if (anyApptProcHasAuto) return true;
+    }
+
+    return false;
   } catch {
     return false;
   }
@@ -97,6 +156,7 @@ export interface CreateAppointmentPayload {
   stageId?: string;
   generateInvoice?: boolean;
   lineItems?: any[];
+  discountAmount?: number;
   source?: "screen" | "call" | "webhook" | "import" | "ai";
 }
 
@@ -380,14 +440,13 @@ class AppointmentService {
     invoiceId?: string;
     confirmationSent: boolean;
   } {
-    // 0. Automation Check: Only allow appointment creation if automation rule exists or created by rule / test / screen UI
+    // 0. Automation Check: Only allow appointment creation if automation rule exists or created by rule / test bypass
     if (
-      !hasAppointmentAutomation() &&
+      !hasAppointmentAutomation(payload.processId) &&
       options?.createdBy !== "rule" &&
       options?.createdBy !== "test" &&
       !options?.force &&
-      (payload as any).source !== "test" &&
-      (payload as any).source !== "screen"
+      (payload as any).source !== "test"
     ) {
       console.warn("[AppointmentService] Appointment booking blocked: No appointment automation configured.");
       return { appointment: null as any, confirmationSent: false };
@@ -424,9 +483,9 @@ class AppointmentService {
     }
 
     const proc = targetProcess || this.getAppointmentProcess();
-    const initialStage = targetStage || (payload.stageId ? this.findStageById(payload.stageId, proc.id) : (proc.stages && proc.stages[0]));
+    const initialStage = targetStage || (payload.stageId ? this.findStageById(payload.stageId, proc.id) : undefined);
     const initialStageId = initialStage?.id || "";
-    const initialStageName = initialStage?.name || "Booked";
+    const initialStageName = initialStage?.name || "";
 
     const newAppointment: Appointment = {
       id: nextId,
@@ -462,10 +521,14 @@ class AppointmentService {
       source: payload.source || "screen",
     });
 
-    // 3. Invoice Generation (only if explicitly enabled AND an active invoice automation exists!)
+    // 3. Invoice Generation (if explicitly enabled OR active invoice automation exists for appointment booking)
+    const shouldGenerateInvoice =
+      payload.generateInvoice === true ||
+      hasInvoiceAutomation(proc.id);
+
     let createdInvoiceId: string | undefined = undefined;
-    if (payload.generateInvoice === true) {
-      if (!hasInvoiceAutomation()) {
+    if (shouldGenerateInvoice) {
+      if (!hasInvoiceAutomation(proc.id) && payload.generateInvoice !== true) {
         console.warn("[AppointmentService] Invoice creation skipped: No active invoice automation configured.");
       } else {
         const lineItems = payload.lineItems && payload.lineItems.length > 0
@@ -482,7 +545,7 @@ class AppointmentService {
             title: newAppointment.title,
           },
           lineItems,
-          { createdBy: payload.source === "call" ? "system" : "Admin User" }
+          { createdBy: "rule", discountAmount: payload.discountAmount }
         );
         if (invoice?.id) {
           createdInvoiceId = invoice.id;
