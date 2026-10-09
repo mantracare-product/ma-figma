@@ -171,10 +171,10 @@ export default function Appointments() {
     return apptProcs.length > 0 ? apptProcs : [DEFAULT_ENTITY_PROCESSES.appointment];
   }, [activeOrganization]);
 
-  // Auto-select first process if none selected or invalid
+  // Auto-select first process if none selected or invalid (unless explicitly "all")
   useEffect(() => {
     if (appointmentProcesses.length > 0) {
-      if (!selectedProcessFilter || selectedProcessFilter === "all" || !appointmentProcesses.some((p) => p.id === selectedProcessFilter)) {
+      if (!selectedProcessFilter || (selectedProcessFilter !== "all" && !appointmentProcesses.some((p) => p.id === selectedProcessFilter))) {
         setSelectedProcessFilter(appointmentProcesses[0].id);
       }
     }
@@ -306,7 +306,10 @@ export default function Appointments() {
   });
 
   useEffect(() => {
-    sessionStorage.setItem("appointments_v1", JSON.stringify(appointments));
+    if (appointments && appointments.length > 0) {
+      sessionStorage.setItem("appointments_v1", JSON.stringify(appointments));
+      localStorage.setItem("appointments_v1", JSON.stringify(appointments));
+    }
   }, [appointments]);
 
   const [searchParams] = useSearchParams();
@@ -580,6 +583,14 @@ export default function Appointments() {
       appointmentService.rescheduleAppointment(selectedAppointment.id, selectedDate, timeStr, bookingNote);
       toast.success("Appointment rescheduled successfully!");
     } else {
+      const targetProc = appointmentProcesses.find(
+        (p) => p.id === bookingProcessId || p.name === bookingProcessId
+      ) || appointmentProcess;
+
+      const targetStage = targetProc?.stages?.find(
+        (s) => s.id === bookingStageId || s.name === bookingStageId
+      ) || targetProc?.stages?.[0];
+
       const res = appointmentService.createAppointment({
         clientName: selectedClient.name,
         clientEmail: selectedClient.email,
@@ -596,12 +607,16 @@ export default function Appointments() {
         clientId: selectedClient.id ? String(selectedClient.id) : undefined,
         location: bookingLocation,
         sessionType,
-        processId: bookingProcessId || appointmentProcess.id,
-        stageId: bookingStageId || undefined,
+        processId: targetProc?.id || appointmentProcess.id,
+        stageId: targetStage?.id || undefined,
         generateInvoice: bookingGenerateInvoice,
         lineItems: bookingLineItems && bookingLineItems.length > 0 ? bookingLineItems : undefined,
         source: "screen",
       });
+
+      if (res.appointment) {
+        setAppointments(appointmentService.getAppointments() as any);
+      }
 
       if (res.invoiceId) {
         toast.success(`Appointment scheduled — Invoice ${res.invoiceId} created!`);
@@ -820,7 +835,10 @@ export default function Appointments() {
     const matchesProcess =
       selectedProcessFilter === "all" ||
       apt.processId === selectedProcessFilter ||
-      (!apt.processId && appointmentProcess.stages.some((s) => s.id === apt.currentStageId || s.id === apt.stageId));
+      apt.processId === appointmentProcess.id ||
+      apt.processId === appointmentProcess.name ||
+      (!apt.processId && appointmentProcess.stages.some((s) => s.id === apt.currentStageId || s.id === apt.stageId)) ||
+      (appointmentProcess.stages && appointmentProcess.stages.some((s) => s.id === apt.currentStageId || s.name === apt.statusLabel));
 
     return matchesSearch && matchesEmployee && matchesTab && matchesStage && matchesProcess;
   });
@@ -923,7 +941,9 @@ export default function Appointments() {
                   title="Select Process"
                 >
                   <span className="truncate max-w-[160px] font-semibold text-gray-800">
-                    {appointmentProcesses.find((p) => p.id === selectedProcessFilter)?.name || appointmentProcesses[0]?.name || "Select Process"}
+                    {selectedProcessFilter === "all"
+                      ? "All Processes"
+                      : appointmentProcesses.find((p) => p.id === selectedProcessFilter)?.name || appointmentProcesses[0]?.name || "Select Process"}
                   </span>
                   <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 </button>
@@ -935,6 +955,23 @@ export default function Appointments() {
                       onClick={() => setShowProcessesDropdown(false)}
                     />
                     <div className="absolute top-full left-0 mt-1.5 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedProcessFilter("all");
+                          setStageFilter("all");
+                          setShowProcessesDropdown(false);
+                        }}
+                        className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                          selectedProcessFilter === "all" ? "bg-blue-50/80 text-blue-600 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        <span className="truncate">All Processes</span>
+                        {selectedProcessFilter === "all" && (
+                          <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
+                        )}
+                      </button>
                       {appointmentProcesses.map((proc) => (
                         <button
                           key={proc.id}

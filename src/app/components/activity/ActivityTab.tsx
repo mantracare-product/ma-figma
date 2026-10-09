@@ -25,6 +25,7 @@ import ScheduleCallDrawer, {
 import ScheduleAppointmentDrawer, {
   BookingFormValues,
 } from "../appointments/ScheduleAppointmentDrawer";
+import { appointmentService } from "../../../lib/appointmentService";
 
 // ─── Legacy ActivityLogEntry (kept for backward compat) ───────────────────────
 
@@ -1317,6 +1318,29 @@ export default function ActivityTab({
         secondary: `${apptFormValues.date} at ${timeStr} · ${apptFormValues.provider?.name || "Provider"}`,
       },
     });
+
+    try {
+      appointmentService.createAppointment({
+        clientName: apptFormValues.client?.name || clientName || "Client",
+        clientEmail: apptFormValues.client?.email || clientEmail || "",
+        clientPhone: apptFormValues.client?.phone || clientPhone || "",
+        employeeId: apptFormValues.provider?.id || 1,
+        serviceId: apptFormValues.serviceId ? Number(apptFormValues.serviceId) : 1,
+        date: apptFormValues.date,
+        time: timeStr,
+        duration: 60,
+        notes: apptFormValues.note || apptFormValues.description || undefined,
+        title: apptFormValues.title.trim() || "Appointment",
+        clientId: normalizedClientId,
+        location: apptFormValues.sessionType === "inPerson" ? "In-Person" : "Video Call",
+        sessionType: apptFormValues.sessionType,
+        processId: apptFormValues.processId,
+        stageId: apptFormValues.stageId,
+        source: "screen",
+      });
+    } catch (e) {
+      console.warn("[ActivityTab] Error calling createAppointment:", e);
+    }
 
     if (!created) {
       toast.error("Couldn't save this activity — client context missing");

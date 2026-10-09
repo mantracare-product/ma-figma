@@ -48,7 +48,7 @@ import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
 import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { ClientInvoice } from "../types/invoiceTypes";
 import { hasInvoiceAutomation } from "../../lib/invoiceService";
-import { hasAppointmentAutomation } from "../../lib/appointmentService";
+import { appointmentService, hasAppointmentAutomation } from "../../lib/appointmentService";
 import DocumentsTab from "../components/profile/DocumentsTab";
 import TableComponent, { TableColumn } from "../components/ui/TableComponent";
 import AIScribeModal from "../components/scribe/AIScribeModal";
@@ -863,35 +863,25 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     const mm = String(activityBookingValues.startMinute).padStart(2, "0");
     const timeStr = `${hh}:${mm}`;
     const dateFormatted = new Date(activityBookingValues.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    // Save to appointments_v1
-    const stored = sessionStorage.getItem("appointments_v1");
-    const existing: any[] = stored ? JSON.parse(stored) : [];
-
-    const chosenServiceName =
-      activityBookingValues.serviceName ||
-      (activityBookingValues.serviceId
-        ? getStoredServices().find((s) => String(s.id) === String(activityBookingValues.serviceId))?.name ||
-          MOCK_SERVICES.find((s) => s.id === activityBookingValues.serviceId)?.name
-        : "") ||
-      "Initial Consultation";
-
-    const newAppt = {
-      id: existing.length > 0 ? Math.max(...existing.map((a: any) => a.id ?? 0)) + 1 : Date.now(),
+    // Save via canonical appointmentService
+    appointmentService.createAppointment({
       clientName: activityBookingValues.client.name,
       clientEmail: activityBookingValues.client.email,
       clientPhone: activityBookingValues.client.phone,
       employeeId: activityBookingValues.provider.id,
-      serviceId: activityBookingValues.serviceId || 1,
-      service: chosenServiceName,
-      serviceName: chosenServiceName,
+      serviceId: activityBookingValues.serviceId ? Number(activityBookingValues.serviceId) : 1,
       date: activityBookingValues.date,
       time: timeStr,
       duration: 60,
-      status: "scheduled",
       notes: activityBookingValues.note || activityBookingValues.description || undefined,
       title: activityBookingValues.title.trim(),
-    };
-    sessionStorage.setItem("appointments_v1", JSON.stringify([...existing, newAppt]));
+      clientId: String(client.id),
+      location: activityBookingValues.sessionType === "inPerson" ? "In-Person" : "Video Call",
+      sessionType: activityBookingValues.sessionType,
+      processId: activityBookingValues.processId,
+      stageId: activityBookingValues.stageId,
+      source: "screen",
+    });
     setAppointmentRefreshKey((k) => k + 1);
     // Append activity entry
     if (client) {

@@ -110,10 +110,7 @@ const APPOINTMENTS_CHANGE_EVENT = "mantra_appointments_changed";
 
 export function isSampleAppointment(a: Appointment): boolean {
   if (!a) return false;
-  const name = (a.clientName || "").trim().toLowerCase();
-  if (SAMPLE_CLIENT_NAMES.has(name)) return true;
-  if (typeof a.id === "number" && a.id <= 20) return true;
-  if (typeof a.id === "string" && /^appt-\d+$/i.test(a.id)) return true;
+  if ((a as any).isSample === true || (a as any).source === "sample_seed") return true;
   return false;
 }
 
@@ -237,13 +234,14 @@ class AppointmentService {
     invoiceId?: string;
     confirmationSent: boolean;
   } {
-    // 0. Automation Check: Only allow appointment creation if automation rule exists or created by rule / test
+    // 0. Automation Check: Only allow appointment creation if automation rule exists or created by rule / test / screen UI
     if (
       !hasAppointmentAutomation() &&
       options?.createdBy !== "rule" &&
       options?.createdBy !== "test" &&
       !options?.force &&
-      (payload as any).source !== "test"
+      (payload as any).source !== "test" &&
+      (payload as any).source !== "screen"
     ) {
       console.warn("[AppointmentService] Appointment booking blocked: No appointment automation configured.");
       return { appointment: null as any, confirmationSent: false };
@@ -251,9 +249,10 @@ class AppointmentService {
 
     const all = this.getAppointments();
     const nextId = all.length > 0 ? Math.max(...all.map((a) => Number(a.id) || 0)) + 1 : 101;
-    const initialStage = payload.stageId ? this.findStageById(payload.stageId) : undefined;
+    const proc = (payload.processId ? getStoredProcesses().find(p => p.id === payload.processId || p.name === payload.processId) : null) || this.getAppointmentProcess();
+    const initialStage = payload.stageId ? this.findStageById(payload.stageId, proc.id) : (proc.stages && proc.stages[0]);
     const initialStageId = initialStage?.id || "";
-    const initialStageName = initialStage?.name || "";
+    const initialStageName = initialStage?.name || "Booked";
 
     const newAppointment: Appointment = {
       id: nextId,
@@ -265,14 +264,14 @@ class AppointmentService {
       date: payload.date,
       time: payload.time,
       duration: payload.duration || 60,
-      status: "scheduled",
+      status: initialStage?.systemCategory === "completed" ? "completed" : initialStage?.systemCategory === "cancelled" ? "cancelled" : "scheduled",
       notes: payload.notes || `Session Type: ${payload.sessionType === "video" ? "Video Call" : "In-Person"}`,
       title: payload.title || "Scheduled Appointment",
       description: payload.description,
       tags: payload.tags,
       currentStageId: initialStageId,
       statusLabel: initialStageName,
-      processId: payload.processId || this.getAppointmentProcess().id,
+      processId: proc.id,
       clientId: payload.clientId,
       location: payload.location,
       sessionType: payload.sessionType || "video",
