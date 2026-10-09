@@ -62,13 +62,13 @@ export const ChevronStageRibbon: React.FC<ChevronStageRibbonProps> = ({
 
   // Split sequential vs final stage options (matching Process.tsx exactly)
   const { sequentialStages, finalStageOptions } = React.useMemo(() => {
-    const hasExplicitFinal = stages.some((s) => s.isFinalStage || s.isFinal);
-    const seq = hasExplicitFinal
+    const hasAnyOutcomeFlag = stages.some((s) => s.isFinalStage !== undefined || s.isFinal !== undefined);
+    const seq = hasAnyOutcomeFlag
       ? stages.filter((s) => !s.isFinalStage && !s.isFinal)
       : stages.length > 1
       ? stages.slice(0, -1)
       : stages;
-    const finalOpts = hasExplicitFinal
+    const finalOpts = hasAnyOutcomeFlag
       ? stages.filter((s) => s.isFinalStage || s.isFinal)
       : stages.length > 1
       ? stages.slice(-1)

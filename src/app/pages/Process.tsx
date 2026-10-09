@@ -2346,6 +2346,7 @@ export default function Process() {
   const [newProcess, setNewProcess] = useState({ name: "", description: "" });
   const [newStage, setNewStage] = useState({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "AI Receives Calls" });
   const [newStagePosition, setNewStagePosition] = useState<"initial" | "final" | "sequential" | null>(null);
+  const [newStageOutcome, setNewStageOutcome] = useState<"won" | "lost">("won");
   const [newStageSelectedNumbers, setNewStageSelectedNumbers] = useState<string[]>([]);
   const [showHowToReceiveCallModal, setShowHowToReceiveCallModal] = useState(false);
   const [applyAdvancedSettingsToAllStages, setApplyAdvancedSettingsToAllStages] = useState(false);
@@ -2664,6 +2665,7 @@ export default function Process() {
                   color: editingStage.color,
                   isFinalStage: editingStage.isFinalStage,
                   isFinal: editingStage.isFinalStage,
+                  stagePosition: editingStage.isFinalStage ? "final" : (s.stagePosition === "initial" ? "initial" : "intermediate"),
                   nextProcessTransitions: editingStage.nextProcessTransitions || [],
                 }
                 : s
@@ -2928,6 +2930,8 @@ export default function Process() {
   };
 
   const handleQuickAddStage = () => {
+    setNewStagePosition("sequential");
+    setNewStageOutcome("won");
     setShowAddStageModal(true);
   };
 
@@ -2943,28 +2947,29 @@ export default function Process() {
       return;
     }
 
-    const isFinal = newStagePosition === "final";
+    const isFinal = newStageOutcome === "lost" || newStagePosition === "final";
 
     const stage: Stage = {
       id: `${selectedProcess}-${Date.now()}`,
       name: newStage.name.trim(),
       description: newStage.description.trim(),
-      color: newStage.color || STAGE_PRESET_COLORS[0],
+      color: newStage.color || (isFinal ? "#EF4444" : STAGE_PRESET_COLORS[0]),
       stageType: newStage.type || "Receive Inbound Calls",
       status: "active",
       callTriggerSettings: getDefaultCallTriggerSettings(),
       isFinalStage: isFinal,
       isFinal: isFinal,
+      stagePosition: isFinal ? "final" : (newStagePosition === "initial" ? "initial" : "intermediate"),
     };
 
     let updatedStages: Stage[];
     if (newStagePosition === "initial") {
       updatedStages = [stage, ...selectedProc.stages];
     } else if (isFinal) {
-      // Added from second + : Add into Lost stages
+      // Added from second + or selected Lost: Add into Lost stages
       updatedStages = [...selectedProc.stages, stage];
     } else {
-      // Added from first + (sequential) : Add into Won side (before first final/lost stage)
+      // Added from first + or selected Won: Add into Won side (before first final/lost stage)
       const firstFinalIdx = selectedProc.stages.findIndex((s) => s.isFinalStage || s.isFinal);
       if (firstFinalIdx >= 0) {
         updatedStages = [
@@ -2993,6 +2998,7 @@ export default function Process() {
     setViewMode("stage");
     setNewStage({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "AI Receives Calls" });
     setNewStagePosition(null);
+    setNewStageOutcome("won");
     setNewStageSelectedNumbers([]);
     setShowNewStageNumberDropdown(false);
     setHasInteractedWithColor(false);
@@ -3339,6 +3345,8 @@ export default function Process() {
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedProcess(process.id);
+                            setNewStagePosition("sequential");
+                            setNewStageOutcome("won");
                             setShowAddStageModal(true);
                           }}
                           className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold text-blue-600 hover:bg-blue-50/80 transition-colors border border-dashed border-blue-200 hover:border-blue-300 mt-2 cursor-pointer"
@@ -3477,6 +3485,7 @@ export default function Process() {
                                   type="button"
                                   onClick={() => {
                                     setNewStagePosition("sequential");
+                                    setNewStageOutcome("won");
                                     setShowAddStageModal(true);
                                   }}
                                   className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs hover:shadow-sm transition-all cursor-pointer"
@@ -3489,6 +3498,7 @@ export default function Process() {
                                   type="button"
                                   onClick={() => {
                                     setNewStagePosition("final");
+                                    setNewStageOutcome("lost");
                                     setShowAddStageModal(true);
                                   }}
                                   className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-lg text-xs font-semibold shadow-2xs hover:shadow-xs transition-all cursor-pointer"
@@ -3502,11 +3512,11 @@ export default function Process() {
                           );
                         }
 
-                        const hasExplicitFinal = allStages.some((s) => s.isFinalStage || s.isFinal);
-                        const sequentialStages = hasExplicitFinal
+                        const hasAnyOutcomeFlag = allStages.some((s) => s.isFinalStage !== undefined || s.isFinal !== undefined);
+                        const sequentialStages = hasAnyOutcomeFlag
                           ? allStages.filter((s) => !s.isFinalStage && !s.isFinal)
                           : (allStages.length > 1 ? allStages.slice(0, -1) : allStages);
-                        const finalStageOptions = hasExplicitFinal
+                        const finalStageOptions = hasAnyOutcomeFlag
                           ? allStages.filter((s) => s.isFinalStage || s.isFinal)
                           : (allStages.length > 1 ? allStages.slice(-1) : []);
                         const lastSeqStage = sequentialStages[sequentialStages.length - 1];
@@ -3585,6 +3595,7 @@ export default function Process() {
                                 type="button"
                                 onClick={() => {
                                   setNewStagePosition("sequential");
+                                  setNewStageOutcome("won");
                                   setShowAddStageModal(true);
                                 }}
                                 className="flex items-center justify-center w-6 h-7 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-600 border border-gray-200/80 transition-all shadow-2xs hover:shadow-xs flex-shrink-0 cursor-pointer"
@@ -3629,6 +3640,7 @@ export default function Process() {
                                     type="button"
                                     onClick={() => {
                                       setNewStagePosition("final");
+                                      setNewStageOutcome("lost");
                                       setShowAddStageModal(true);
                                     }}
                                     className="flex items-center justify-center w-6 h-7 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-600 border border-gray-200/80 transition-all shadow-2xs hover:shadow-xs flex-shrink-0 cursor-pointer"
@@ -3643,6 +3655,7 @@ export default function Process() {
                                   type="button"
                                   onClick={() => {
                                     setNewStagePosition("final");
+                                    setNewStageOutcome("lost");
                                     setShowAddStageModal(true);
                                   }}
                                   className="flex items-center gap-1 px-2 h-7 rounded-md border border-dashed border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100 text-gray-500 text-xs font-medium transition-all shadow-2xs flex-shrink-0 cursor-pointer ml-1"
@@ -6939,6 +6952,7 @@ export default function Process() {
             setShowAddStageModal(false);
             setNewStage({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "Receive Inbound Calls" });
             setNewStagePosition(null);
+            setNewStageOutcome("won");
             setNewStageSelectedNumbers([]);
             setShowNewStageNumberDropdown(false);
             setHasInteractedWithColor(false);
@@ -6954,6 +6968,7 @@ export default function Process() {
                   setShowAddStageModal(false);
                   setNewStage({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "Receive Inbound Calls" });
                   setNewStagePosition(null);
+                  setNewStageOutcome("won");
                   setNewStageSelectedNumbers([]);
                   setShowNewStageNumberDropdown(false);
                   setHasInteractedWithColor(false);
@@ -6987,6 +7002,36 @@ export default function Process() {
                 className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all placeholder:text-slate-400 text-slate-900 font-medium"
                 autoFocus
               />
+            </div>
+
+            {/* Stage Outcome Dropdown: Won vs Lost */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Stage Outcome <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={newStageOutcome}
+                onChange={(e) => {
+                  const val = e.target.value as "won" | "lost";
+                  setNewStageOutcome(val);
+                  setNewStagePosition(val === "lost" ? "final" : "sequential");
+                  if (!hasInteractedWithColor) {
+                    setNewStage((prev) => ({
+                      ...prev,
+                      color: val === "lost" ? "#EF4444" : "#10B981"
+                    }));
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all text-slate-900 font-medium cursor-pointer"
+              >
+                <option value="won">Won Stage (Sequential Pipeline)</option>
+                <option value="lost">Lost Stage (Terminal / Dropped)</option>
+              </select>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {newStageOutcome === "won"
+                  ? "Stage is added to the active Won pipeline progression."
+                  : "Stage is added to the terminal Lost outcome section."}
+              </p>
             </div>
 
             <div>
@@ -7249,6 +7294,25 @@ export default function Process() {
                 style={{ fontFamily: 'Outfit, sans-serif' }}
                 placeholder="Enter stage name"
               />
+            </div>
+
+            {/* Stage Outcome Dropdown: Won vs Lost */}
+            <div>
+              <label className="block text-sm font-medium mb-1.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                Stage Outcome
+              </label>
+              <select
+                value={editingStage?.isFinalStage ? "lost" : "won"}
+                onChange={(e) => {
+                  const isLost = e.target.value === "lost";
+                  setEditingStage(editingStage ? { ...editingStage, isFinalStage: isLost } : null);
+                }}
+                className="w-full px-3.5 py-2.5 text-sm border border-border rounded-lg bg-white focus:outline-none focus:border-slate-400 font-medium cursor-pointer"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              >
+                <option value="won">Won Stage (Sequential Pipeline)</option>
+                <option value="lost">Lost Stage (Terminal / Dropped)</option>
+              </select>
             </div>
 
             <div>

@@ -426,6 +426,12 @@ export default function AdminAutomations() {
         initialScopingRules={
           (activeRule?.scopingRules && activeRule.scopingRules.length > 0)
             ? activeRule.scopingRules
+            : (activeRule?.industryCategory && activeRule.industryCategory !== "All")
+            ? [{
+                industryCategory: activeRule.industryCategory,
+                industries: activeRule.industry && activeRule.industry !== "All" ? [activeRule.industry] : [],
+                locations: activeRule.locations && !activeRule.locations.includes("All") ? activeRule.locations : [],
+              }]
             : (pendingScopingRules && pendingScopingRules.length > 0)
             ? pendingScopingRules
             : (selectedCategoryFilter && selectedCategoryFilter !== "All")

@@ -388,12 +388,45 @@ export default function AddAutomationDrawer({
     return [];
   });
 
+  useEffect(() => {
+    if (initialScopingRules && initialScopingRules.length > 0) {
+      setDrawerScopingRules(initialScopingRules);
+    } else if ((initialAutomation as any)?.scopingRules?.length > 0) {
+      setDrawerScopingRules((initialAutomation as any).scopingRules);
+    } else if (stageRef?.processId) {
+      const allProcs = (processes && processes.length > 0) ? processes : getStoredProcesses();
+      const p = allProcs.find((proc: any) => proc.id === stageRef.processId);
+      const st = p?.stages?.find((s: any) => s.id === stageRef.stageId);
+      if (st?.scopingRules && st.scopingRules.length > 0) setDrawerScopingRules(st.scopingRules);
+      else if (p?.scopingRules && p.scopingRules.length > 0) setDrawerScopingRules(p.scopingRules);
+      else if (p?.industryCategory && p.industryCategory !== "All") {
+        setDrawerScopingRules([{
+          industryCategory: p.industryCategory,
+          industries: p.industry && p.industry !== "All" ? [p.industry] : [],
+          locations: p.locations && !p.locations.includes("All") ? p.locations : [],
+        }]);
+      } else {
+        setDrawerScopingRules([]);
+      }
+    } else {
+      setDrawerScopingRules([]);
+    }
+  }, [initialScopingRules, initialAutomation, stageRef, processes]);
+
   // Determine effective scope and scoped processes
   const allAvailableProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
   const effectiveProcesses = useMemo(() => {
     if (!isAdmin || !drawerScopingRules || drawerScopingRules.length === 0) {
       return allAvailableProcesses;
     }
+    const hasActiveRules = drawerScopingRules.some(
+      (r) =>
+        Boolean(r.industryCategory && r.industryCategory !== "All" && r.industryCategory !== "*") ||
+        Boolean(r.industries && r.industries.length > 0 && !r.industries.includes("All")) ||
+        Boolean(r.locations && r.locations.length > 0 && !r.locations.includes("All"))
+    );
+    if (!hasActiveRules) return allAvailableProcesses;
+
     return allAvailableProcesses.filter((p) =>
       isProcessMatchingScopingRules(p, drawerScopingRules)
     );

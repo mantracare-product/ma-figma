@@ -12,7 +12,7 @@ import { InfoTooltip } from "../help/InfoTooltip";
 import { useFieldRegistry, isFieldMatchingOrg, ScopingRule, ALL_MODULES, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
 
 import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
-import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES } from "../../../lib/useProcessStore";
+import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES, isProcessMatchingScopingRules } from "../../../lib/useProcessStore";
 import { MOCK_SERVICES } from "../../../lib/mockServicesData";
 import { getStoredServices } from "../../../lib/servicesStore";
 import {
@@ -43,6 +43,10 @@ interface ProcessOption {
   name: string;
   stages?: { id: string; name: string }[];
   entityType?: string;
+  scopingRules?: ScopingRule[];
+  industryCategory?: string;
+  industry?: string;
+  locations?: string[];
 }
 
 interface StepParametersFieldsProps {
@@ -62,7 +66,24 @@ export default function StepParametersFields({
   stepTrigger,
   scopingRules = [],
 }: StepParametersFieldsProps) {
-  const effectiveProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
+  const allAvailableProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
+  const effectiveProcesses = useMemo(() => {
+    if (!scopingRules || scopingRules.length === 0) {
+      return allAvailableProcesses;
+    }
+    const hasActiveRules = scopingRules.some(
+      (r) =>
+        Boolean(r.industryCategory && r.industryCategory !== "All" && r.industryCategory !== "*") ||
+        Boolean(r.industries && r.industries.length > 0 && !r.industries.includes("All")) ||
+        Boolean(r.locations && r.locations.length > 0 && !r.locations.includes("All"))
+    );
+    if (!hasActiveRules) return allAvailableProcesses;
+
+    const filtered = allAvailableProcesses.filter((p: any) =>
+      isProcessMatchingScopingRules(p, scopingRules)
+    );
+    return filtered.length > 0 ? filtered : allAvailableProcesses;
+  }, [allAvailableProcesses, scopingRules]);
 
   const { getAllFields } = useFieldRegistry();
   const allClientFields = getAllFields("client");
@@ -2217,6 +2238,46 @@ export default function StepParametersFields({
             {(stepKey === "update_to_stage" || stepKey === "update-stage" || stepKey === "processmovement" || stepKey === "stagemovement" || stepKey === "move-process" || stepKey === "move-stage" || stepKey === "movetonewprocess" || stepKey === "move-new-process") && (() => {
               const stageEntity = (params.stageEntity || params.entityType || "processes") as "processes" | "appointment" | "invoice";
 
+              // Respective scoped entity processes
+              const appointmentProcesses = effectiveProcesses.filter((p: any) => p.entityType === "appointment");
+              const effectiveApptProcesses = appointmentProcesses.length > 0
+                ? appointmentProcesses
+                : (() => {
+                    const allAppts = getStoredProcesses().filter((p: any) => p.entityType === "appointment");
+                    return allAppts.length > 0 ? allAppts : [DEFAULT_ENTITY_PROCESSES.appointment];
+                  })();
+
+              const invoiceProcesses = effectiveProcesses.filter((p: any) => p.entityType === "invoice");
+              const effectiveInvProcesses = invoiceProcesses.length > 0
+                ? invoiceProcesses
+                : (() => {
+                    const allInvs = getStoredProcesses().filter((p: any) => p.entityType === "invoice");
+                    return allInvs.length > 0 ? allInvs : [DEFAULT_ENTITY_PROCESSES.invoice];
+                  })();
+
+              const clientProcesses = effectiveProcesses.filter((p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes");
+              const effectiveClientProcesses = clientProcesses.length > 0
+                ? clientProcesses
+                : getStoredProcesses().filter((p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes");
+
+              // Selection for appointment
+              const selectedApptProcId = stepDetailProcess || params.processId || effectiveApptProcesses[0]?.id || "";
+              const selectedApptProc = effectiveApptProcesses.find((p: any) => p.id === selectedApptProcId) || effectiveApptProcesses[0];
+              const apptStages = selectedApptProc?.stages || [];
+              const currentApptStageVal = stepDetailStage || params.stageId || apptStages[0]?.id || "";
+
+              // Selection for invoice
+              const selectedInvProcId = stepDetailProcess || params.processId || effectiveInvProcesses[0]?.id || "";
+              const selectedInvProc = effectiveInvProcesses.find((p: any) => p.id === selectedInvProcId) || effectiveInvProcesses[0];
+              const invStages = selectedInvProc?.stages || [];
+              const currentInvStageVal = stepDetailStage || params.stageId || invStages[0]?.id || "";
+
+              // Selection for client processes
+              const selectedClientProcId = stepDetailProcess || params.processId || effectiveClientProcesses[0]?.id || "";
+              const selectedClientProc = effectiveClientProcesses.find((p: any) => p.id === selectedClientProcId) || effectiveClientProcesses[0];
+              const clientStages = selectedClientProc?.stages || [];
+              const currentClientStageVal = stepDetailStage || params.stageId || clientStages[0]?.id || "";
+
               return (
                 <div className="space-y-4">
                   {/* Choose entity dropdown */}
@@ -2225,26 +2286,30 @@ export default function StepParametersFields({
                       value={stageEntity}
                       onChange={(e) => {
                         const entId = e.target.value as "processes" | "appointment" | "invoice";
+                        let nextProcId = "";
+                        let nextProcName = "";
                         let nextStageId = "";
                         let nextStageName = "";
-                        let nextProcId = params.stepDetailProcess || "";
-                        let nextProcName = params.processName || "";
 
                         if (entId === "processes") {
-                          const proc = effectiveProcesses.find(p => p.id === nextProcId) || effectiveProcesses[0];
+                          const proc = effectiveClientProcesses[0];
                           nextProcId = proc?.id || "";
                           nextProcName = proc?.name || "";
                           const stg = proc?.stages?.[0];
                           nextStageId = stg?.id || stg?.name || "";
                           nextStageName = stg?.name || "";
                         } else if (entId === "appointment") {
-                          const apptProc = effectiveProcesses.find((p: any) => p.entityType === "appointment") || DEFAULT_ENTITY_PROCESSES.appointment;
-                          const defaultApptStage = apptProc?.stages?.[0];
+                          const proc = effectiveApptProcesses[0];
+                          nextProcId = proc?.id || "";
+                          nextProcName = proc?.name || "";
+                          const defaultApptStage = proc?.stages?.[0];
                           nextStageId = defaultApptStage?.id || "";
                           nextStageName = defaultApptStage?.name || "";
                         } else if (entId === "invoice") {
-                          const invProc = effectiveProcesses.find((p: any) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
-                          const defaultInvStage = invProc?.stages?.[0];
+                          const proc = effectiveInvProcesses[0];
+                          nextProcId = proc?.id || "";
+                          nextProcName = proc?.name || "";
+                          const defaultInvStage = proc?.stages?.[0];
                           nextStageId = defaultInvStage?.id || "";
                           nextStageName = defaultInvStage?.name || "";
                         }
@@ -2252,9 +2317,9 @@ export default function StepParametersFields({
                         onChange({
                           stageEntity: entId,
                           entityType: entId,
-                          stepDetailProcess: entId === "processes" ? nextProcId : undefined,
-                          processId: entId === "processes" ? nextProcId : undefined,
-                          processName: entId === "processes" ? nextProcName : undefined,
+                          stepDetailProcess: nextProcId,
+                          processId: nextProcId,
+                          processName: nextProcName,
                           stepDetailStage: nextStageId,
                           stageId: nextStageId,
                           stageName: nextStageName,
@@ -2273,10 +2338,10 @@ export default function StepParametersFields({
                     <>
                       {renderField("Choose Process",
                         <select
-                          value={stepDetailProcess}
-                          onChange={e => {
+                          value={selectedClientProc?.id || ""}
+                          onChange={(e) => {
                             const selectedProcId = e.target.value;
-                            const targetProc = effectiveProcesses.find(p => p.id === selectedProcId);
+                            const targetProc = effectiveClientProcesses.find(p => p.id === selectedProcId) || effectiveClientProcesses[0];
                             const defaultStage = targetProc?.stages?.[0];
                             onChange({
                               stageEntity: "processes",
@@ -2292,18 +2357,22 @@ export default function StepParametersFields({
                           className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
                         >
                           <option value="">Select process...</option>
-                          {effectiveProcesses.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          {effectiveClientProcesses.map((p: any) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
                         </select>
                       )}
 
-                      {stepDetailProcess && (
+                      {selectedClientProc && (
                         <>
                           {renderField("Choose Stage",
                             <select
-                              value={stepDetailStage}
-                              onChange={e => {
+                              value={currentClientStageVal}
+                              onChange={(e) => {
                                 const val = e.target.value;
-                                const targetStage = (effectiveProcesses.find(p => p.id === stepDetailProcess)?.stages || []).find(s => s.id === val || s.name === val);
+                                const targetStage = clientStages.find((s: any) => s.id === val || s.name === val);
                                 onChange({
                                   stepDetailStage: val,
                                   stageId: val,
@@ -2312,10 +2381,15 @@ export default function StepParametersFields({
                               }}
                               className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
                             >
-                              <option value="">Select stage...</option>
-                              {(effectiveProcesses.find(p => p.id === stepDetailProcess)?.stages || []).map(s => (
-                                <option key={s.id} value={s.id || s.name}>{s.name}</option>
-                              ))}
+                              {clientStages.length === 0 ? (
+                                <option value="">No stages defined for this process</option>
+                              ) : (
+                                clientStages.map((s: any) => (
+                                  <option key={s.id} value={s.id || s.name}>
+                                    {s.name}
+                                  </option>
+                                ))
+                              )}
                             </select>
                           )}
 
@@ -2333,7 +2407,7 @@ export default function StepParametersFields({
                               <input
                                 type="checkbox"
                                 checked={Boolean(params.stepEndCurrentProcess)}
-                                onChange={e => onChange({ stepEndCurrentProcess: e.target.checked })}
+                                onChange={(e) => onChange({ stepEndCurrentProcess: e.target.checked })}
                                 className="sr-only peer"
                               />
                               <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
@@ -2344,59 +2418,131 @@ export default function StepParametersFields({
                     </>
                   )}
 
-                  {stageEntity === "appointment" && (() => {
-                    const apptProc = effectiveProcesses.find((p: any) => p.entityType === "appointment") || DEFAULT_ENTITY_PROCESSES.appointment;
-                    const stagesList = apptProc?.stages || [];
-                    const currentVal = stepDetailStage || params.stageId || stagesList[0]?.id || "";
-                    return renderField("Choose Stage",
-                      <select
-                        value={currentVal}
-                        onChange={e => {
-                          const val = e.target.value;
-                          const targetStage = stagesList.find((s: any) => s.id === val || s.name === val);
-                          onChange({
-                            stageEntity: "appointment",
-                            entityType: "appointment",
-                            stepDetailStage: val,
-                            stageId: val,
-                            stageName: targetStage?.name || val,
-                          });
-                        }}
-                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
-                      >
-                        {stagesList.map((s: any) => (
-                          <option key={s.id} value={s.id}>{s.name} {s.description ? `(${s.description})` : ""}</option>
-                        ))}
-                      </select>
-                    );
-                  })()}
+                  {stageEntity === "appointment" && (
+                    <>
+                      {renderField("Choose Process",
+                        <select
+                          value={selectedApptProc?.id || ""}
+                          onChange={(e) => {
+                            const selectedId = e.target.value;
+                            const targetProc = effectiveApptProcesses.find((p: any) => p.id === selectedId) || effectiveApptProcesses[0];
+                            const defaultStage = targetProc?.stages?.[0];
+                            onChange({
+                              stageEntity: "appointment",
+                              entityType: "appointment",
+                              stepDetailProcess: targetProc?.id || "",
+                              processId: targetProc?.id || "",
+                              processName: targetProc?.name || "",
+                              stepDetailStage: defaultStage?.id || defaultStage?.name || "",
+                              stageId: defaultStage?.id || defaultStage?.name || "",
+                              stageName: defaultStage?.name || "",
+                            });
+                          }}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                        >
+                          {effectiveApptProcesses.map((p: any) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
 
-                  {stageEntity === "invoice" && (() => {
-                    const invProc = effectiveProcesses.find((p: any) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
-                    const stagesList = invProc?.stages || [];
-                    const currentVal = stepDetailStage || params.stageId || stagesList[0]?.id || "";
-                    return renderField("Choose Stage",
-                      <select
-                        value={currentVal}
-                        onChange={e => {
-                          const val = e.target.value;
-                          const targetStage = stagesList.find((s: any) => s.id === val || s.name === val);
-                          onChange({
-                            stageEntity: "invoice",
-                            entityType: "invoice",
-                            stepDetailStage: val,
-                            stageId: val,
-                            stageName: targetStage?.name || val,
-                          });
-                        }}
-                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
-                      >
-                        {stagesList.map((s: any) => (
-                          <option key={s.id} value={s.id}>{s.name} {s.description ? `(${s.description})` : ""}</option>
-                        ))}
-                      </select>
-                    );
-                  })()}
+                      {renderField("Choose Stage",
+                        <select
+                          value={currentApptStageVal}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const targetStage = apptStages.find((s: any) => s.id === val || s.name === val);
+                            onChange({
+                              stageEntity: "appointment",
+                              entityType: "appointment",
+                              stepDetailProcess: selectedApptProc?.id || "",
+                              processId: selectedApptProc?.id || "",
+                              processName: selectedApptProc?.name || "",
+                              stepDetailStage: val,
+                              stageId: val,
+                              stageName: targetStage?.name || val,
+                            });
+                          }}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                        >
+                          {apptStages.length === 0 ? (
+                            <option value="">No stages defined for this process</option>
+                          ) : (
+                            apptStages.map((s: any) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name} {s.description ? `(${s.description})` : ""}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      )}
+                    </>
+                  )}
+
+                  {stageEntity === "invoice" && (
+                    <>
+                      {renderField("Choose Process",
+                        <select
+                          value={selectedInvProc?.id || ""}
+                          onChange={(e) => {
+                            const selectedId = e.target.value;
+                            const targetProc = effectiveInvProcesses.find((p: any) => p.id === selectedId) || effectiveInvProcesses[0];
+                            const defaultStage = targetProc?.stages?.[0];
+                            onChange({
+                              stageEntity: "invoice",
+                              entityType: "invoice",
+                              stepDetailProcess: targetProc?.id || "",
+                              processId: targetProc?.id || "",
+                              processName: targetProc?.name || "",
+                              stepDetailStage: defaultStage?.id || defaultStage?.name || "",
+                              stageId: defaultStage?.id || defaultStage?.name || "",
+                              stageName: defaultStage?.name || "",
+                            });
+                          }}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                        >
+                          {effectiveInvProcesses.map((p: any) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      {renderField("Choose Stage",
+                        <select
+                          value={currentInvStageVal}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const targetStage = invStages.find((s: any) => s.id === val || s.name === val);
+                            onChange({
+                              stageEntity: "invoice",
+                              entityType: "invoice",
+                              stepDetailProcess: selectedInvProc?.id || "",
+                              processId: selectedInvProc?.id || "",
+                              processName: selectedInvProc?.name || "",
+                              stepDetailStage: val,
+                              stageId: val,
+                              stageName: targetStage?.name || val,
+                            });
+                          }}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                        >
+                          {invStages.length === 0 ? (
+                            <option value="">No stages defined for this process</option>
+                          ) : (
+                            invStages.map((s: any) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name} {s.description ? `(${s.description})` : ""}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      )}
+                    </>
+                  )}
                 </div>
               );
             })()}

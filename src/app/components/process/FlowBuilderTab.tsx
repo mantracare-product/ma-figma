@@ -2452,18 +2452,20 @@ export default function FlowBuilderTab({
                           {(node.type === "update-stage" || node.type === "move-process" || node.type === "move-stage" || node.type === "move-new-process") && (() => {
                             const entity = node.config?.stageEntity || node.config?.entityType || "processes";
                             if (entity === "appointment") {
+                              const procDisplay = node.config?.processName || (effectiveProcesses.find(p => p.id === (node.config?.stepDetailProcess || node.config?.processId))?.name);
                               const stageName = node.config?.stageName || node.config?.stepDetailStage || "Select stage";
                               return (
                                 <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                                  Appointment → {stageName}
+                                  {procDisplay ? `${procDisplay} → ${stageName}` : `Appointment → ${stageName}`}
                                 </p>
                               );
                             }
                             if (entity === "invoice") {
+                              const procDisplay = node.config?.processName || (effectiveProcesses.find(p => p.id === (node.config?.stepDetailProcess || node.config?.processId))?.name);
                               const stageName = node.config?.stageName || node.config?.stepDetailStage || "Select stage";
                               return (
                                 <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                                  Invoice → {stageName}
+                                  {procDisplay ? `${procDisplay} → ${stageName}` : `Invoice → ${stageName}`}
                                 </p>
                               );
                             }

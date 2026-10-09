@@ -406,6 +406,7 @@ export async function executeRulesForEvent(
                 appointmentService.moveToStage(apptId, targetStageId, {
                   type: "rule",
                   ruleName: rule.name,
+                  processId: act.params?.processId || act.params?.stepDetailProcess,
                 });
                 console.log(`[RuleEngine] Moved appointment ${apptId} to stage ${targetStageId} via rule "${rule.name}"`);
               } catch (e) {

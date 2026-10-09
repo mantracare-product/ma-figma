@@ -157,9 +157,22 @@ class AppointmentService {
     return proc.stages.find((s) => s.systemCategory === category) || proc.stages[0];
   }
 
-  public findStageById(stageId: string): Stage | undefined {
-    const proc = this.getAppointmentProcess();
+  public findStageById(stageId: string, processId?: string): Stage | undefined {
     const query = String(stageId).trim().toLowerCase();
+    const processes = getStoredProcesses();
+    if (processId) {
+      const proc = processes.find((p) => p.id === processId);
+      if (proc) {
+        const found = proc.stages.find((s) => s.id.toLowerCase() === query || s.name.toLowerCase() === query);
+        if (found) return found;
+      }
+    }
+    const apptProcs = processes.filter((p) => p.entityType === "appointment");
+    for (const p of apptProcs) {
+      const found = p.stages.find((s) => s.id.toLowerCase() === query || s.name.toLowerCase() === query);
+      if (found) return found;
+    }
+    const proc = this.getAppointmentProcess();
     return proc.stages.find((s) => s.id.toLowerCase() === query || s.name.toLowerCase() === query);
   }
 
@@ -433,12 +446,12 @@ class AppointmentService {
   /**
    * Move appointment to a specific stage ID directly
    */
-  public moveToStage(id: number | string, stageId: string, cause?: { type: any; ruleName?: string }): Appointment {
+  public moveToStage(id: number | string, stageId: string, cause?: { type: any; ruleName?: string; processId?: string }): Appointment {
     const all = this.getAppointments();
     const existing = all.find((a) => String(a.id) === String(id));
     if (!existing) throw new Error(`[AppointmentService] Appointment ${id} not found.`);
 
-    const targetStage = this.findStageById(stageId);
+    const targetStage = this.findStageById(stageId, cause?.processId);
     if (!targetStage) throw new Error(`[AppointmentService] Stage ${stageId} not found.`);
 
     const previousStageId = existing.currentStageId;

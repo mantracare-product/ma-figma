@@ -217,11 +217,26 @@ export function isProcessMatchingScopingRules(
   if (activeRules.length === 0) return true;
 
   return activeRules.some((rule) => {
-    return isProcessMatchingScope(process, {
-      category: rule.industryCategory,
-      industry: rule.industries?.[0],
-      location: rule.locations?.[0],
-    });
+    const inds = (rule.industries || []).filter((i) => i && i !== "All" && i !== "*");
+    const locs = (rule.locations || []).filter((l) => l && l !== "All" && l !== "*");
+
+    if (inds.length === 0 && locs.length === 0) {
+      return isProcessMatchingScope(process, {
+        category: rule.industryCategory,
+      });
+    }
+
+    if (inds.length > 0) {
+      return inds.some((ind) =>
+        locs.length > 0
+          ? locs.some((loc) => isProcessMatchingScope(process, { category: rule.industryCategory, industry: ind, location: loc }))
+          : isProcessMatchingScope(process, { category: rule.industryCategory, industry: ind })
+      );
+    }
+
+    return locs.some((loc) =>
+      isProcessMatchingScope(process, { category: rule.industryCategory, location: loc })
+    );
   });
 }
 
