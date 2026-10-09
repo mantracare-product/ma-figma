@@ -211,6 +211,7 @@ export default function Appointments() {
 
     const updated = {
       ...apt,
+      processId: appointmentProcess.id,
       currentStageId: targetStage.id,
       statusLabel: targetStage.name,
       status: newStatus,
@@ -583,13 +584,13 @@ export default function Appointments() {
       appointmentService.rescheduleAppointment(selectedAppointment.id, selectedDate, timeStr, bookingNote);
       toast.success("Appointment rescheduled successfully!");
     } else {
-      const targetProc = appointmentProcesses.find(
-        (p) => p.id === bookingProcessId || p.name === bookingProcessId
-      ) || appointmentProcess;
+      const targetProc = bookingProcessId
+        ? appointmentProcesses.find((p) => p.id === bookingProcessId || p.name === bookingProcessId)
+        : undefined;
 
       const targetStage = targetProc?.stages?.find(
         (s) => s.id === bookingStageId || s.name === bookingStageId
-      ) || targetProc?.stages?.[0];
+      );
 
       const res = appointmentService.createAppointment({
         clientName: selectedClient.name,
@@ -607,7 +608,7 @@ export default function Appointments() {
         clientId: selectedClient.id ? String(selectedClient.id) : undefined,
         location: bookingLocation,
         sessionType,
-        processId: targetProc?.id || appointmentProcess.id,
+        processId: targetProc?.id,
         stageId: targetStage?.id || undefined,
         generateInvoice: bookingGenerateInvoice,
         lineItems: bookingLineItems && bookingLineItems.length > 0 ? bookingLineItems : undefined,
@@ -832,13 +833,31 @@ export default function Appointments() {
       (apt.statusLabel && apt.statusLabel.toLowerCase() === stageFilter.toLowerCase()) ||
       apt.status === stageFilter;
 
+    const effectiveProcessId = (() => {
+      // 1. If appointment's currentStageId belongs to any known appointment process, that process is authoritative
+      if (apt.currentStageId || apt.stageId) {
+        const sid = (apt.currentStageId || apt.stageId || "").trim().toLowerCase();
+        for (const p of appointmentProcesses) {
+          if (p.stages?.some((s) => s.id.toLowerCase() === sid)) {
+            return p.id;
+          }
+        }
+      }
+      // 2. Otherwise match by apt.processId
+      if (apt.processId) {
+        const found = appointmentProcesses.find(
+          (p) => p.id === apt.processId || p.name.toLowerCase() === apt.processId?.toLowerCase()
+        );
+        return found ? found.id : apt.processId;
+      }
+      return "";
+    })();
+
     const matchesProcess =
       selectedProcessFilter === "all" ||
-      apt.processId === selectedProcessFilter ||
-      apt.processId === appointmentProcess.id ||
-      apt.processId === appointmentProcess.name ||
-      (!apt.processId && appointmentProcess.stages.some((s) => s.id === apt.currentStageId || s.id === apt.stageId)) ||
-      (appointmentProcess.stages && appointmentProcess.stages.some((s) => s.id === apt.currentStageId || s.name === apt.statusLabel));
+      effectiveProcessId === appointmentProcess.id ||
+      effectiveProcessId === selectedProcessFilter ||
+      (!effectiveProcessId && (!selectedProcessFilter || selectedProcessFilter === appointmentProcesses[0]?.id));
 
     return matchesSearch && matchesEmployee && matchesTab && matchesStage && matchesProcess;
   });

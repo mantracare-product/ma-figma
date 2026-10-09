@@ -135,6 +135,138 @@ if (typeof window !== "undefined") {
   } catch {}
 }
 
+function evaluateAppointmentCondition(condition: any, data: Record<string, any> = {}): boolean {
+  if (!condition) return true;
+  const fieldKey = condition.field || condition.fieldToFilter || condition.fieldKey || "";
+  if (!fieldKey) return true;
+
+  let actualValue = data[fieldKey];
+  if (actualValue === undefined && fieldKey.includes(".")) {
+    const parts = fieldKey.split(".");
+    actualValue = data[parts[parts.length - 1]];
+  }
+  if (actualValue === undefined) {
+    const lowerKey = fieldKey.toLowerCase();
+    const shortKey = fieldKey.includes(".") ? fieldKey.split(".").pop()?.toLowerCase() : lowerKey;
+    const foundKey = Object.keys(data).find(
+      (k) => k.toLowerCase() === lowerKey || (shortKey && k.toLowerCase() === shortKey)
+    );
+    if (foundKey) actualValue = data[foundKey];
+  }
+
+  const op = (condition.op || condition.operator || "equals").toLowerCase();
+  const targetValue = condition.value ?? condition.filterValue ?? condition.targetValue ?? "";
+
+  switch (op) {
+    case "equals":
+    case "equal_to":
+    case "is":
+      return String(actualValue ?? "").trim().toLowerCase() === String(targetValue ?? "").trim().toLowerCase();
+    case "not_equals":
+    case "not_equal_to":
+    case "is_not":
+      return String(actualValue ?? "").trim().toLowerCase() !== String(targetValue ?? "").trim().toLowerCase();
+    case "contains":
+    case "includes":
+      return String(actualValue ?? "").toLowerCase().includes(String(targetValue ?? "").toLowerCase());
+    case "not_contains":
+      return !String(actualValue ?? "").toLowerCase().includes(String(targetValue ?? "").toLowerCase());
+    case "starts_with":
+      return String(actualValue ?? "").toLowerCase().startsWith(String(targetValue ?? "").toLowerCase());
+    case "ends_with":
+      return String(actualValue ?? "").toLowerCase().endsWith(String(targetValue ?? "").toLowerCase());
+    case "greater_than":
+    case "gt":
+      return Number(actualValue) > Number(targetValue);
+    case "less_than":
+    case "lt":
+      return Number(actualValue) < Number(targetValue);
+    default:
+      return String(actualValue ?? "").trim().toLowerCase() === String(targetValue ?? "").trim().toLowerCase();
+  }
+}
+
+export function findMatchingAppointmentBookingRule(appointmentData: Record<string, any>): {
+  rule: any;
+  targetProcessId?: string;
+  targetStageId?: string;
+} | null {
+  try {
+    const rules = getStoredRules();
+    const appointmentProcesses = getStoredProcesses().filter((p) => p.entityType === "appointment");
+
+    for (const rule of rules) {
+      if (!rule.enabled) continue;
+      const isBookingTrigger =
+        rule.trigger?.event === "appointment.booked" ||
+        (rule.entityType === "appointment" && (!rule.trigger?.event || rule.trigger.event.startsWith("appointment.")));
+      if (!isBookingTrigger) continue;
+
+      let conditionsPass = true;
+      if (rule.conditions && rule.conditions.length > 0) {
+        for (const cond of rule.conditions) {
+          if (!evaluateAppointmentCondition(cond, appointmentData)) {
+            conditionsPass = false;
+            break;
+          }
+        }
+      }
+      const triggerConditions = rule.trigger?.params?.triggerConditions || [];
+      if (conditionsPass && Array.isArray(triggerConditions) && triggerConditions.length > 0) {
+        for (const cond of triggerConditions) {
+          if (!evaluateAppointmentCondition(cond, appointmentData)) {
+            conditionsPass = false;
+            break;
+          }
+        }
+      }
+      if (!conditionsPass) continue;
+
+      // Extract target process and stage
+      let targetProcessId = rule.action?.processId;
+      let targetStageId = rule.action?.stageId;
+
+      if (!targetProcessId || !targetStageId) {
+        const allActions = rule.actions || [];
+        for (const act of allActions) {
+          const stepKey = (act.stepKey || (act as any).type || "").toLowerCase();
+          if (
+            [
+              "update_to_stage",
+              "update-stage",
+              "movetostage",
+              "move_to_stage",
+              "move-stage",
+              "stage_movement",
+              "stagemovement",
+              "processmovement",
+            ].includes(stepKey)
+          ) {
+            targetProcessId = act.params?.processId || act.params?.stepDetailProcess || targetProcessId;
+            targetStageId = act.params?.stageId || act.params?.stepDetailStage || targetStageId;
+            break;
+          }
+        }
+      }
+
+      // If targetStageId is present without targetProcessId, find process from stage
+      if (!targetProcessId && targetStageId) {
+        const foundProc = appointmentProcesses.find((p) =>
+          p.stages?.some((s) => s.id === targetStageId || s.name.toLowerCase() === targetStageId?.toLowerCase())
+        );
+        if (foundProc) targetProcessId = foundProc.id;
+      }
+
+      if (targetProcessId || targetStageId) {
+        return { rule, targetProcessId, targetStageId };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 class AppointmentService {
   private getAppointmentProcess(): Process {
     const processes = getStoredProcesses();
@@ -182,12 +314,26 @@ class AppointmentService {
       }
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Filter out legacy hardcoded sample appointments
-        const filtered = parsed.filter((a) => !isSampleAppointment(a));
-        if (filtered.length !== parsed.length) {
-          this.saveAppointments(filtered);
+        let dirty = false;
+        const allProcs = getStoredProcesses().filter((p) => p.entityType === "appointment");
+        // Filter out legacy hardcoded sample appointments and reconcile processId if currentStageId belongs to another process
+        const cleaned = parsed
+          .filter((a) => !isSampleAppointment(a))
+          .map((a) => {
+            if (a.currentStageId) {
+              const sid = String(a.currentStageId).trim().toLowerCase();
+              const owningProc = allProcs.find((p) => p.stages?.some((s) => s.id.toLowerCase() === sid));
+              if (owningProc && a.processId !== owningProc.id) {
+                dirty = true;
+                return { ...a, processId: owningProc.id };
+              }
+            }
+            return a;
+          });
+        if (dirty || cleaned.length !== parsed.length) {
+          this.saveAppointments(cleaned);
         }
-        return filtered;
+        return cleaned;
       }
       return [];
     } catch {
@@ -249,8 +395,36 @@ class AppointmentService {
 
     const all = this.getAppointments();
     const nextId = all.length > 0 ? Math.max(...all.map((a) => Number(a.id) || 0)) + 1 : 101;
-    const proc = (payload.processId ? getStoredProcesses().find(p => p.id === payload.processId || p.name === payload.processId) : null) || this.getAppointmentProcess();
-    const initialStage = payload.stageId ? this.findStageById(payload.stageId, proc.id) : (proc.stages && proc.stages[0]);
+
+    // Check if an automation rule with condition triggers matches this booking
+    const matchingRule = findMatchingAppointmentBookingRule({
+      ...payload,
+      source: payload.source || "screen",
+    });
+
+    let targetProcess: Process | null | undefined = null;
+    let targetStage: Stage | undefined = undefined;
+
+    // If an automation rule matched, prioritize its targeted process and stage
+    if (matchingRule) {
+      if (matchingRule.targetProcessId) {
+        targetProcess = getStoredProcesses().find(
+          (p) => p.id === matchingRule.targetProcessId || p.name === matchingRule.targetProcessId
+        );
+      }
+      if (matchingRule.targetStageId) {
+        targetStage = this.findStageById(matchingRule.targetStageId, targetProcess?.id);
+      }
+    }
+
+    if (!targetProcess && payload.processId) {
+      targetProcess = getStoredProcesses().find(
+        (p) => p.id === payload.processId || p.name === payload.processId
+      );
+    }
+
+    const proc = targetProcess || this.getAppointmentProcess();
+    const initialStage = targetStage || (payload.stageId ? this.findStageById(payload.stageId, proc.id) : (proc.stages && proc.stages[0]));
     const initialStageId = initialStage?.id || "";
     const initialStageName = initialStage?.name || "Booked";
 
@@ -454,10 +628,18 @@ class AppointmentService {
     if (!targetStage) throw new Error(`[AppointmentService] Stage ${stageId} not found.`);
 
     const previousStageId = existing.currentStageId;
-    const proc = this.getAppointmentProcess();
+    const allProcs = getStoredProcesses().filter((p) => p.entityType === "appointment");
+    let targetProcess = cause?.processId
+      ? allProcs.find((p) => p.id === cause.processId || p.name === cause.processId)
+      : undefined;
+    if (!targetProcess) {
+      targetProcess = allProcs.find((p) => p.stages?.some((s) => s.id === targetStage.id || s.name === targetStage.name));
+    }
+    const finalProcessId = targetProcess?.id || existing.processId || this.getAppointmentProcess().id;
 
     const updatedAppointment: Appointment = {
       ...existing,
+      processId: finalProcessId,
       currentStageId: targetStage.id,
       statusLabel: targetStage.name,
       status: targetStage.systemCategory === "completed"
@@ -477,9 +659,19 @@ class AppointmentService {
       fromStageId: previousStageId,
       toStageId: targetStage.id,
       toStageName: targetStage.name,
-      processId: proc.id,
-      processName: proc.name,
+      processId: finalProcessId,
+      processName: targetProcess?.name || "Appointment Process",
       cause: cause || { type: "manual", ruleName: `Stage changed to ${targetStage.name}` },
+    });
+
+    eventBus.emit("stage.entered", "appointment", String(id), {
+      ...updatedAppointment,
+      fromStageId: previousStageId,
+      toStageId: targetStage.id,
+      stageId: targetStage.id,
+      stageName: targetStage.name,
+      processId: finalProcessId,
+      causeRuleId: cause?.type === "rule" ? cause.ruleName : undefined,
     });
 
     return updatedAppointment;

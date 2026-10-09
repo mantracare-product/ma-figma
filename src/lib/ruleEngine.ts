@@ -318,6 +318,7 @@ export async function executeRulesForEvent(
           appointmentService.moveToStage(event.recordId, rule.action.stageId, {
             type: "rule",
             ruleName: rule.name,
+            processId: rule.action.processId,
           });
         } catch (err) {
           console.warn("[RuleEngine] Failed to sync appointment stage:", err);
