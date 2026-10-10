@@ -4,7 +4,8 @@ import { toast } from "sonner";
 import {
   LogIn, ArrowRightCircle, CheckCircle2, Phone, MessageCircle, MessageSquare,
   Mail, Zap, Calendar, Pencil, Globe, PhoneIncoming, PhoneOutgoing, PhoneOff,
-  MoreVertical, X, Clock, CalendarClock, ChevronRight, Send, FileText, Paperclip, Settings
+  MoreVertical, X, Clock, CalendarClock, ChevronRight, Send, FileText, Paperclip, Settings,
+  Receipt, FileCheck, CreditCard
 } from "lucide-react";
 import {
   appendActivity,
@@ -86,6 +87,7 @@ const ACTIVITY_ICON_BG: Record<string, string> = {
   webhook_trigger: "#1F2937", appointment_booked: "#1F2937", field_update: "#1F2937",
   process_completed: "#1F2937", website_message: "#1F2937", website: "#1F2937",
   form_submitted: "#1F2937", note: "#1F2937",
+  invoice_created: "#1F2937", document_generated: "#1F2937", payment_recorded: "#1F2937",
 };
 
 const HEADING_BY_TYPE: Record<string, string> = {
@@ -101,6 +103,9 @@ const HEADING_BY_TYPE: Record<string, string> = {
   process_completed: "Process Completed",
   website_message: "Website Message", website: "Website Message",
   form_submitted: "Form Submitted", note: "Note",
+  invoice_created: "Invoice Created",
+  document_generated: "Document Generated",
+  payment_recorded: "Payment Recorded",
 };
 
 // ─── Status pill ──────────────────────────────────────────────────────────────
@@ -164,6 +169,9 @@ function ActivityIcon({ type, direction, status }: { type: string; direction?: s
     case "appointment_completed":
     case "appointment_cancelled":
       return <Calendar className={cls} />;
+    case "invoice_created":   return <Receipt className={cls} />;
+    case "document_generated":return <FileCheck className={cls} />;
+    case "payment_recorded":  return <CreditCard className={cls} />;
     case "field_update":      return <Pencil className={cls} />;
     case "form_submitted":    return <FileText className={cls} />;
     case "note":              return <FileText className={cls} />;

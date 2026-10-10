@@ -29,9 +29,11 @@ import {
   Shield,
   Layers,
   Settings,
+  Search,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { ClientInvoice, InvoiceStatus, InvoicePaymentRecord } from "../../types/invoiceTypes";
+import { ClientInvoice, InvoiceStatus, InvoicePaymentRecord, InvoiceLineItem } from "../../types/invoiceTypes";
 import { useInvoices } from "../../context/InvoiceContext";
 import { ChevronStageRibbon } from "../common/ChevronStageRibbon";
 import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
@@ -59,6 +61,7 @@ import { invoiceService } from "../../../lib/invoiceService";
 import { appendActivity, getActivity, subscribeToActivity } from "../../../lib/activityEngine";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import { AdminSectionDrawer } from "../../pages/admin/components/AdminSectionDrawer";
+import { getStoredServices, onServicesChanged, Service } from "../../../lib/servicesStore";
 
 export interface InvoiceDetailDrawerProps {
   isOpen: boolean;
@@ -89,20 +92,6 @@ const DEFAULT_INVOICE_SECTIONS: OverviewSection[] = [
     ],
   },
   {
-    id: "sec-inv-client",
-    title: "Client Information",
-    description: "Client contact coordinates and billing address",
-    iconName: "user",
-    source: "system",
-    module: "invoice",
-    fieldKeys: [
-      "client_name",
-      "client_email",
-      "client_phone",
-      "billing_address",
-    ],
-  },
-  {
     id: "sec-inv-items",
     title: "Product / Line Items",
     description: "Itemized services, consultation rates, and totals",
@@ -128,6 +117,372 @@ const DEFAULT_INVOICE_SECTIONS: OverviewSection[] = [
     ],
   },
 ];
+
+// ─── Custom Tabular Line Items Section Component ─────────────────────────────
+
+interface InvoiceLineItemsSectionProps {
+  invoice: ClientInvoice;
+  onUpdateInvoice: (patch: Partial<ClientInvoice>) => void;
+}
+
+function InvoiceLineItemsSection({ invoice, onUpdateInvoice }: InvoiceLineItemsSectionProps) {
+  const [catalogServices, setCatalogServices] = useState<Service[]>(() => getStoredServices());
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [searchFilter, setSearchFilter] = useState("");
+
+  useEffect(() => {
+    return onServicesChanged(() => {
+      setCatalogServices(getStoredServices());
+    });
+  }, []);
+
+  const lineItems: InvoiceLineItem[] = invoice.lineItems || [];
+
+  const filteredCatalog = useMemo(() => {
+    if (!searchFilter.trim()) return catalogServices;
+    const q = searchFilter.toLowerCase();
+    return catalogServices.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.category && s.category.toLowerCase().includes(q))
+    );
+  }, [catalogServices, searchFilter]);
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    filteredCatalog.forEach((s) => set.add(s.category || "Product / Services"));
+    return Array.from(set);
+  }, [filteredCatalog]);
+
+  const isItemSelected = (service: Service) => {
+    return lineItems.some(
+      (item) =>
+        (item.serviceId !== undefined && String(item.serviceId) === String(service.id)) ||
+        item.description.trim().toLowerCase() === service.name.trim().toLowerCase()
+    );
+  };
+
+  const recalcAndSync = (items: InvoiceLineItem[]) => {
+    const subtotal = items.reduce(
+      (acc, it) => acc + (it.unitPrice * (it.quantity || 1)),
+      0
+    );
+    const totalDiscount = items.reduce(
+      (acc, it) => acc + (it.discountAmount || 0),
+      0
+    );
+    const taxable = Math.max(0, subtotal - totalDiscount);
+    const taxSum = items.reduce((acc, it) => {
+      const itemSub = Math.max(0, (it.unitPrice * (it.quantity || 1)) - (it.discountAmount || 0));
+      const rate = it.taxPercent !== undefined ? it.taxPercent : 5;
+      return acc + (itemSub * rate) / 100;
+    }, 0);
+    const tax = Math.round(taxSum * 100) / 100;
+    const total = Math.round((taxable + tax) * 100) / 100;
+
+    onUpdateInvoice({
+      lineItems: items,
+      subtotal,
+      discountAmount: totalDiscount,
+      taxAmount: tax,
+      total,
+    });
+  };
+
+  const handleToggleService = (service: Service) => {
+    const existingIndex = lineItems.findIndex(
+      (item) =>
+        (item.serviceId !== undefined && String(item.serviceId) === String(service.id)) ||
+        item.description.trim().toLowerCase() === service.name.trim().toLowerCase()
+    );
+
+    let updated: InvoiceLineItem[];
+    if (existingIndex >= 0) {
+      updated = lineItems.filter((_, idx) => idx !== existingIndex);
+    } else {
+      const newItem: InvoiceLineItem = {
+        id: `li-${Date.now()}-${service.id}`,
+        source: "service",
+        serviceId: service.id,
+        description: service.name,
+        quantity: 1,
+        unitPrice: service.price,
+        discountAmount: 0,
+        taxPercent: service.tax ?? 5,
+      };
+      updated = [...lineItems, newItem];
+    }
+    recalcAndSync(updated);
+  };
+
+  const handleUpdateQty = (itemId: string, qty: number) => {
+    const updated = lineItems.map((item) =>
+      item.id === itemId ? { ...item, quantity: Math.max(1, qty) } : item
+    );
+    recalcAndSync(updated);
+  };
+
+  const handleUpdateDiscount = (itemId: string, disc: number) => {
+    const updated = lineItems.map((item) =>
+      item.id === itemId ? { ...item, discountAmount: Math.max(0, disc) } : item
+    );
+    recalcAndSync(updated);
+  };
+
+  const handleRemoveItem = (itemId: string) => {
+    const updated = lineItems.filter((item) => item.id !== itemId);
+    recalcAndSync(updated);
+  };
+
+  const subtotal = lineItems.reduce(
+    (acc, it) => acc + (it.unitPrice * (it.quantity || 1)),
+    0
+  );
+  const totalDiscount = lineItems.reduce(
+    (acc, it) => acc + (it.discountAmount || 0),
+    0
+  );
+  const taxAmount = invoice.taxAmount ?? Math.round(Math.max(0, subtotal - totalDiscount) * 0.05 * 100) / 100;
+  const grandTotal = Math.round((Math.max(0, subtotal - totalDiscount) + taxAmount) * 100) / 100;
+
+  return (
+    <div className="space-y-4 pt-1">
+      {/* Multiselect Toolbar */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Line Items ({lineItems.length})
+          </span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+            Product/services
+          </span>
+        </div>
+
+        {/* Advance List > Multiselect Dropdown */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Select Products / Services (Multiselect)</span>
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          {isDropdownOpen && (
+            <div
+              className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-xl border border-slate-200 shadow-xl p-3 z-50 space-y-2.5"
+              style={{ boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.15)" }}
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="text-xs font-bold text-slate-900">
+                  Product / Services Catalogue
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {catalogServices.length} items available
+                </span>
+              </div>
+
+              {/* Search filter */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search products & services..."
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-all text-slate-800"
+                  autoFocus
+                />
+              </div>
+
+              {/* Multiselect options grouped by category */}
+              <div className="max-h-60 overflow-y-auto space-y-3 pr-1 divide-y divide-slate-100">
+                {categories.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">No matching products found</p>
+                ) : (
+                  categories.map((cat) => {
+                    const groupItems = filteredCatalog.filter(
+                      (s) => (s.category || "Product / Services") === cat
+                    );
+                    if (groupItems.length === 0) return null;
+
+                    return (
+                      <div key={cat} className="pt-2 first:pt-0 space-y-1">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">
+                          {cat}
+                        </div>
+                        {groupItems.map((svc) => {
+                          const selected = isItemSelected(svc);
+                          return (
+                            <button
+                              key={svc.id}
+                              type="button"
+                              onClick={() => handleToggleService(svc)}
+                              className={`w-full flex items-center justify-between p-2 rounded-lg text-left text-xs transition-colors cursor-pointer ${
+                                selected ? "bg-blue-50/80 text-blue-900" : "hover:bg-slate-50 text-slate-700"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div
+                                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                    selected
+                                      ? "bg-blue-600 border-blue-600 text-white"
+                                      : "border-slate-300 bg-white"
+                                  }`}
+                                >
+                                  {selected && <Check className="w-3 h-3 stroke-[3]" />}
+                                </div>
+                                <div className="truncate">
+                                  <p className="font-semibold text-xs truncate leading-tight">{svc.name}</p>
+                                  <span className="text-[10px] text-purple-700 font-medium">CRM bind</span>
+                                </div>
+                              </div>
+                              <span className="text-xs font-bold text-slate-900 ml-2 font-mono shrink-0">
+                                ${svc.price.toFixed(2)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="border-t border-slate-100 pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tabular View */}
+      {lineItems.length === 0 ? (
+        <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-200 rounded-xl space-y-2">
+          <p className="text-xs font-semibold text-slate-600">No product/service line items added</p>
+          <p className="text-[11px] text-slate-400">
+            Use the multiselect dropdown above to add products & services from the catalog.
+          </p>
+        </div>
+      ) : (
+        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
+                <th className="py-2.5 px-3">Product Name</th>
+                <th className="py-2.5 px-3 text-right">Price (CRM)</th>
+                <th className="py-2.5 px-3 text-center">Qty</th>
+                <th className="py-2.5 px-3 text-right">Discount ($)</th>
+                <th className="py-2.5 px-3 text-right">Total</th>
+                <th className="py-2.5 px-2 text-center w-8"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {lineItems.map((item) => {
+                const rowTotal = Math.max(
+                  0,
+                  (item.unitPrice * (item.quantity || 1)) - (item.discountAmount || 0)
+                );
+                return (
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                    {/* Product Name (CRM bind) */}
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-slate-900">{item.description}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 select-none">
+                          CRM bind
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Money (CRM bind) */}
+                    <td className="py-2.5 px-3 text-right">
+                      <div className="inline-flex items-center gap-1 font-mono text-slate-700">
+                        <span className="font-semibold">${item.unitPrice.toFixed(2)}</span>
+                        <span className="px-1 py-0.2 rounded text-[8px] font-medium bg-slate-100 text-slate-500 select-none">
+                          bind
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Qty */}
+                    <td className="py-2.5 px-3 text-center">
+                      <input
+                        type="number"
+                        min={1}
+                        value={item.quantity || 1}
+                        onChange={(e) => handleUpdateQty(item.id, parseInt(e.target.value) || 1)}
+                        className="w-14 px-2 py-1 text-center bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </td>
+
+                    {/* Discount (number) */}
+                    <td className="py-2.5 px-3 text-right">
+                      <input
+                        type="number"
+                        min={0}
+                        step="1"
+                        value={item.discountAmount ?? 0}
+                        onChange={(e) => handleUpdateDiscount(item.id, parseFloat(e.target.value) || 0)}
+                        className="w-20 px-2 py-1 text-right bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        placeholder="0.00"
+                      />
+                    </td>
+
+                    {/* Row Total */}
+                    <td className="py-2.5 px-3 text-right font-bold text-slate-900 font-mono">
+                      ${rowTotal.toFixed(2)}
+                    </td>
+
+                    {/* Remove Action */}
+                    <td className="py-2.5 px-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(item.id)}
+                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Remove item"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {/* Section Summary Totals */}
+          <div className="bg-slate-50/80 px-4 py-3 border-t border-slate-200 flex flex-col sm:flex-row items-end sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-4 text-slate-500">
+              <span>Subtotal: <strong className="text-slate-800">${subtotal.toFixed(2)}</strong></span>
+              {totalDiscount > 0 && (
+                <span className="text-emerald-600 font-medium">
+                  Discount: -${totalDiscount.toFixed(2)}
+                </span>
+              )}
+              <span>Tax (5%): <strong className="text-slate-800">${taxAmount.toFixed(2)}</strong></span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500 font-medium uppercase text-[10px] tracking-wider">Total Due:</span>
+              <span className="text-base font-bold text-blue-600 font-mono">
+                ${grandTotal.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function InvoiceDetailDrawer({
   isOpen,
@@ -215,15 +570,22 @@ export default function InvoiceDetailDrawer({
   const [invoiceSections, setInvoiceSections] = useState<OverviewSection[]>(() => {
     try {
       const raw = localStorage.getItem(storageSectionKey);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((s: OverviewSection) => s.id !== "sec-inv-client");
+          return filtered.length > 0 ? filtered : DEFAULT_INVOICE_SECTIONS;
+        }
+      }
     } catch {}
     return DEFAULT_INVOICE_SECTIONS;
   });
 
   const handleSectionsChange = (newSections: OverviewSection[]) => {
-    setInvoiceSections(newSections);
+    const filtered = newSections.filter((s) => s.id !== "sec-inv-client");
+    setInvoiceSections(filtered);
     try {
-      localStorage.setItem(storageSectionKey, JSON.stringify(newSections));
+      localStorage.setItem(storageSectionKey, JSON.stringify(filtered));
     } catch {}
   };
 
@@ -300,6 +662,25 @@ export default function InvoiceDetailDrawer({
         type: "manual",
         ruleName: `Stage changed to ${targetStage.name} from drawer`,
       });
+
+      const primaryId = liveInvoice.clientId || effectiveClientId;
+      appendActivity({
+        clientId: primaryId,
+        appointmentId: liveInvoice.appointmentId ? String(liveInvoice.appointmentId) : undefined,
+        processId: invoiceProcess.id,
+        processName: invoiceProcess.name,
+        type: "stage_update" as any,
+        refId: liveInvoice.id,
+        fromStage: currentInvoiceStage?.name || "Draft",
+        toStage: targetStage.name,
+        status: "completed",
+        createdBy: "user",
+        details: {
+          primary: `Invoice stage updated to "${targetStage.name}"`,
+          secondary: `Moved from ${currentInvoiceStage?.name || "Draft"}`,
+        },
+      });
+
       toast.success(`Invoice moved to "${targetStage.name}"`);
     } catch (e) {
       console.warn("[InvoiceDetailDrawer] Failed to move stage:", e);
@@ -323,51 +704,93 @@ export default function InvoiceDetailDrawer({
         appointmentId: liveInvoice.appointmentId ? String(liveInvoice.appointmentId) : undefined,
       });
 
-      // Auto-backfill if no activity logs exist for this invoice yet
-      if (list.length === 0) {
+      // Ensure exact lifecycle sequence for this invoice:
+      // Invoice Created (with Source) -> Document Generated -> Stage Updated -> Payment Recorded
+      const hasInvoiceCreated = list.some(
+        (e) => (e.type === "invoice_created" || e.type === "process_entry") &&
+               (e.details?.primary?.includes(liveInvoice.id) || (e as any).refId === liveInvoice.id)
+      );
+
+      if (!hasInvoiceCreated) {
         const primaryId = liveInvoice.clientId || effectiveClientId;
+        const sourceLabel = liveInvoice.createdBy === "rule"
+          ? "Automation / Rule"
+          : liveInvoice.appointmentId
+          ? `Appointment #${liveInvoice.appointmentId}`
+          : "Standalone";
+
+        const baseTime = liveInvoice.createdAt ? new Date(liveInvoice.createdAt).getTime() : Date.now() - 300000;
+
+        // 1. Invoice Created
         appendActivity({
           clientId: primaryId,
           appointmentId: liveInvoice.appointmentId ? String(liveInvoice.appointmentId) : undefined,
           processId: invoiceProcess.id,
           processName: invoiceProcess.name,
-          type: "process_entry" as any,
-          status: liveInvoice.status || "draft",
-          createdBy: "system",
+          type: "invoice_created" as any,
+          refId: liveInvoice.id,
+          status: "completed",
+          createdBy: liveInvoice.createdBy === "rule" ? "system" : "user",
+          sourceStepName: sourceLabel,
+          timestamp: new Date(baseTime).toISOString(),
           details: {
-            primary: `Invoice ${liveInvoice.id} generated for ${liveInvoice.clientName}`,
-            secondary: `Total: $${liveInvoice.total.toFixed(2)} · Due: ${liveInvoice.dueDate || "On Receipt"}`,
+            primary: `Invoice ${liveInvoice.id} created for ${liveInvoice.clientName}`,
+            secondary: `Source: ${sourceLabel} · Total: $${liveInvoice.total.toFixed(2)} · Due: ${liveInvoice.dueDate || "On Receipt"}`,
           },
         });
 
-        if (currentInvoiceStage?.name) {
-          appendActivity({
-            clientId: primaryId,
-            processId: invoiceProcess.id,
-            processName: invoiceProcess.name,
-            type: "stage_change",
-            fromStage: "Draft",
-            toStage: currentInvoiceStage.name,
-            createdBy: "system",
-            details: {
-              primary: `Invoice stage updated to "${currentInvoiceStage.name}"`,
-              secondary: `Status: ${liveInvoice.status}`,
-            },
-          });
-        }
+        // 2. Document Generated
+        appendActivity({
+          clientId: primaryId,
+          appointmentId: liveInvoice.appointmentId ? String(liveInvoice.appointmentId) : undefined,
+          processId: invoiceProcess.id,
+          processName: invoiceProcess.name,
+          type: "document_generated" as any,
+          refId: liveInvoice.id,
+          status: "completed",
+          createdBy: "system",
+          timestamp: new Date(baseTime + 60000).toISOString(),
+          details: {
+            primary: "Official invoice document generated",
+            secondary: "System template applied · Ready for client download & dispatch",
+          },
+        });
 
-        if (liveInvoice.status === "paid") {
+        // 3. Stage Updated
+        const activeStageName = currentInvoiceStage?.name || liveInvoice.statusLabel || "Draft";
+        appendActivity({
+          clientId: primaryId,
+          appointmentId: liveInvoice.appointmentId ? String(liveInvoice.appointmentId) : undefined,
+          processId: invoiceProcess.id,
+          processName: invoiceProcess.name,
+          type: "stage_update" as any,
+          refId: liveInvoice.id,
+          fromStage: "Draft",
+          toStage: activeStageName,
+          status: "completed",
+          createdBy: "system",
+          timestamp: new Date(baseTime + 120000).toISOString(),
+          details: {
+            primary: `Invoice stage updated to "${activeStageName}"`,
+            secondary: `Current status: ${liveInvoice.status}`,
+          },
+        });
+
+        // 4. Payment Recorded (if payment was settled)
+        if ((liveInvoice.amountPaid && liveInvoice.amountPaid > 0) || liveInvoice.status === "paid" || liveInvoice.status === "partial") {
           appendActivity({
             clientId: primaryId,
+            appointmentId: liveInvoice.appointmentId ? String(liveInvoice.appointmentId) : undefined,
             processId: invoiceProcess.id,
             processName: invoiceProcess.name,
-            type: "field_update",
-            fieldLabel: "Payment",
-            newValue: `$${liveInvoice.total.toFixed(2)} Paid in Full`,
+            type: "payment_recorded" as any,
+            refId: liveInvoice.id,
+            status: "completed",
             createdBy: "user",
+            timestamp: liveInvoice.paidAt || new Date(baseTime + 180000).toISOString(),
             details: {
-              primary: `Invoice ${liveInvoice.id} marked as Paid`,
-              secondary: `Amount paid: $${(liveInvoice.amountPaid || liveInvoice.total).toFixed(2)}`,
+              primary: `Payment of $${(liveInvoice.amountPaid || liveInvoice.total).toFixed(2)} recorded`,
+              secondary: `Method: ${liveInvoice.paymentMethod || "Bank Transfer"} · Remaining Balance: $${Math.max(0, liveInvoice.total - (liveInvoice.amountPaid || liveInvoice.total)).toFixed(2)}`,
             },
           });
         }
@@ -654,6 +1077,32 @@ export default function InvoiceDetailDrawer({
                       name: liveInvoice.clientName,
                       phone: liveInvoice.clientPhone,
                       email: liveInvoice.clientEmail,
+                    }}
+                    renderCustomSection={(section) => {
+                      if (section.id === "sec-inv-items") {
+                        return (
+                          <InvoiceLineItemsSection
+                            invoice={liveInvoice}
+                            onUpdateInvoice={(patch) => {
+                              invoiceService.updateInvoice(liveInvoice.id, patch);
+                              if (patch.lineItems) {
+                                const itemsSummary = patch.lineItems
+                                  .map((item) => `${item.description} (x${item.quantity}) - $${((item.quantity || 1) * (item.unitPrice || 0)).toFixed(2)}`)
+                                  .join("\n");
+                                setFieldValues((prev) => ({
+                                  ...prev,
+                                  line_items_summary: itemsSummary,
+                                  subtotal: `$${(patch.subtotal ?? liveInvoice.subtotal).toFixed(2)}`,
+                                  tax_amount: `$${(patch.taxAmount ?? liveInvoice.taxAmount ?? 0).toFixed(2)}`,
+                                  discount_applied: `$${(patch.discountAmount ?? 0).toFixed(2)}`,
+                                  total_amount: `$${(patch.total ?? liveInvoice.total).toFixed(2)}`,
+                                }));
+                              }
+                            }}
+                          />
+                        );
+                      }
+                      return null;
                     }}
                   />
                 </div>

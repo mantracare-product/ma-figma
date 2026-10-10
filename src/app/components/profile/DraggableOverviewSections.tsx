@@ -94,6 +94,7 @@ export interface DraggableOverviewSectionsProps {
   onNavigateToClient?: (clientId: string) => void;
   customFieldsModule?: FieldModule;
   highlightRequiredKeys?: string[];
+  renderCustomSection?: (section: OverviewSection) => React.ReactNode;
 }
 
 
@@ -265,6 +266,7 @@ export default function DraggableOverviewSections({
   onNavigateToClient,
   customFieldsModule = "client",
   highlightRequiredKeys = [],
+  renderCustomSection,
 }: DraggableOverviewSectionsProps) {
   const { getAllFields, getAllSections, addCustomSection, updateCustomSection, deleteCustomSection, updateCustomField } = useFieldRegistry();
   const { activeOrganization } = useOrganization();
@@ -1645,7 +1647,9 @@ export default function DraggableOverviewSections({
                   }
                 }}
               >
-                {section.fieldKeys.length === 0 ? (
+                {renderCustomSection && renderCustomSection(section) ? (
+                  renderCustomSection(section)
+                ) : section.fieldKeys.length === 0 ? (
                   <div className="py-5 px-3 flex items-center justify-between border border-dashed border-slate-200 rounded-lg bg-slate-50/50">
                     <p className="text-xs text-slate-400 font-medium">
                       No fields in this section yet
