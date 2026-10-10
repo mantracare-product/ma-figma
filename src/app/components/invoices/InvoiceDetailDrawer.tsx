@@ -58,7 +58,7 @@ export default function InvoiceDetailDrawer({
   invoice,
   onOpenDocument,
 }: InvoiceDetailDrawerProps) {
-  const { updateInvoiceStatus, sendInvoice, voidInvoice, getPaymentsByInvoice, getClientCredit } = useInvoices();
+  const { invoices, updateInvoiceStatus, sendInvoice, voidInvoice, getPaymentsByInvoice, getClientCredit } = useInvoices();
   const [activeTab, setActiveTab] = useState<"general" | "activity" | "documents" | "payments">("general");
   const [copied, setCopied] = useState(false);
   const [showSendOptions, setShowSendOptions] = useState(false);
