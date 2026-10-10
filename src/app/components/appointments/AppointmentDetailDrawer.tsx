@@ -419,15 +419,117 @@ export default function AppointmentDetailDrawer({
   // Activity logs subscription
   const [activities, setActivities] = useState<ActivityLogEntry[]>([]);
   useEffect(() => {
-    if (!effectiveClientId) return;
+    if (!effectiveAppt) return;
+
+    const candidateClientIds = [
+      effectiveAppt.clientId,
+      effectiveClientId,
+      `APT-${effectiveAppt.id}`,
+      formattedApptId,
+      String(effectiveAppt.id),
+    ].filter(Boolean) as string[];
+
     const load = () => {
-      const list = getActivity(effectiveClientId, appointmentProcess.name);
+      let list = getActivity(candidateClientIds, undefined, {
+        appointmentId: String(effectiveAppt.id),
+      });
+
+      // Backfill initial booking & stage activity logs if empty for this existing appointment
+      if (list.length === 0 && effectiveAppt.date) {
+        const primaryId = effectiveAppt.clientId || formattedApptId;
+        appendActivity({
+          clientId: primaryId,
+          appointmentId: String(effectiveAppt.id),
+          processId: appointmentProcess.id,
+          processName: appointmentProcess.name,
+          type: "appointment_booked",
+          status: effectiveAppt.status || "scheduled",
+          date: effectiveAppt.date || "",
+          time: effectiveAppt.time || "",
+          location: effectiveAppt.location,
+          notes: effectiveAppt.notes,
+          appointmentTitle: effectiveAppt.title,
+          createdBy: "user",
+          details: {
+            primary: `Appointment #${formattedApptId} booked for ${effectiveAppt.clientName}`,
+            secondary: `${effectiveAppt.date || ""} at ${effectiveAppt.time || ""} · ${effectiveAppt.title || "Consultation"}`,
+          },
+        });
+
+        if (currentStage?.name) {
+          appendActivity({
+            clientId: primaryId,
+            appointmentId: String(effectiveAppt.id),
+            processId: appointmentProcess.id,
+            processName: appointmentProcess.name,
+            type: "stage_change",
+            fromStage: "Initiated",
+            toStage: currentStage.name,
+            createdBy: "system",
+            details: {
+              primary: `Stage set to "${currentStage.name}"`,
+              secondary: `Appointment #${formattedApptId} in ${appointmentProcess.name}`,
+            },
+          });
+        }
+
+        if (effectiveAppt.status === "completed") {
+          appendActivity({
+            clientId: primaryId,
+            appointmentId: String(effectiveAppt.id),
+            processId: appointmentProcess.id,
+            processName: appointmentProcess.name,
+            type: "appointment_completed" as any,
+            status: "completed",
+            date: effectiveAppt.date || "",
+            time: effectiveAppt.time || "",
+            createdBy: "user",
+            details: {
+              primary: `Appointment #${formattedApptId} marked as completed`,
+              secondary: `Completed for ${effectiveAppt.clientName}`,
+            },
+          });
+        } else if (effectiveAppt.status === "cancelled") {
+          appendActivity({
+            clientId: primaryId,
+            appointmentId: String(effectiveAppt.id),
+            processId: appointmentProcess.id,
+            processName: appointmentProcess.name,
+            type: "appointment_cancelled" as any,
+            status: "cancelled",
+            date: effectiveAppt.date || "",
+            time: effectiveAppt.time || "",
+            createdBy: "user",
+            details: {
+              primary: `Appointment #${formattedApptId} cancelled`,
+              secondary: `Appointment on ${effectiveAppt.date || ""} cancelled`,
+            },
+          });
+        }
+
+        list = getActivity(candidateClientIds, undefined, {
+          appointmentId: String(effectiveAppt.id),
+        });
+      }
+
       setActivities(list as any);
     };
+
     load();
-    const unsub = subscribeToActivity(effectiveClientId, load);
+    const unsub = subscribeToActivity(candidateClientIds, load, {
+      appointmentId: String(effectiveAppt.id),
+    });
     return unsub;
-  }, [effectiveClientId, appointmentProcess.name]);
+  }, [
+    effectiveAppt?.id,
+    effectiveAppt?.status,
+    effectiveAppt?.currentStageId,
+    formattedApptId,
+    effectiveClientId,
+    appointmentProcess.name,
+    appointmentProcess.id,
+    currentStage?.name,
+  ]);
 
   // Filtered Client Invoices
   const appointmentInvoices = useMemo(() => {

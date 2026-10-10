@@ -94,7 +94,11 @@ const HEADING_BY_TYPE: Record<string, string> = {
   inbound_call: "Inbound Call", failed_call: "Call Failed",
   whatsapp: "WhatsApp Message", sms: "SMS Message", email: "Email",
   webhook_trigger: "Webhook Triggered", field_update: "Field Updated",
-  appointment_booked: "Appointment Booked", process_completed: "Process Completed",
+  appointment_booked: "Appointment Booked",
+  appointment_rescheduled: "Appointment Rescheduled",
+  appointment_completed: "Appointment Completed",
+  appointment_cancelled: "Appointment Cancelled",
+  process_completed: "Process Completed",
   website_message: "Website Message", website: "Website Message",
   form_submitted: "Form Submitted", note: "Note",
 };
@@ -155,7 +159,11 @@ function ActivityIcon({ type, direction, status }: { type: string; direction?: s
     case "sms":               return <MessageSquare className={cls} />;
     case "email":             return <Mail className={cls} />;
     case "webhook_trigger":   return <Zap className={cls} />;
-    case "appointment_booked": return <Calendar className={cls} />;
+    case "appointment_booked":
+    case "appointment_rescheduled":
+    case "appointment_completed":
+    case "appointment_cancelled":
+      return <Calendar className={cls} />;
     case "field_update":      return <Pencil className={cls} />;
     case "form_submitted":    return <FileText className={cls} />;
     case "note":              return <FileText className={cls} />;
@@ -519,6 +527,7 @@ function AppointmentBlock({ entry }: { entry: ActivityLogEntry }) {
   const dateTime = [entry.date, entry.time].filter(Boolean).join(" · ");
   const loc = entry.location || entry.details?.secondary || "";
   const notes = entry.notes || "";
+  const status = entry.status;
   return (
     <div className="mt-2 space-y-1.5">
       {dateTime && (
@@ -527,8 +536,28 @@ function AppointmentBlock({ entry }: { entry: ActivityLogEntry }) {
           {dateTime}
         </div>
       )}
+      {status && (
+        <span
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
+            status === "completed"
+              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              : status === "cancelled"
+              ? "bg-rose-50 text-rose-700 border border-rose-200"
+              : status === "rescheduled"
+              ? "bg-amber-50 text-amber-700 border border-amber-200"
+              : "bg-blue-50 text-blue-700 border border-blue-200"
+          }`}
+        >
+          {status}
+        </span>
+      )}
       {loc && <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>{loc}</p>}
       {notes && <p className="text-[11px] text-gray-400 italic" style={{ fontFamily: "Outfit, sans-serif" }}>{notes}</p>}
+      {entry.details?.primary && (!dateTime || entry.details.primary !== dateTime) && (
+        <p className="text-xs text-gray-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {entry.details.primary}
+        </p>
+      )}
     </div>
   );
 }
@@ -815,7 +844,12 @@ function ActivityCard({
       return <WhatsAppSmsBlock entry={entry} onOpenThreadDrawer={onOpenThreadDrawer} />;
     if (t === "email")
       return <EmailBlock entry={entry} onOpenEmailThreadDrawer={onOpenEmailThreadDrawer} />;
-    if (t === "appointment_booked")
+    if (
+      t === "appointment_booked" ||
+      t === "appointment_rescheduled" ||
+      t === "appointment_completed" ||
+      t === "appointment_cancelled"
+    )
       return <AppointmentBlock entry={entry} />;
     if (t === "form_submitted")
       return <FormBlock entry={entry} />;
@@ -1422,8 +1456,15 @@ export default function ActivityTab({
         !!(entry as any).callId;
     if (activeCategoryTab === "sms") return rawType === "sms" || entry.type === "sms";
     if (activeCategoryTab === "email") return rawType === "email" || entry.type === "email";
-    if (activeCategoryTab === "appointment")
-      return rawType === "appointment_booked" || entry.type === "appointment_booked";
+    if (activeCategoryTab === "appointment") {
+      const typeStr = String(rawType || entry.type || "").toLowerCase();
+      return (
+        typeStr.startsWith("appointment") ||
+        typeStr === "stage_change" ||
+        typeStr === "stage_update" ||
+        !!(entry as any).appointmentId
+      );
+    }
     return false;
   };
 

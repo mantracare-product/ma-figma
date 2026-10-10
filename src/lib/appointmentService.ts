@@ -17,6 +17,7 @@ import { eventBus } from "./eventBus";
 import { logStageMove, getStoredRules } from "./useAutomationStore";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, getActiveOrganizationSync, isProcessMatchingOrg } from "./useProcessStore";
 import { invoiceService, hasInvoiceAutomation, SAMPLE_CLIENT_NAMES } from "./invoiceService";
+import { appendActivity } from "./activityEngine";
 
 export function hasAppointmentAutomation(processId?: string): boolean {
   try {
@@ -530,6 +531,47 @@ class AppointmentService {
     // 1. Save appointment
     this.saveAppointments([newAppointment, ...all]);
 
+    const formattedApptId = !isNaN(Number(newAppointment.id))
+      ? `APT-${Number(newAppointment.id).toString().padStart(4, "0")}`
+      : `APT-${newAppointment.id}`;
+
+    // Append activity for appointment booking
+    appendActivity({
+      clientId: newAppointment.clientId || formattedApptId,
+      appointmentId: String(newAppointment.id),
+      processId: proc.id,
+      processName: proc.name,
+      type: "appointment_booked",
+      status: newAppointment.status || "scheduled",
+      date: newAppointment.date,
+      time: newAppointment.time,
+      location: newAppointment.location,
+      notes: newAppointment.notes,
+      appointmentTitle: newAppointment.title,
+      createdBy: options?.createdBy === "rule" ? "system" : "user",
+      details: {
+        primary: `Appointment #${formattedApptId} booked for ${newAppointment.clientName}`,
+        secondary: `${newAppointment.date} at ${newAppointment.time} · ${newAppointment.title || "Consultation"}`,
+      },
+    });
+
+    if (initialStageName) {
+      appendActivity({
+        clientId: newAppointment.clientId || formattedApptId,
+        appointmentId: String(newAppointment.id),
+        processId: proc.id,
+        processName: proc.name,
+        type: "stage_change",
+        fromStage: "Initiated",
+        toStage: initialStageName,
+        createdBy: options?.createdBy === "rule" ? "system" : "user",
+        details: {
+          primary: `Stage set to "${initialStageName}"`,
+          secondary: `Appointment #${formattedApptId} enrolled in ${proc.name}`,
+        },
+      });
+    }
+
     // 2. Emit appointment.booked event via eventBus (triggers automations for stage move / invoicing)
     eventBus.emit("appointment.booked", "appointment", String(newAppointment.id), {
       ...newAppointment,
@@ -607,6 +649,30 @@ class AppointmentService {
     const updatedList = all.map((a) => (String(a.id) === String(id) ? updatedAppointment : a));
     this.saveAppointments(updatedList);
 
+    const formattedApptId = !isNaN(Number(id))
+      ? `APT-${Number(id).toString().padStart(4, "0")}`
+      : `APT-${id}`;
+    const proc = getStoredProcesses().find((p) => p.id === existing.processId) || this.getAppointmentProcess();
+
+    appendActivity({
+      clientId: existing.clientId || formattedApptId,
+      appointmentId: String(id),
+      processId: existing.processId || proc.id,
+      processName: proc.name,
+      type: "appointment_rescheduled" as any,
+      status: "rescheduled",
+      date: newDate,
+      time: newTime,
+      location: existing.location,
+      notes: notes || existing.notes,
+      appointmentTitle: existing.title,
+      createdBy: "user",
+      details: {
+        primary: `Appointment #${formattedApptId} rescheduled to ${newDate} at ${newTime}`,
+        secondary: `Was previously scheduled for ${existing.date} at ${existing.time}`,
+      },
+    });
+
     // Emit appointment.rescheduled event (automations will execute update_to_stage if defined)
     eventBus.emit("appointment.rescheduled", "appointment", String(id), {
       ...updatedAppointment,
@@ -634,6 +700,30 @@ class AppointmentService {
     };
 
     this.saveAppointments(all.map((a) => (String(a.id) === String(id) ? updatedAppointment : a)));
+
+    const formattedApptId = !isNaN(Number(id))
+      ? `APT-${Number(id).toString().padStart(4, "0")}`
+      : `APT-${id}`;
+    const proc = getStoredProcesses().find((p) => p.id === existing.processId) || this.getAppointmentProcess();
+
+    appendActivity({
+      clientId: existing.clientId || formattedApptId,
+      appointmentId: String(id),
+      processId: existing.processId || proc.id,
+      processName: proc.name,
+      type: "appointment_cancelled" as any,
+      status: "cancelled",
+      date: existing.date,
+      time: existing.time,
+      location: existing.location,
+      notes: reason || existing.notes,
+      appointmentTitle: existing.title,
+      createdBy: "user",
+      details: {
+        primary: `Appointment #${formattedApptId} cancelled`,
+        secondary: reason ? `Reason: ${reason}` : `Appointment on ${existing.date} cancelled`,
+      },
+    });
 
     eventBus.emit("appointment.cancelled", "appointment", String(id), updatedAppointment);
 
@@ -667,6 +757,30 @@ class AppointmentService {
     };
 
     this.saveAppointments(all.map((a) => (String(a.id) === String(id) ? updatedAppointment : a)));
+
+    const formattedApptId = !isNaN(Number(id))
+      ? `APT-${Number(id).toString().padStart(4, "0")}`
+      : `APT-${id}`;
+    const proc = getStoredProcesses().find((p) => p.id === existing.processId) || this.getAppointmentProcess();
+
+    appendActivity({
+      clientId: existing.clientId || formattedApptId,
+      appointmentId: String(id),
+      processId: existing.processId || proc.id,
+      processName: proc.name,
+      type: "appointment_completed" as any,
+      status: "completed",
+      date: existing.date,
+      time: existing.time,
+      location: existing.location,
+      notes: existing.notes,
+      appointmentTitle: existing.title,
+      createdBy: "user",
+      details: {
+        primary: `Appointment #${formattedApptId} marked as completed`,
+        secondary: rating ? `Rating: ${rating} / 5 ⭐` : `Completed for ${existing.clientName}`,
+      },
+    });
 
     eventBus.emit("appointment.completed", "appointment", String(id), updatedAppointment);
 
@@ -729,6 +843,28 @@ class AppointmentService {
     };
 
     this.saveAppointments(all.map((a) => (String(a.id) === String(id) ? updatedAppointment : a)));
+
+    const fromStageObj = this.findStageById(previousStageId, existing.processId);
+    const fromStageName = fromStageObj?.name || "Previous Stage";
+    const formattedApptId = !isNaN(Number(id))
+      ? `APT-${Number(id).toString().padStart(4, "0")}`
+      : `APT-${id}`;
+
+    // Append activity for stage move
+    appendActivity({
+      clientId: existing.clientId || formattedApptId,
+      appointmentId: String(id),
+      processId: finalProcessId,
+      processName: targetProcess?.name || "Appointment Process",
+      type: "stage_change",
+      fromStage: fromStageName,
+      toStage: targetStage.name,
+      createdBy: cause?.type === "rule" ? "system" : "user",
+      details: {
+        primary: `Moved to stage "${targetStage.name}"`,
+        secondary: cause?.ruleName ? `Via: ${cause.ruleName}` : `Appointment #${formattedApptId} for ${existing.clientName}`,
+      },
+    });
 
     logStageMove({
       orgId: "default",
