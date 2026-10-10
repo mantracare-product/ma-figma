@@ -349,20 +349,34 @@ class AppointmentService {
   public findStageById(stageId: string, processId?: string): Stage | undefined {
     const query = String(stageId).trim().toLowerCase();
     const processes = getStoredProcesses();
+    const matchStage = (s: Stage) => {
+      const sId = s.id.toLowerCase();
+      const sName = s.name.toLowerCase();
+      const sCat = (s.systemCategory || "").toLowerCase();
+      return (
+        sId === query ||
+        sName === query ||
+        (sCat && sCat === query) ||
+        (sCat && (query.includes(sCat) || sCat.includes(query))) ||
+        query.includes(sName) ||
+        sName.includes(query)
+      );
+    };
+
     if (processId) {
       const proc = processes.find((p) => p.id === processId);
       if (proc) {
-        const found = proc.stages.find((s) => s.id.toLowerCase() === query || s.name.toLowerCase() === query);
+        const found = proc.stages.find(matchStage);
         if (found) return found;
       }
     }
     const apptProcs = processes.filter((p) => p.entityType === "appointment");
     for (const p of apptProcs) {
-      const found = p.stages.find((s) => s.id.toLowerCase() === query || s.name.toLowerCase() === query);
+      const found = p.stages.find(matchStage);
       if (found) return found;
     }
     const proc = this.getAppointmentProcess();
-    return proc.stages.find((s) => s.id.toLowerCase() === query || s.name.toLowerCase() === query);
+    return proc.stages.find(matchStage);
   }
 
   public getAppointments(): Appointment[] {
@@ -413,6 +427,7 @@ class AppointmentService {
       sessionStorage.setItem(APPOINTMENTS_STORAGE_KEY, serialized);
       localStorage.setItem(APPOINTMENTS_STORAGE_KEY, serialized);
       window.dispatchEvent(new CustomEvent(APPOINTMENTS_CHANGE_EVENT, { detail: appointments }));
+      window.dispatchEvent(new Event("storage"));
     } catch (e) {
       console.error("[AppointmentService] Failed to save appointments:", e);
     }

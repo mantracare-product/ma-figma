@@ -309,16 +309,17 @@ export default function Automation() {
           processName={!isCreatingNewRule && activeRule ? activeRule.name : "New Global Automation"}
           workflowSteps={!isCreatingNewRule && activeRule ? activeWorkflowSteps : []}
           onSaveAutomation={(saved) => {
+          const triggerEvtStr = String((saved.trigger as any)?.event || "").toLowerCase();
           const catalogEvt = GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
-            (e) => e.event === (saved.trigger as any).event
+            (e) => e.event.toLowerCase() === triggerEvtStr
           );
           const triggerCategory = GLOBAL_TRIGGER_CATALOG.find((cat) =>
-            cat.events.some((e) => e.event === (saved.trigger as any).event)
+            cat.events.some((e) => e.event.toLowerCase() === triggerEvtStr)
           );
           const detectedEntityType =
-            triggerCategory?.type === "appointment"
+            triggerCategory?.type === "appointment" || triggerEvtStr.startsWith("appointment")
               ? "appointment"
-              : triggerCategory?.type === "invoice"
+              : triggerCategory?.type === "invoice" || triggerEvtStr.startsWith("invoice")
               ? "invoice"
               : "client";
 

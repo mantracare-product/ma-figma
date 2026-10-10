@@ -487,37 +487,12 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const simulatePayment = (invoiceId: string) => {
-    const now = new Date().toISOString();
-    setInvoices((prev) =>
-      prev.map((inv) => {
-        if (inv.id === invoiceId) {
-          const updated: ClientInvoice = {
-            ...inv,
-            status: "paid",
-            paidAt: now,
-          };
-
-          if (updated.clientId) {
-            const modeText = updated.paymentMode ? ` via ${updated.paymentMode}` : "";
-            addActivityEntry({
-              clientId: updated.clientId,
-              processId: "billing",
-              processName: "Billing & Invoicing",
-              type: "field_update",
-              status: "success",
-              refId: updated.id,
-              details: {
-                primary: `Invoice ${updated.id} marked Paid${modeText}`,
-                secondary: `Amount: $${updated.total.toFixed(2)} received${modeText}`,
-              },
-            });
-          }
-
-          return updated;
-        }
-        return inv;
-      })
-    );
+    const inv = invoices.find((i) => i.id === invoiceId);
+    if (inv) {
+      const remaining = Math.max(0, inv.total - (inv.amountPaid || 0));
+      invoiceService.recordPayment(invoiceId, remaining, "card_on_file", "Simulated payment");
+      setInvoices(invoiceService.getInvoices());
+    }
   };
 
   const recordPayment = (paymentDataList: Omit<Payment, "id" | "createdAt">[]) => {
@@ -641,6 +616,20 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return updated;
       })
     );
+
+    // Synchronize through invoiceService to trigger automations & eventBus triggers (e.g. invoice.paid)
+    createdPayments.forEach((p) => {
+      if (p.invoiceId && p.invoiceId !== "UNLINKED") {
+        try {
+          invoiceService.recordPayment(p.invoiceId, p.amount, p.method, p.note);
+        } catch (err) {
+          console.warn("[InvoiceContext] Error forwarding payment to invoiceService:", err);
+        }
+      }
+    });
+
+    // Refresh live invoice state from invoiceService
+    setInvoices(invoiceService.getInvoices());
   };
 
   const getPaymentsByInvoice = (invoiceId: string) => {

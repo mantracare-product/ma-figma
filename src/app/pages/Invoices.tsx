@@ -877,7 +877,11 @@ export default function Invoices() {
       <InvoiceDetailDrawer
         isOpen={isDetailDrawerOpen}
         onClose={() => setIsDetailDrawerOpen(false)}
-        invoice={selectedInvoice}
+        invoice={
+          selectedInvoice
+            ? invoices.find((i) => i.id === selectedInvoice.id) || selectedInvoice
+            : null
+        }
         onOpenDocument={(inv) => {
           setIsDetailDrawerOpen(false);
           handleOpenDocument(inv);

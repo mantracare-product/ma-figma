@@ -176,10 +176,23 @@ class InvoiceService {
     return proc.stages.find((s) => s.systemCategory === category) || proc.stages[0];
   }
 
-  private findStageById(stageId: string): Stage | undefined {
+  public findStageById(stageId: string): Stage | undefined {
     const proc = this.getInvoiceProcess();
     const query = String(stageId).trim().toLowerCase();
-    return proc.stages.find((s) => s.id.toLowerCase() === query || s.name.toLowerCase() === query);
+    const matchStage = (s: Stage) => {
+      const sId = s.id.toLowerCase();
+      const sName = s.name.toLowerCase();
+      const sCat = (s.systemCategory || "").toLowerCase();
+      return (
+        sId === query ||
+        sName === query ||
+        (sCat && sCat === query) ||
+        (sCat && (query.includes(sCat) || sCat.includes(query))) ||
+        query.includes(sName) ||
+        sName.includes(query)
+      );
+    };
+    return proc.stages.find(matchStage);
   }
 
   public getInvoices(): ClientInvoice[] {
@@ -214,6 +227,7 @@ class InvoiceService {
     try {
       localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify(invoices));
       window.dispatchEvent(new CustomEvent(INVOICES_CHANGE_EVENT, { detail: invoices }));
+      window.dispatchEvent(new Event("storage"));
     } catch (e) {
       console.error("[InvoiceService] Failed to save invoices:", e);
     }
@@ -405,6 +419,14 @@ class InvoiceService {
       paidAt: isFullyPaid ? new Date().toISOString() : existing.paidAt,
     };
 
+    if (isFullyPaid) {
+      const paidStage = this.findStageById("paid");
+      if (paidStage) {
+        updated.currentStageId = paidStage.id;
+        updated.statusLabel = paidStage.name;
+      }
+    }
+
     this.saveInvoices(all.map((i) => (i.id === invoiceId ? updated : i)));
 
     const payment: Payment = {
@@ -565,6 +587,16 @@ class InvoiceService {
       processId: proc.id,
       processName: proc.name,
       cause: cause || { type: "manual", ruleName: `Stage changed to ${targetStage.name}` },
+    });
+
+    eventBus.emit("stage.entered", "invoice", invoiceId, {
+      ...updated,
+      fromStageId: previousStageId,
+      toStageId: targetStage.id,
+      stageId: targetStage.id,
+      stageName: targetStage.name,
+      processId: proc.id,
+      causeRuleId: cause?.type === "rule" ? cause.ruleName : undefined,
     });
 
     return updated;

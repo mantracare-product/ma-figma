@@ -595,6 +595,11 @@ export default function Appointments() {
 
     if (drawerMode === "reschedule" && selectedAppointment) {
       appointmentService.rescheduleAppointment(selectedAppointment.id, selectedDate, timeStr, bookingNote);
+      setAppointments(appointmentService.getAppointments() as any);
+      if (selectedAppointmentForDrawer && selectedAppointmentForDrawer.id === selectedAppointment.id) {
+        const found = appointmentService.getAppointmentById(selectedAppointment.id);
+        if (found) setSelectedAppointmentForDrawer(found);
+      }
       toast.success("Appointment rescheduled successfully!");
     } else {
       const targetProc = bookingProcessId
@@ -1333,19 +1338,28 @@ export default function Appointments() {
                     icon: <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />,
                     hidden: (apt) => apt.status === "completed",
                     onClick: (apt) => {
-                      const updated = appointments.map((a) =>
-                        a.id === apt.id ? { ...a, status: "completed" as const, rating: 5, statusLabel: "Completed" } : a
-                      );
-                      setAppointments(updated);
-                      appointmentService.saveAppointments(updated as any);
-                      toast.success("Appointment marked as completed");
+                      try {
+                        appointmentService.completeAppointment(apt.id);
+                        setAppointments(appointmentService.getAppointments() as any);
+                        toast.success("Appointment marked as completed");
+                      } catch (e) {
+                        console.warn(e);
+                      }
                     },
                   },
                   {
                     label: "Cancel / Delete",
                     icon: <Trash2 className="w-3.5 h-3.5 text-rose-600" />,
                     isDanger: true,
-                    onClick: (apt) => setConfirmDelete(apt.id),
+                    onClick: (apt) => {
+                      try {
+                        appointmentService.cancelAppointment(apt.id, "Cancelled by user");
+                        setAppointments(appointmentService.getAppointments() as any);
+                        toast.success("Appointment cancelled & invoice voided if unpaid");
+                      } catch (e) {
+                        console.warn(e);
+                      }
+                    },
                   },
                 ]}
               />
@@ -1453,7 +1467,11 @@ export default function Appointments() {
           setIsDetailDrawerOpen(false);
           setSelectedAppointmentForDrawer(null);
         }}
-        appointment={selectedAppointmentForDrawer}
+        appointment={
+          selectedAppointmentForDrawer
+            ? appointments.find((a) => String(a.id) === String(selectedAppointmentForDrawer.id)) || selectedAppointmentForDrawer
+            : null
+        }
         onUpdateAppointment={(updated) => {
           setAppointments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
           setSelectedAppointmentForDrawer(updated);
@@ -1463,22 +1481,26 @@ export default function Appointments() {
           openBookingDrawerForReschedule(apt);
         }}
         onMarkComplete={(id) => {
-          const updated = appointments.map((a) =>
-            a.id === id ? { ...a, status: "completed" as const, rating: 5, statusLabel: "Completed" } : a
-          );
-          setAppointments(updated);
-          appointmentService.saveAppointments(updated as any);
-          if (selectedAppointmentForDrawer && selectedAppointmentForDrawer.id === id) {
-            setSelectedAppointmentForDrawer({ ...selectedAppointmentForDrawer, status: "completed", rating: 5, statusLabel: "Completed" });
+          try {
+            const completed = appointmentService.completeAppointment(id);
+            setAppointments(appointmentService.getAppointments() as any);
+            if (selectedAppointmentForDrawer && selectedAppointmentForDrawer.id === id) {
+              setSelectedAppointmentForDrawer(completed);
+            }
+          } catch (e) {
+            console.warn(e);
           }
         }}
         onDelete={(id) => {
-          const updated = appointments.filter((a) => a.id !== id);
-          setAppointments(updated);
-          appointmentService.saveAppointments(updated as any);
-          setIsDetailDrawerOpen(false);
-          setSelectedAppointmentForDrawer(null);
-          toast.success("Appointment removed");
+          try {
+            appointmentService.cancelAppointment(id, "Cancelled from drawer");
+            setAppointments(appointmentService.getAppointments() as any);
+            setIsDetailDrawerOpen(false);
+            setSelectedAppointmentForDrawer(null);
+            toast.success("Appointment cancelled & invoice voided if unpaid");
+          } catch (e) {
+            console.warn(e);
+          }
         }}
         employees={employees}
         services={services}

@@ -213,23 +213,44 @@ export function validateRuleEntityTarget(
   rule: Partial<AutomationRule>,
   processes: Process[] = getStoredProcesses()
 ): { valid: boolean; error?: string } {
-  if (rule.action?.type === "moveToStage" && rule.action.processId) {
+  if (rule.action?.type === "moveToStage" && rule.action.stageId && rule.action.processId) {
     const { processId, stageId } = rule.action;
-    const targetProcess = processes.find((p) => p.id === processId);
+    let targetProcess = processes.find((p) => p.id === processId || p.name === processId);
+
+    const effectiveEntity = (
+      rule.trigger?.event?.toLowerCase().startsWith("appointment")
+        ? "appointment"
+        : rule.trigger?.event?.toLowerCase().startsWith("invoice")
+        ? "invoice"
+        : rule.entityType || "client"
+    );
+
+    if (!targetProcess && (effectiveEntity === "appointment" || effectiveEntity === "invoice")) {
+      targetProcess = DEFAULT_ENTITY_PROCESSES[effectiveEntity];
+    }
+
     if (!targetProcess) {
       return { valid: false, error: `Target process "${processId}" not found.` };
     }
 
     const targetEntityType = targetProcess.entityType || "client";
-    if (rule.entityType && targetEntityType !== rule.entityType) {
+    if (effectiveEntity && targetEntityType !== effectiveEntity) {
       return {
         valid: false,
-        error: `Entity mismatch: ${rule.entityType} rule cannot move records to ${targetEntityType} process.`,
+        error: `Entity mismatch: ${effectiveEntity} rule cannot move records to ${targetEntityType} process.`,
       };
     }
 
     if (stageId) {
-      const targetStage = targetProcess.stages.find((s) => s.id === stageId);
+      const q = stageId.trim().toLowerCase();
+      const targetStage = targetProcess.stages.find(
+        (s) =>
+          s.id.toLowerCase() === q ||
+          s.name.toLowerCase() === q ||
+          (s.systemCategory && s.systemCategory.toLowerCase() === q) ||
+          (s.systemCategory && q.includes(s.systemCategory.toLowerCase())) ||
+          q.includes(s.name.toLowerCase())
+      );
       if (!targetStage) {
         return { valid: false, error: `Target stage "${stageId}" not found in process "${targetProcess.name}".` };
       }

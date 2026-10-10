@@ -29,6 +29,7 @@ import {
   MapPin,
   Video,
   Settings,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { TableComponent, TableColumn } from "../ui/TableComponent";
@@ -141,29 +142,77 @@ export default function AppointmentDetailDrawer({
   // Field values
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
 
+  // Sync with appointmentService in real time
+  const [liveAppointment, setLiveAppointment] = useState<Appointment | undefined>(appointment);
+  useEffect(() => {
+    setLiveAppointment(appointment);
+  }, [appointment]);
+
+  useEffect(() => {
+    if (!appointment) return;
+    return appointmentService.subscribe((all) => {
+      const found = all.find((a) => String(a.id) === String(appointment.id));
+      if (found) {
+        setLiveAppointment(found);
+      }
+    });
+  }, [appointment?.id]);
+
+  const effectiveAppt = liveAppointment || appointment;
+
   // Dynamic appointment process and workflow stages
   const appointmentProcess: Process = useMemo(() => {
     const procs = getStoredProcesses();
-    const found = procs.find((p) => p.entityType === "appointment");
-    return found || DEFAULT_ENTITY_PROCESSES.appointment;
-  }, []);
+    const apptProcs = procs.filter((p) => p.entityType === "appointment");
+    if (effectiveAppt?.processId) {
+      const found = apptProcs.find((p) => p.id === effectiveAppt.processId || p.name === effectiveAppt.processId);
+      if (found) return found;
+    }
+    if (effectiveAppt?.currentStageId) {
+      const stgLower = String(effectiveAppt.currentStageId).toLowerCase();
+      const foundByStage = apptProcs.find((p) =>
+        p.stages?.some((s) => s.id.toLowerCase() === stgLower || s.name.toLowerCase() === stgLower)
+      );
+      if (foundByStage) return foundByStage;
+    }
+    return apptProcs[0] || DEFAULT_ENTITY_PROCESSES.appointment;
+  }, [effectiveAppt?.processId, effectiveAppt?.currentStageId]);
 
   const stages: Stage[] = useMemo(() => {
     return appointmentProcess.stages || DEFAULT_ENTITY_PROCESSES.appointment.stages;
   }, [appointmentProcess]);
 
-  // Current appointment stage
+  // Current appointment stage with robust matching
   const currentStage: Stage | undefined = useMemo(() => {
-    if (!appointment || !appointment.currentStageId || String(appointment.currentStageId).trim() === "") {
-      return undefined;
+    if (!effectiveAppt) return undefined;
+
+    // 1. Match by currentStageId against stages
+    if (effectiveAppt.currentStageId && String(effectiveAppt.currentStageId).trim() !== "") {
+      const targetId = String(effectiveAppt.currentStageId).toLowerCase();
+      const match = stages.find(
+        (s) =>
+          s.id.toLowerCase() === targetId ||
+          s.name.toLowerCase() === targetId ||
+          (effectiveAppt.statusLabel && s.name.toLowerCase() === String(effectiveAppt.statusLabel).toLowerCase())
+      );
+      if (match) return match;
     }
-    const match = stages.find(
-      (s) =>
-        s.id.toLowerCase() === String(appointment.currentStageId).toLowerCase() ||
-        (appointment.statusLabel && s.name.toLowerCase() === String(appointment.statusLabel).toLowerCase())
-    );
-    return match;
-  }, [appointment, stages]);
+
+    // 2. Match by statusLabel
+    if (effectiveAppt.statusLabel) {
+      const matchLabel = stages.find((s) => s.name.toLowerCase() === String(effectiveAppt.statusLabel).toLowerCase());
+      if (matchLabel) return matchLabel;
+    }
+
+    // 3. Fallback to status mapping
+    if (effectiveAppt.status) {
+      const sysCat = effectiveAppt.status === "scheduled" ? "booked" : effectiveAppt.status;
+      const matchStatus = stages.find((s) => s.systemCategory === sysCat || s.systemCategory === effectiveAppt.status);
+      if (matchStatus) return matchStatus;
+    }
+
+    return undefined;
+  }, [effectiveAppt, stages]);
 
   // Appointment Formatted ID
   const formattedApptId = useMemo(() => {
@@ -181,35 +230,35 @@ export default function AppointmentDetailDrawer({
 
   // Initialize and sync field values when appointment changes
   useEffect(() => {
-    if (!appointment) return;
-    const providerObj = employees.find((e) => String(e.id) === String(appointment.employeeId));
-    const serviceObj = services.find((s) => String(s.id) === String(appointment.serviceId));
+    if (!effectiveAppt) return;
+    const providerObj = employees.find((e) => String(e.id) === String(effectiveAppt.employeeId));
+    const serviceObj = services.find((s) => String(s.id) === String(effectiveAppt.serviceId));
 
     // Load any persisted custom fields for this appointment
     let storedCustom: Record<string, any> = {};
     try {
-      const raw = localStorage.getItem(`mantra_appt_fields_${appointment.id}`);
+      const raw = localStorage.getItem(`mantra_appt_fields_${effectiveAppt.id}`);
       if (raw) storedCustom = JSON.parse(raw);
     } catch {}
 
     setFieldValues({
-      appointment_date: appointment.date || "",
-      appointment_time: appointment.time || "",
-      duration: appointment.duration ? `${appointment.duration} mins` : "60 mins",
-      service: serviceObj?.name || (appointment.serviceId ? `Service #${appointment.serviceId}` : "General Consultation"),
-      provider: providerObj?.name || (appointment.employeeId ? `Staff #${appointment.employeeId}` : "Unassigned"),
-      session_type: appointment.sessionType === "inPerson" ? "In-Person" : "Video Consultation",
-      location: appointment.location || "Main Clinic",
-      rating: appointment.rating ? `${appointment.rating} / 5 ⭐` : "Not Rated",
-      notes: appointment.notes || "",
-      client_name: appointment.clientName || "",
-      email: appointment.clientEmail || "",
-      phone: appointment.clientPhone || "",
-      status: appointment.status || "scheduled",
+      appointment_date: effectiveAppt.date || "",
+      appointment_time: effectiveAppt.time || "",
+      duration: effectiveAppt.duration ? `${effectiveAppt.duration} mins` : "60 mins",
+      service: serviceObj?.name || (effectiveAppt.serviceId ? `Service #${effectiveAppt.serviceId}` : "General Consultation"),
+      provider: providerObj?.name || (effectiveAppt.employeeId ? `Staff #${effectiveAppt.employeeId}` : "Unassigned"),
+      session_type: effectiveAppt.sessionType === "inPerson" ? "In-Person" : "Video Consultation",
+      location: effectiveAppt.location || "Main Clinic",
+      rating: effectiveAppt.rating ? `${effectiveAppt.rating} / 5 ⭐` : "Not Rated",
+      notes: effectiveAppt.notes || "",
+      client_name: effectiveAppt.clientName || "",
+      email: effectiveAppt.clientEmail || "",
+      phone: effectiveAppt.clientPhone || "",
+      status: effectiveAppt.status || "scheduled",
       stage: currentStage?.name || "Unassigned",
       ...storedCustom,
     });
-  }, [appointment, employees, services, currentStage?.name]);
+  }, [effectiveAppt, employees, services, currentStage?.name]);
 
   // Sections State
   const storageSectionKey = `mantra_appt_sections_layout`;
@@ -277,7 +326,7 @@ export default function AppointmentDetailDrawer({
     });
 
     // If core fields change, bubble update to appointment
-    if (appointment && onUpdateAppointment) {
+    if (effectiveAppt && onUpdateAppointment) {
       let patch: any = {};
       if (key === "appointment_date") patch.date = value;
       if (key === "appointment_time") patch.time = value;
@@ -287,73 +336,84 @@ export default function AppointmentDetailDrawer({
       if (key === "phone") patch.clientPhone = value;
 
       if (Object.keys(patch).length > 0) {
-        const updated = { ...appointment, ...patch };
-        onUpdateAppointment(updated);
-        appointmentService.saveAppointments(
-          appointmentService.getAppointments().map((a) => (a.id === updated.id ? updated : a))
-        );
+        if (key === "appointment_date" || key === "appointment_time") {
+          try {
+            const updatedDate = patch.date || effectiveAppt.date;
+            const updatedTime = patch.time || effectiveAppt.time;
+            const rescheduled = appointmentService.rescheduleAppointment(
+              effectiveAppt.id,
+              updatedDate,
+              updatedTime,
+              patch.notes || effectiveAppt.notes
+            );
+            setLiveAppointment(rescheduled);
+            onUpdateAppointment(rescheduled);
+            toast.success("Appointment rescheduled successfully");
+          } catch (err: any) {
+            console.warn(err);
+          }
+        } else {
+          const updated = { ...effectiveAppt, ...patch };
+          setLiveAppointment(updated);
+          onUpdateAppointment(updated);
+          appointmentService.saveAppointments(
+            appointmentService.getAppointments().map((a) => (a.id === updated.id ? updated : a))
+          );
+        }
       }
     }
   };
 
   // Stage Progression Handler
   const handleStageSelect = (targetStage: Stage) => {
-    if (!appointment || targetStage.id === currentStage?.id) return;
+    if (!effectiveAppt || targetStage.id === currentStage?.id) return;
 
-    let newStatus = appointment.status;
-    if (targetStage.systemCategory === "completed") newStatus = "completed";
-    else if (targetStage.systemCategory === "cancelled") newStatus = "cancelled";
-    else if (targetStage.systemCategory === "rescheduled") newStatus = "rescheduled";
-    else if (targetStage.systemCategory === "booked") newStatus = "scheduled";
-
-    const updated = {
-      ...appointment,
-      currentStageId: targetStage.id,
-      statusLabel: targetStage.name,
-      status: newStatus,
-      updatedAt: new Date().toISOString(),
-    };
-
-    if (onUpdateAppointment) {
-      onUpdateAppointment(updated);
-    }
-    appointmentService.saveAppointments(
-      appointmentService.getAppointments().map((a) => (a.id === updated.id ? updated : a))
-    );
-
-    // Log Stage Move
-    logStageMove({
-      orgId: "default",
-      recordType: "appointment",
-      recordId: String(appointment.id),
-      fromStageId: currentStage?.id || "",
-      fromStageName: currentStage?.name || "Unassigned",
-      toStageId: targetStage.id,
-      toStageName: targetStage.name,
-      processId: appointmentProcess.id,
-      processName: appointmentProcess.name,
-      cause: {
+    try {
+      const moved = appointmentService.moveToStage(effectiveAppt.id, targetStage.id, {
         type: "manual",
-        ruleName: `Stage changed to ${targetStage.name} by user`,
-      },
-    });
+        ruleName: `Stage changed to ${targetStage.name} from drawer`,
+      });
+      setLiveAppointment(moved);
+      if (onUpdateAppointment) {
+        onUpdateAppointment(moved);
+      }
 
-    // Record activity timeline entry
-    appendActivity({
-      clientId: effectiveClientId,
-      processId: appointmentProcess.id,
-      processName: appointmentProcess.name,
-      type: "stage_change",
-      createdBy: "user",
-      fromStage: currentStage?.name || "Initial Stage",
-      toStage: targetStage.name,
-      details: {
-        primary: `Moved to stage "${targetStage.name}"`,
-        secondary: `Appointment #${formattedApptId} for ${appointment.clientName}`,
-      },
-    });
+      // Log Stage Move
+      logStageMove({
+        orgId: "default",
+        recordType: "appointment",
+        recordId: String(effectiveAppt.id),
+        fromStageId: currentStage?.id || "",
+        fromStageName: currentStage?.name || "Unassigned",
+        toStageId: targetStage.id,
+        toStageName: targetStage.name,
+        processId: appointmentProcess.id,
+        processName: appointmentProcess.name,
+        cause: {
+          type: "manual",
+          ruleName: `Stage changed to ${targetStage.name} by user`,
+        },
+      });
 
-    toast.success(`Appointment moved to "${targetStage.name}"`);
+      // Record activity timeline entry
+      appendActivity({
+        clientId: effectiveClientId,
+        processId: appointmentProcess.id,
+        processName: appointmentProcess.name,
+        type: "stage_change",
+        createdBy: "user",
+        fromStage: currentStage?.name || "Initial Stage",
+        toStage: targetStage.name,
+        details: {
+          primary: `Moved to stage "${targetStage.name}"`,
+          secondary: `Appointment #${formattedApptId} for ${effectiveAppt.clientName}`,
+        },
+      });
+
+      toast.success(`Appointment moved to "${targetStage.name}"`);
+    } catch (e) {
+      console.warn("[AppointmentDetailDrawer] Failed to move stage:", e);
+    }
   };
 
   // Activity logs subscription
@@ -476,7 +536,7 @@ export default function AppointmentDetailDrawer({
             {onReschedule && (
               <button
                 type="button"
-                onClick={() => onReschedule(appointment)}
+                onClick={() => onReschedule(effectiveAppt)}
                 className="px-3.5 py-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <Calendar className="w-3.5 h-3.5 text-slate-500" />
@@ -484,17 +544,43 @@ export default function AppointmentDetailDrawer({
               </button>
             )}
 
-            {appointment.status !== "completed" && onMarkComplete && (
+            {effectiveAppt.status !== "completed" && (
               <button
                 type="button"
                 onClick={() => {
-                  onMarkComplete(appointment.id);
-                  toast.success("Appointment marked as completed");
+                  try {
+                    const completed = appointmentService.completeAppointment(effectiveAppt.id);
+                    setLiveAppointment(completed);
+                    if (onMarkComplete) onMarkComplete(effectiveAppt.id);
+                    toast.success("Appointment marked as completed");
+                  } catch (e) {
+                    console.warn(e);
+                  }
                 }}
                 className="px-4 py-1.5 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                 Mark Done
+              </button>
+            )}
+
+            {effectiveAppt.status !== "cancelled" && (
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    const cancelled = appointmentService.cancelAppointment(effectiveAppt.id, "Cancelled from drawer");
+                    setLiveAppointment(cancelled);
+                    if (onUpdateAppointment) onUpdateAppointment(cancelled);
+                    toast.success("Appointment cancelled & invoice voided if unpaid");
+                  } catch (e) {
+                    console.warn(e);
+                  }
+                }}
+                className="px-3.5 py-1.5 rounded-xl border border-rose-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                Cancel
               </button>
             )}
 

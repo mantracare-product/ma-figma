@@ -105,23 +105,48 @@ export default function InvoiceDetailDrawer({
     }));
   }, []);
 
+  const liveInvoice = useMemo(() => {
+    if (!invoice) return null;
+    return invoices.find((i) => i.id === invoice.id) || invoice;
+  }, [invoices, invoice]);
+
   const currentInvoiceStage = useMemo(() => {
-    if (!invoice || !invoice.currentStageId || invoice.currentStageId.trim() === "") return undefined;
-    const stageKey = invoice.currentStageId.trim().toLowerCase();
-    return invoiceStages.find(
-      (s) =>
-        s.id.toLowerCase() === stageKey ||
-        s.name.toLowerCase() === stageKey ||
-        (invoice.statusLabel && s.name.toLowerCase() === invoice.statusLabel.toLowerCase())
-    );
-  }, [invoiceStages, invoice?.currentStageId, invoice?.statusLabel]);
+    if (!liveInvoice) return undefined;
+    if (liveInvoice.currentStageId && liveInvoice.currentStageId.trim() !== "") {
+      const stageKey = liveInvoice.currentStageId.trim().toLowerCase();
+      const match = invoiceStages.find(
+        (s) =>
+          s.id.toLowerCase() === stageKey ||
+          s.name.toLowerCase() === stageKey ||
+          (liveInvoice.statusLabel && s.name.toLowerCase() === liveInvoice.statusLabel.toLowerCase())
+      );
+      if (match) return match;
+    }
+
+    if (liveInvoice.statusLabel) {
+      const match = invoiceStages.find(
+        (s) => s.name.toLowerCase() === liveInvoice.statusLabel!.toLowerCase()
+      );
+      if (match) return match;
+    }
+
+    if (liveInvoice.status) {
+      const sysCat = liveInvoice.status === "partial" ? "partially_paid" : liveInvoice.status;
+      const match = invoiceStages.find(
+        (s) => s.systemCategory === sysCat || s.systemCategory === liveInvoice.status || s.name.toLowerCase() === sysCat
+      );
+      if (match) return match;
+    }
+
+    return undefined;
+  }, [invoiceStages, liveInvoice?.currentStageId, liveInvoice?.statusLabel, liveInvoice?.status]);
 
   const currentInvoiceStageName = currentInvoiceStage ? currentInvoiceStage.name : "";
 
-  if (!invoice) return null;
+  if (!liveInvoice) return null;
 
-  const isAutomated = invoice.createdBy === "system";
-  const availableCredit = getClientCredit(invoice.clientId);
+  const isAutomated = liveInvoice.createdBy === "system";
+  const availableCredit = getClientCredit(liveInvoice.clientId);
 
   const handleCopyLink = () => {
     if (invoice.paymentLinkUrl) {
@@ -302,12 +327,15 @@ export default function InvoiceDetailDrawer({
             activeStageId={currentInvoiceStage?.id}
             activeStageName={currentInvoiceStageName}
             onStageClick={(stg) => {
-              if (stg.systemCategory) {
-                updateInvoiceStatus(invoice.id, stg.systemCategory as any);
-              } else {
-                updateInvoiceStatus(invoice.id, stg.name.toLowerCase() as any);
+              try {
+                invoiceService.moveToStage(liveInvoice.id, stg.id, {
+                  type: "manual",
+                  ruleName: `Stage changed to ${stg.name} from drawer`,
+                });
+                toast.success(`Invoice moved to "${stg.name}"`);
+              } catch (e) {
+                console.warn(e);
               }
-              toast.success(`Invoice moved to "${stg.name}"`);
             }}
             showAddButton={true}
           />

@@ -125,24 +125,44 @@ export async function executeRulesForEvent(
   }
 
   const allRules = getStoredRules(event.orgId);
-  const matchingRules = allRules.filter(
-    (r) =>
-      r.enabled &&
-      (r.entityType === event.recordType ||
-        !r.entityType ||
-        r.trigger.event.startsWith(`${event.recordType}.`) ||
-        r.trigger.event.startsWith("stage.") ||
-        r.trigger.event.startsWith("field.") ||
-        r.trigger.event === "field_update" ||
-        r.trigger.event === event.event) &&
-      (r.trigger.event === event.event ||
-       (r.trigger.event === "stage.entered" && (event.event === "stage.entry" || event.event === `${event.recordType}.entered_stage` || event.event === "stage.entered")) ||
-       (r.trigger.event === "stage.entry" && (event.event === "stage.entered" || event.event === `${event.recordType}.entered_stage` || event.event === "stage.entry")) ||
-       (r.trigger.event === "stage.exited" && (event.event === "stage.exit" || event.event === `${event.recordType}.exited_stage` || event.event === "stage.exited")) ||
-       (r.trigger.event === "stage.exit" && (event.event === "stage.exited" || event.event === `${event.recordType}.exited_stage` || event.event === "stage.exit")) ||
-       ((r.trigger.event === "field.updated" || r.trigger.event === "field_update" || r.trigger.event.includes("field")) &&
-        (event.event === "field.updated" || event.event === "field_update" || event.event === "client.field_updated" || event.event === `${event.recordType}.field_updated`)))
-  );
+  const norm = (s?: string) => (s || "").trim().toLowerCase().replace(/[\s_-]+/g, ".");
+  const busEvt = norm(event.event);
+
+  const matchingRules = allRules.filter((r) => {
+    if (!r.enabled) return false;
+    const ruleEvt = norm(r.trigger?.event);
+    const ruleLabel = norm(r.trigger?.label);
+
+    const isDirectMatch = ruleEvt === busEvt || ruleLabel === busEvt;
+    const isStageMatch =
+      (ruleEvt === "stage.entered" || ruleEvt === "stage.entry" || ruleEvt.endsWith(".entered_stage") || ruleEvt.endsWith(".entered.stage")) &&
+      (busEvt === "stage.entered" || busEvt === "stage.entry" || busEvt.endsWith(".entered_stage") || busEvt.endsWith(".entered.stage"));
+    const isStageExitMatch =
+      (ruleEvt === "stage.exited" || ruleEvt === "stage.exit" || ruleEvt.endsWith(".exited_stage") || ruleEvt.endsWith(".exited.stage")) &&
+      (busEvt === "stage.exited" || busEvt === "stage.exit" || busEvt.endsWith(".exited_stage") || busEvt.endsWith(".exited.stage"));
+    const isFieldMatch =
+      (ruleEvt.includes("field") || ruleEvt === "field_update") &&
+      (busEvt.includes("field") || busEvt === "field_update");
+
+    if (!isDirectMatch && !isStageMatch && !isStageExitMatch && !isFieldMatch) {
+      return false;
+    }
+
+    const ruleEntity = (r.entityType || "").toLowerCase();
+    const eventRecord = (event.recordType || "").toLowerCase();
+    if (
+      ruleEntity &&
+      ruleEntity !== eventRecord &&
+      !ruleEvt.startsWith(`${eventRecord}.`) &&
+      !ruleLabel.startsWith(eventRecord)
+    ) {
+      if (!isStageMatch && !isStageExitMatch && !isFieldMatch) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 
   const results: RuleExecutionResult[] = [];
   const processes = getStoredProcesses();
@@ -393,7 +413,7 @@ export async function executeRulesForEvent(
         stepKey === "processmovement"
       ) {
         const rawTargetEntity = act.params?.stageEntity || act.params?.entityType;
-        const targetStageId = act.params?.stageId || act.params?.stepDetailStage;
+        const targetStageId = act.params?.stageId || act.params?.stepDetailStage || act.params?.stageName || act.params?.stepDetailStageName;
 
         if (targetStageId) {
           // If explicitly invoice or target stage belongs to invoice
