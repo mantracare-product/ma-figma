@@ -933,40 +933,42 @@ export default function InvoiceDetailDrawer({
       )}
 
       {/* Admin Section Drawer */}
-      <AdminSectionDrawer
-        isOpen={sectionDrawerOpen}
-        onClose={() => {
-          setSectionDrawerOpen(false);
-          setEditingSection(null);
-        }}
-        section={editingSection}
-        onSave={(savedSection) => {
-          if (editingSection) {
-            updateCustomSection(savedSection);
-            setInvoiceSections((prev) =>
-              prev.map((s) => (s.id === savedSection.id ? { ...s, title: savedSection.title } : s))
-            );
-            toast.success("Section updated successfully");
-          } else {
-            addCustomSection(savedSection);
-            setInvoiceSections((prev) => [
-              ...prev,
-              {
-                id: savedSection.id,
-                title: savedSection.title,
-                description: savedSection.description,
-                iconName: savedSection.iconName as any,
-                source: "custom",
-                module: "invoice",
-                fieldKeys: [],
-              },
-            ]);
-            toast.success("New section added to invoice overview");
-          }
-          setSectionDrawerOpen(false);
-          setEditingSection(null);
-        }}
-      />
+      {sectionDrawerOpen && (
+        <AdminSectionDrawer
+          section={editingSection}
+          initialModule="invoice"
+          onClose={() => {
+            setSectionDrawerOpen(false);
+            setEditingSection(null);
+          }}
+          onSaved={(savedSection) => {
+            if (editingSection) {
+              updateCustomSection(savedSection);
+              setInvoiceSections((prev) =>
+                prev.map((s) => (s.id === savedSection.id ? { ...s, title: savedSection.title } : s))
+              );
+              toast.success("Section updated successfully");
+            } else {
+              addCustomSection(savedSection);
+              setInvoiceSections((prev) => [
+                ...prev,
+                {
+                  id: savedSection.id,
+                  title: savedSection.title,
+                  description: savedSection.description,
+                  iconName: savedSection.iconName as any,
+                  source: "custom",
+                  module: "invoice",
+                  fieldKeys: [],
+                },
+              ]);
+              toast.success("New section added to invoice overview");
+            }
+            setSectionDrawerOpen(false);
+            setEditingSection(null);
+          }}
+        />
+      )}
     </div>
   );
 }
