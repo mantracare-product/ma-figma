@@ -40,6 +40,368 @@ export interface GenerateDocumentDrawerProps {
   };
   initialTemplate?: DocumentTemplate | null;
   onDocumentGenerated?: (doc: StoredClientDocument) => void;
+  entityType?: "client" | "process" | "appointment" | "invoice";
+  entityId?: string;
+  invoiceData?: any;
+  previewDoc?: StoredClientDocument | null;
+  isReadOnly?: boolean;
+  onToggleStatus?: (docId: string) => void;
+}
+
+// Helper to resolve placeholders against client, system, or invoice data
+export function resolvePlaceholderValue(
+  rawKey: string,
+  clientObj: any,
+  sourceValues: Record<string, string> = {},
+  tpl: DocumentTemplate | null = null,
+  invoiceData?: any
+): string {
+  if (sourceValues[rawKey] !== undefined && sourceValues[rawKey] !== "") {
+    return sourceValues[rawKey];
+  }
+  const rawKeyLower = rawKey.toLowerCase().trim();
+  if (sourceValues[rawKeyLower] !== undefined && sourceValues[rawKeyLower] !== "") {
+    return sourceValues[rawKeyLower];
+  }
+
+  if (tpl?.fieldMappings) {
+    const mapping = tpl.fieldMappings.find(
+      (m) =>
+        m.templateField.toLowerCase().trim() === rawKeyLower ||
+        m.mappedFieldKey.toLowerCase().trim() === rawKeyLower
+    );
+    if (mapping) {
+      const mappedVal = sourceValues[mapping.mappedFieldKey] || (clientObj as any)[mapping.mappedFieldKey];
+      if (mappedVal) return String(mappedVal);
+    }
+  }
+
+  if (clientObj[rawKey] !== undefined && clientObj[rawKey] !== null) {
+    return String(clientObj[rawKey]);
+  }
+  if (clientObj[rawKeyLower] !== undefined && clientObj[rawKeyLower] !== null) {
+    return String(clientObj[rawKeyLower]);
+  }
+
+  const cleaned = rawKeyLower.replace(/[^a-z0-9]/g, "");
+  const todayFormatted = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+  if (
+    cleaned === "name" ||
+    cleaned === "fullname" ||
+    cleaned === "clientname" ||
+    cleaned === "patientname" ||
+    cleaned === "customername" ||
+    cleaned === "patient" ||
+    cleaned === "client"
+  ) {
+    return clientObj.name || "Sarah Johnson";
+  }
+
+  if (
+    cleaned === "id" ||
+    cleaned === "clientid" ||
+    cleaned === "patientid" ||
+    cleaned === "pcompanyid" ||
+    cleaned === "companyid" ||
+    cleaned === "pid" ||
+    cleaned === "regno" ||
+    cleaned === "registrationnumber" ||
+    cleaned === "recordid"
+  ) {
+    return clientObj.id || "CL-001";
+  }
+
+  if (invoiceData) {
+    if (cleaned === "invoicenumber" || cleaned === "invoiceno" || cleaned === "invoiceid") {
+      return invoiceData.id || "INV-001";
+    }
+    if (cleaned === "duedate") {
+      return invoiceData.dueDate || todayFormatted;
+    }
+    if (cleaned === "subtotal") {
+      return `$${Number(invoiceData.subtotal ?? (invoiceData.total ? invoiceData.total * 0.9 : 0)).toFixed(2)}`;
+    }
+    if (cleaned === "taxamount" || cleaned === "tax") {
+      return `$${Number(invoiceData.tax ?? (invoiceData.total ? invoiceData.total * 0.1 : 0)).toFixed(2)}`;
+    }
+    if (cleaned === "totalamount" || cleaned === "total" || cleaned === "amountpaid") {
+      return `$${Number(invoiceData.total ?? 0).toFixed(2)}`;
+    }
+    if (cleaned === "paymentstatus" || cleaned === "status") {
+      return String(invoiceData.status || "DRAFT").toUpperCase();
+    }
+    if (cleaned === "lineitemssummary" || cleaned === "items" || cleaned === "services") {
+      return (invoiceData.lineItems || [])
+        .map(
+          (li: any, i: number) =>
+            `${i + 1}. ${li.description || li.product_name || "Item"} - Qty: ${li.quantity || 1} x $${Number(
+              li.unit_price || li.rate || 0
+            ).toFixed(2)} = $${Number(
+              li.total || (li.quantity || 1) * (li.unit_price || li.rate || 0)
+            ).toFixed(2)}`
+        )
+        .join("\n") || "1. Consultation / Service - $80.00";
+    }
+  }
+
+  if (
+    cleaned.includes("voucher") ||
+    cleaned.includes("documentnumber") ||
+    cleaned.includes("docnumber") ||
+    cleaned.includes("invoicenumber") ||
+    cleaned.includes("voucherno") ||
+    cleaned.includes("docno") ||
+    cleaned.includes("invoiceno") ||
+    cleaned.includes("receiptno")
+  ) {
+    if (invoiceData?.id) return invoiceData.id;
+    const numericId = String(clientObj.id || "001").replace(/[^0-9]/g, "").padStart(3, "0") || "001";
+    return `VCH-${new Date().getFullYear()}-${numericId}`;
+  }
+
+  if (cleaned === "age" || cleaned === "patientage" || cleaned === "clientage") {
+    return clientObj.age || (clientObj as any).age || "32";
+  }
+
+  if (cleaned === "gender" || cleaned === "sex" || cleaned === "patientgender" || cleaned === "clientgender") {
+    return clientObj.gender || (clientObj as any).gender || "Female";
+  }
+
+  if (
+    cleaned.includes("date") ||
+    cleaned.includes("bill") ||
+    cleaned === "today" ||
+    cleaned === "now" ||
+    cleaned === "issueddate" ||
+    cleaned === "createdat" ||
+    cleaned === "submissiondate"
+  ) {
+    return todayFormatted;
+  }
+
+  if (
+    cleaned.includes("address") ||
+    cleaned.includes("location") ||
+    cleaned.includes("city") ||
+    cleaned.includes("delivery") ||
+    cleaned === "companyrequisitedeliveryaddresstext"
+  ) {
+    return clientObj.location || clientObj.address || "New York, NY";
+  }
+
+  if (cleaned.includes("email") || cleaned === "mail") {
+    return clientObj.email || "sarah.j@email.com";
+  }
+
+  if (cleaned.includes("phone") || cleaned.includes("mobile") || cleaned.includes("contact") || cleaned.includes("tel")) {
+    return clientObj.phone || "5551234567";
+  }
+
+  if (cleaned.includes("company") || cleaned.includes("organization") || cleaned.includes("org")) {
+    return clientObj.companyName || "TechCorp Inc.";
+  }
+
+  if (cleaned.includes("position") || cleaned.includes("title") || cleaned.includes("designation") || cleaned.includes("role")) {
+    return clientObj.jobPosition || "Client Representative";
+  }
+
+  if (
+    cleaned.includes("responsible") ||
+    cleaned.includes("doctor") ||
+    cleaned.includes("physician") ||
+    cleaned.includes("specialist") ||
+    cleaned.includes("provider") ||
+    cleaned.includes("staff")
+  ) {
+    return clientObj.responsible || "John Smith";
+  }
+
+  if (cleaned.includes("status")) {
+    return clientObj.status || "Active";
+  }
+
+  if (cleaned.includes("signature") || cleaned.includes("consent")) {
+    return clientObj.name || "Sarah Johnson";
+  }
+
+  if (cleaned.includes("allerg")) {
+    return "None Reported";
+  }
+
+  if (
+    cleaned.includes("diagno") ||
+    cleaned.includes("complaint") ||
+    cleaned.includes("medical") ||
+    cleaned.includes("history") ||
+    cleaned.includes("notes")
+  ) {
+    return "Regular Consultation";
+  }
+
+  if (cleaned.includes("emergency")) {
+    return clientObj.phone || "—";
+  }
+
+  return "";
+}
+
+// Helper to reliably resolve a template for a stored document
+export function resolveTemplateForDoc(
+  doc: StoredClientDocument | null | undefined,
+  allTemplates: DocumentTemplate[]
+): DocumentTemplate | null {
+  if (!doc) return null;
+
+  // 1. By explicit templateId
+  if (doc.templateId) {
+    const byId = allTemplates.find((t) => t.id === doc.templateId);
+    if (byId) return byId;
+  }
+
+  // 2. By notes mentioning template: e.g. Generated from template: "Prescription & Medication Order"
+  if (doc.notes) {
+    const byNote = allTemplates.find((t) =>
+      doc.notes?.toLowerCase().includes(t.name.toLowerCase())
+    );
+    if (byNote) return byNote;
+  }
+
+  // 3. By document name keywords
+  const docLower = doc.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (docLower.includes("prescription") || docLower.includes("medication")) {
+    const rx = allTemplates.find((t) => t.id === "tpl-rx-1" || t.name.toLowerCase().includes("prescription"));
+    if (rx) return rx;
+  }
+  if (docLower.includes("kyc") || docLower.includes("identity")) {
+    const kyc = allTemplates.find((t) => t.id === "tpl-1" || t.name.toLowerCase().includes("kyc"));
+    if (kyc) return kyc;
+  }
+  if (docLower.includes("agreement") || docLower.includes("contract") || docLower.includes("service")) {
+    const agr = allTemplates.find((t) => t.id === "tpl-2" || t.name.toLowerCase().includes("contract"));
+    if (agr) return agr;
+  }
+  if (docLower.includes("intake") || docLower.includes("medicalform")) {
+    const intake = allTemplates.find((t) => t.id === "tpl-3" || t.name.toLowerCase().includes("intake"));
+    if (intake) return intake;
+  }
+  if (docLower.includes("invoice") || docLower.includes("billing")) {
+    const inv = allTemplates.find((t) => t.id === "tpl-inv-1" || t.name.toLowerCase().includes("invoice"));
+    if (inv) return inv;
+  }
+  if (docLower.includes("session") || docLower.includes("notes")) {
+    const sn = allTemplates.find((t) => t.id === "tpl-sn-1" || t.name.toLowerCase().includes("session"));
+    if (sn) return sn;
+  }
+
+  // 4. Any name match
+  for (const t of allTemplates) {
+    const cleanTpl = t.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (docLower.includes(cleanTpl) || cleanTpl.includes(docLower)) {
+      return t;
+    }
+  }
+
+  // 5. Fallback synthetic template
+  return {
+    id: doc.templateId || "tpl-view",
+    name: doc.name.replace(/\.[^/.]+$/, "").replace(/_/g, " "),
+    category: doc.category || "General",
+    fileName: doc.name,
+    templateText: doc.generatedContent || doc.name,
+    extractedFields: doc.fieldValues
+      ? Object.keys(doc.fieldValues)
+      : extractTemplateFields(doc.generatedContent || ""),
+    fieldMappings: [],
+    createdAt: doc.uploadedDate,
+    createdBy: doc.uploadedBy,
+    rawDocxBase64: doc.rawDocxBase64,
+  };
+}
+
+// Helper to initialize filled field values for a stored document
+export function getInitialFieldValuesForDoc(
+  doc: StoredClientDocument,
+  tpl: DocumentTemplate | null,
+  clientObj: any,
+  invoiceData?: any
+): Record<string, string> {
+  const result: Record<string, string> = {};
+
+  // 1. If doc has stored fieldValues, populate from them
+  if (doc.fieldValues && Object.keys(doc.fieldValues).length > 0) {
+    Object.assign(result, doc.fieldValues);
+  }
+
+  // 2. Parse lines from generatedContent if any
+  if (doc.generatedContent) {
+    const lines = doc.generatedContent.split("\n");
+    for (const line of lines) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx > 0 && colonIdx < 40) {
+        const rawLabel = line.slice(0, colonIdx).trim().toLowerCase().replace(/[^a-z0-9]/g, "_");
+        const val = line.slice(colonIdx + 1).trim();
+        if (rawLabel.includes("patient_name") || rawLabel.includes("client_name") || rawLabel === "name") {
+          result["client_name"] = val;
+          result["name"] = val;
+        } else if (rawLabel.includes("age") || rawLabel.includes("birth")) {
+          result["age"] = val;
+        } else if (
+          rawLabel.includes("date_issued") ||
+          rawLabel.includes("issued") ||
+          (rawLabel.includes("date") && !rawLabel.includes("due") && !rawLabel.includes("follow"))
+        ) {
+          result["current_date"] = val;
+          result["date"] = val;
+        } else if (
+          rawLabel.includes("physician") ||
+          rawLabel.includes("attending") ||
+          rawLabel.includes("doctor") ||
+          rawLabel.includes("responsible")
+        ) {
+          result["responsible"] = val;
+        } else if (rawLabel.includes("diagnosis")) {
+          result["diagnosis"] = val;
+        } else if (rawLabel.includes("complaint")) {
+          result["chief_complaint"] = val;
+        } else if (rawLabel.includes("medication")) {
+          result["medications"] = val;
+        } else if (rawLabel.includes("advice") || rawLabel.includes("instruction")) {
+          result["advice"] = val;
+        } else if (rawLabel.includes("follow_up") || rawLabel.includes("followup")) {
+          result["follow_up_date"] = val;
+        } else if (rawLabel.includes("location") || rawLabel.includes("address")) {
+          result["location"] = val;
+        } else if (rawLabel.includes("email")) {
+          result["email"] = val;
+        } else if (rawLabel.includes("phone")) {
+          result["phone"] = val;
+        } else if (rawLabel.includes("company")) {
+          result["company_name"] = val;
+        }
+      }
+    }
+  }
+
+  // 3. For any template placeholders still empty, resolve them
+  const placeholders = Array.from(
+    new Set([
+      ...(tpl?.extractedFields || []),
+      ...extractTemplateFields(tpl?.templateText || ""),
+    ])
+  ).filter(Boolean);
+
+  placeholders.forEach((f) => {
+    if (result[f] === undefined) {
+      result[f] = resolvePlaceholderValue(f, clientObj, result, tpl, invoiceData);
+    }
+  });
+
+  return result;
 }
 
 export default function GenerateDocumentDrawer({
@@ -48,10 +410,22 @@ export default function GenerateDocumentDrawer({
   client,
   initialTemplate = null,
   onDocumentGenerated,
+  entityType,
+  entityId,
+  invoiceData,
+  previewDoc = null,
+  isReadOnly = false,
+  onToggleStatus,
 }: GenerateDocumentDrawerProps) {
   const [templates, setTemplates] = useState<DocumentTemplate[]>(getStoredDocumentTemplates);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(initialTemplate);
+  const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(() => {
+    if (initialTemplate) return initialTemplate;
+    if (previewDoc) {
+      return resolveTemplateForDoc(previewDoc, getStoredDocumentTemplates());
+    }
+    return null;
+  });
 
   // Source selection state ("current" | "webform_{id}" | "transcript_{id}")
   const [selectedSourceId, setSelectedSourceId] = useState<string>("current");
@@ -64,7 +438,13 @@ export default function GenerateDocumentDrawer({
   const [isSaving, setIsSaving] = useState(false);
 
   // Field Values Map (key -> editable value)
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>(() => {
+    if (previewDoc) {
+      const tpl = resolveTemplateForDoc(previewDoc, getStoredDocumentTemplates());
+      return getInitialFieldValuesForDoc(previewDoc, tpl, client, invoiceData);
+    }
+    return {};
+  });
 
   // Download Dropdown State
   const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
@@ -127,6 +507,7 @@ export default function GenerateDocumentDrawer({
   }, []);
 
   const [isDocxRendered, setIsDocxRendered] = useState(false);
+  const createdDocIdRef = React.useRef<string | null>(previewDoc ? previewDoc.id : null);
 
   // Render authentic docx with 100% fidelity (backgrounds, logos, colors, tables) via docx-preview
   useEffect(() => {
@@ -171,188 +552,7 @@ export default function GenerateDocumentDrawer({
     };
   }, [selectedTemplate?.id, selectedTemplate?.rawDocxBase64, fieldValues, isGeneratingDoc]);
 
-  // Smart helper to resolve a placeholder name to real client / system / source data
-  const resolvePlaceholderValue = (
-    rawKey: string,
-    clientObj: any,
-    sourceValues: Record<string, string>,
-    tpl: DocumentTemplate | null
-  ): string => {
-    // 1. Direct match in sourceValues (e.g. from webform or transcript)
-    if (sourceValues[rawKey] !== undefined && sourceValues[rawKey] !== "") {
-      return sourceValues[rawKey];
-    }
-    const rawKeyLower = rawKey.toLowerCase().trim();
-    if (sourceValues[rawKeyLower] !== undefined && sourceValues[rawKeyLower] !== "") {
-      return sourceValues[rawKeyLower];
-    }
 
-    // 2. Check template field mappings if available
-    if (tpl?.fieldMappings) {
-      const mapping = tpl.fieldMappings.find(
-        (m) =>
-          m.templateField.toLowerCase().trim() === rawKeyLower ||
-          m.mappedFieldKey.toLowerCase().trim() === rawKeyLower
-      );
-      if (mapping) {
-        const mappedVal = sourceValues[mapping.mappedFieldKey] || (clientObj as any)[mapping.mappedFieldKey];
-        if (mappedVal) return String(mappedVal);
-      }
-    }
-
-    // 3. Direct match on clientObj
-    if (clientObj[rawKey] !== undefined && clientObj[rawKey] !== null) {
-      return String(clientObj[rawKey]);
-    }
-    if (clientObj[rawKeyLower] !== undefined && clientObj[rawKeyLower] !== null) {
-      return String(clientObj[rawKeyLower]);
-    }
-
-    // 4. Normalized alias / semantic matching
-    const cleaned = rawKeyLower.replace(/[^a-z0-9]/g, "");
-    const todayFormatted = new Date().toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-
-    // Name matches
-    if (
-      cleaned === "name" ||
-      cleaned === "fullname" ||
-      cleaned === "clientname" ||
-      cleaned === "patientname" ||
-      cleaned === "customername" ||
-      cleaned === "patient" ||
-      cleaned === "client"
-    ) {
-      return clientObj.name || "Sarah Johnson";
-    }
-
-    // ID matches (Patient ID, PCompanyId, Client ID, etc.)
-    if (
-      cleaned === "id" ||
-      cleaned === "clientid" ||
-      cleaned === "patientid" ||
-      cleaned === "pcompanyid" ||
-      cleaned === "companyid" ||
-      cleaned === "pid" ||
-      cleaned === "regno" ||
-      cleaned === "registrationnumber" ||
-      cleaned === "recordid"
-    ) {
-      return clientObj.id || "CL-001";
-    }
-
-    // Voucher / Document / Invoice / Receipt number
-    if (
-      cleaned.includes("voucher") ||
-      cleaned.includes("documentnumber") ||
-      cleaned.includes("docnumber") ||
-      cleaned.includes("invoicenumber") ||
-      cleaned.includes("voucherno") ||
-      cleaned.includes("docno") ||
-      cleaned.includes("invoiceno") ||
-      cleaned.includes("receiptno")
-    ) {
-      const numericId = String(clientObj.id || "001").replace(/[^0-9]/g, "").padStart(3, "0") || "001";
-      return `VCH-${new Date().getFullYear()}-${numericId}`;
-    }
-
-    // Age matches
-    if (cleaned === "age" || cleaned === "patientage" || cleaned === "clientage") {
-      return clientObj.age || (clientObj as any).age || "32";
-    }
-
-    // Gender matches
-    if (cleaned === "gender" || cleaned === "sex" || cleaned === "patientgender" || cleaned === "clientgender") {
-      return clientObj.gender || (clientObj as any).gender || "Female";
-    }
-
-    // Date / Bill Date / Voucher Date
-    if (
-      cleaned.includes("date") ||
-      cleaned.includes("bill") ||
-      cleaned === "today" ||
-      cleaned === "now" ||
-      cleaned === "issueddate" ||
-      cleaned === "createdat" ||
-      cleaned === "submissiondate"
-    ) {
-      return todayFormatted;
-    }
-
-    // Address / Location
-    if (
-      cleaned.includes("address") ||
-      cleaned.includes("location") ||
-      cleaned.includes("city") ||
-      cleaned.includes("delivery") ||
-      cleaned === "companyrequisitedeliveryaddresstext"
-    ) {
-      return clientObj.location || clientObj.address || "New York, NY";
-    }
-
-    // Email
-    if (cleaned.includes("email") || cleaned === "mail") {
-      return clientObj.email || "sarah.j@email.com";
-    }
-
-    // Phone / Contact
-    if (cleaned.includes("phone") || cleaned.includes("mobile") || cleaned.includes("contact") || cleaned.includes("tel")) {
-      return clientObj.phone || "5551234567";
-    }
-
-    // Company / Organization
-    if (cleaned.includes("company") || cleaned.includes("organization") || cleaned.includes("org")) {
-      return clientObj.companyName || "TechCorp Inc.";
-    }
-
-    // Job Position / Designation
-    if (cleaned.includes("position") || cleaned.includes("title") || cleaned.includes("designation") || cleaned.includes("role")) {
-      return clientObj.jobPosition || "Client Representative";
-    }
-
-    // Responsible / Doctor / Attending
-    if (
-      cleaned.includes("responsible") ||
-      cleaned.includes("doctor") ||
-      cleaned.includes("physician") ||
-      cleaned.includes("specialist") ||
-      cleaned.includes("provider") ||
-      cleaned.includes("staff")
-    ) {
-      return clientObj.responsible || "John Smith";
-    }
-
-    // Status
-    if (cleaned.includes("status")) {
-      return clientObj.status || "Active";
-    }
-
-    // Consent / Signature
-    if (cleaned.includes("signature") || cleaned.includes("consent")) {
-      return clientObj.name || "Sarah Johnson";
-    }
-
-    // Allergies
-    if (cleaned.includes("allerg")) {
-      return "None Reported";
-    }
-
-    // Medical notes / History / Diagnosis / Chief Complaint
-    if (cleaned.includes("diagno") || cleaned.includes("complaint") || cleaned.includes("medical") || cleaned.includes("history") || cleaned.includes("notes")) {
-      return "Regular Consultation";
-    }
-
-    // Emergency contact
-    if (cleaned.includes("emergency")) {
-      return clientObj.phone || "—";
-    }
-
-    // Fallback: Return empty string instead of raw placeholder name
-    return "";
-  };
 
   // Helper to compute field values for a specific source ID
   const getSourceFieldValues = (sourceId: string, tpl: DocumentTemplate | null): Record<string, string> => {
@@ -504,14 +704,20 @@ export default function GenerateDocumentDrawer({
     }
   };
 
-  // Update selectedTemplate when initialTemplate prop changes
+  // Update selectedTemplate when previewDoc or initialTemplate prop changes
   useEffect(() => {
-    if (initialTemplate) {
+    if (previewDoc) {
+      createdDocIdRef.current = previewDoc.id;
+      const matchedTpl = resolveTemplateForDoc(previewDoc, templates);
+      setSelectedTemplate(matchedTpl);
+      const initialFields = getInitialFieldValuesForDoc(previewDoc, matchedTpl, client, invoiceData);
+      setFieldValues(initialFields);
+    } else if (initialTemplate) {
       handleSelectTemplate(initialTemplate);
     }
-  }, [initialTemplate]);
+  }, [previewDoc?.id, initialTemplate?.id]);
 
-  // When a template is selected, initialize filled field values and simulate loading state
+  // When a template is selected, initialize filled field values, auto-create entry in table, and simulate loading state
   const handleSelectTemplate = (tpl: DocumentTemplate) => {
     setSelectedTemplate(tpl);
     setIsDocxRendered(false);
@@ -532,6 +738,64 @@ export default function GenerateDocumentDrawer({
 
     setFieldValues(resolvedVals);
 
+    // AUTO-CREATE ENTRY IN TABLE IMMEDIATELY WHEN TEMPLATE IS CHOSEN & GENERATED
+    if (!isReadOnly) {
+      const docId = `doc-gen-${Date.now()}`;
+      createdDocIdRef.current = docId;
+      const dateStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+      const baseName =
+        entityType === "invoice" && entityId
+          ? `${entityId}_${tpl.name.replace(/\s+/g, "_")}`
+          : `${client.name.replace(/\s+/g, "_")}_${tpl.name.replace(/\s+/g, "_")}`;
+
+      let initialText = tpl.templateText || "";
+      if (tpl.fieldMappings) {
+        tpl.fieldMappings.forEach((m) => {
+          const v = resolvedVals[m.templateField] ?? resolvedVals[m.mappedFieldKey] ?? "";
+          const esc = m.templateField.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          initialText = initialText.replace(new RegExp(`\\{\\{\\s*${esc}\\s*\\}\\}`, "gi"), v);
+          initialText = initialText.replace(new RegExp(`\\{\\s*${esc}\\s*\\}`, "gi"), v);
+          initialText = initialText.replace(new RegExp(`\\[\\s*${esc}\\s*\\]`, "gi"), v);
+          initialText = initialText.replace(new RegExp(`«\\s*${esc}\\s*»`, "gi"), v);
+        });
+      }
+      Object.keys(resolvedVals).forEach((k) => {
+        const v = resolvedVals[k] ?? "";
+        const esc = k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        initialText = initialText.replace(new RegExp(`\\{\\{\\s*${esc}\\s*\\}\\}`, "gi"), v);
+        initialText = initialText.replace(new RegExp(`\\{\\s*${esc}\\s*\\}`, "gi"), v);
+        initialText = initialText.replace(new RegExp(`\\[\\s*${esc}\\s*\\]`, "gi"), v);
+        initialText = initialText.replace(new RegExp(`«\\s*${esc}\\s*»`, "gi"), v);
+      });
+
+      const newDoc: StoredClientDocument = {
+        id: docId,
+        clientId: client.id,
+        invoiceId: entityType === "invoice" ? entityId : undefined,
+        entityId,
+        entityType,
+        name: `${baseName}.pdf`,
+        category: tpl.category || (entityType === "invoice" ? "Invoices" : "General"),
+        valueBy: entityType === "invoice" ? "Invoice Record Data" : "Client Profile Data",
+        fileType: "pdf",
+        fileSize: "1.4 MB",
+        uploadedDate: dateStr,
+        uploadedBy: client.responsible || "System Admin",
+        status: "Verified",
+        notes: `Generated from template: "${tpl.name}"`,
+        templateId: tpl.id,
+        generatedContent: initialText,
+        fieldValues: resolvedVals,
+        rawDocxBase64: tpl.rawDocxBase64,
+      };
+
+      saveClientDocument(newDoc);
+      if (onDocumentGenerated) {
+        onDocumentGenerated(newDoc);
+      }
+      toast.success(`Document entry created in table from "${tpl.name}"!`);
+    }
+
     // Simulate 750ms "Generating document..." loader animation
     setTimeout(() => {
       setIsGeneratingDoc(false);
@@ -540,6 +804,11 @@ export default function GenerateDocumentDrawer({
 
   // Compute live rendered text based on current fieldValues
   const getRenderedText = (): string => {
+    if (isReadOnly && previewDoc?.generatedContent) {
+      if (!previewDoc.fieldValues || Object.keys(previewDoc.fieldValues).length === 0) {
+        return previewDoc.generatedContent;
+      }
+    }
     if (!selectedTemplate) return "";
     let text = selectedTemplate.templateText || "";
 
@@ -595,7 +864,22 @@ export default function GenerateDocumentDrawer({
 
   // Field change handler
   const handleFieldValueChange = (key: string, val: string) => {
-    setFieldValues((prev) => ({ ...prev, [key]: val }));
+    const nextVals = { ...fieldValues, [key]: val };
+    setFieldValues(nextVals);
+
+    // Keep the created document entry in store synchronized with live user edits
+    if (createdDocIdRef.current && !isReadOnly && selectedTemplate) {
+      const allStored = getStoredClientDocuments();
+      const existing = allStored.find((d) => d.id === createdDocIdRef.current);
+      if (existing) {
+        const updated: StoredClientDocument = {
+          ...existing,
+          fieldValues: nextVals,
+        };
+        saveClientDocument(updated);
+        if (onDocumentGenerated) onDocumentGenerated(updated);
+      }
+    }
   };
 
   // Helper to download document as Word (.docx)
@@ -640,15 +924,20 @@ export default function GenerateDocumentDrawer({
               ? `AI Scribe Transcript #${selectedSourceId.replace("transcript_", "")}`
               : "Client Profile Data";
 
+      const docId = createdDocIdRef.current || `doc-${Date.now()}`;
+
       if (format === "pdf") {
         const pdfResult = await generateClientPdf(selectedTemplate, renderedText, client);
         const blobUrl = URL.createObjectURL(pdfResult.blob);
 
         const newDoc: StoredClientDocument = {
-          id: `doc-${Date.now()}`,
+          id: docId,
           clientId: client.id,
+          invoiceId: entityType === "invoice" ? entityId : undefined,
+          entityId,
+          entityType,
           name: `${baseName}.pdf`,
-          category: selectedTemplate.category || "General",
+          category: selectedTemplate.category || (entityType === "invoice" ? "Invoices" : "General"),
           valueBy: valueBySource,
           fileType: "pdf",
           fileSize: `${(pdfResult.blob.size / (1024 * 1024)).toFixed(2)} MB`,
@@ -658,6 +947,8 @@ export default function GenerateDocumentDrawer({
           notes: `Generated PDF from template: "${selectedTemplate.name}"`,
           templateId: selectedTemplate.id,
           generatedContent: renderedText,
+          fieldValues,
+          rawDocxBase64: selectedTemplate.rawDocxBase64,
           pdfBase64: pdfResult.base64,
           pdfBlobUrl: blobUrl,
         };
@@ -672,7 +963,7 @@ export default function GenerateDocumentDrawer({
         link.click();
         document.body.removeChild(link);
 
-        toast.success(`Downloaded "${baseName}.pdf" & saved to client profile!`);
+        toast.success(`Downloaded "${baseName}.pdf" & saved!`);
         if (onDocumentGenerated) onDocumentGenerated(newDoc);
       } else {
         // Download Word DOCX format
@@ -697,10 +988,13 @@ export default function GenerateDocumentDrawer({
         }
 
         const newDoc: StoredClientDocument = {
-          id: `doc-${Date.now()}`,
+          id: docId,
           clientId: client.id,
+          invoiceId: entityType === "invoice" ? entityId : undefined,
+          entityId,
+          entityType,
           name: `${baseName}.docx`,
-          category: selectedTemplate.category || "General",
+          category: selectedTemplate.category || (entityType === "invoice" ? "Invoices" : "General"),
           valueBy: valueBySource,
           fileType: "doc",
           fileSize: "1.2 MB",
@@ -710,10 +1004,12 @@ export default function GenerateDocumentDrawer({
           notes: `Generated Word doc from template: "${selectedTemplate.name}"`,
           templateId: selectedTemplate.id,
           generatedContent: renderedText,
+          fieldValues,
+          rawDocxBase64: selectedTemplate.rawDocxBase64,
         };
 
         saveClientDocument(newDoc);
-        toast.success(`Downloaded "${baseName}.docx" & saved to client profile!`);
+        toast.success(`Downloaded "${baseName}.docx" & saved!`);
         if (onDocumentGenerated) onDocumentGenerated(newDoc);
       }
     } catch (err) {
@@ -802,12 +1098,13 @@ export default function GenerateDocumentDrawer({
     }
   };
 
-  // Extract unique placeholders present in the selected template
+  // Extract unique placeholders present in the selected template and populated fieldValues
   const activePlaceholders = selectedTemplate
     ? Array.from(new Set([
       ...(selectedTemplate.extractedFields || []),
       ...extractTemplateFields(selectedTemplate.templateText || ""),
       ...(selectedTemplate.fieldMappings || []).map((m) => m.templateField),
+      ...(fieldValues ? Object.keys(fieldValues) : []),
     ])).filter(Boolean)
     : [];
 
@@ -861,7 +1158,9 @@ export default function GenerateDocumentDrawer({
         onClose={onClose}
         title="Generate Document from Template"
         subtitle={
-          selectedTemplate
+          isReadOnly
+            ? "Preview generated document, view field values, print or download as PDF / DOCX"
+            : selectedTemplate
             ? "Preview generated document, edit field values, print or download as PDF / DOCX"
             : "Select a document template to populate with client data"
         }
@@ -870,7 +1169,19 @@ export default function GenerateDocumentDrawer({
         zIndex={650}
         footer={
           selectedTemplate ? (
-            <div className="flex items-center justify-end w-full">
+            <div className="flex items-center justify-between w-full">
+              {isReadOnly && onToggleStatus && previewDoc ? (
+                <button
+                  type="button"
+                  onClick={() => onToggleStatus(previewDoc.id)}
+                  className="px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 transition-colors cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  Status: {previewDoc.status} (Click to toggle)
+                </button>
+              ) : (
+                <div />
+              )}
               <div className="flex items-center gap-3">
                 {/* Print Button */}
                 <button
@@ -1357,21 +1668,38 @@ export default function GenerateDocumentDrawer({
               <div className="col-span-12 lg:col-span-5 xl:col-span-4 space-y-3 min-w-0 sticky top-0 self-start z-10">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    FILLED FIELDS & VALUES ({activePlaceholders.length})
+                    {isReadOnly ? "DOCUMENT RECORD FIELDS" : `FILLED FIELDS & VALUES (${activePlaceholders.length})`}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => handleSourceChange("current")}
-                    className="text-[11px] text-slate-500 hover:text-slate-900 flex items-center gap-1 cursor-pointer font-medium"
-                    title="Reset to system profile defaults"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Reset Defaults</span>
-                  </button>
+                  {isReadOnly ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Read-Only View
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleSourceChange("current")}
+                      className="text-[11px] text-slate-500 hover:text-slate-900 flex items-center gap-1 cursor-pointer font-medium"
+                      title="Reset to system profile defaults"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Reset Defaults</span>
+                    </button>
+                  )}
                 </div>
 
-                {/* DATA SOURCE SELECTOR (Conditional 2nd Dropdown & Minimal Clean UI with Info Icon) */}
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5 shadow-2xs">
+                {isReadOnly ? (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-3.5 h-3.5 text-slate-600" />
+                      <span className="font-semibold text-slate-700 truncate">Source: {previewDoc?.valueBy || "Document Record Data"}</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-200 text-slate-700 uppercase shrink-0">
+                      {previewDoc?.status || "Verified"}
+                    </span>
+                  </div>
+                ) : (
+                  /* DATA SOURCE SELECTOR (Conditional 2nd Dropdown & Minimal Clean UI with Info Icon) */
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5 shadow-2xs">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <Database className="w-3.5 h-3.5 text-slate-700" />
@@ -1615,10 +1943,14 @@ export default function GenerateDocumentDrawer({
                     )}
                   </div>
                 </div>
+              )}
 
                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 max-h-[calc(100vh-360px)] overflow-y-auto">
                   <p className="text-[11px] text-slate-500 leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    The placeholders below were pre-filled from <strong>{selectedSourceId === "current" ? `${client.name}'s profile data` : selectedSourceId.startsWith("webform_") ? "WebForm submission response" : "AI Scribe transcript extraction"}</strong>. You can manually edit any field value:
+                    {isReadOnly
+                      ? `The values below were recorded for this document. Displayed in non-editable form:`
+                      : `The placeholders below were pre-filled from ${selectedSourceId === "current" ? `${client.name}'s profile data` : selectedSourceId.startsWith("webform_") ? "WebForm submission response" : "AI Scribe transcript extraction"}. You can manually edit any field value:`
+                    }
                   </p>
 
                   {activePlaceholders.length === 0 ? (
@@ -1643,8 +1975,14 @@ export default function GenerateDocumentDrawer({
                           <input
                             type="text"
                             value={val}
-                            onChange={(e) => handleFieldValueChange(key, e.target.value)}
-                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-slate-500 font-medium"
+                            readOnly={isReadOnly}
+                            disabled={isReadOnly}
+                            onChange={(e) => !isReadOnly && handleFieldValueChange(key, e.target.value)}
+                            className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-medium ${
+                              isReadOnly
+                                ? "border-slate-200 bg-slate-50/70 text-slate-800 cursor-default select-all"
+                                : "border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-slate-500"
+                            }`}
                             style={{ fontFamily: "DM Sans, sans-serif" }}
                           />
                         </div>

@@ -197,6 +197,7 @@ const MODULE_TABS: { label: string; value: Exclude<FieldModule, "deal"> }[] = [
   { label: "Processes",     value: "process" },
   { label: "Appointments",  value: "appointment" },
   { label: "Services",      value: "service" },
+  { label: "Invoices",      value: "invoice" },
   { label: "Organizations", value: "organization" },
   { label: "Team Members",  value: "teamMember" },
   { label: "AI Scribe",     value: "scribe" },
@@ -491,12 +492,13 @@ export function AdminCustomFields() {
               align: "left",
               render: (field) => {
                 const isCompositeField =
-                  field.compositeDisplayMode !== undefined ||
+                  field.inputType !== "new_list" &&
+                  (field.compositeDisplayMode !== undefined ||
                   field.inputType === "table" ||
                   field.inputType === "group" ||
                   field.inputType === "group_repeatable" ||
                   (field.inputType === "list_open" && (field.listEntryType === "structured" || (field.subFields && field.subFields.length > 0))) ||
-                  (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig);
+                  (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig));
 
                 const isListField =
                   !isCompositeField &&
@@ -506,11 +508,21 @@ export function AdminCustomFields() {
                   field.inputType === "multiselect" ||
                   field.inputType === "list");
 
+                const isAdvanceList =
+                  field.inputType === "new_list" &&
+                  (field.newListConfig?.sourceMode === "advance_2" ||
+                   field.newListConfig?.sourceMode === "advance_list" ||
+                   Boolean(field.newListConfig?.advanceListId));
+
                 const typeName =
                   isCompositeField
                     ? field.compositeDisplayMode === "table" || field.inputType === "table"
                       ? "Group Field (Table)"
                       : "Group Field (Group)"
+                    : isAdvanceList
+                    ? "List (Advance)"
+                    : field.inputType === "new_list"
+                    ? "List"
                     : field.inputType === "list_open"
                     ? "List (Open · Tags)"
                     : isListField
@@ -523,6 +535,10 @@ export function AdminCustomFields() {
                 if (isCompositeField) {
                   typeBadgeStyle = "bg-indigo-50 text-indigo-700";
                   TypeIcon = field.compositeDisplayMode === "table" || field.inputType === "table" ? TableIcon : Layers;
+                }
+                else if (isAdvanceList) {
+                  typeBadgeStyle = "bg-purple-50 text-purple-700";
+                  TypeIcon = Layers;
                 }
                 else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
                 else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {

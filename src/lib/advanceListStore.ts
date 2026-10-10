@@ -146,6 +146,106 @@ export const DEFAULT_ADVANCE_LISTS: AdvanceListDefinition[] = [
     createdAt: "2026-09-05T12:00:00.000Z",
     updatedAt: "2026-09-05T12:00:00.000Z",
   },
+  {
+    id: "adv_list_products_services",
+    name: "Products / Services Catalog",
+    description: "Standard clinic and healthcare products, consultation rates, and services",
+    columns: [
+      { id: "col_product_name", name: "Product / Service Name", type: "string", isPrimary: true, isEditable: false, isDisable: false },
+      { id: "col_cpt_code", name: "CPT / Item Code", type: "string", isPrimary: false, isEditable: false, isDisable: true },
+      { id: "col_unit_price", name: "Unit Price ($)", type: "number", isPrimary: false, isEditable: true, isDisable: false },
+      { id: "col_category", name: "Category", type: "string", isPrimary: false, isEditable: false, isDisable: false },
+      { id: "col_tax_rate", name: "Tax (%)", type: "number", isPrimary: false, isEditable: true, isDisable: false },
+    ],
+    rows: [
+      {
+        id: "row_prod_1",
+        label: "Initial Comprehensive Consultation",
+        isDefault: true,
+        values: {
+          col_product_name: "Initial Comprehensive Consultation",
+          col_cpt_code: "99204",
+          col_unit_price: 150,
+          col_category: "Consultation",
+          col_tax_rate: 5,
+        },
+      },
+      {
+        id: "row_prod_2",
+        label: "Routine Follow-up Visit",
+        isDefault: false,
+        values: {
+          col_product_name: "Routine Follow-up Visit",
+          col_cpt_code: "99213",
+          col_unit_price: 85,
+          col_category: "Consultation",
+          col_tax_rate: 5,
+        },
+      },
+      {
+        id: "row_prod_3",
+        label: "Detailed Established Visit (30 min)",
+        isDefault: false,
+        values: {
+          col_product_name: "Detailed Established Visit (30 min)",
+          col_cpt_code: "99214",
+          col_unit_price: 120,
+          col_category: "Consultation",
+          col_tax_rate: 5,
+        },
+      },
+      {
+        id: "row_prod_4",
+        label: "Dental Prophylaxis Adult",
+        isDefault: false,
+        values: {
+          col_product_name: "Dental Prophylaxis Adult",
+          col_cpt_code: "D1110",
+          col_unit_price: 110,
+          col_category: "Dental",
+          col_tax_rate: 5,
+        },
+      },
+      {
+        id: "row_prod_5",
+        label: "Diagnostic Ultrasound Scan",
+        isDefault: false,
+        values: {
+          col_product_name: "Diagnostic Ultrasound Scan",
+          col_cpt_code: "76700",
+          col_unit_price: 320,
+          col_category: "Diagnostics",
+          col_tax_rate: 5,
+        },
+      },
+      {
+        id: "row_prod_6",
+        label: "Minor In-Office Procedure",
+        isDefault: false,
+        values: {
+          col_product_name: "Minor In-Office Procedure",
+          col_cpt_code: "10060",
+          col_unit_price: 210,
+          col_category: "Treatment",
+          col_tax_rate: 5,
+        },
+      },
+      {
+        id: "row_prod_7",
+        label: "X-Ray Imaging",
+        isDefault: false,
+        values: {
+          col_product_name: "X-Ray Imaging",
+          col_cpt_code: "71045",
+          col_unit_price: 80,
+          col_category: "Radiology",
+          col_tax_rate: 5,
+        },
+      },
+    ],
+    createdAt: "2026-09-08T10:00:00.000Z",
+    updatedAt: "2026-09-08T10:00:00.000Z",
+  },
 ];
 
 /**
@@ -157,6 +257,26 @@ export function getStoredAdvanceLists(): AdvanceListDefinition[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        // Ensure default seed lists are present and have latest rows
+        let changed = false;
+        DEFAULT_ADVANCE_LISTS.forEach((def) => {
+          const found = parsed.find((l: any) => l.id === def.id);
+          if (!found) {
+            parsed.push(def);
+            changed = true;
+          } else {
+            const existingRowIds = new Set((found.rows || []).map((r: any) => String(r.id)));
+            def.rows.forEach((r) => {
+              if (!existingRowIds.has(String(r.id))) {
+                found.rows.push(r);
+                changed = true;
+              }
+            });
+          }
+        });
+        if (changed) {
+          saveAllAdvanceLists(parsed);
+        }
         return parsed;
       }
     }

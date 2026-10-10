@@ -30,6 +30,7 @@ export const DOCUMENT_TEMPLATES_EVENT = "documentTemplates_updated";
 export const DOCUMENT_CATEGORIES_EVENT = "documentCategories_updated";
 
 export const DEFAULT_TEMPLATE_CATEGORIES: string[] = [
+  "Invoices",
   "Prescription",
   "Session Notes",
   "Consent forms",
@@ -259,14 +260,14 @@ Account Manager: {responsible}`,
   {
     id: "tpl-inv-1",
     name: "Tax Invoice & Billing Statement",
-    category: "General",
+    category: "Invoices",
     fileName: "tax_invoice_statement.docx",
     templateText: `OFFICIAL TAX INVOICE & BILLING STATEMENT
 
 Invoice Number: {invoice_number}
 Invoice Date: {current_date}
 Due Date: {due_date}
-Total Amount: {total_amount}
+Payment Status: {payment_status}
 
 Billed To:
 Client Name: {client_name}
@@ -275,21 +276,34 @@ Phone: {phone}
 Address: {location}
 
 Service Breakdown & Itemized Charges:
-{items}
+{line_items_summary}
 
 Tax & Totals:
 Subtotal: {subtotal}
 Tax: {tax_amount}
 Total Due: {total_amount}
-Payment Status: {payment_status}
+
+Payment Instructions & Bank Details:
+Bank: Global Health Care Trust Bank
+Account Name: MantraCare Healthcare Services
+Account / IBAN: MC-US-992014882
+Payment Terms: Net 15 days upon receipt
 
 Issued By: {responsible}
 Organization: MantraCare Healthcare Services`,
-    extractedFields: ["invoice_number", "current_date", "due_date", "total_amount", "client_name", "email", "phone", "location", "items", "subtotal", "tax_amount", "payment_status", "responsible"],
+    extractedFields: ["invoice_number", "current_date", "due_date", "payment_status", "client_name", "email", "phone", "location", "line_items_summary", "subtotal", "tax_amount", "total_amount", "responsible"],
     fieldMappings: [
       { templateField: "invoice_number", mappedFieldKey: "invoice_number", label: "Invoice Number" },
       { templateField: "current_date", mappedFieldKey: "date", label: "Invoice Date" },
+      { templateField: "due_date", mappedFieldKey: "due_date", label: "Due Date" },
+      { templateField: "payment_status", mappedFieldKey: "payment_status", label: "Payment Status" },
       { templateField: "client_name", mappedFieldKey: "name", label: "Client Full Name" },
+      { templateField: "email", mappedFieldKey: "email", label: "Email Address" },
+      { templateField: "phone", mappedFieldKey: "phone", label: "Phone Number" },
+      { templateField: "location", mappedFieldKey: "location", label: "Location" },
+      { templateField: "line_items_summary", mappedFieldKey: "line_items_summary", label: "Line Items Summary" },
+      { templateField: "subtotal", mappedFieldKey: "subtotal", label: "Subtotal" },
+      { templateField: "tax_amount", mappedFieldKey: "tax_amount", label: "Tax Amount" },
       { templateField: "total_amount", mappedFieldKey: "total_amount", label: "Total Amount" },
       { templateField: "responsible", mappedFieldKey: "responsible", label: "Billing Officer" },
     ],
@@ -300,7 +314,7 @@ Organization: MantraCare Healthcare Services`,
   {
     id: "tpl-inv-receipt",
     name: "Payment Receipt & Proof of Payment",
-    category: "General",
+    category: "Invoices",
     fileName: "payment_receipt.docx",
     templateText: `PAYMENT RECEIPT & ACKNOWLEDGMENT
 
@@ -330,7 +344,7 @@ Cashier / Officer: {responsible}`,
       { templateField: "responsible", mappedFieldKey: "responsible", label: "Billing Officer" },
     ],
     entities: ["invoice"],
-    createdAt: "2024-05-21 11:00",
+    createdAt: "2024-05-21 10:30",
     createdBy: "Finance Dept",
   },
   {
@@ -538,7 +552,13 @@ export function getStoredDocumentTemplates(): DocumentTemplate[] {
     const raw = sessionStorage.getItem("clientDocumentTemplates");
     if (raw) {
       const parsed: DocumentTemplate[] = JSON.parse(raw);
-      return parsed.map((t) => {
+      const parsedIds = new Set(parsed.map((p) => p.id));
+      const missingInitials = INITIAL_DOCUMENT_TEMPLATES.filter((init) => !parsedIds.has(init.id));
+      const merged = [...parsed, ...missingInitials];
+      return merged.map((t) => {
+        if (t.id === "tpl-inv-1" || t.id === "tpl-inv-receipt") {
+          return { ...t, category: "Invoices", entities: ["invoice"] };
+        }
         if (t.category?.toLowerCase() === "identification") return { ...t, category: "General" };
         if (t.category?.toLowerCase() === "contract") return { ...t, category: "Consent forms" };
         if (t.category?.toLowerCase() === "financial") return { ...t, category: "General" };

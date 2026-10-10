@@ -43,17 +43,6 @@ export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
       ],
     },
     {
-      id: "automation",
-      title: "CUSTOMIZATIONS",
-      defaultExpanded: false,
-      items: [
-        { id: "workflows", label: "Workflows", iconName: "SlidersHorizontal", path: "/process", visible: true },
-        { id: "global-automation", label: "Automation", iconName: "Zap", path: "/automation", visible: true },
-        { id: "knowledge-base", label: "Knowledge Base", iconName: "Database", path: "/knowledge-base", visible: true },
-        { id: "web-forms", label: "Webforms", iconName: "FileText", path: "/web-forms", visible: true },
-      ],
-    },
-    {
       id: "billing",
       title: "REVENUE & INSIGHTS",
       defaultExpanded: false,
@@ -62,6 +51,17 @@ export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
         { id: "invoices", label: "Invoice", iconName: "Receipt", path: "/invoices", visible: true },
         { id: "insurance-claims", label: "Insurance & Claims", iconName: "ShieldCheck", path: "/claims", visible: true },
         { id: "reports", label: "Reports", iconName: "BarChart3", path: "/reports", visible: true },
+      ],
+    },
+    {
+      id: "automation",
+      title: "CUSTOMIZATIONS",
+      defaultExpanded: false,
+      items: [
+        { id: "workflows", label: "Workflows", iconName: "SlidersHorizontal", path: "/process", visible: true },
+        { id: "global-automation", label: "Automation", iconName: "Zap", path: "/automation", visible: true },
+        { id: "knowledge-base", label: "Knowledge Base", iconName: "Database", path: "/knowledge-base", visible: true },
+        { id: "web-forms", label: "Webforms", iconName: "FileText", path: "/web-forms", visible: true },
       ],
     },
     {
@@ -141,8 +141,14 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
           localStorage.setItem(storageKey, JSON.stringify(migrated));
           return migrated;
         }
-        // Always ensure billing and automation sections have correct titles and items
+        // Always ensure billing and automation sections have correct titles and items, and billing is above automation
         if (parsed.sections) {
+          const sectionOrder = ["workspace", "billing", "automation", "settings"];
+          parsed.sections.sort((a: NavSectionConfig, b: NavSectionConfig) => {
+            const ai = sectionOrder.indexOf(a.id);
+            const bi = sectionOrder.indexOf(b.id);
+            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+          });
           parsed.sections = parsed.sections.map((sec: NavSectionConfig) => {
             if (sec.id === "billing") return { ...sec, title: "REVENUE & INSIGHTS" };
             if (sec.id === "automation") {
@@ -168,6 +174,9 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
             }
             return sec;
           });
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(parsed));
+          } catch {}
         }
         return parsed;
       }

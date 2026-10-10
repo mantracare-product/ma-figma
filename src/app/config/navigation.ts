@@ -107,32 +107,6 @@ export const navigationConfig: NavGroup[] = [
     ],
   },
 
-  // CUSTOMIZATIONS
-  {
-    id: "automation",
-    label: "CUSTOMIZATIONS",
-    items: [
-      {
-        id: "workflows",
-        label: "Workflows",
-        icon: SlidersHorizontal,
-        path: "/process",
-      },
-      {
-        id: "knowledge-base",
-        label: "Knowledge Base",
-        icon: Database,
-        path: "/knowledge-base",
-      },
-      {
-        id: "web-forms",
-        label: "Webforms",
-        icon: FileText,
-        path: "/web-forms",
-      },
-    ],
-  },
-
   // REVENUE & INSIGHTS
   {
     id: "billing-insights",
@@ -161,6 +135,32 @@ export const navigationConfig: NavGroup[] = [
         label: "Reports",
         icon: BarChart3,
         path: "/reports",
+      },
+    ],
+  },
+
+  // CUSTOMIZATIONS
+  {
+    id: "automation",
+    label: "CUSTOMIZATIONS",
+    items: [
+      {
+        id: "workflows",
+        label: "Workflows",
+        icon: SlidersHorizontal,
+        path: "/process",
+      },
+      {
+        id: "knowledge-base",
+        label: "Knowledge Base",
+        icon: Database,
+        path: "/knowledge-base",
+      },
+      {
+        id: "web-forms",
+        label: "Webforms",
+        icon: FileText,
+        path: "/web-forms",
       },
     ],
   },

@@ -229,7 +229,7 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
   else if (rawType.includes("textarea") || rawType.includes("area") || rawType.includes("long")) inputType = "textarea";
   else if (rawType.includes("rating") || rawType.includes("score")) inputType = "rating";
   else if (rawType.includes("yes") || rawType.includes("bool")) inputType = "yes_no";
-  else if (rawType.includes("crm")) inputType = "crm_bind";
+  else if (rawType.includes("crm") || rawType.includes("mantra") || rawType.includes("entit")) inputType = "crm_bind";
   else if (rawType.includes("email")) inputType = "email";
   else if (rawType.includes("tel") || rawType.includes("phone")) inputType = "tel";
   else if (rawType.includes("link") || rawType.includes("url")) inputType = "link";
@@ -252,7 +252,7 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
           { id: 3, label: "Option C", value: "option_c" },
         ]
       : [],
-    crmBindConfig: col.crmBindConfig || (inputType === "crm_bind" ? { sourceModule: "teamMember", displayField: "name", selectionMode: col.selectionMode || "single" } : undefined),
+    crmBindConfig: col.crmBindConfig || (inputType === "crm_bind" ? { sourceModule: "service", displayField: "name", selectionMode: col.selectionMode || "single" } : undefined),
     defaultValue: col.defaultValue,
     currency: col.currency,
     selectionMode: isMulti ? "multiple" : (col.selectionMode || "single"),
@@ -518,7 +518,11 @@ export const LEGACY_SECTION_REGISTRY_EVENT = "SECTION_REGISTRY_CHANGED";
 const SYSTEM_FIELD_KEYS = new Set([
   "name", "email", "phone", "location", "country",
   "company", "role", "status", "processes", "stage",
-  "responsible", "lastContact", "companyName", "jobPosition"
+  "responsible", "lastContact", "companyName", "jobPosition",
+  "invoice_number", "issue_date", "due_date", "payment_mode",
+  "total_amount", "amount_paid", "balance_due", "client_credit",
+  "product_name", "quantity", "unit_price", "tax_rate",
+  "line_items_summary", "subtotal", "tax_amount", "discount_applied", "payment_url"
 ]);
 
 const SYSTEM_SECTION_IDS = new Set([
@@ -530,6 +534,10 @@ const SYSTEM_SECTION_IDS = new Set([
   "sec-service-info",
   "sec-service-pricing",
   "sec-service-assignment",
+  "sec-inv-details",
+  "sec-inv-items",
+  "sec-inv-payment-link",
+  "sec-inv-custom",
 ]);
 
 /**
@@ -1533,6 +1541,144 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
   scribe: [
     { key: "session_notes", label: "Session Clinical Notes", module: "scribe", inputType: "textarea", placeholder: "Clinical dialogue notes", showAlways: true },
   ],
+  invoice: [
+    { key: "invoice_number", label: "Invoice Number", module: "invoice", sectionId: "sec-inv-details", inputType: "text", placeholder: "INV-2026-001", required: true, showAlways: true },
+    { key: "issue_date", label: "Issue Date", module: "invoice", sectionId: "sec-inv-details", inputType: "date", required: true, showAlways: true },
+    { key: "due_date", label: "Due Date", module: "invoice", sectionId: "sec-inv-details", inputType: "date", required: true, showAlways: true },
+    {
+      key: "payment_mode",
+      label: "Payment Mode",
+      module: "invoice",
+      sectionId: "sec-inv-details",
+      inputType: "new_list",
+      placeholder: "Select payment method...",
+      newListConfig: {
+        sourceMode: "basic_list",
+        allowSearch: true,
+        allowCustomOptions: true,
+      },
+      options: [
+        { id: 1, label: "Bank Transfer", value: "Bank Transfer" },
+        { id: 2, label: "Credit / Debit Card", value: "Card" },
+        { id: 3, label: "Cash", value: "Cash" },
+        { id: 4, label: "UPI", value: "UPI" },
+        { id: 5, label: "Stripe", value: "Stripe" },
+        { id: 6, label: "PayPal", value: "PayPal" },
+      ],
+      showAlways: true,
+    },
+    { key: "total_amount", label: "Total Amount", module: "invoice", sectionId: "sec-inv-details", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "amount_paid", label: "Amount Paid", module: "invoice", sectionId: "sec-inv-details", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "balance_due", label: "Balance Due", module: "invoice", sectionId: "sec-inv-details", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "client_credit", label: "Client Credit Available", module: "invoice", sectionId: "sec-inv-details", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    {
+      key: "product_name",
+      label: "Product Name",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "crm_bind",
+      crmBindConfig: {
+        sourceModule: "service",
+        displayField: "name",
+        selectionMode: "single",
+      },
+      placeholder: "Select product or service...",
+      required: true,
+      showAlways: true,
+    },
+    {
+      key: "quantity",
+      label: "Quantity",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "number",
+      placeholder: "1",
+      defaultValue: 1,
+      required: true,
+      showAlways: true,
+    },
+    {
+      key: "unit_price",
+      label: "Price",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "money",
+      placeholder: "0.00",
+      currency: "USD",
+      defaultValue: 0,
+      required: true,
+      showAlways: true,
+    },
+    {
+      key: "tax_rate",
+      label: "Tax",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "number",
+      placeholder: "5",
+      defaultValue: 5,
+      showAlways: true,
+    },
+    {
+      key: "line_items_summary",
+      label: "Line Items (Products / Services)",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "group",
+      compositeDisplayMode: "table",
+      subFields: [
+        {
+          id: "product_name",
+          name: "Product Name",
+          inputType: "crm_bind",
+          crmBindConfig: {
+            sourceModule: "service",
+            displayField: "name",
+            selectionMode: "single",
+          },
+          required: true,
+        },
+        {
+          id: "quantity",
+          name: "Quantity",
+          inputType: "number",
+          placeholder: "1",
+          defaultValue: 1,
+          required: true,
+        },
+        {
+          id: "unit_price",
+          name: "Price",
+          inputType: "money",
+          currency: "USD",
+          placeholder: "0.00",
+          defaultValue: 0,
+          required: true,
+        },
+        {
+          id: "tax_rate",
+          name: "Tax (%)",
+          inputType: "number",
+          placeholder: "5",
+          defaultValue: 5,
+        },
+      ],
+      defaultValue: [
+        {
+          id: "row_1",
+          product_name: "Initial Comprehensive Consultation",
+          quantity: 1,
+          unit_price: 150,
+          tax_rate: 5,
+        },
+      ],
+      showAlways: true,
+    },
+    { key: "subtotal", label: "Subtotal", module: "invoice", sectionId: "sec-inv-items", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "tax_amount", label: "Tax Amount", module: "invoice", sectionId: "sec-inv-items", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "discount_applied", label: "Discount Applied", module: "invoice", sectionId: "sec-inv-items", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "payment_url", label: "Payment Link URL", module: "invoice", sectionId: "sec-inv-payment-link", inputType: "link", placeholder: "https://pay.example.com/...", showAlways: true },
+  ],
 };
 
 export function getLiveTeamMembers() {
@@ -1844,6 +1990,60 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       createdAt: 0,
     },
   ],
+  invoice: [
+    {
+      id: "sec-inv-details",
+      title: "Invoice Details",
+      description: "Invoice numbering, issue & due dates, and payment terms",
+      module: "invoice",
+      source: "system",
+      fieldKeys: [
+        "invoice_number",
+        "issue_date",
+        "due_date",
+        "payment_mode",
+        "total_amount",
+        "amount_paid",
+        "balance_due",
+        "client_credit",
+      ],
+      createdAt: 0,
+    },
+    {
+      id: "sec-inv-items",
+      title: "Product / Line Items",
+      description: "Itemized services, consultation rates, discounts, and totals",
+      module: "invoice",
+      source: "system",
+      fieldKeys: [
+        "line_items_summary",
+        "subtotal",
+        "tax_amount",
+        "discount_applied",
+      ],
+      createdAt: 0,
+    },
+    {
+      id: "sec-inv-payment-link",
+      title: "Shareable Payment Link",
+      description: "Direct customer payment link and transaction portal",
+      module: "invoice",
+      source: "system",
+      fieldKeys: [
+        "payment_url",
+      ],
+      createdAt: 0,
+    },
+    {
+      id: "sec-inv-custom",
+      title: "Custom Fields",
+      description: "Additional user-defined invoice custom properties",
+      module: "invoice",
+      source: "system",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+  ],
 };
 
 interface FieldRegistryContextValue {
@@ -1884,6 +2084,7 @@ function normalizeModuleKey(raw: any): Exclude<FieldModule, "deal"> {
   if (lower === "organization" || lower === "organizations" || lower === "organisation") return "organization";
   if (lower === "teammember" || lower === "team_member" || lower === "team member" || lower === "team members") return "teamMember";
   if (lower === "scribe" || lower === "ai scribe" || lower === "ai_scribe") return "scribe";
+  if (lower === "invoice" || lower === "invoices") return "invoice";
   return "client";
 }
 
@@ -2064,6 +2265,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
     organization: [],
     teamMember: [],
     scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
+    invoice: [],
   };
 
   if (typeof window === "undefined") {
@@ -2084,6 +2286,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
         organization: [],
         teamMember: [],
         scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
+        invoice: [],
       };
 
       if (Array.isArray(parsed)) {
@@ -2110,6 +2313,14 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
       ensureScribeSeeds(registry);
       ensureServiceSeeds(registry);
 
+      // Clean up any duplicate system seeds or removed fields from invoice custom fields
+      if (Array.isArray(registry.invoice)) {
+        const invoiceSysKeys = new Set((SYSTEM_SEEDS.invoice || []).map((s) => s.key));
+        registry.invoice = registry.invoice.filter(
+          (f) => f.source !== "system" && !invoiceSysKeys.has(f.key) && f.key !== "stage" && f.key !== "status"
+        );
+      }
+
       // Save the sanitized canonical object to localStorage
       try {
         localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(registry));
@@ -2130,6 +2341,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
     organization: [],
     teamMember: [],
     scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
+    invoice: [],
   };
 
   // Check legacy sessionStorage keys
@@ -2184,6 +2396,14 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
   }
 
   ensureScribeSeeds(registry);
+  ensureServiceSeeds(registry);
+
+  if (Array.isArray(registry.invoice)) {
+    const invoiceSysKeys = new Set((SYSTEM_SEEDS.invoice || []).map((s) => s.key));
+    registry.invoice = registry.invoice.filter(
+      (f) => f.source !== "system" && !invoiceSysKeys.has(f.key) && f.key !== "stage" && f.key !== "status"
+    );
+  }
 
   // Write the canonical module-keyed object to localStorage
   try {
@@ -2255,6 +2475,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
     organization: [],
     teamMember: [],
     scribe: [],
+    invoice: [],
   };
 
   if (typeof window === "undefined") {
@@ -2275,6 +2496,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
         organization: [],
         teamMember: [],
         scribe: [],
+        invoice: [],
       };
 
       if (Array.isArray(parsed)) {
@@ -2310,6 +2532,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
     organization: [],
     teamMember: [],
     scribe: [],
+    invoice: [],
   };
 
   const legacyRaw = sessionStorage.getItem("sectionRegistry_v1");
@@ -2433,7 +2656,10 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
 
   const getCustomFields = (module: FieldModule): FieldDefinition[] => {
     const norm = normalizeModule(module);
-    const directFields = customFields[norm] || [];
+    const systemKeys = new Set((SYSTEM_SEEDS[norm] || []).map((s) => s.key));
+    const directFields = (customFields[norm] || []).filter(
+      (f) => f.source !== "system" && !systemKeys.has(f.key)
+    );
     // Also include fields marked as reusable across modules
     const reusableFields: FieldDefinition[] = [];
     (Object.keys(customFields) as (keyof typeof customFields)[]).forEach((mod) => {
@@ -2441,7 +2667,7 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
         (customFields[mod] || []).forEach((f) => {
           if (f.isReusable) {
             const matchesModule = !f.reusableModules || f.reusableModules.length === 0 || f.reusableModules.includes(norm);
-            if (matchesModule && !directFields.some((df) => df.key === f.key) && !reusableFields.some((rf) => rf.key === f.key)) {
+            if (matchesModule && !directFields.some((df) => df.key === f.key) && !reusableFields.some((rf) => rf.key === f.key) && !systemKeys.has(f.key)) {
               reusableFields.push({ ...f, module: norm });
             }
           }
@@ -2452,7 +2678,17 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
   };
 
   const getAllFields = (module: FieldModule): FieldDefinition[] => {
-    return [...getSystemFields(module), ...getCustomFields(module)];
+    const sys = getSystemFields(module);
+    const cust = getCustomFields(module);
+    const seen = new Set<string>();
+    const result: FieldDefinition[] = [];
+    for (const f of [...sys, ...cust]) {
+      if (!seen.has(f.key)) {
+        seen.add(f.key);
+        result.push(f);
+      }
+    }
+    return result;
   };
 
   const addCustomField = (

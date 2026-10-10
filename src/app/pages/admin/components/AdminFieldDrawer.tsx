@@ -106,6 +106,7 @@ export const MODULE_OPTIONS: { label: string; value: Exclude<FieldModule, "deal"
   { label: "Appointment",  value: "appointment" },
   { label: "Call Log",     value: "call" },
   { label: "Service",      value: "service" },
+  { label: "Invoice",      value: "invoice" },
   { label: "Organization", value: "organization" },
   { label: "Team Member",  value: "teamMember" },
   { label: "AI Scribe",    value: "scribe" },
@@ -1281,7 +1282,7 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     ? f.subFields.map((sf) => ({
         id: sf.id,
         name: sf.name,
-        type: sf.inputType === "list_select" ? "Select" : sf.inputType === "money" ? "Money" : sf.inputType === "number" ? "Number" : sf.inputType === "date" ? "Date" : sf.inputType === "date_time" ? "Date & Time" : sf.inputType === "textarea" ? "Long Text" : sf.inputType === "yes_no" ? "Yes / No" : sf.inputType === "email" ? "Email" : sf.inputType === "tel" ? "Phone" : sf.inputType === "link" ? "Link" : sf.inputType === "rating" ? "Rating" : sf.inputType === "crm_bind" ? "crm_bind" : "Text",
+        type: sf.inputType === "list_select" ? "Select" : sf.inputType === "money" ? "Money" : sf.inputType === "number" ? "Number" : sf.inputType === "date" ? "Date" : sf.inputType === "date_time" ? "Date & Time" : sf.inputType === "textarea" ? "Long Text" : sf.inputType === "yes_no" ? "Yes / No" : sf.inputType === "email" ? "Email" : sf.inputType === "tel" ? "Phone" : sf.inputType === "link" ? "Link" : sf.inputType === "rating" ? "Rating" : sf.inputType === "crm_bind" ? "Link to Mantra Entities" : "Text",
         inputType: sf.inputType,
         placeholder: sf.placeholder ?? "",
         options: sf.options,

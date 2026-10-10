@@ -37,6 +37,11 @@ export interface DocumentsTabProps {
     status?: string;
   };
   processName?: string;
+  title?: string;
+  entityType?: "client" | "process" | "appointment" | "invoice";
+  entityId?: string;
+  invoiceData?: any;
+  hideClientDefaultDocs?: boolean;
 }
 
 function TabFieldTooltip({ text }: { text: string }) {
@@ -50,7 +55,15 @@ function TabFieldTooltip({ text }: { text: string }) {
   );
 }
 
-export default function DocumentsTab({ client, processName }: DocumentsTabProps) {
+export default function DocumentsTab({
+  client,
+  processName,
+  title,
+  entityType,
+  entityId,
+  invoiceData,
+  hideClientDefaultDocs,
+}: DocumentsTabProps) {
   const [documents, setDocuments] = useState<StoredClientDocument[]>([]);
   const [docSearchQuery, setDocSearchQuery] = useState("");
   const [selectedDocStatus, setSelectedDocStatus] = useState<string>("All");
@@ -66,6 +79,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
   const [categories, setCategories] = useState<string[]>(getStoredTemplateCategories);
   const [templateSearchQuery, setTemplateSearchQuery] = useState("");
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    Invoices: true,
     Prescription: true,
     "Session Notes": true,
     "Consent forms": true,
@@ -124,6 +138,26 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
     if (!client?.id) return;
 
     const refreshDocs = () => {
+      // 1. If scoped to an invoice, ONLY show documents for this invoice (NO client-level KYC/intake docs)
+      if (entityType === "invoice" && entityId) {
+        const allStored = getStoredClientDocuments();
+        const invoiceDocs = allStored.filter(
+          (d) =>
+            d.invoiceId === entityId ||
+            (d.entityType === "invoice" && d.entityId === entityId)
+        );
+        setDocuments(invoiceDocs);
+        return;
+      }
+
+      // 2. If hideClientDefaultDocs is requested, only show actual saved docs
+      if (hideClientDefaultDocs) {
+        const stored = getStoredClientDocuments(client.id);
+        setDocuments(stored);
+        return;
+      }
+
+      // 3. Otherwise standard client documents
       const cName = client.name || "Client";
       const initialDocs: StoredClientDocument[] = [
         {
@@ -190,7 +224,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
     refreshDocs();
     window.addEventListener(CLIENT_DOCUMENTS_EVENT, refreshDocs);
     return () => window.removeEventListener(CLIENT_DOCUMENTS_EVENT, refreshDocs);
-  }, [client?.id, client?.name, client?.responsible, processName]);
+  }, [client?.id, client?.name, client?.responsible, processName, entityType, entityId, hideClientDefaultDocs]);
 
   const handleToggleDocStatus = (docId: string) => {
     setDocuments((prev) =>
@@ -246,6 +280,31 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
   const handleGenerateFromTemplate = (template: DocumentTemplate) => {
     const dateStr = new Date().toISOString().replace("T", " ").substring(0, 16);
     let generatedText = template.templateText || "";
+
+    // If invoice data is provided, replace invoice-specific placeholders
+    if (invoiceData) {
+      const itemsList = (invoiceData.lineItems || [])
+        .map(
+          (li: any, i: number) =>
+            `${i + 1}. ${li.description || li.product_name || "Item"} - Qty: ${li.quantity || 1} x $${Number(
+              li.unit_price || li.rate || 0
+            ).toFixed(2)} = $${Number(
+              li.total || (li.quantity || 1) * (li.unit_price || li.rate || 0)
+            ).toFixed(2)}`
+        )
+        .join("\n") || "1. Consultation / Service - $80.00";
+
+      generatedText = generatedText
+        .replace(/\{invoice_number\}/g, invoiceData.id || "")
+        .replace(/\{due_date\}/g, invoiceData.dueDate || "")
+        .replace(/\{subtotal\}/g, `$${Number(invoiceData.subtotal ?? (invoiceData.total ? invoiceData.total * 0.9 : 0)).toFixed(2)}`)
+        .replace(/\{tax_amount\}/g, `$${Number(invoiceData.tax ?? (invoiceData.total ? invoiceData.total * 0.1 : 0)).toFixed(2)}`)
+        .replace(/\{total_amount\}/g, `$${Number(invoiceData.total ?? 0).toFixed(2)}`)
+        .replace(/\{payment_status\}/g, String(invoiceData.status || "DRAFT").toUpperCase())
+        .replace(/\{line_items_summary\}/g, itemsList)
+        .replace(/\{items\}/g, itemsList);
+    }
+
     generatedText = generatedText
       .replace(/\{client_name\}/g, client.name || "Client")
       .replace(/\{email\}/g, client.email || "")
@@ -256,12 +315,20 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       .replace(/\{responsible\}/g, client.responsible || "Admin")
       .replace(/\{current_date\}/g, dateStr);
 
+    const docName =
+      entityType === "invoice" && entityId
+        ? `${entityId}_${template.name.replace(/\s+/g, "_")}.pdf`
+        : `${(client.name || "Client").replace(/\s+/g, "_")}_${template.name.replace(/\s+/g, "_")}.pdf`;
+
     const newDoc: StoredClientDocument = {
       id: `doc-gen-${Date.now()}`,
       clientId: client.id,
-      name: `${(client.name || "Client").replace(/\s+/g, "_")}_${template.name.replace(/\s+/g, "_")}.pdf`,
-      category: template.category || "General",
-      valueBy: "Client Profile Data",
+      invoiceId: entityType === "invoice" ? entityId : undefined,
+      entityId,
+      entityType,
+      name: docName,
+      category: template.category || (entityType === "invoice" ? "Invoices" : "General"),
+      valueBy: entityType === "invoice" ? "Invoice Record Data" : "Client Profile Data",
       fileType: "pdf",
       fileSize: "1.6 MB",
       uploadedDate: dateStr,
@@ -272,7 +339,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       generatedContent: generatedText,
     };
     saveClientDocument(newDoc);
-    toast.success(`Generated "${template.name}" for ${client.name}!`);
+    toast.success(`Generated "${template.name}"!`);
   };
 
   // Upload custom document file
@@ -288,8 +355,11 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
     const newDoc: StoredClientDocument = {
       id: `doc-upload-${Date.now()}`,
       clientId: client.id,
+      invoiceId: entityType === "invoice" ? entityId : undefined,
+      entityId,
+      entityType,
       name: file.name,
-      category: "General",
+      category: entityType === "invoice" ? "Invoices" : "General",
       valueBy: "Manual File Upload",
       fileType,
       fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
@@ -299,7 +369,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       notes: `Uploaded file (${file.name})`,
     };
     saveClientDocument(newDoc);
-    toast.success(`Uploaded "${file.name}" for ${client.name}!`);
+    toast.success(`Uploaded "${file.name}"!`);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -353,7 +423,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       <div className="flex items-center justify-between p-4 border border-gray-200 rounded-xl bg-white shadow-xs gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="font-bold text-sm text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
-            {processName ? `${processName} Documents` : "Client Documents"}
+            {title || (entityType === "invoice" ? "Invoice Documents" : processName ? `${processName} Documents` : "Client Documents")}
           </h3>
           <span
             className="text-xs text-gray-500 font-medium px-2 py-0.5 bg-gray-100 rounded-full"
@@ -609,7 +679,11 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
         onSelectionChange={setSelectedDocIds}
         enableColumnCustomization={true}
         tableId="client-profile-documents"
-        emptyMessage="No documents found for this client."
+        emptyMessage={
+          entityType === "invoice"
+            ? "No documents attached to this invoice yet. Upload or generate a document to get started."
+            : "No documents found for this client."
+        }
         rowActions={[
           {
             label: "Preview",
@@ -632,13 +706,17 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
         defaultRowsPerPage={10}
       />
 
-      {/* Document Preview Drawer (Right-side drawer) */}
+      {/* Document Preview Drawer (Opens same template view in non-editable read-only form) */}
       {previewDoc && (
-        <DocumentPreviewDrawer
+        <GenerateDocumentDrawer
           isOpen={Boolean(previewDoc)}
           onClose={() => setPreviewDoc(null)}
-          document={previewDoc}
-          clientName={client.name}
+          client={client}
+          previewDoc={previewDoc}
+          isReadOnly={true}
+          entityType={entityType}
+          entityId={entityId}
+          invoiceData={invoiceData}
           onToggleStatus={handleToggleDocStatus}
         />
       )}
@@ -653,6 +731,12 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
           }}
           client={client}
           initialTemplate={drawerInitialTemplate}
+          entityType={entityType}
+          entityId={entityId}
+          invoiceData={invoiceData}
+          onDocumentGenerated={(doc) => {
+            setDocuments((prev) => [doc, ...prev.filter((d) => d.id !== doc.id)]);
+          }}
         />
       )}
 

@@ -1410,7 +1410,7 @@ export default function Settings() {
     deleteCustomSection,
   } = useFieldRegistry();
 
-  const tabToModule: Record<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe" | "services", FieldModule> = {
+  const tabToModule: Record<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe" | "services" | "invoices", FieldModule> = {
     "organization": "organization",
     "clients": "client",
     "call-logs": "call",
@@ -1420,6 +1420,7 @@ export default function Settings() {
     "team": "teamMember",
     "scribe": "scribe",
     "services": "service",
+    "invoices": "invoice",
   };
 
   const FIELD_TYPE_MAP: Record<string, any> = {
@@ -1444,25 +1445,30 @@ export default function Settings() {
   };
 
   const FIELD_TYPE_REVERSE_MAP: Record<string, string> = {
-    "text": "String / Text",
-    "table": "Table",
-    "signature": "Drawing / Signature",
-    "drawing": "Drawing / Signature",
-    "select": "List (Dropdown)",
-    "new_list": "List",
-    "multiselect": "Multi-Select",
-    "date": "Date",
-    "date_time": "Date & Time",
-    "number": "Number",
-    "money": "Money / Currency",
-    "textarea": "Address / Text Area",
-    "richtext": "Rich Text",
-    "link": "Link",
-    "whatsapp_link": "WhatsApp Link",
-    "yes_no": "Yes / No",
-    "file": "File / Attachment",
-    "rating": "Rating / Score",
-    "user": "User / Member",
+    text: "Text",
+    table: "Group Field (Table)",
+    signature: "Digital Signature",
+    drawing: "Digital Signature",
+    select: "List",
+    list_select: "List",
+    new_list: "List",
+    list_open: "List (Open · Tags)",
+    multiselect: "List (Multi)",
+    group: "Group Field (Group)",
+    group_repeatable: "Group Field (Group)",
+    crm_bind: "Link to Mantra Entities",
+    date: "Date",
+    date_time: "Date & Time",
+    number: "Number",
+    money: "Money / Currency",
+    textarea: "Text (Paragraph)",
+    richtext: "Text (Rich Text)",
+    link: "Link",
+    whatsapp_link: "WhatsApp Link",
+    yes_no: "Yes / No",
+    file: "Media Attach",
+    rating: "Rating / Score",
+    user: "User / Member",
   };
 
   // Layout View Tabs: Fields vs Sections
@@ -1532,7 +1538,7 @@ export default function Settings() {
   const [tablePreviewRows, setTablePreviewRows] = useState<Record<string, string>[]>([{}]);
 
   // Module filter tab
-  const [customFieldsTab, setCustomFieldsTab] = useState<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe" | "services">("clients");
+  const [customFieldsTab, setCustomFieldsTab] = useState<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe" | "services" | "invoices">("clients");
 
   const currentModule = tabToModule[customFieldsTab || "clients"];
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
@@ -6634,41 +6640,6 @@ export default function Settings() {
             {/* Layout Tab (Custom Fields & Custom Sections) */}
             {(activeTab === "custom-fields" || activeTab === "layout" || activeTab === "sections-fields") && (
               <div className="space-y-4">
-                {/* Horizontal Entity Tabs Bar */}
-                <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-xl overflow-x-auto border border-slate-200/70 shadow-2xs">
-                  {[
-                    { id: "organization", label: "Organizations" },
-                    { id: "clients", label: "Clients" },
-                    { id: "services", label: "Services" },
-                    { id: "appointments", label: "Appointments" },
-                    { id: "processes", label: "Processes" },
-                    { id: "call-logs", label: "Call Logs" },
-                    { id: "forms", label: "Forms" },
-                    { id: "team", label: "Team" },
-                    { id: "scribe", label: "AI Scribe" },
-                  ].map((entity) => {
-                    const isActive = customFieldsTab === entity.id;
-                    return (
-                      <button
-                        key={entity.id}
-                        type="button"
-                        onClick={() => {
-                          setCustomFieldsTab(entity.id as any);
-                          setLayoutCurrentPage(1);
-                        }}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                          isActive
-                            ? "bg-white text-blue-600 shadow-xs font-bold"
-                            : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
-                        }`}
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        {entity.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
                 {/* Top Toolbar using standard PageTopBar */}
                 <PageTopBar
                   modes={[
@@ -6696,6 +6667,7 @@ export default function Settings() {
                       <option value="processes">Processes</option>
                       <option value="appointments">Appointments</option>
                       <option value="services">Services</option>
+                      <option value="invoices">Invoices</option>
                       <option value="forms">Forms</option>
                       <option value="team">Team</option>
                       <option value="scribe">AI Scribe</option>
@@ -6768,6 +6740,7 @@ export default function Settings() {
                               { label: "Processes", value: "processes" },
                               { label: "Appointments", value: "appointments" },
                               { label: "Services", value: "services" },
+                              { label: "Invoices", value: "invoices" },
                               { label: "Forms", value: "forms" },
                               { label: "Team", value: "team" },
                               { label: "AI Scribe", value: "scribe" },
@@ -6872,12 +6845,13 @@ export default function Settings() {
                         header: "Field Type",
                         render: (field) => {
                           const isCompositeField =
-                            field.compositeDisplayMode !== undefined ||
+                            field.inputType !== "new_list" &&
+                            (field.compositeDisplayMode !== undefined ||
                             field.inputType === "table" ||
                             field.inputType === "group" ||
                             field.inputType === "group_repeatable" ||
                             (field.inputType === "list_open" && (field.listEntryType === "structured" || (field.subFields && field.subFields.length > 0))) ||
-                            (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig);
+                            (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig));
 
                           const isListField =
                             !isCompositeField &&
@@ -6886,17 +6860,28 @@ export default function Settings() {
                             field.inputType === "select" ||
                             field.inputType === "multiselect" ||
                             field.inputType === "list");
+
+                          const isAdvanceList =
+                            field.inputType === "new_list" &&
+                            (field.newListConfig?.sourceMode === "advance_2" ||
+                             field.newListConfig?.sourceMode === "advance_list" ||
+                             Boolean(field.newListConfig?.advanceListId));
+
                           const typeName =
                             isCompositeField
                               ? field.compositeDisplayMode === "table" || field.inputType === "table"
                                 ? "Group Field (Table)"
                                 : "Group Field (Group)"
+                              : isAdvanceList
+                              ? "List (Advance)"
+                              : field.inputType === "new_list"
+                              ? "List"
                               : field.inputType === "list_open"
                               ? "List (Open · Tags)"
                               : isListField
                               ? field.selectionMode === "multiple" || field.inputType === "multiselect"
-                                ? "List (Multi-Select)"
-                                : "List (Select)"
+                                ? "List (Multi)"
+                                : "List"
                               : FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
 
                           let typeBadgeStyle = "bg-blue-50 text-blue-700";
@@ -6905,33 +6890,38 @@ export default function Settings() {
                             typeBadgeStyle = "bg-indigo-50 text-indigo-700";
                             TypeIcon = field.compositeDisplayMode === "table" || field.inputType === "table" ? TableIcon : Layers;
                           }
+                          else if (isAdvanceList) {
+                            typeBadgeStyle = "bg-purple-50 text-purple-700";
+                            TypeIcon = Layers;
+                          }
                           else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
+                          else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
+                            typeBadgeStyle = field.selectionMode === "multiple" ? "bg-teal-50 text-teal-700" : "bg-emerald-50 text-emerald-700";
+                            TypeIcon = ClipboardList;
+                          }
                           else if (field.inputType === "new_list") {
                             typeBadgeStyle = "bg-indigo-50 text-indigo-700";
                             TypeIcon = Layers;
                           }
+                          else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
                           else if (field.inputType === "list_open") {
                             typeBadgeStyle = "bg-emerald-50 text-emerald-700";
                             TypeIcon = Tag;
                           }
-                          else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
-                            typeBadgeStyle = field.selectionMode === "multiple" ? "bg-teal-50 text-teal-700" : "bg-emerald-50 text-emerald-700";
-                            TypeIcon = field.selectionMode === "multiple" ? Tag : ClipboardList;
-                          }
-                          else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
+                          else if (field.inputType === "crm_bind") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = LinkIcon; }
                           else if (field.inputType === "date" || field.inputType === "date_time") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Calendar; }
                           else if (field.inputType === "number") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Hash; }
                           else if (field.inputType === "money") { typeBadgeStyle = "bg-green-50 text-green-700"; TypeIcon = DollarSign; }
                           else if (field.inputType === "textarea" || field.inputType === "richtext") { typeBadgeStyle = "bg-orange-50 text-orange-700"; TypeIcon = AlignLeft; }
                           else if (field.inputType === "link" || field.inputType === "whatsapp_link") { typeBadgeStyle = "bg-sky-50 text-sky-700"; TypeIcon = LinkIcon; }
                           else if (field.inputType === "yes_no") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = CheckCircle2; }
-                          else if (field.inputType === "file") { typeBadgeStyle = "bg-violet-50 text-violet-700"; TypeIcon = FileIcon; }
+                          else if (field.inputType === "file") { typeBadgeStyle = "bg-violet-50 text-violet-700"; TypeIcon = FileText; }
                           else if (field.inputType === "rating") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Star; }
                           else if (field.inputType === "user") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = User; }
 
                           return (
-                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-none text-[11px] font-medium ${typeBadgeStyle}`}>
-                              <TypeIcon className="w-3 h-3" />
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${typeBadgeStyle}`}>
+                              <TypeIcon className="w-3.5 h-3.5" />
                               <span>{typeName}</span>
                             </span>
                           );

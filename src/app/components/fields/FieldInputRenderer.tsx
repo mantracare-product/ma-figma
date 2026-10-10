@@ -41,6 +41,7 @@ import { RichTextEditor } from "./RichTextEditor";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 import { AdminSelect } from "../ui/AdminSelect";
 import { getStoredTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
+import { getStoredServices } from "../../../lib/servicesStore";
 
 export type FieldRendererMode = "runtime" | "admin_default";
 
@@ -549,7 +550,31 @@ function TableInputRenderer({
 
   const handleCellChange = (rIdx: number, colId: string, cellVal: any) => {
     const updated = [...rows];
-    updated[rIdx] = { ...updated[rIdx], [colId]: cellVal };
+    let updatedRow = { ...updated[rIdx], [colId]: cellVal };
+
+    // Auto-fill price & tax if product_name changed from a service record
+    if (colId === "product_name" || colId === "col_item_name") {
+      try {
+        const services = getStoredServices();
+        const matched = services.find(
+          (s) => s.name === cellVal || String(s.id) === String(cellVal)
+        );
+        if (matched) {
+          updatedRow.product_name = matched.name;
+          updatedRow.col_item_name = matched.name;
+          if (matched.price !== undefined) {
+            updatedRow.unit_price = matched.price;
+            updatedRow.col_unit_price = matched.price;
+          }
+          if (matched.tax !== undefined) {
+            updatedRow.tax_rate = matched.tax;
+            updatedRow.col_tax_rate = matched.tax;
+          }
+        }
+      } catch {}
+    }
+
+    updated[rIdx] = updatedRow;
     onChange(updated);
   };
 
@@ -828,6 +853,168 @@ function NewListInputRenderer({
       }
     };
 
+    const isTableView = field?.compositeDisplayMode !== "group";
+
+    const renderAdvanceTable = () => {
+      if (normalizedItems.length === 0) {
+        return (
+          <div className="py-4 px-3 border border-dashed border-slate-200 rounded-xl bg-slate-50/50 text-center">
+            <p className="text-xs text-slate-400 font-medium">
+              {isAdminDefault
+                ? "No default items pre-seeded. New records will start empty."
+                : "No items selected yet. Use the dropdown above to add."}
+            </p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
+                  <th className="w-8 px-2.5 py-2.5 text-center text-slate-400">#</th>
+                  {columns.map((col) => (
+                    <th
+                      key={col.id}
+                      className={`px-3 py-2.5 font-bold uppercase text-[10px] tracking-wider ${
+                        col.type === "number" ? "text-right" : "text-left"
+                      }`}
+                    >
+                      <div className={`flex items-center gap-1 ${col.type === "number" ? "justify-end" : "justify-start"}`}>
+                        <span>{col.name}</span>
+                        {col.isPrimary && (
+                          <span className="text-[9px] bg-blue-50 text-blue-700 px-1 py-0.2 rounded font-normal lowercase select-none">
+                            primary
+                          </span>
+                        )}
+                        {col.isDisable && (
+                          <Lock className="w-2.5 h-2.5 text-slate-400" />
+                        )}
+                        {col.isEditable && (
+                          <span className="text-[8px] text-emerald-600 font-medium lowercase select-none">
+                            edit
+                          </span>
+                        )}
+                      </div>
+                    </th>
+                  ))}
+                  {!disabled && <th className="w-9 px-2 py-2.5 text-center" />}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {normalizedItems.map((item, itemIdx) => {
+                  const foundOpt = rawOptions.find(
+                    (o) =>
+                      String(o.id) === String(item.selectedRowId) ||
+                      o.label === item.primaryValue ||
+                      o.label === item.selectedRowId ||
+                      (typeof o.value === "object" && o.value !== null && String((o.value as any)[primaryColId]) === item.primaryValue)
+                  );
+                  const rowValues: Record<string, any> = (typeof foundOpt?.value === "object" && foundOpt?.value !== null)
+                    ? foundOpt.value
+                    : (typeof item.overrides === "object" && item.overrides !== null ? item.overrides : {});
+
+                  return (
+                    <tr key={`${item.selectedRowId}_${itemIdx}`} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-2.5 py-2 text-center text-[10px] font-bold text-slate-400 bg-slate-50/30">
+                        {itemIdx + 1}
+                      </td>
+                      {columns.map((col) => {
+                        const isPrimary = Boolean(col.isPrimary);
+                        const isColDisabled = Boolean(col.isDisable);
+                        const isColEditable = Boolean(col.isEditable);
+                        const baseVal = rowValues[col.id] !== undefined ? rowValues[col.id] : "";
+                        const overrideVal = item.overrides?.[col.id];
+                        const currentVal = overrideVal !== undefined ? overrideVal : baseVal;
+
+                        if (isPrimary) {
+                          const displayPrimary = item.primaryValue || currentVal || item.selectedRowId;
+                          return (
+                            <td key={col.id} className="px-3 py-2">
+                              <div className="flex items-center gap-1.5 min-w-[140px]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
+                                <span className="font-semibold text-slate-900 text-xs truncate">
+                                  {displayPrimary}
+                                </span>
+                              </div>
+                            </td>
+                          );
+                        }
+
+                        if (isColDisabled || !isColEditable || disabled) {
+                          return (
+                            <td
+                              key={col.id}
+                              className={`px-3 py-2 text-xs font-medium text-slate-700 min-w-[100px] ${
+                                col.type === "number" ? "text-right font-mono" : "text-left"
+                              }`}
+                            >
+                              {currentVal !== undefined && currentVal !== "" ? (
+                                col.type === "number" && (col.id.includes("price") || col.id.includes("fee") || col.id.includes("cost")) ? (
+                                  `${Number(currentVal).toFixed(2)}`
+                                ) : (
+                                  String(currentVal)
+                                )
+                              ) : (
+                                <span className="text-slate-300 italic">—</span>
+                              )}
+                            </td>
+                          );
+                        }
+
+                        // Editable cell
+                        return (
+                          <td key={col.id} className="px-2 py-1.5 min-w-[90px]">
+                            <input
+                              type={col.type === "number" ? "number" : "text"}
+                              value={currentVal ?? ""}
+                              disabled={disabled}
+                              onChange={(e) => {
+                                const val = col.type === "number"
+                                  ? (e.target.value === "" ? "" : Number(e.target.value))
+                                  : e.target.value;
+                                handleColumnOverride(itemIdx, col.id, val);
+                              }}
+                              placeholder={`Enter ${col.name}...`}
+                              className={`w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-2xs transition-all ${
+                                col.type === "number" ? "text-right font-mono" : "text-left"
+                              }`}
+                            />
+                          </td>
+                        );
+                      })}
+
+                      {/* Action Cell */}
+                      {!disabled && (
+                        <td className="px-2 py-1.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isMulti) {
+                                onChange(normalizedItems.filter((_, i) => i !== itemIdx));
+                              } else {
+                                onChange(isAdminDefault ? undefined : null);
+                              }
+                            }}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                            title="Remove item"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    };
+
     const renderAdvanceCard = (item: { selectedRowId: string; primaryValue: string; overrides?: Record<string, any> }, itemIdx: number) => {
       const foundOpt = rawOptions.find(
         (o) =>
@@ -968,10 +1155,14 @@ function NewListInputRenderer({
             }}
           />
 
-          {normalizedItems.length > 0 && (
-            <div className="space-y-2.5">
-              {normalizedItems.map((item, idx) => renderAdvanceCard(item, idx))}
-            </div>
+          {isTableView ? (
+            renderAdvanceTable()
+          ) : (
+            normalizedItems.length > 0 && (
+              <div className="space-y-2.5">
+                {normalizedItems.map((item, idx) => renderAdvanceCard(item, idx))}
+              </div>
+            )
           )}
         </div>
       );
@@ -1013,7 +1204,7 @@ function NewListInputRenderer({
           }}
         />
 
-        {normalizedItems.length > 0 && normalizedItems[0] && renderAdvanceCard(normalizedItems[0], 0)}
+        {normalizedItems.length > 0 && (isTableView ? renderAdvanceTable() : renderAdvanceCard(normalizedItems[0], 0))}
       </div>
     );
   }
@@ -2147,7 +2338,24 @@ export function FieldInputRenderer({
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 4. GROUP (Single Instance)
+  // 4. GROUP / TABLE (Table View / Matrix / Grid with Typed Columns)
+  // ─────────────────────────────────────────────────────────────
+  if ((effectiveType === "table" || (effectiveType === "group" && field?.compositeDisplayMode === "table")) && !isSubField) {
+    return (
+      <TableInputRenderer
+        field={field}
+        value={value}
+        onChange={onChange}
+        mode={mode}
+        disabled={disabled}
+        recordData={recordData}
+        isAdminDefault={isAdminDefault}
+      />
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 5. GROUP (Single Instance Key-Value Grid)
   // ─────────────────────────────────────────────────────────────
   if (effectiveType === "group" && !isSubField) {
     const childFields: SubFieldConfig[] = resolveColumnsOrSubFields(field);
@@ -2183,23 +2391,6 @@ export function FieldInputRenderer({
           ))}
         </div>
       </div>
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // 6. TABLE (Matrix / Grid with Typed Columns)
-  // ─────────────────────────────────────────────────────────────
-  if (effectiveType === "table" && !isSubField) {
-    return (
-      <TableInputRenderer
-        field={field}
-        value={value}
-        onChange={onChange}
-        mode={mode}
-        disabled={disabled}
-        recordData={recordData}
-        isAdminDefault={isAdminDefault}
-      />
     );
   }
 
@@ -2666,13 +2857,18 @@ function CrmBindInput({
     <AdminSelect
       value={currentVal}
       disabled={disabled}
-      onChange={(val) => onChange(val)}
-      placeholder={isAdminDefault ? "— No Default (Select on Record) —" : (placeholder || "Select bound record...")}
+      onChange={(val) => {
+        const found = options.find((o) => o.value === val || o.label === val);
+        onChange(found ? found.label : val);
+      }}
+      placeholder={isAdminDefault ? "— No Default (Select on Record) —" : (placeholder || "Select product or service...")}
       options={options.map((opt) => ({
-        value: opt.value,
+        value: opt.label,
         label: opt.label,
         subtitle: opt.subtitle,
       }))}
+      allowSearch={true}
+      allowCustomOptions={true}
       size="sm"
     />
   );
