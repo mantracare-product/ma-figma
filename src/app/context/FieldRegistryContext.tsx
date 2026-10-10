@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import { getStoredProcesses } from "../../lib/useProcessStore";
 
-export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember" | "scribe";
+export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember" | "scribe" | "invoice";
 
 export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
   "client",
@@ -11,7 +11,8 @@ export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
   "service",
   "organization",
   "teamMember",
-  "scribe"
+  "scribe",
+  "invoice"
 ];
 
 export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plural: string }> = {
@@ -23,6 +24,7 @@ export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: strin
   organization: { singular: "organization", plural: "organizations" },
   teamMember: { singular: "team member", plural: "team members" },
   scribe: { singular: "AI Scribe field", plural: "AI Scribe fields" },
+  invoice: { singular: "invoice", plural: "invoices" },
 };
 
 export const CURRENCY_SYMBOLS: Record<string, string> = {

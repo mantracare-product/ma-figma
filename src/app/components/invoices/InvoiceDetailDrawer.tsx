@@ -1,12 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { CustomSideDrawer } from "../ui/drawer";
-import { ClientInvoice, InvoiceStatus } from "../../types/invoiceTypes";
-import { useInvoices } from "../../context/InvoiceContext";
-import { toast } from "sonner";
+import { Link } from "react-router";
 import {
   FileText,
   User,
-  Bot,
   Calendar,
   Send,
   CreditCard,
@@ -19,7 +15,6 @@ import {
   MessageCircle,
   Mail,
   MessageSquare,
-  History,
   Upload,
   Plus,
   Printer,
@@ -30,27 +25,109 @@ import {
   Receipt,
   Sparkles,
   X,
+  Link as LinkIcon,
+  Shield,
+  Layers,
+  Settings,
 } from "lucide-react";
-import { Link } from "react-router";
-import InvoiceProgressBar from "./InvoiceProgressBar";
+import { toast } from "sonner";
+import { ClientInvoice, InvoiceStatus, InvoicePaymentRecord } from "../../types/invoiceTypes";
+import { useInvoices } from "../../context/InvoiceContext";
 import { ChevronStageRibbon } from "../common/ChevronStageRibbon";
-import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES } from "../../../lib/useProcessStore";
+import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
+import ActivityTab, { ActivityLogEntry } from "../activity/ActivityTab";
+import DocumentsTab from "../profile/DocumentsTab";
 import RecordPaymentModal from "./RecordPaymentModal";
+import { TableComponent, TableColumn } from "../ui/TableComponent";
 import {
-  getActivityForClient,
-  addActivityEntry,
-  ACTIVITY_LOG_EVENT,
-} from "../../../lib/activityLog";
-import { ACTIVITY_ENGINE_EVENT } from "../../../lib/activityEngine";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "../ui/dropdown-menu";
+import {
+  useFieldRegistry,
+  FieldDefinition,
+  SectionDefinition,
+  SECTION_REGISTRY_EVENT,
+  FIELD_REGISTRY_EVENT,
+} from "../../context/FieldRegistryContext";
+import { useOrganization } from "../../context/OrganizationContext";
+import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES, Process, Stage } from "../../../lib/useProcessStore";
+import { invoiceService } from "../../../lib/invoiceService";
+import { appendActivity, getActivity, subscribeToActivity } from "../../../lib/activityEngine";
+import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
+import { AdminSectionDrawer } from "../../pages/admin/components/AdminSectionDrawer";
 
-interface InvoiceDetailDrawerProps {
+export interface InvoiceDetailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   invoice: ClientInvoice | null;
   onOpenDocument?: (invoice: ClientInvoice) => void;
 }
 
-const DEFAULT_DOC_TEMPLATES = ["Receipt", "Invoice Copy", "Payment Confirmation"];
+const DEFAULT_INVOICE_SECTIONS: OverviewSection[] = [
+  {
+    id: "sec-inv-details",
+    title: "Invoice Details",
+    description: "Issue date, due date, payment mode, totals, and balance",
+    iconName: "file-text",
+    source: "system",
+    module: "invoice",
+    fieldKeys: [
+      "invoice_number",
+      "issue_date",
+      "due_date",
+      "payment_mode",
+      "status",
+      "stage",
+      "total_amount",
+      "amount_paid",
+      "balance_due",
+      "client_credit",
+    ],
+  },
+  {
+    id: "sec-inv-client",
+    title: "Client Information",
+    description: "Client contact coordinates and billing address",
+    iconName: "user",
+    source: "system",
+    module: "invoice",
+    fieldKeys: [
+      "client_name",
+      "client_email",
+      "client_phone",
+      "billing_address",
+    ],
+  },
+  {
+    id: "sec-inv-items",
+    title: "Product / Line Items",
+    description: "Itemized services, consultation rates, and totals",
+    iconName: "table",
+    source: "system",
+    module: "invoice",
+    fieldKeys: [
+      "line_items_summary",
+      "subtotal",
+      "tax_amount",
+      "discount_applied",
+    ],
+  },
+  {
+    id: "sec-inv-payment-link",
+    title: "Shareable Payment Link",
+    description: "Online checkout and direct payment portal for client",
+    iconName: "link",
+    source: "system",
+    module: "invoice",
+    fieldKeys: [
+      "payment_url",
+    ],
+  },
+];
 
 export default function InvoiceDetailDrawer({
   isOpen,
@@ -59,58 +136,39 @@ export default function InvoiceDetailDrawer({
   onOpenDocument,
 }: InvoiceDetailDrawerProps) {
   const { invoices, updateInvoiceStatus, sendInvoice, voidInvoice, getPaymentsByInvoice, getClientCredit } = useInvoices();
-  const [activeTab, setActiveTab] = useState<"general" | "activity" | "documents" | "payments">("general");
-  const [copied, setCopied] = useState(false);
-  const [showSendOptions, setShowSendOptions] = useState(false);
+  const { activeOrganization } = useOrganization();
+  const { getSectionsForOrg, getFieldsForOrg, addCustomSection, updateCustomSection } = useFieldRegistry();
+
+  // Active Tab
+  const [activeTab, setActiveTab] = useState<"overview" | "documents" | "payments">("overview");
+  const [copiedLink, setCopiedLink] = useState(false);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
-  const [isDocMenuOpen, setIsDocMenuOpen] = useState(false);
-  
-  // Real file uploader state
-  const [isUploadDocOpen, setIsUploadDocOpen] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadDocTitle, setUploadDocTitle] = useState("");
-  const [uploadDocCategory, setUploadDocCategory] = useState<string>("Receipt");
 
-  // Live activity log state for documents & activity tab
-  const [activityEntries, setActivityEntries] = useState<any[]>([]);
+  // Field Management Modals
+  const [fieldManagerOpen, setFieldManagerOpen] = useState(false);
+  const [fieldManagerMode, setFieldManagerMode] = useState<"select" | "create">("select");
+  const [sectionDrawerOpen, setSectionDrawerOpen] = useState(false);
+  const [editingSection, setEditingSection] = useState<SectionDefinition | null>(null);
 
-  useEffect(() => {
-    if (invoice?.clientId) {
-      const load = () => {
-        const clientLogs = getActivityForClient(invoice.clientId);
-        setActivityEntries(clientLogs);
-      };
-      load();
-
-      const handleUpdate = () => load();
-      window.addEventListener(ACTIVITY_ENGINE_EVENT, handleUpdate);
-      window.addEventListener(ACTIVITY_LOG_EVENT, handleUpdate);
-
-      return () => {
-        window.removeEventListener(ACTIVITY_ENGINE_EVENT, handleUpdate);
-        window.removeEventListener(ACTIVITY_LOG_EVENT, handleUpdate);
-      };
-    }
-  }, [invoice?.clientId, invoice?.id]);
-
-  const invoiceStages = useMemo(() => {
-    const proc = getStoredProcesses().find((p) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
-    return (proc.stages || []).map((s) => ({
-      id: s.id,
-      name: s.name,
-      color: s.color,
-      isFinalStage: s.isFinalStage || s.isFinal || s.systemCategory === "paid" || s.systemCategory === "void",
-      isFinal: s.isFinal || s.isFinalStage,
-      systemCategory: s.systemCategory,
-    }));
-  }, []);
-
+  // Live Invoice state from store / context
   const liveInvoice = useMemo(() => {
     if (!invoice) return null;
-    return invoices.find((i) => i.id === invoice.id) || invoice;
+    return invoices.find((i) => i.id === invoice.id) || invoiceService.getInvoiceById(invoice.id) || invoice;
   }, [invoices, invoice]);
 
-  const currentInvoiceStage = useMemo(() => {
+  // Invoice Process & Stages
+  const invoiceProcess: Process = useMemo(() => {
+    const procs = getStoredProcesses();
+    const invProcs = procs.filter((p) => p.entityType === "invoice");
+    return invProcs[0] || DEFAULT_ENTITY_PROCESSES.invoice;
+  }, []);
+
+  const invoiceStages: Stage[] = useMemo(() => {
+    return invoiceProcess.stages || DEFAULT_ENTITY_PROCESSES.invoice.stages;
+  }, [invoiceProcess]);
+
+  // Current stage matching
+  const currentInvoiceStage: Stage | undefined = useMemo(() => {
     if (!liveInvoice) return undefined;
     if (liveInvoice.currentStageId && liveInvoice.currentStageId.trim() !== "") {
       const stageKey = liveInvoice.currentStageId.trim().toLowerCase();
@@ -141,201 +199,385 @@ export default function InvoiceDetailDrawer({
     return undefined;
   }, [invoiceStages, liveInvoice?.currentStageId, liveInvoice?.statusLabel, liveInvoice?.status]);
 
-  const currentInvoiceStageName = currentInvoiceStage ? currentInvoiceStage.name : "";
+  // Client Identifier for documents and activities
+  const effectiveClientId = useMemo(() => {
+    if (!liveInvoice) return "CL-0";
+    return liveInvoice.clientId || `INV-${liveInvoice.id}`;
+  }, [liveInvoice]);
 
-  if (!liveInvoice) return null;
+  const availableCredit = useMemo(() => {
+    if (!liveInvoice) return 0;
+    return getClientCredit(liveInvoice.clientId);
+  }, [liveInvoice, getClientCredit]);
 
-  const isAutomated = liveInvoice.createdBy === "system";
-  const availableCredit = getClientCredit(liveInvoice.clientId);
+  // Overview Sections & Fields State
+  const storageSectionKey = `mantra_inv_sections_layout`;
+  const [invoiceSections, setInvoiceSections] = useState<OverviewSection[]>(() => {
+    try {
+      const raw = localStorage.getItem(storageSectionKey);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return DEFAULT_INVOICE_SECTIONS;
+  });
+
+  const handleSectionsChange = (newSections: OverviewSection[]) => {
+    setInvoiceSections(newSections);
+    try {
+      localStorage.setItem(storageSectionKey, JSON.stringify(newSections));
+    } catch {}
+  };
+
+  // Field values mapping
+  const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    if (!liveInvoice) return;
+
+    let storedCustom: Record<string, any> = {};
+    try {
+      const raw = localStorage.getItem(`mantra_inv_fields_${liveInvoice.id}`);
+      if (raw) storedCustom = JSON.parse(raw);
+    } catch {}
+
+    const balance = Math.max(0, liveInvoice.total - (liveInvoice.amountPaid || 0));
+    const itemsSummary = (liveInvoice.lineItems || [])
+      .map((item) => `${item.description} (x${item.quantity}) - $${((item.quantity || 1) * (item.unitPrice || 0)).toFixed(2)}`)
+      .join("\n");
+
+    setFieldValues({
+      invoice_number: liveInvoice.id,
+      issue_date: liveInvoice.issueDate || liveInvoice.date || new Date().toISOString().split("T")[0],
+      due_date: liveInvoice.dueDate || "",
+      payment_mode: liveInvoice.paymentMethod || "Bank Transfer",
+      status: liveInvoice.status || "draft",
+      stage: currentInvoiceStage?.name || liveInvoice.statusLabel || "Draft",
+      total_amount: `$${liveInvoice.total.toFixed(2)}`,
+      amount_paid: `$${(liveInvoice.amountPaid || 0).toFixed(2)}`,
+      balance_due: `$${balance.toFixed(2)}`,
+      client_credit: `$${availableCredit.toFixed(2)}`,
+      client_name: liveInvoice.clientName || "",
+      client_email: liveInvoice.clientEmail || "",
+      client_phone: liveInvoice.clientPhone || "",
+      billing_address: liveInvoice.billingAddress || "123 Health Tech Ave, Suite 400, San Francisco, CA",
+      line_items_summary: itemsSummary || "Standard Consultation - $150.00",
+      subtotal: `$${(liveInvoice.subtotal || liveInvoice.total * 0.95).toFixed(2)}`,
+      tax_amount: `$${(liveInvoice.tax || liveInvoice.total * 0.05).toFixed(2)}`,
+      discount_applied: liveInvoice.discount ? `$${liveInvoice.discount.toFixed(2)}` : "$0.00",
+      payment_url: `https://pay.mantra-assist.mock/${liveInvoice.id}`,
+      ...storedCustom,
+    });
+  }, [liveInvoice, currentInvoiceStage?.name, availableCredit]);
+
+  const handleFieldValueChange = (key: string, value: any) => {
+    setFieldValues((prev) => {
+      const next = { ...prev, [key]: value };
+      if (liveInvoice) {
+        try {
+          localStorage.setItem(`mantra_inv_fields_${liveInvoice.id}`, JSON.stringify(next));
+        } catch {}
+      }
+      return next;
+    });
+
+    if (liveInvoice) {
+      let patch: any = {};
+      if (key === "due_date") patch.dueDate = value;
+      if (key === "payment_mode") patch.paymentMethod = value;
+      if (key === "billing_address") patch.billingAddress = value;
+
+      if (Object.keys(patch).length > 0) {
+        invoiceService.updateInvoice(liveInvoice.id, patch);
+      }
+    }
+  };
+
+  // Stage Progression Handler
+  const handleStageSelect = (targetStage: Stage) => {
+    if (!liveInvoice || targetStage.id === currentInvoiceStage?.id) return;
+
+    try {
+      const moved = invoiceService.moveToStage(liveInvoice.id, targetStage.id, {
+        type: "manual",
+        ruleName: `Stage changed to ${targetStage.name} from drawer`,
+      });
+      toast.success(`Invoice moved to "${targetStage.name}"`);
+    } catch (e) {
+      console.warn("[InvoiceDetailDrawer] Failed to move stage:", e);
+    }
+  };
+
+  // Activity logs subscription
+  const [activities, setActivities] = useState<ActivityLogEntry[]>([]);
+  useEffect(() => {
+    if (!liveInvoice) return;
+
+    const candidateIds = [
+      liveInvoice.clientId,
+      effectiveClientId,
+      liveInvoice.id,
+      String(liveInvoice.appointmentId || ""),
+    ].filter(Boolean) as string[];
+
+    const load = () => {
+      let list = getActivity(candidateIds, undefined, {
+        appointmentId: liveInvoice.appointmentId ? String(liveInvoice.appointmentId) : undefined,
+      });
+
+      // Auto-backfill if no activity logs exist for this invoice yet
+      if (list.length === 0) {
+        const primaryId = liveInvoice.clientId || effectiveClientId;
+        appendActivity({
+          clientId: primaryId,
+          appointmentId: liveInvoice.appointmentId ? String(liveInvoice.appointmentId) : undefined,
+          processId: invoiceProcess.id,
+          processName: invoiceProcess.name,
+          type: "process_entry" as any,
+          status: liveInvoice.status || "draft",
+          createdBy: "system",
+          details: {
+            primary: `Invoice ${liveInvoice.id} generated for ${liveInvoice.clientName}`,
+            secondary: `Total: $${liveInvoice.total.toFixed(2)} · Due: ${liveInvoice.dueDate || "On Receipt"}`,
+          },
+        });
+
+        if (currentInvoiceStage?.name) {
+          appendActivity({
+            clientId: primaryId,
+            processId: invoiceProcess.id,
+            processName: invoiceProcess.name,
+            type: "stage_change",
+            fromStage: "Draft",
+            toStage: currentInvoiceStage.name,
+            createdBy: "system",
+            details: {
+              primary: `Invoice stage updated to "${currentInvoiceStage.name}"`,
+              secondary: `Status: ${liveInvoice.status}`,
+            },
+          });
+        }
+
+        if (liveInvoice.status === "paid") {
+          appendActivity({
+            clientId: primaryId,
+            processId: invoiceProcess.id,
+            processName: invoiceProcess.name,
+            type: "field_update",
+            fieldLabel: "Payment",
+            newValue: `$${liveInvoice.total.toFixed(2)} Paid in Full`,
+            createdBy: "user",
+            details: {
+              primary: `Invoice ${liveInvoice.id} marked as Paid`,
+              secondary: `Amount paid: $${(liveInvoice.amountPaid || liveInvoice.total).toFixed(2)}`,
+            },
+          });
+        }
+
+        list = getActivity(candidateIds, undefined, {
+          appointmentId: liveInvoice.appointmentId ? String(liveInvoice.appointmentId) : undefined,
+        });
+      }
+
+      setActivities(list as any);
+    };
+
+    load();
+    const unsub = subscribeToActivity(candidateIds, load, {
+      appointmentId: liveInvoice.appointmentId ? String(liveInvoice.appointmentId) : undefined,
+    });
+    return unsub;
+  }, [liveInvoice?.id, liveInvoice?.status, liveInvoice?.currentStageId, effectiveClientId, invoiceProcess.name, currentInvoiceStage?.name]);
+
+  // Settled Payments records for this invoice
+  const settledPayments = useMemo(() => {
+    if (!liveInvoice) return [];
+    const directPayments = getPaymentsByInvoice(liveInvoice.id);
+    if (directPayments && directPayments.length > 0) return directPayments;
+
+    // If marked paid, create a synthetic settled record so table is complete
+    if (liveInvoice.status === "paid" || (liveInvoice.amountPaid && liveInvoice.amountPaid > 0)) {
+      return [
+        {
+          id: `pay-${liveInvoice.id}-1`,
+          date: liveInvoice.issueDate || new Date().toISOString().split("T")[0],
+          invoiceId: liveInvoice.id,
+          clientId: liveInvoice.clientId,
+          amount: liveInvoice.amountPaid || liveInvoice.total,
+          method: liveInvoice.paymentMethod || "Bank Transfer",
+          reference: `REC-${liveInvoice.id.replace(/[^0-9]/g, "").slice(-5) || "92831"}`,
+          status: "completed",
+        } as InvoicePaymentRecord,
+      ];
+    }
+    return [];
+  }, [liveInvoice, getPaymentsByInvoice]);
+
+  if (!isOpen || !liveInvoice) return null;
 
   const handleCopyLink = () => {
-    if (invoice.paymentLinkUrl) {
-      navigator.clipboard.writeText(invoice.paymentLinkUrl);
-      setCopied(true);
-      toast.success("Payment link copied to clipboard");
-      setTimeout(() => setCopied(false), 2000);
-    }
+    const url = `https://pay.mantra-assist.mock/${liveInvoice.id}`;
+    navigator.clipboard?.writeText(url);
+    setCopiedLink(true);
+    toast.success("Shareable payment link copied to clipboard");
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleSend = (channel: "whatsapp" | "sms" | "email") => {
-    sendInvoice(invoice.id, channel);
-    toast.success(`Invoice ${invoice.id} sent via ${channel.toUpperCase()}`);
-    setShowSendOptions(false);
+  const handleSendInvoice = (method: "email" | "sms" | "whatsapp") => {
+    sendInvoice(liveInvoice.id, method);
   };
 
-  const handleVoid = () => {
-    voidInvoice(invoice.id);
-    toast.success(`Invoice ${invoice.id} voided`);
+  const handleVoidInvoice = () => {
+    voidInvoice(liveInvoice.id);
+    toast.success(`Invoice ${liveInvoice.id} voided`);
   };
-
-  const handleGenerateDoc = (docType: string) => {
-    addActivityEntry({
-      clientId: invoice.clientId,
-      processId: "billing",
-      processName: "Billing & Invoicing",
-      type: "document_generated",
-      status: "success",
-      refId: invoice.id,
-      details: {
-        primary: `Document generated (${docType})`,
-        secondary: `Official ${docType} generated for Invoice ${invoice.id}`,
-      },
-    });
-    toast.success(`Document generated: ${docType}`);
-    setIsDocMenuOpen(false);
-  };
-
-  const handleUploadSubmit = () => {
-    if (!uploadFile && !uploadDocTitle.trim()) {
-      toast.error("Please select a file to upload.");
-      return;
-    }
-    const fileName = uploadFile ? uploadFile.name : `${uploadDocTitle.trim()}.pdf`;
-    const primaryTitle = uploadDocTitle.trim() || fileName;
-    const isReceipt = uploadDocCategory.toLowerCase().includes("receipt");
-
-    addActivityEntry({
-      clientId: invoice.clientId,
-      processId: "billing",
-      processName: "Billing & Invoicing",
-      type: isReceipt ? "receipt_uploaded" : "document_generated",
-      status: "success",
-      refId: invoice.id,
-      details: {
-        primary: `${uploadDocCategory}: ${primaryTitle}`,
-        secondary: `File: ${fileName}${uploadFile ? ` (${(uploadFile.size / 1024).toFixed(1)} KB)` : ""} · Uploaded on ${new Date().toLocaleDateString()}`,
-      },
-    });
-
-    toast.success(`Document "${primaryTitle}" uploaded successfully!`);
-    setUploadFile(null);
-    setUploadDocTitle("");
-    setUploadDocCategory("Receipt");
-    setIsUploadDocOpen(false);
-  };
-
-  const invoicePayments = getPaymentsByInvoice(invoice.id);
-
-  // Filter activity entries for this invoice's documents
-  const invoiceDocEntries = activityEntries.filter(
-    (e) =>
-      e.refId === invoice.id ||
-      (e.details?.primary && (e.details.primary.includes("Document generated") || e.details.primary.includes("Receipt uploaded")))
-  );
-
-  const clientActivityLogs = activityEntries.filter(
-    (e) =>
-      !e.details?.primary?.includes("Document generated") &&
-      !e.details?.primary?.includes("Receipt uploaded")
-  );
-
-  const activityCount = 1 + (invoice.sentAt ? 1 : 0) + invoicePayments.length + clientActivityLogs.length;
 
   return (
-    <>
-      <CustomSideDrawer
-        isOpen={isOpen}
-        onClose={onClose}
-        maxWidth="sm:max-w-[70vw] w-full max-w-[70vw]"
-        title={
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xl font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    {invoice.id}
-                  </span>
-                  <InvoiceProgressBar
-                    status={invoice.status}
-                    onStatusChange={(newSt) => updateInvoiceStatus(invoice.id, newSt as any)}
-                    interactive={true}
-                    size="sm"
-                  />
-                  {availableCredit > 0 && (
-                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-bold flex items-center gap-1">
-                      <Wallet className="w-3 h-3 text-emerald-600" /> Credit Available: ${availableCredit.toFixed(2)}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">Created on {invoice.createdAt.split("T")[0]}</p>
-              </div>
+    <div className="fixed inset-0 z-50 overflow-hidden flex justify-end bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="w-full max-w-5xl bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 overflow-hidden animate-in slide-in-from-right duration-300">
+        
+        {/* ── Top Header (DESIGN.md Light Architectural Standard) ── */}
+        <div className="flex-shrink-0 bg-white px-7 py-3.5 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-xs">
+              <FileText className="w-4 h-4" />
             </div>
-
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-200 rounded-full text-xs font-medium text-slate-700">
-              {isAutomated ? (
-                <>
-                  <Bot className="w-3.5 h-3.5 text-blue-600" />
-                  <span className="text-blue-700 font-semibold">Automated Flow</span>
-                </>
-              ) : (
-                <>
-                  <User className="w-3.5 h-3.5 text-slate-500" />
-                  <span>{invoice.createdBy}</span>
-                </>
-              )}
+            <div>
+              <div className="flex items-center gap-2">
+                <h1
+                  className="text-base font-bold text-slate-900 tracking-tight"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  Invoice View
+                </h1>
+                <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                  #{liveInvoice.id}
+                </span>
+                {liveInvoice.createdBy === "system" && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    <Sparkles className="w-2.5 h-2.5" /> Automated Flow
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-0.5">
+                <span>Created {liveInvoice.issueDate || liveInvoice.date || "recently"}</span>
+                <span>•</span>
+                <span>{liveInvoice.clientName || "Client"}</span>
+              </div>
             </div>
           </div>
-        }
-        footer={
-          <div className="flex items-center gap-2.5 w-full">
+
+          <div className="flex items-center gap-2">
+            {/* Quick Actions Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <Settings className="w-3.5 h-3.5 text-slate-500" />
+                  Actions
+                  <ChevronDown className="w-3 h-3 text-slate-400" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 bg-white shadow-xl rounded-xl border border-slate-200 p-1">
+                <DropdownMenuItem
+                  onClick={() => setIsRecordPaymentOpen(true)}
+                  className="text-xs font-medium cursor-pointer flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-slate-100"
+                >
+                  <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                  Record Payment
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleSendInvoice("email")}
+                  className="text-xs font-medium cursor-pointer flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-slate-100"
+                >
+                  <Mail className="w-3.5 h-3.5 text-blue-600" />
+                  Send via Email
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleSendInvoice("whatsapp")}
+                  className="text-xs font-medium cursor-pointer flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-slate-100"
+                >
+                  <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                  Send via WhatsApp
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleCopyLink}
+                  className="text-xs font-medium cursor-pointer flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-slate-100"
+                >
+                  <LinkIcon className="w-3.5 h-3.5 text-slate-600" />
+                  Copy Payment Link
+                </DropdownMenuItem>
+                {onOpenDocument && (
+                  <DropdownMenuItem
+                    onClick={() => onOpenDocument(liveInvoice)}
+                    className="text-xs font-medium cursor-pointer flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-slate-100"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-slate-600" />
+                    Printable Document
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator className="my-1 border-slate-100" />
+                <DropdownMenuItem
+                  onClick={handleVoidInvoice}
+                  disabled={liveInvoice.status === "void"}
+                  className="text-xs font-medium cursor-pointer text-rose-600 flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-rose-50"
+                >
+                  <Ban className="w-3.5 h-3.5 text-rose-500" />
+                  Void Invoice
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Direct Action: Record Payment */}
+            {liveInvoice.status !== "paid" && (
+              <button
+                type="button"
+                onClick={() => setIsRecordPaymentOpen(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+                Record Payment
+              </button>
+            )}
+
+            {/* Direct Action: Printable View */}
             {onOpenDocument && (
               <button
-                onClick={() => onOpenDocument(invoice)}
-                className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors"
-                style={{ fontFamily: "Outfit, sans-serif" }}
+                type="button"
+                onClick={() => onOpenDocument(liveInvoice)}
+                className="px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
-                <Printer className="w-3.5 h-3.5 text-blue-600" /> Printable View
+                <Printer className="w-3.5 h-3.5 text-slate-500" />
+                Printable View
               </button>
             )}
 
             <button
-              onClick={() => setShowSendOptions(!showSendOptions)}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+              title="Close drawer"
             >
-              <Send className="w-3.5 h-3.5" /> Send Invoice
+              <X className="w-4 h-4" />
             </button>
-
-            {invoice.status !== "paid" && invoice.status !== "void" && (
-              <button
-                onClick={() => setIsRecordPaymentOpen(true)}
-                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
-              >
-                <CreditCard className="w-3.5 h-3.5" /> Record Payment
-              </button>
-            )}
-
-            <div className="flex-1" />
-
-            {invoice.status !== "void" && invoice.status !== "paid" && (
-              <button
-                onClick={handleVoid}
-                className="px-3 py-2.5 border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-600 rounded-xl text-xs font-semibold transition-all flex items-center gap-1"
-              >
-                <Ban className="w-3.5 h-3.5" /> Void
-              </button>
-            )}
           </div>
-        }
-      >
-        {/* ── Stage Pipeline Bar (Chevron Stage Ribbon identical to Process Tab) ── */}
-        <div className="-mx-6 -mt-6 mb-6 px-6 py-2.5 bg-white border-b border-slate-200">
+        </div>
+
+        {/* ── Stage Pipeline Bar (Chevron Stage Ribbon) ── */}
+        <div className="flex-shrink-0 px-7 py-2.5 bg-white border-b border-slate-200">
           <ChevronStageRibbon
-            stages={invoiceStages}
+            stages={invoiceStages.map((s) => ({
+              id: s.id,
+              name: s.name,
+              color: s.color,
+              isFinalStage: s.isFinalStage || s.isFinal || s.systemCategory === "paid" || s.systemCategory === "void",
+              isFinal: s.isFinal || s.isFinalStage,
+              systemCategory: s.systemCategory,
+            }))}
             activeStageId={currentInvoiceStage?.id}
-            activeStageName={currentInvoiceStageName}
             onStageClick={(stg) => {
-              try {
-                invoiceService.moveToStage(liveInvoice.id, stg.id, {
-                  type: "manual",
-                  ruleName: `Stage changed to ${stg.name} from drawer`,
-                });
-                toast.success(`Invoice moved to "${stg.name}"`);
-              } catch (e) {
-                console.warn(e);
-              }
+              const matched = invoiceStages.find((s) => String(s.id) === String(stg.id));
+              if (matched) handleStageSelect(matched);
             }}
             showAddButton={true}
           />
@@ -352,688 +594,379 @@ export default function InvoiceDetailDrawer({
           )}
         </div>
 
-        {/* Tab Bar: General | Activity | Documents | Payments */}
-        <div className="border-b border-slate-200 mb-6">
-          <div className="flex items-center gap-6">
-            <button
-              type="button"
-              onClick={() => setActiveTab("general")}
-              className={`pb-3 text-xs font-bold transition-all relative ${
-                activeTab === "general"
-                  ? "text-blue-600 border-b-2 border-blue-600"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              General
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("activity")}
-              className={`pb-3 text-xs font-bold transition-all relative flex items-center gap-1.5 ${
-                activeTab === "activity"
-                  ? "text-blue-600 border-b-2 border-blue-600"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              <History className="w-3.5 h-3.5" /> Activity
-              <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-bold">
-                {activityCount}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("documents")}
-              className={`pb-3 text-xs font-bold transition-all relative flex items-center gap-1.5 ${
-                activeTab === "documents"
-                  ? "text-blue-600 border-b-2 border-blue-600"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" /> Documents
-              <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-bold">
-                {invoiceDocEntries.length}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("payments")}
-              className={`pb-3 text-xs font-bold transition-all relative flex items-center gap-1.5 ${
-                activeTab === "payments"
-                  ? "text-blue-600 border-b-2 border-blue-600"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              <CreditCard className="w-3.5 h-3.5" /> Payments
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                invoicePayments.length > 0 ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"
-              }`}>
-                {invoicePayments.length}
-              </span>
-            </button>
-          </div>
+        {/* ── Tabs Bar ── */}
+        <div className="flex-shrink-0 bg-white px-6 flex border-b border-slate-200 gap-8">
+          {(
+            [
+              { id: "overview", label: "Overview", icon: <FileText className="w-3.5 h-3.5" /> },
+              { id: "documents", label: "Documents", icon: <FileCheck className="w-3.5 h-3.5" />, count: 1 },
+              { id: "payments", label: "Payments", icon: <Wallet className="w-3.5 h-3.5" />, count: settledPayments.length },
+            ] as const
+          ).map((tab) => {
+            const isSelected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`py-3.5 text-xs font-semibold transition-all flex items-center gap-2 relative cursor-pointer ${
+                  isSelected ? "text-blue-600" : "text-slate-500 hover:text-slate-800"
+                }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+                {typeof (tab as any).count === "number" && (tab as any).count > 0 && (
+                  <span
+                    className={`px-1.5 py-0.2 text-[10px] font-bold rounded-full ${
+                      isSelected ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {(tab as any).count}
+                  </span>
+                )}
+                {isSelected && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />}
+              </button>
+            );
+          })}
         </div>
 
-        {activeTab === "general" && (
-          <div className="space-y-6">
-            {/* Send Channel Picker Modal Popover */}
-            {showSendOptions && (
-              <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-xl space-y-3">
-                <p className="text-xs font-bold text-blue-900">Select Delivery Channel</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => handleSend("whatsapp")}
-                    className="flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700"
-                  >
-                    <MessageCircle className="w-4 h-4" /> WhatsApp
-                  </button>
-                  <button
-                    onClick={() => handleSend("sms")}
-                    className="flex items-center justify-center gap-1.5 py-2 px-3 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700"
-                  >
-                    <MessageSquare className="w-4 h-4" /> SMS
-                  </button>
-                  <button
-                    onClick={() => handleSend("email")}
-                    className="flex items-center justify-center gap-1.5 py-2 px-3 bg-slate-800 text-white text-xs font-semibold rounded-lg hover:bg-slate-900"
-                  >
-                    <Mail className="w-4 h-4" /> Email
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Client & Appointment Details */}
-            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs">
-              <div>
-                <span className="text-slate-400 font-medium block mb-1">Client</span>
-                <Link
-                  to={`/clients/${invoice.clientId}`}
-                  onClick={onClose}
-                  className="font-semibold text-blue-600 hover:underline flex items-center gap-1"
-                >
-                  <User className="w-3.5 h-3.5" /> {invoice.clientName}
-                </Link>
-                {invoice.clientEmail && <p className="text-slate-500 mt-0.5">{invoice.clientEmail}</p>}
-              </div>
-
-              <div>
-                <span className="text-slate-400 font-medium block mb-1 font-bold uppercase tracking-wider text-[10px]">
-                  Linked Service & Payment
-                </span>
-                {invoice.appointmentId ? (
-                  <Link
-                    to={`/appointments?id=${invoice.appointmentId}`}
-                    onClick={onClose}
-                    className="font-semibold text-blue-600 hover:underline flex items-center gap-1"
-                  >
-                    <Calendar className="w-3.5 h-3.5 text-blue-500" /> {invoice.appointmentTitle || `Appointment #${invoice.appointmentId}`}
-                  </Link>
-                ) : (
-                  <span className="text-slate-400 italic">Standalone Invoice</span>
-                )}
-                <p className="text-slate-600 mt-0.5 font-medium">Due Date: {invoice.dueDate}</p>
-                {invoice.paymentMode && (
-                  <p className="text-slate-700 font-semibold mt-1 bg-blue-50/80 px-2 py-0.5 rounded border border-blue-100 inline-block text-[11px]">
-                    Payment Mode: {invoice.paymentMode}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Line Items Table */}
-            <div>
-              <span className="text-xs font-semibold text-slate-700 block mb-2 font-bold uppercase tracking-wider text-[10px]">
-                Line Items ({invoice.lineItems.length})
-              </span>
-              <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                    <tr>
-                      <th className="py-2.5 px-3 font-semibold">Description</th>
-                      <th className="py-2.5 px-3 font-semibold text-center">Qty</th>
-                      <th className="py-2.5 px-3 font-semibold text-right">Price</th>
-                      <th className="py-2.5 px-3 font-semibold text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {invoice.lineItems.map((item) => (
-                      <tr key={item.id}>
-                        <td className="py-2.5 px-3 font-medium text-slate-800">{item.description}</td>
-                        <td className="py-2.5 px-3 text-center text-slate-500">{item.quantity}</td>
-                        <td className="py-2.5 px-3 text-right text-slate-500">${item.unitPrice.toFixed(2)}</td>
-                        <td className="py-2.5 px-3 text-right font-medium text-slate-800">
-                          ${(item.quantity * item.unitPrice).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Summary Totals */}
-            <div className="flex justify-end">
-              <div className="w-60 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
-                <div className="flex justify-between text-slate-500">
-                  <span>Subtotal</span>
-                  <span>${invoice.subtotal.toFixed(2)}</span>
-                </div>
-                {invoice.discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-600">
-                    <span>Discount</span>
-                    <span>-${invoice.discountAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-slate-500">
-                  <span>Tax</span>
-                  <span>${invoice.taxAmount.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between pt-1.5 border-t border-slate-200 font-bold text-slate-900 text-sm">
-                  <span>Total</span>
-                  <span>${invoice.total.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between pt-1 text-emerald-600 font-semibold">
-                  <span>Amount Paid</span>
-                  <span>${(invoice.amountPaid || 0).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-xs">
-                  <span>Remaining Balance</span>
-                  <span className={invoice.total - (invoice.amountPaid || 0) > 0 ? "text-rose-600" : "text-emerald-600"}>
-                    ${Math.max(0, invoice.total - (invoice.amountPaid || 0)).toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Copy Payment Link */}
-            {invoice.paymentLinkUrl && (
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Shareable Payment Link</span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={invoice.paymentLinkUrl}
-                    className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-700"
+        {/* ── Scrollable Tab Body ── */}
+        <div className="flex-1 overflow-y-auto bg-[#F8FAFC]">
+          
+          {/* ─────────────────────────────────────────────────────────────
+              TAB 1: OVERVIEW (2-Column Split: Sections on Left, Activity on Right)
+             ───────────────────────────────────────────────────────────── */}
+          {activeTab === "overview" && (
+            <div className="p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* LEFT COLUMN: Draggable Sections & Custom Fields */}
+                <div className="lg:col-span-6 space-y-4">
+                  <DraggableOverviewSections
+                    mode="invoice"
+                    customFieldsModule="invoice"
+                    sections={invoiceSections}
+                    onSectionsChange={handleSectionsChange}
+                    fieldValues={fieldValues}
+                    onFieldValueChange={handleFieldValueChange}
+                    client={{
+                      id: effectiveClientId,
+                      name: liveInvoice.clientName,
+                      phone: liveInvoice.clientPhone,
+                      email: liveInvoice.clientEmail,
+                    }}
                   />
-                  <button
-                    onClick={handleCopyLink}
-                    className="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-medium hover:bg-slate-800 flex items-center gap-1"
-                  >
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    {copied ? "Copied" : "Copy"}
-                  </button>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
 
-        {activeTab === "payments" && (
-          <div className="space-y-6">
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Amount</span>
-                <span className="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">${invoice.total.toFixed(2)}</span>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Amount Paid</span>
-                <span className="text-lg font-extrabold text-emerald-600 font-mono mt-0.5 block">${(invoice.amountPaid || 0).toFixed(2)}</span>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Balance Due</span>
-                <span className={`text-lg font-extrabold font-mono mt-0.5 block ${invoice.total - (invoice.amountPaid || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                  ${Math.max(0, invoice.total - (invoice.amountPaid || 0)).toFixed(2)}
-                </span>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Client Credit</span>
-                <span className="text-lg font-extrabold text-indigo-600 font-mono mt-0.5 block">${availableCredit.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Payments Action Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Settled & Applied Payments</h4>
-                <p className="text-[11px] text-slate-500">Itemized transaction records and attached payment receipts for {invoice.id}</p>
-              </div>
-
-              {invoice.status !== "paid" && invoice.status !== "void" && (
-                <button
-                  type="button"
-                  onClick={() => setIsRecordPaymentOpen(true)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" /> + Record Payment
-                </button>
-              )}
-            </div>
-
-            {/* Payments Table */}
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-              {invoicePayments.length === 0 ? (
-                <div className="p-10 text-center space-y-3">
-                  <CreditCard className="w-8 h-8 text-slate-300 mx-auto" />
-                  <div>
-                    <p className="text-xs font-bold text-slate-700">No Payments Recorded Yet</p>
-                    <p className="text-[11px] text-slate-400">Click "+ Record Payment" above to collect payments or apply client credit.</p>
+                {/* RIGHT COLUMN: Real-Time Activity Feed */}
+                <div className="lg:col-span-6">
+                  <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+                    <ActivityTab
+                      activity={activities}
+                      clientId={effectiveClientId}
+                      clientName={liveInvoice.clientName}
+                      clientEmail={liveInvoice.clientEmail}
+                      clientPhone={liveInvoice.clientPhone}
+                      onCloseParentDrawer={onClose}
+                      emptyMessage="No activity logs yet for this invoice"
+                    />
                   </div>
                 </div>
-              ) : (
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-bold uppercase text-[10px] tracking-wider">
-                    <tr>
-                      <th className="py-3 px-4">Date</th>
-                      <th className="py-3 px-4">Method & Type</th>
-                      <th className="py-3 px-4">Receipt / Ref</th>
-                      <th className="py-3 px-4 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                    {invoicePayments.map((pmt) => (
-                      <tr key={pmt.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-bold text-slate-900">{pmt.paymentDate}</td>
-                        <td className="py-3 px-4">
-                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 text-[10px] font-bold uppercase inline-block mb-0.5">
-                            {pmt.method.replace("_", " ")}
-                          </span>
-                          <span className="text-[11px] text-slate-400 block">{pmt.paymentType}</span>
-                        </td>
-                        <td className="py-3 px-4">
-                          {pmt.receiptFileName ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
-                              <Receipt className="w-3 h-3" /> {pmt.receiptFileName}
-                            </span>
-                          ) : pmt.receiptNumber ? (
-                            <span className="text-slate-600 font-mono text-[11px]">{pmt.receiptNumber}</span>
-                          ) : (
-                            <span className="text-slate-400 italic">No receipt attached</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600 text-sm">
-                          +${pmt.amount.toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
 
-        {activeTab === "activity" && (
-          <div className="space-y-6">
-            <div>
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-                Combined Activity & Lifecycle Timeline
-              </h4>
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-4">
-                {/* Created Event */}
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5">
-                    ✓
+              </div>
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              TAB 2: DOCUMENTS (Templates, Invoice Document, Add Template)
+             ───────────────────────────────────────────────────────────── */}
+          {activeTab === "documents" && (
+            <div className="p-6 space-y-6">
+              {/* Highlight Card for this Invoice's Official PDF Document */}
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs flex items-center justify-between">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-2xs">
+                    <Receipt className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-slate-900 block">Invoice Created</span>
-                    <span className="text-[11px] text-slate-500">
-                      Created on {invoice.createdAt.split("T")[0]} · By {isAutomated ? "Automated Flow" : invoice.createdBy}
-                    </span>
+                    <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Official Invoice Document (#{liveInvoice.id})
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Ready for printing, direct download, or client dispatch. Total: ${liveInvoice.total.toFixed(2)}
+                    </p>
                   </div>
                 </div>
 
-                {/* Sent Event */}
-                {invoice.sentAt && (
-                  <div className="flex items-start gap-3 border-t border-slate-100 pt-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5">
-                      <Send className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-slate-900 block">Invoice Sent via {invoice.sentVia?.toUpperCase()}</span>
-                      <span className="text-[11px] text-slate-500">{invoice.sentAt}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Viewed Event */}
-                {(invoice.status === "viewed" || invoice.status === "paid") && (
-                  <div className="flex items-start gap-3 border-t border-slate-100 pt-3">
-                    <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5">
-                      <Clock className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-slate-900 block">Invoice Viewed by Client</span>
-                      <span className="text-[11px] text-slate-500">Client accessed payment portal</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Recorded Payments */}
-                {invoicePayments.map((pmt) => (
-                  <div key={pmt.id} className="flex items-start justify-between border-t border-slate-100 pt-3">
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5">
-                        <CreditCard className="w-3.5 h-3.5" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-900 block">
-                          Payment Settled ({pmt.paymentType === "insurance" ? "Insurance" : pmt.paymentType === "write_off" ? "Write-off" : "Self-Pay"})
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          {pmt.paymentDate} · Method: {pmt.method.replace("_", " ").toUpperCase()} {pmt.note ? `· ${pmt.note}` : ""}
-                        </span>
-                      </div>
-                    </div>
-                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 font-mono">
-                      +${pmt.amount.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-
-                {/* Void Event */}
-                {invoice.status === "void" && (
-                  <div className="flex items-start gap-3 border-t border-slate-100 pt-3">
-                    <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5">
-                      <Ban className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-rose-700 block">Invoice Voided</span>
-                      <span className="text-[11px] text-slate-500">Invoice cancelled and marked void</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === "documents" && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Generated Documents & Uploaded Receipts
-                </h4>
-                <p className="text-[11px] text-slate-400">
-                  Read directly from real activity logs for {invoice.id}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* Generate Document Dropdown */}
-                <div className="relative">
+                <div className="flex items-center gap-2">
+                  {onOpenDocument && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenDocument(liveInvoice)}
+                      className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      Print / Download Invoice
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setIsDocMenuOpen(!isDocMenuOpen)}
-                    className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+                    onClick={handleCopyLink}
+                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    <FileCheck className="w-3.5 h-3.5" /> Generate Document <ChevronDown className="w-3.5 h-3.5" />
+                    {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <LinkIcon className="w-3.5 h-3.5" />}
+                    {copiedLink ? "Link Copied" : "Copy Payment Link"}
                   </button>
+                </div>
+              </div>
 
-                  {isDocMenuOpen && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setIsDocMenuOpen(false)} />
-                      <div className="absolute right-0 mt-1 z-20 w-52 bg-white border border-slate-200 rounded-xl shadow-xl py-1 text-xs">
-                        <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
-                          Select Template
-                        </div>
-                        {DEFAULT_DOC_TEMPLATES.map((tmpl) => (
-                          <button
-                            key={tmpl}
-                            type="button"
-                            onClick={() => handleGenerateDoc(tmpl)}
-                            className="w-full text-left px-3.5 py-2 hover:bg-blue-50 font-semibold text-slate-700 hover:text-blue-700 transition-colors flex items-center gap-2"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-blue-500" />
-                            <span>{tmpl}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </>
+              {/* Standard Documents & Templates Tab */}
+              <DocumentsTab
+                client={{
+                  id: effectiveClientId,
+                  name: liveInvoice.clientName || "Client",
+                  email: liveInvoice.clientEmail || "",
+                  phone: liveInvoice.clientPhone || "",
+                }}
+                processName={invoiceProcess.name}
+              />
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              TAB 3: PAYMENTS (Settled & Applied Payments Table + Metrics)
+             ───────────────────────────────────────────────────────────── */}
+          {activeTab === "payments" && (
+            <div className="p-6 space-y-6">
+              {/* Metric Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs">
+                  <p className="text-xs text-slate-500 font-medium">TOTAL AMOUNT</p>
+                  <p className="text-xl font-bold text-slate-900 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    ${liveInvoice.total.toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs">
+                  <p className="text-xs text-emerald-600 font-medium">AMOUNT PAID</p>
+                  <p className="text-xl font-bold text-emerald-600 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    ${(liveInvoice.amountPaid || (liveInvoice.status === "paid" ? liveInvoice.total : 0)).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs">
+                  <p className="text-xs text-blue-600 font-medium">BALANCE DUE</p>
+                  <p className="text-xl font-bold text-blue-600 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    ${Math.max(0, liveInvoice.total - (liveInvoice.amountPaid || (liveInvoice.status === "paid" ? liveInvoice.total : 0))).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs">
+                  <p className="text-xs text-purple-600 font-medium">CLIENT CREDIT</p>
+                  <p className="text-xl font-bold text-purple-600 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    ${availableCredit.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Settled Payments Table Section */}
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+                <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Settled & Applied Payments
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Itemized transaction records and attached receipts for {liveInvoice.id}
+                    </p>
+                  </div>
+
+                  {liveInvoice.status !== "paid" && (
+                    <button
+                      type="button"
+                      onClick={() => setIsRecordPaymentOpen(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Record Payment
+                    </button>
                   )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setIsUploadDocOpen(true)}
-                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Upload className="w-3.5 h-3.5" /> + Upload
-                </button>
-              </div>
-            </div>
-
-            {/* Documents Log Table */}
-            <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs">
-              {invoiceDocEntries.length === 0 ? (
-                <div className="p-8 text-center space-y-2">
-                  <FileText className="w-8 h-8 text-slate-300 mx-auto" />
-                  <p className="text-xs font-bold text-slate-700">No Documents Logged</p>
-                  <p className="text-[11px] text-slate-400">
-                    Use "Generate Document" or "+ Upload" above to attach documents or receipts to this invoice.
-                  </p>
-                </div>
-              ) : (
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-bold uppercase text-[10px] tracking-wider">
-                    <tr>
-                      <th className="py-3 px-4">Document / File</th>
-                      <th className="py-3 px-4">Type</th>
-                      <th className="py-3 px-4">Date Logged</th>
-                      <th className="py-3 px-4 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                    {invoiceDocEntries.map((doc) => (
-                      <tr key={doc.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-semibold text-slate-900 flex items-center gap-2">
-                          {doc.type === "receipt_uploaded" ? (
-                            <Upload className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                          ) : (
-                            <FileCheck className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                          )}
-                          <span>{doc.details?.primary || "Invoice Document"}</span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                              doc.type === "receipt_uploaded"
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                : "bg-blue-50 text-blue-700 border border-blue-200"
-                            }`}
-                          >
-                            {doc.type === "receipt_uploaded" ? "Receipt" : "Generated Doc"}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-slate-500">
-                          {doc.timestamp ? doc.timestamp.split("T")[0] : "Today"}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => onOpenDocument && onOpenDocument(invoice)}
-                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold transition-colors inline-flex items-center gap-1"
-                          >
-                            <Printer className="w-3 h-3" /> View / Print
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
-      </CustomSideDrawer>
-
-      {/* Embedded Record Payment Modal */}
-      {isRecordPaymentOpen && (
-        <RecordPaymentModal
-          isOpen={isRecordPaymentOpen}
-          onClose={() => setIsRecordPaymentOpen(false)}
-          clientId={invoice.clientId}
-          clientName={invoice.clientName}
-          preSelectedInvoiceId={invoice.id}
-        />
-      )}
-
-      {/* Upload Document / File Modal with Real File Uploader */}
-      {isUploadDocOpen && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center">
-                  <Upload className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Upload Document
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Attach files, payment receipts, or insurance proofs to Invoice <strong>{invoice.id}</strong>
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setUploadFile(null);
-                  setUploadDocTitle("");
-                  setIsUploadDocOpen(false);
-                }}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              {/* Document Category / Type Selector */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Document Type *
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {["Receipt", "Invoice Copy", "Insurance / EOB", "Contract", "Other"].map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setUploadDocCategory(cat)}
-                      className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-center ${
-                        uploadDocCategory === cat
-                          ? "bg-emerald-50 text-emerald-900 border-emerald-500 font-bold shadow-2xs"
-                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Drag & Drop / Click to Upload Box */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Select File *
-                </label>
-
-                {!uploadFile ? (
-                  <label className="flex flex-col items-center justify-center p-6 bg-slate-50 hover:bg-slate-100/80 border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-2xl cursor-pointer transition-all group">
-                    <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 text-slate-400 group-hover:text-emerald-600 flex items-center justify-center mb-2 shadow-2xs transition-colors">
-                      <Upload className="w-6 h-6" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-800 group-hover:text-emerald-700">
-                      Click or drag file here to upload
-                    </span>
-                    <span className="text-[11px] text-slate-400 mt-0.5">
-                      Supports PDF, PNG, JPG, DOCX, CSV up to 25MB
-                    </span>
-                    <input
-                      type="file"
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files.length > 0) {
-                          const f = e.target.files[0];
-                          setUploadFile(f);
-                          if (!uploadDocTitle) {
-                            setUploadDocTitle(f.name.replace(/\.[^/.]+$/, ""));
-                          }
-                        }
-                      }}
+                {settledPayments.length > 0 ? (
+                  <div className="p-3">
+                    <TableComponent<InvoicePaymentRecord>
+                      data={settledPayments}
+                      columns={[
+                        {
+                          id: "date",
+                          header: "Date",
+                          render: (row) => (
+                            <span className="text-xs font-medium text-slate-700">
+                              {row.date || "2026-10-10"}
+                            </span>
+                          ),
+                        },
+                        {
+                          id: "method",
+                          header: "Method & Type",
+                          render: (row) => (
+                            <div>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700">
+                                {row.method || "Cash"}
+                              </span>
+                              <p className="text-[10px] text-slate-400 mt-0.5">settled_pay</p>
+                            </div>
+                          ),
+                        },
+                        {
+                          id: "receipt",
+                          header: "Receipt / Ref",
+                          render: (row) => (
+                            <span className="text-xs font-mono text-slate-600">
+                              {row.reference || `REC-${row.id.slice(-5)}`}
+                            </span>
+                          ),
+                        },
+                        {
+                          id: "status",
+                          header: "Status",
+                          render: () => (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Settled
+                            </span>
+                          ),
+                        },
+                        {
+                          id: "amount",
+                          header: "Amount",
+                          align: "right",
+                          render: (row) => (
+                            <span className="text-xs font-bold text-emerald-600 font-mono">
+                              +${Number(row.amount || 0).toFixed(2)}
+                            </span>
+                          ),
+                        },
+                      ]}
+                      getRowId={(row) => row.id}
+                      emptyMessage="No payments recorded yet for this invoice."
                     />
-                  </label>
+                  </div>
                 ) : (
-                  <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-white border border-emerald-200 text-emerald-600 flex items-center justify-center shadow-2xs font-bold">
-                        <FileCheck className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-900 block truncate max-w-[260px]">
-                          {uploadFile.name}
-                        </span>
-                        <span className="text-[11px] text-emerald-700 font-medium">
-                          {(uploadFile.size / 1024).toFixed(1)} KB · Ready to upload
-                        </span>
-                      </div>
-                    </div>
+                  <div className="p-10 text-center">
+                    <Wallet className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm font-medium text-slate-700">No payments settled yet</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Click &quot;Record Payment&quot; above to log cash, card, or credit transactions.
+                    </p>
                     <button
                       type="button"
-                      onClick={() => setUploadFile(null)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-white transition-colors"
-                      title="Remove file"
+                      onClick={() => setIsRecordPaymentOpen(true)}
+                      className="mt-4 px-4 py-2 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-all inline-flex items-center gap-1.5 cursor-pointer"
                     >
-                      <X className="w-4 h-4" />
+                      <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+                      Record First Payment
                     </button>
                   </div>
                 )}
               </div>
-
-              {/* Document Title / Note */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Document Title (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Settlement receipt #8942"
-                  value={uploadDocTitle}
-                  onChange={(e) => setUploadDocTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                />
-              </div>
             </div>
+          )}
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setUploadFile(null);
-                  setUploadDocTitle("");
-                  setIsUploadDocOpen(false);
-                }}
-                className="px-4 py-2.5 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleUploadSubmit}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <Upload className="w-4 h-4" /> Upload Document
-              </button>
-            </div>
-          </div>
         </div>
+      </div>
+
+      {/* ── Sub-Modals ── */}
+      {/* Record Payment Modal */}
+      {isRecordPaymentOpen && (
+        <RecordPaymentModal
+          isOpen={isRecordPaymentOpen}
+          clientId={liveInvoice.clientId}
+          clientName={liveInvoice.clientName}
+          preSelectedInvoiceId={liveInvoice.id}
+          onClose={() => setIsRecordPaymentOpen(false)}
+        />
       )}
-    </>
+
+      {/* Select Predefined Fields Modal */}
+      {fieldManagerOpen && fieldManagerMode === "select" && (
+        <SelectFieldsModal
+          isOpen={fieldManagerOpen}
+          onClose={() => setFieldManagerOpen(false)}
+          onSelect={(selectedFieldIds) => {
+            const orgFields = getFieldsForOrg(activeOrganization?.id || "default");
+            const newlySelected = orgFields.filter((f) => selectedFieldIds.includes(f.id));
+
+            setInvoiceSections((prev) =>
+              prev.map((sec, idx) => {
+                if (idx === 0) {
+                  const existing = new Set(sec.fieldKeys);
+                  newlySelected.forEach((f) => existing.add(f.key));
+                  return { ...sec, fieldKeys: Array.from(existing) };
+                }
+                return sec;
+              })
+            );
+
+            setFieldManagerOpen(false);
+            toast.success("Fields added to invoice overview");
+          }}
+          alreadySelectedKeys={invoiceSections.flatMap((s) => s.fieldKeys)}
+        />
+      )}
+
+      {/* Create Custom Field Modal */}
+      {fieldManagerOpen && fieldManagerMode === "create" && (
+        <CreateFieldModal
+          isOpen={fieldManagerOpen}
+          onClose={() => setFieldManagerOpen(false)}
+          onCreated={(newField) => {
+            setInvoiceSections((prev) =>
+              prev.map((sec, idx) => {
+                if (idx === 0) {
+                  return { ...sec, fieldKeys: [...sec.fieldKeys, newField.key] };
+                }
+                return sec;
+              })
+            );
+            setFieldManagerOpen(false);
+            toast.success(`Custom field "${newField.label}" added to invoice overview`);
+          }}
+        />
+      )}
+
+      {/* Admin Section Drawer */}
+      <AdminSectionDrawer
+        isOpen={sectionDrawerOpen}
+        onClose={() => {
+          setSectionDrawerOpen(false);
+          setEditingSection(null);
+        }}
+        section={editingSection}
+        onSave={(savedSection) => {
+          if (editingSection) {
+            updateCustomSection(savedSection);
+            setInvoiceSections((prev) =>
+              prev.map((s) => (s.id === savedSection.id ? { ...s, title: savedSection.title } : s))
+            );
+            toast.success("Section updated successfully");
+          } else {
+            addCustomSection(savedSection);
+            setInvoiceSections((prev) => [
+              ...prev,
+              {
+                id: savedSection.id,
+                title: savedSection.title,
+                description: savedSection.description,
+                iconName: savedSection.iconName as any,
+                source: "custom",
+                module: "invoice",
+                fieldKeys: [],
+              },
+            ]);
+            toast.success("New section added to invoice overview");
+          }
+          setSectionDrawerOpen(false);
+          setEditingSection(null);
+        }}
+      />
+    </div>
   );
 }
