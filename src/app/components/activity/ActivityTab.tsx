@@ -26,7 +26,7 @@ import ScheduleAppointmentDrawer, {
   BookingFormValues,
 } from "../appointments/ScheduleAppointmentDrawer";
 import { appointmentService } from "../../../lib/appointmentService";
-import { hasInvoiceAutomation } from "../../../lib/invoiceService";
+import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../../lib/invoiceService";
 
 // ─── Legacy ActivityLogEntry (kept for backward compat) ───────────────────────
 
@@ -1371,7 +1371,7 @@ export default function ActivityTab({
         sessionType: apptFormValues.sessionType,
         processId: apptFormValues.processId,
         stageId: apptFormValues.stageId,
-        generateInvoice: apptFormValues.generateInvoice ?? hasInvoiceAutomation(apptFormValues.processId),
+        generateInvoice: apptFormValues.generateInvoice ?? hasAppointmentInvoiceAutomation(apptFormValues.processId),
         lineItems: apptFormValues.lineItems,
         discountAmount: apptFormValues.discountAmount,
         source: "screen",

@@ -76,8 +76,7 @@ export function hasInvoiceAutomation(processId?: string): boolean {
           return (
             ["generate_invoice", "generate-invoice", "create_invoice", "send_invoice", "send-invoice", "sendinvoice"].includes(key) ||
             key.includes("invoice") ||
-            (a.params?.autoGenerateInvoice === true) ||
-            (key.includes("appointment") && a.params?.autoGenerateInvoice !== false)
+            (a.params?.autoGenerateInvoice === true)
           );
         })
       ) {
@@ -111,27 +110,69 @@ export function hasInvoiceAutomation(processId?: string): boolean {
           return (
             ["generate_invoice", "generate-invoice", "create_invoice", "send_invoice", "send-invoice", "sendinvoice"].includes(key) ||
             key.includes("invoice") ||
-            (step.params?.autoGenerateInvoice === true) ||
-            (key.includes("appointment") && step.params?.autoGenerateInvoice !== false)
+            (step.params?.autoGenerateInvoice === true)
           );
         });
       });
       if (hasStageInv) return true;
+    }
 
-      const hasRuleForProc = rules.some(
-        (r) =>
-          r.enabled &&
-          (r.action?.processId === proc.id ||
-            r.action?.processName === proc.name ||
-            r.actions?.some(
-              (a) =>
-                a.params?.processId === proc.id ||
-                a.params?.processName === proc.name ||
-                a.params?.stepDetailProcess === proc.id ||
-                a.params?.targetProcessId === proc.id
-            ))
-      );
-      if (hasRuleForProc) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Specifically checks if there is an active automation rule or process workflow step
+ * that generates an invoice when an appointment is booked or transitions.
+ * General invoice automations (such as invoice.created -> update stage) will NOT match this.
+ */
+export function hasAppointmentInvoiceAutomation(processId?: string): boolean {
+  try {
+    const rules = getStoredRules();
+    const hasApptInvRule = rules.some((r) => {
+      if (!r.enabled) return false;
+      const trigEvt = (r.trigger?.event || "").toLowerCase();
+      const isApptTrigger =
+        trigEvt.startsWith("appointment.") ||
+        trigEvt === "appointment.booked" ||
+        r.entityType === "appointment";
+
+      if (!isApptTrigger) return false;
+
+      // Must explicitly have a generate invoice action
+      const hasGenAction = r.actions?.some((a) => {
+        const key = (a.stepKey || (a as any).type || (a as any).name || "").toLowerCase();
+        return (
+          ["generate_invoice", "generate-invoice", "create_invoice"].includes(key) ||
+          a.params?.autoGenerateInvoice === true
+        );
+      });
+
+      return Boolean(hasGenAction);
+    });
+
+    if (hasApptInvRule) return true;
+
+    // Check process stages for appointment processes
+    const processes = getStoredProcesses();
+    const targetProcesses = processId
+      ? processes.filter((p) => p.id === processId || p.name === processId)
+      : processes.filter((p) => !p.entityType || p.entityType === "appointment");
+
+    for (const proc of targetProcesses) {
+      const hasStageInv = proc.stages?.some((s) => {
+        const steps = (s as any).workflowSteps || (s as any).automations || [];
+        return steps.some((step: any) => {
+          const key = (step.stepKey || step.type || step.name || "").toLowerCase();
+          return (
+            ["generate_invoice", "generate-invoice", "create_invoice"].includes(key) ||
+            step.params?.autoGenerateInvoice === true
+          );
+        });
+      });
+      if (hasStageInv) return true;
     }
 
     return false;

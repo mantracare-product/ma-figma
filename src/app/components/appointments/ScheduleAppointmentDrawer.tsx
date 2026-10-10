@@ -21,7 +21,7 @@ import { useOrganization } from "../../context/OrganizationContext";
 import { CustomSideDrawer } from "../ui/drawer";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
 import { InfoTooltip } from "../help/InfoTooltip";
-import { hasInvoiceAutomation } from "../../../lib/invoiceService";
+import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../../lib/invoiceService";
 import { hasAppointmentAutomation } from "../../../lib/appointmentService";
 import { AUTOMATION_STORE_EVENT } from "../../../lib/useAutomationStore";
 import { PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
@@ -429,13 +429,14 @@ export default function ScheduleAppointmentDrawer({
 
   const appointmentAutomationConfigured = hasAppointmentAutomation(values.processId);
   const invoiceAutomationConfigured = hasInvoiceAutomation(values.processId);
+  const appointmentInvoiceAutomationConfigured = hasAppointmentInvoiceAutomation(values.processId);
 
-  // Auto-enable generateInvoice if invoice automation is configured and not explicitly set
+  // Auto-enable generateInvoice ONLY if appointment-to-invoice automation is specifically configured
   useEffect(() => {
-    if (isOpen && invoiceAutomationConfigured && values.generateInvoice === undefined) {
+    if (isOpen && appointmentInvoiceAutomationConfigured && values.generateInvoice === undefined) {
       onChange({ generateInvoice: true });
     }
-  }, [isOpen, invoiceAutomationConfigured, values.generateInvoice, onChange]);
+  }, [isOpen, appointmentInvoiceAutomationConfigured, values.generateInvoice, onChange]);
 
   // Combine employees prop with teamMembers store
   const allEmployeesList: Employee[] = useMemo(() => {
@@ -750,7 +751,7 @@ export default function ScheduleAppointmentDrawer({
       onChange({
         serviceId: String(srv.id), serviceName: srv.name,
         title: patientName ? `${srv.name} — ${patientName}` : `${srv.name} Appointment`,
-        generateInvoice: values.generateInvoice !== undefined ? values.generateInvoice : hasInvoiceAutomation(values.processId),
+        generateInvoice: values.generateInvoice !== undefined ? values.generateInvoice : hasAppointmentInvoiceAutomation(values.processId),
         lineItems: [li],
         provider: nextProvider,
       });
@@ -1245,7 +1246,7 @@ export default function ScheduleAppointmentDrawer({
                       <input
                         type="checkbox"
                         disabled={!invoiceAutomationConfigured}
-                        checked={invoiceAutomationConfigured ? Boolean(values.generateInvoice ?? true) : false}
+                        checked={invoiceAutomationConfigured ? Boolean(values.generateInvoice) : false}
                         onChange={(e) => {
                           if (!invoiceAutomationConfigured) {
                             toast.error("Please build the invoice automation first in Automation.");

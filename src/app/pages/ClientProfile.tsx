@@ -47,7 +47,7 @@ import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
 import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
 import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { ClientInvoice } from "../types/invoiceTypes";
-import { hasInvoiceAutomation } from "../../lib/invoiceService";
+import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../lib/invoiceService";
 import { appointmentService, hasAppointmentAutomation } from "../../lib/appointmentService";
 import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
 import { PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
@@ -893,7 +893,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       sessionType: activityBookingValues.sessionType,
       processId: activityBookingValues.processId,
       stageId: activityBookingValues.stageId,
-      generateInvoice: activityBookingValues.generateInvoice ?? hasInvoiceAutomation(activityBookingValues.processId || client.processes?.[0]),
+      generateInvoice: activityBookingValues.generateInvoice ?? hasAppointmentInvoiceAutomation(activityBookingValues.processId || client.processes?.[0]),
       lineItems: activityBookingValues.lineItems,
       discountAmount: activityBookingValues.discountAmount,
       source: "screen",
@@ -2381,7 +2381,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                               sessionType: "video",
                               client: { id: client.id, name: client.name, email: client.email || "", phone: client.phone || "" },
                               provider: { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
-                              generateInvoice: hasInvoiceAutomation(clientProcId),
+                              generateInvoice: hasAppointmentInvoiceAutomation(clientProcId),
                             });
                             setShowScheduleApptFromActivity(true);
                           }}

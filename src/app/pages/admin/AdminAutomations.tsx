@@ -19,6 +19,7 @@ import {
   useAutomationRules,
   AutomationRule,
   isAutomationRuleMatchingScope,
+  isAdminAutomationRule,
 } from "../../../lib/useAutomationStore";
 import { useProcessStore } from "../../../lib/useProcessStore";
 import { AdminScopingRulesEditor } from "./components/AdminScopingRulesEditor";
@@ -60,9 +61,14 @@ export default function AdminAutomations() {
     return getIndustriesForCategory(selectedCategoryFilter);
   }, [selectedCategoryFilter]);
 
+  // Product-level rules (excluding client personal customizations)
+  const adminRules = useMemo(() => {
+    return rules.filter(isAdminAutomationRule);
+  }, [rules]);
+
   // Filtered rules list with admin scoping
   const filteredRules = useMemo(() => {
-    return rules.filter((r) => {
+    return adminRules.filter((r) => {
       if (statusFilter === "active" && !r.enabled) return false;
       if (statusFilter === "paused" && r.enabled) return false;
 
@@ -420,7 +426,7 @@ export default function AdminAutomations() {
             {
               id: "all",
               label: "All Rules",
-              count: rules.length,
+              count: adminRules.length,
               isActive: statusFilter === "all" && selectedCategoryFilter === "All" && selectedIndustryFilter === "All" && selectedLocationFilter === "All",
               onClick: () => {
                 setStatusFilter("all");
@@ -432,14 +438,14 @@ export default function AdminAutomations() {
             {
               id: "active",
               label: "Active",
-              count: rules.filter((r) => r.enabled).length,
+              count: adminRules.filter((r) => r.enabled).length,
               isActive: statusFilter === "active",
               onClick: () => setStatusFilter("active"),
             },
             {
               id: "paused",
               label: "Paused",
-              count: rules.filter((r) => !r.enabled).length,
+              count: adminRules.filter((r) => !r.enabled).length,
               isActive: statusFilter === "paused",
               onClick: () => setStatusFilter("paused"),
             },
@@ -537,6 +543,10 @@ export default function AdminAutomations() {
                 name: saved.name || "New Automation",
                 description: saved.description || "",
                 entityType: detectedEntityType,
+                isAdmin: true,
+                createdIn: "admin",
+                isClientCustomization: false,
+                source: "product",
                 trigger: {
                   event: (saved.trigger as any).event || "call.inbound",
                   label: catalogEvt?.label || (saved.trigger as any).event || "Inbound call",
@@ -571,6 +581,10 @@ export default function AdminAutomations() {
                 description: saved.description,
                 enabled: saved.status === "active",
                 entityType: detectedEntityType,
+                isAdmin: true,
+                createdIn: "admin",
+                isClientCustomization: false,
+                source: "product",
                 trigger: {
                   event: (saved.trigger as any).event,
                   label: catalogEvt?.label || (saved.trigger as any).event,

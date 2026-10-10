@@ -16,6 +16,8 @@ import {
   useAutomationRules,
   AutomationRule,
   isAutomationRuleMatchingScope,
+  isClientAutomationRule,
+  isAdminAutomationRule,
 } from "../../lib/useAutomationStore";
 import { useProcessStore, isProcessMatchingOrg } from "../../lib/useProcessStore";
 import { useOrganization } from "../context/OrganizationContext";
@@ -39,14 +41,14 @@ export default function Automation() {
     return processes.filter((p) => isProcessMatchingOrg(p, activeOrganization));
   }, [processes, activeOrganization]);
 
-  // Filtered rules list (filtered by client's active organization scope)
+  // Filtered rules list (client personal customizations + active organization product rules)
   const filteredRules = useMemo(() => {
     return rules.filter((r) => {
       if (statusFilter === "active" && !r.enabled) return false;
       if (statusFilter === "paused" && r.enabled) return false;
 
-      // Match tenant scope of the active organization
-      if (activeOrganization) {
+      // Product-level rules must match active organization scope
+      if (isAdminAutomationRule(r) && activeOrganization) {
         const matchesScope = isAutomationRuleMatchingScope(r, {
           category: activeOrganization.industryCategory,
           industry: activeOrganization.industry,
@@ -341,10 +343,14 @@ export default function Automation() {
           if (isCreatingNewRule || !activeRule) {
             try {
               const created = createRule({
-                orgId: "default",
+                orgId: activeOrganization?.id || "default",
                 name: saved.name || "New Automation",
                 description: saved.description || "",
                 entityType: detectedEntityType,
+                isAdmin: false,
+                createdIn: "client",
+                isClientCustomization: true,
+                source: "custom",
                 trigger: {
                   event: (saved.trigger as any).event || "call.inbound",
                   label: catalogEvt?.label || (saved.trigger as any).event || "Inbound call",
@@ -374,6 +380,10 @@ export default function Automation() {
                 description: saved.description,
                 enabled: saved.status === "active",
                 entityType: detectedEntityType,
+                isAdmin: false,
+                createdIn: "client",
+                isClientCustomization: true,
+                source: "custom",
                 trigger: {
                   event: (saved.trigger as any).event,
                   label: catalogEvt?.label || (saved.trigger as any).event,

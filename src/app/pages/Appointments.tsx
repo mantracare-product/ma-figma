@@ -30,7 +30,7 @@ import {
   Check,
 } from "lucide-react";
 import { appointmentService, hasAppointmentAutomation } from "../../lib/appointmentService";
-import { hasInvoiceAutomation } from "../../lib/invoiceService";
+import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../lib/invoiceService";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, isProcessMatchingOrg, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
 import { useOrganization } from "../context/OrganizationContext";
@@ -365,7 +365,7 @@ export default function Appointments() {
   const [bookingStartMinute, setBookingStartMinute] = useState(0);
   const [drawerMode, setDrawerMode] = useState<"create" | "reschedule">("create");
   const [bookingServiceId, setBookingServiceId] = useState("");
-  const [bookingGenerateInvoice, setBookingGenerateInvoice] = useState(() => hasInvoiceAutomation());
+  const [bookingGenerateInvoice, setBookingGenerateInvoice] = useState(() => hasAppointmentInvoiceAutomation());
   const [bookingLineItems, setBookingLineItems] = useState<any[]>([]);
   const [bookingDiscountAmount, setBookingDiscountAmount] = useState(0);
   const [bookingLocation, setBookingLocation] = useState("Main Clinic — Suite 400");
@@ -628,7 +628,7 @@ export default function Appointments() {
         sessionType,
         processId: targetProc?.id || bookingProcessId,
         stageId: targetStage?.id || bookingStageId || undefined,
-        generateInvoice: bookingGenerateInvoice ?? hasInvoiceAutomation(targetProc?.id),
+        generateInvoice: bookingGenerateInvoice ?? false,
         lineItems: bookingLineItems && bookingLineItems.length > 0 ? bookingLineItems : undefined,
         source: "screen",
       });
@@ -664,7 +664,7 @@ export default function Appointments() {
     setBookingStartHour(9);
     setBookingStartMinute(0);
     setBookingLocation("Main Clinic — Suite 400");
-    setBookingGenerateInvoice(hasInvoiceAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined));
+    setBookingGenerateInvoice(hasAppointmentInvoiceAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined));
     setBookingLineItems([]);
     setBookingDiscountAmount(0);
 

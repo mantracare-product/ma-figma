@@ -88,8 +88,31 @@ export interface AutomationRule {
   industry?: string;
   locations?: string[];
   scopingRules?: ScopingRule[];
+  isAdmin?: boolean;
+  isClientCustomization?: boolean;
+  createdIn?: "admin" | "client";
+  source?: "product" | "custom" | "template";
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Checks whether an automation rule was built on the client side as a tenant's personal customization.
+ * Rules created on the client side do not reflect on Admin Console.
+ */
+export function isClientAutomationRule(rule: AutomationRule): boolean {
+  if (rule.isClientCustomization === true || rule.createdIn === "client" || rule.isAdmin === false) {
+    return true;
+  }
+  // If not explicitly marked as an admin product-level automation, treat as client customization
+  return rule.isAdmin !== true && rule.createdIn !== "admin";
+}
+
+/**
+ * Checks whether an automation rule is a product-level automation configured via the Admin Console.
+ */
+export function isAdminAutomationRule(rule: AutomationRule): boolean {
+  return (rule.isAdmin === true || rule.createdIn === "admin") && rule.isClientCustomization !== true;
 }
 
 export function isAutomationRuleMatchingScope(

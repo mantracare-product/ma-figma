@@ -779,6 +779,7 @@ export default function AddAutomationDrawer({
             : undefined,
       })),
       scopingRules: drawerScopingRules,
+      isAdmin,
       updatedAt: new Date().toISOString(),
     };
 

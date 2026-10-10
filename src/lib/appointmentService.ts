@@ -16,7 +16,7 @@
 import { eventBus } from "./eventBus";
 import { logStageMove, getStoredRules } from "./useAutomationStore";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, getActiveOrganizationSync, isProcessMatchingOrg } from "./useProcessStore";
-import { invoiceService, hasInvoiceAutomation, SAMPLE_CLIENT_NAMES } from "./invoiceService";
+import { invoiceService, hasInvoiceAutomation, hasAppointmentInvoiceAutomation, SAMPLE_CLIENT_NAMES } from "./invoiceService";
 import { appendActivity } from "./activityEngine";
 
 export function hasAppointmentAutomation(processId?: string): boolean {
@@ -578,15 +578,16 @@ class AppointmentService {
       source: payload.source || "screen",
     });
 
-    // 3. Invoice Generation (if explicitly enabled OR active invoice automation exists for appointment booking)
+    // 3. Invoice Generation (ONLY if explicitly enabled by user OR active appointment-to-invoice automation rule exists)
+    const hasApptInvRule = hasAppointmentInvoiceAutomation(proc.id);
     const shouldGenerateInvoice =
       payload.generateInvoice === true ||
-      hasInvoiceAutomation(proc.id);
+      (payload.generateInvoice === undefined && hasApptInvRule);
 
     let createdInvoiceId: string | undefined = undefined;
     if (shouldGenerateInvoice) {
-      if (!hasInvoiceAutomation(proc.id) && payload.generateInvoice !== true) {
-        console.warn("[AppointmentService] Invoice creation skipped: No active invoice automation configured.");
+      if (!hasApptInvRule && payload.generateInvoice !== true) {
+        console.warn("[AppointmentService] Invoice creation skipped: No active invoice automation configured for appointments.");
       } else {
         const lineItems = payload.lineItems && payload.lineItems.length > 0
           ? payload.lineItems

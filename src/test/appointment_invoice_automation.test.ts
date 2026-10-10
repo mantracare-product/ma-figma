@@ -27,7 +27,8 @@ class MockStorage {
 };
 
 import { appointmentService, hasAppointmentAutomation } from "../lib/appointmentService";
-import { invoiceService, hasInvoiceAutomation } from "../lib/invoiceService";
+import { invoiceService, hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../lib/invoiceService";
+import { isClientAutomationRule, isAdminAutomationRule } from "../lib/useAutomationStore";
 
 test("Consecutive appointments generate invoices when appointment+invoice automation is added", () => {
   // Clear any existing storage
@@ -140,4 +141,134 @@ test("Consecutive appointments generate invoices when appointment+invoice automa
   // Verify total invoices in storage
   const allInvoices = invoiceService.getInvoices();
   assert.equal(allInvoices.length, 3, "All 3 appointments should have generated invoices in storage");
+});
+
+test("Appointment booking does NOT generate invoice when rules only update stages (no generate_invoice action)", () => {
+  // Clear existing records
+  appointmentService.saveAppointments([]);
+  invoiceService.saveInvoices([]);
+
+  // Mock exact user configuration:
+  // Rule 1: Appointment Booked -> Update stage
+  // Rule 2: Invoice Created -> Update stage
+  const rule1 = {
+    id: "rule-appt-1",
+    orgId: "default",
+    name: "Appointment booking",
+    entityType: "appointment",
+    enabled: true,
+    trigger: {
+      event: "appointment.booked",
+      label: "Appointment booked",
+      source: "any",
+    },
+    action: {
+      type: "moveToStage",
+      processId: "proc-1",
+      stageId: "stage-booked",
+    },
+    actions: [
+      {
+        id: "step-1",
+        name: "Update to stage",
+        stepKey: "update_stage",
+        params: { stageId: "stage-booked" },
+      },
+    ],
+  };
+
+  const rule2 = {
+    id: "rule-inv-1",
+    orgId: "default",
+    name: "Invoice Generation",
+    entityType: "invoice",
+    enabled: true,
+    trigger: {
+      event: "invoice.created",
+      label: "Invoice created",
+      source: "any",
+    },
+    action: {
+      type: "moveToStage",
+      processId: "proc-inv-1",
+      stageId: "stage-draft",
+    },
+    actions: [
+      {
+        id: "step-1",
+        name: "Update to stage",
+        stepKey: "update_stage",
+        params: { stageId: "stage-draft" },
+      },
+    ],
+  };
+
+  localStorage.setItem("mantra_global_automation_rules_v1", JSON.stringify([rule1, rule2]));
+
+  // hasInvoiceAutomation returns true (for general invoice capability/unlock)
+  assert.equal(hasInvoiceAutomation(), true, "hasInvoiceAutomation returns true because invoice rules exist");
+
+  // hasAppointmentInvoiceAutomation must return false (no rule saying appointment -> generate invoice)
+  assert.equal(hasAppointmentInvoiceAutomation(), false, "hasAppointmentInvoiceAutomation MUST return false");
+
+  // Book an appointment without explicit generateInvoice flag
+  const appt = appointmentService.createAppointment({
+    clientName: "Aditya Mehta",
+    clientEmail: "aditya@example.com",
+    clientPhone: "555-4444",
+    employeeId: 1,
+    serviceId: 1,
+    date: "2026-04-05",
+    time: "09:00",
+    duration: 60,
+    title: "X-Ray Imaging",
+    source: "screen",
+  });
+
+  assert.ok(appt.appointment, "Appointment must be created");
+  assert.equal(appt.invoiceId, undefined, "Appointment must NOT generate an invoice!");
+
+  const invoices = invoiceService.getInvoices();
+  assert.equal(invoices.length, 0, "No invoice should have been generated in storage");
+});
+
+test("Client-built automations are separated from Admin product-level automations", () => {
+  const clientRule: any = {
+    id: "rule-client-1",
+    name: "Client Appointment flow",
+    entityType: "appointment",
+    enabled: true,
+    isAdmin: false,
+    createdIn: "client",
+    isClientCustomization: true,
+    trigger: { event: "appointment.booked" },
+  };
+
+  const adminRule: any = {
+    id: "rule-admin-1",
+    name: "Global Clinic Scribe Workflow",
+    entityType: "appointment",
+    enabled: true,
+    isAdmin: true,
+    createdIn: "admin",
+    isClientCustomization: false,
+    trigger: { event: "appointment.booked" },
+  };
+
+  // Client rule must NOT match admin
+  assert.equal(isAdminAutomationRule(clientRule), false, "Client rule must not be recognized as admin automation rule");
+  assert.equal(isClientAutomationRule(clientRule), true, "Client rule must be recognized as client automation rule");
+
+  // Admin rule must match admin
+  assert.equal(isAdminAutomationRule(adminRule), true, "Admin rule must be recognized as admin automation rule");
+  assert.equal(isClientAutomationRule(adminRule), false, "Admin rule must not be recognized as client customization");
+
+  // Legacy/unmarked rule defaults to client personal customization
+  const legacyRule: any = {
+    id: "rule-legacy-1",
+    name: "User created canvas rule",
+    trigger: { event: "appointment.booked" },
+  };
+  assert.equal(isAdminAutomationRule(legacyRule), false, "Unmarked rule must not leak into admin console");
+  assert.equal(isClientAutomationRule(legacyRule), true, "Unmarked rule is safely scoped as client customization");
 });
