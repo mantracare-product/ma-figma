@@ -49,6 +49,7 @@ export default function CreateInvoiceDrawer({
     createInvoiceFromAppointment,
     updateInvoice,
     fieldRules,
+    updateFieldRule,
     getClientCredit,
   } = useInvoices();
   const clientsList = getClientList();
@@ -668,10 +669,21 @@ export default function CreateInvoiceDrawer({
         </div>
       </div>
 
-      <InvoiceFieldConfigModal
-        isOpen={isConfigModalOpen}
-        onClose={() => setIsConfigModalOpen(false)}
-      />
+      {isConfigModalOpen && (
+        <InvoiceFieldConfigModal
+          isOpen={isConfigModalOpen}
+          rule={fieldRules?.paymentMode || {
+            fieldKey: "paymentMode",
+            fieldName: "Payment mode",
+            requiredAtStage: "sent",
+            showAlways: false,
+            enableTooltip: false,
+            visibleToUserIds: [],
+          }}
+          onSave={(updated) => updateFieldRule?.("paymentMode", updated)}
+          onClose={() => setIsConfigModalOpen(false)}
+        />
+      )}
     </CustomSideDrawer>
   );
 }
