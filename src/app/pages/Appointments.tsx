@@ -28,6 +28,7 @@ import {
   List,
   CalendarClock,
   Check,
+  Settings,
 } from "lucide-react";
 import { appointmentService, hasAppointmentAutomation } from "../../lib/appointmentService";
 import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../lib/invoiceService";
@@ -1090,6 +1091,21 @@ export default function Appointments() {
               setShowAddModal(true);
             },
           }}
+          afterPrimaryAction={
+            <button
+              type="button"
+              onClick={() => {
+                const targetProcId = selectedProcessFilter !== "all" ? selectedProcessFilter : appointmentProcess.id;
+                navigate(`/process?entity=appointment&processId=${targetProcId}`, {
+                  state: { processId: targetProcId, processName: appointmentProcess.name },
+                });
+              }}
+              className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+              title="Configure Appointment Workflow"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          }
         />
 
         {/* Calendar View */}
@@ -1152,7 +1168,7 @@ export default function Appointments() {
                   header: "Stages",
                   accessorKey: "currentStageId",
                   align: "left",
-                  minWidth: 240,
+                  minWidth: 160,
                   render: (apt) => {
                     const aptProc = appointmentProcesses.find((p) => p.id === apt.processId || p.name === apt.processId) || appointmentProcess;
                     const stages = aptProc.stages && aptProc.stages.length > 0 ? aptProc.stages : appointmentWorkflowStages;
@@ -1181,36 +1197,103 @@ export default function Appointments() {
                       );
                     }
 
+                    const isCurrentSuccess = matchedStage && (matchedStage.systemCategory === "completed" || matchedStage.systemCategory === "won" || matchedStage.name.toLowerCase().includes("completed") || matchedStage.name.toLowerCase().includes("won"));
+                    const isCurrentLost = matchedStage && (matchedStage.isFinalStage || matchedStage.isFinal || matchedStage.systemCategory === "cancelled" || matchedStage.systemCategory === "lost" || matchedStage.name.toLowerCase().includes("cancel") || matchedStage.name.toLowerCase().includes("lost") || matchedStage.name.toLowerCase().includes("no-show"));
+                    const isCurrentFinal = Boolean(isCurrentSuccess || isCurrentLost || matchedStage?.isFinalStage || matchedStage?.isFinal);
+
+                    const lightenHex = (hex: string, percent: number = 75): string => {
+                      if (!hex || typeof hex !== "string") return "#F1F5F9";
+                      let c = hex.replace("#", "").trim();
+                      if (c.length === 3) c = c.split("").map((ch) => ch + ch).join("");
+                      const num = parseInt(c, 16);
+                      if (isNaN(num)) return hex;
+                      const factor = percent / 100;
+                      const r = Math.max(0, Math.min(255, Math.round(((num >> 16) & 255) + (255 - ((num >> 16) & 255)) * factor)));
+                      const g = Math.max(0, Math.min(255, Math.round(((num >> 8) & 255) + (255 - ((num >> 8) & 255)) * factor)));
+                      const b = Math.max(0, Math.min(255, Math.round((num & 255) + (255 - (num & 255)) * factor)));
+                      return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+                    };
+
                     return (
-                      <div className="flex items-center gap-2.5" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-[3px]">
+                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center -space-x-px">
                           {stages.map((stg, i) => {
-                            const isCompleted = activeIdx >= 0 && i < activeIdx;
+                            const isStgLost = stg.isFinalStage || stg.isFinal || stg.systemCategory === "cancelled" || stg.systemCategory === "lost" || stg.name.toLowerCase().includes("cancel") || stg.name.toLowerCase().includes("lost") || stg.name.toLowerCase().includes("no-show");
+                            const isStgSuccess = stg.systemCategory === "completed" || stg.systemCategory === "won" || stg.name.toLowerCase().includes("completed") || stg.name.toLowerCase().includes("won");
+                            const isStgFinal = isStgLost || isStgSuccess || Boolean(stg.isFinalStage || stg.isFinal);
+                            const isStgInProgress = !isStgFinal;
                             const isActive = activeIdx >= 0 && i === activeIdx;
+
+                            let isCompleted = false;
+                            let isDeactivated = false;
+
+                            if (isActive) {
+                              // Active stage
+                            } else if (isCurrentFinal) {
+                              if (isStgInProgress) {
+                                isCompleted = true;
+                              } else {
+                                isDeactivated = true;
+                              }
+                            } else {
+                              if (isStgInProgress && activeIdx >= 0 && i < activeIdx) {
+                                isCompleted = true;
+                              }
+                            }
+
+                            const stgColor = stg.color || "#1E88E5";
+                            const lightBg = lightenHex(stgColor, 78);
+                            const lightBorder = lightenHex(stgColor, 40);
+
                             const isHovered = hoveredStageBox?.aptId === apt.id && hoveredStageBox?.stageIdx === i;
 
+                            let bg = "transparent";
+                            let border = "1px solid #CBD5E1";
+                            let opacity = 1;
+
+                            if (isActive) {
+                              bg = stgColor;
+                              border = "1.5px solid #0F172A";
+                              opacity = 1;
+                            } else if (isCompleted) {
+                              bg = stgColor;
+                              border = `1px solid ${stgColor}`;
+                              opacity = 0.85;
+                            } else if (isDeactivated) {
+                              bg = lightBg;
+                              border = `1px solid ${lightBorder}`;
+                              opacity = 0.95;
+                            } else {
+                              bg = "transparent";
+                              border = "1px solid #CBD5E1";
+                              opacity = 0.45;
+                            }
+
                             return (
-                              <div key={stg.id} className="relative">
+                              <div key={stg.id} className="relative" style={{ zIndex: isActive ? 10 : isHovered ? 20 : 1 }}>
                                 {isHovered && (
                                   <div
                                     className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded text-[11px] font-medium shadow-md pointer-events-none"
                                     style={{ backgroundColor: "#1A2B4A", color: "#fff", zIndex: 200 }}
                                   >
-                                    {stg.name}
+                                    {stg.name}{isDeactivated ? " (Inactive)" : isActive ? " (Current)" : isCompleted ? " (Completed)" : ""}
                                   </div>
                                 )}
                                 <button
                                   type="button"
-                                  onClick={() => handleQuickStageChange(apt, stg)}
+                                  onClick={() => {
+                                    if (!isDeactivated) handleQuickStageChange(apt, stg);
+                                  }}
                                   onMouseEnter={() => setHoveredStageBox({ aptId: apt.id, stageIdx: i })}
                                   onMouseLeave={() => setHoveredStageBox(null)}
                                   style={{
                                     width: "18px",
                                     height: "8px",
                                     borderRadius: "0px",
-                                    backgroundColor: (isCompleted || isActive) ? (stg.color || "#1E88E5") : "transparent",
-                                    border: (isCompleted || isActive) ? "none" : "1px solid #CBD5E1",
-                                    cursor: "pointer",
+                                    backgroundColor: bg,
+                                    border: border,
+                                    opacity: opacity,
+                                    cursor: isDeactivated ? "not-allowed" : "pointer",
                                     display: "block",
                                     padding: 0,
                                     flexShrink: 0,
@@ -1222,9 +1305,6 @@ export default function Appointments() {
                             );
                           })}
                         </div>
-                        <span className="text-[11px] font-medium text-slate-500 truncate max-w-[80px]">
-                          {matchedStage.name}
-                        </span>
                       </div>
                     );
                   },

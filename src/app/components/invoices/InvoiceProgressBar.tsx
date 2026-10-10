@@ -95,23 +95,43 @@ export default function InvoiceProgressBar({
         {/* Render dynamic Visual Block Segments */}
         {effectiveStages.map((stg, i) => {
           const segIdx = i + 1;
-          const isCompleted = activeIndex > 0 && segIdx < activeIndex;
+          const currentStage = activeIndex > 0 ? effectiveStages[activeIndex - 1] : null;
+
+          const isStgSuccess = stg.systemCategory === "paid" || stg.name.toLowerCase().includes("paid");
+          const isStgLost = stg.systemCategory === "void" || stg.systemCategory === "lost" || stg.name.toLowerCase().includes("void") || stg.name.toLowerCase().includes("cancel");
+
+          const isCurrentSuccess = status === "paid" || (currentStage && (currentStage.systemCategory === "paid" || currentStage.name.toLowerCase().includes("paid")));
+          const isCurrentLost = status === "void" || (currentStage && (currentStage.systemCategory === "void" || currentStage.systemCategory === "lost" || currentStage.name.toLowerCase().includes("void")));
+
           const isActive = activeIndex > 0 && segIdx === activeIndex;
-          const isFilled = isCompleted || isActive;
+          const isCompleted = activeIndex > 0 && segIdx < activeIndex && !isStgLost;
+
+          let isDisabledGrey = false;
+          if (isCurrentSuccess && isStgLost) {
+            isDisabledGrey = true;
+          } else if (isCurrentLost && !isActive) {
+            isDisabledGrey = true;
+          }
+
           const isHovered = hoveredIdx === segIdx;
 
           let bg = "transparent";
-          let border = "1px solid #E8ECF0";
+          let border = "1px solid #CBD5E1";
+          let opacity = 1;
 
-          if (isVoid) {
-            bg = "#CBD5E1"; // Muted grey for void
+          if (isDisabledGrey) {
+            bg = "#E2E8F0";
+            border = "1px solid #CBD5E1";
+            opacity = 0.35;
+          } else if (isVoid) {
+            bg = isActive ? "#EF4444" : "#E2E8F0";
             border = "none";
           } else if (isOverdue && (isActive || isCompleted)) {
             bg = stg.systemCategory === "overdue" || isActive ? "#EF4444" : (stg.color || "#1E88E5");
             border = "none";
-          } else if (isFilled) {
+          } else if (isCompleted || isActive) {
             bg = stg.color || "#1E88E5";
-            border = "none";
+            border = `1px solid ${stg.color || "#1E88E5"}`;
           }
 
           return (
@@ -149,7 +169,8 @@ export default function InvoiceProgressBar({
                   borderRadius: "2px",
                   backgroundColor: bg,
                   border: border,
-                  cursor: interactive && onStatusChange ? "pointer" : "default",
+                  opacity: opacity,
+                  cursor: isDisabledGrey ? "not-allowed" : (interactive && onStatusChange ? "pointer" : "default"),
                   display: "block",
                   padding: 0,
                   flexShrink: 0,

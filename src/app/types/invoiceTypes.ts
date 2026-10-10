@@ -20,6 +20,7 @@ export interface ClientInvoice {
   clientPhone?: string;
   appointmentId?: string;     // null if standalone/manual invoice
   appointmentTitle?: string;
+  processId?: string;         // Links to invoice process definition
   currentStageId?: string;    // Links to invoice process stage
   statusLabel?: string;       // Computed/read-only status label for display and reports
   status?: InvoiceStatus;     // Deprecated in favor of currentStageId and stage.systemCategory
@@ -41,7 +42,20 @@ export interface ClientInvoice {
   paidAt?: string;
   paymentLinkUrl?: string;    // e.g. "https://pay.mantraassist.mock/inv-1042"
   paymentMode?: string;       // e.g. "Bank Transfer", "Cash", "Card", "Insurance-EMI"
+  issueDate?: string;
+  date?: string;
+  paymentMethod?: string;
+  billingAddress?: string;
+  tax?: number;
+  discount?: number;
 }
+
+export type InvoicePaymentRecord = Payment & {
+  date?: string;
+  method?: string;
+  reference?: string;
+  status?: string;
+};
 
 export interface Payment {
   id: string;

@@ -3,6 +3,7 @@ import type { CrmBindConfig, CrmBindModule } from "../../context/FieldRegistryCo
 import { getStoredTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import { getClientList } from "../../../lib/getClientList";
 import { getStoredServices } from "../../../lib/servicesStore";
+import { MOCK_SERVICES } from "../../../lib/mockServicesData";
 import { getStoredProcesses, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { CLIENTS_STORE_EVENT } from "../../../lib/clientProcessState";
 
@@ -36,8 +37,19 @@ export function fetchCrmRecords(module: CrmBindModule): any[] {
         return getStoredTeamMembers();
       case "client":
         return getClientList();
-      case "service":
-        return getStoredServices();
+      case "service": {
+        const stored = getStoredServices();
+        const storedNames = new Set(stored.map((s) => s.name.toLowerCase()));
+        const extraMocks = MOCK_SERVICES.filter((m) => !storedNames.has(m.name.toLowerCase())).map((m) => ({
+          id: m.id,
+          name: m.name,
+          category: m.category,
+          price: m.price,
+          tax: m.tax ?? 5,
+          isActive: m.isActive,
+        }));
+        return [...stored, ...extraMocks];
+      }
       case "process":
         return getStoredProcesses();
       case "organization": {
@@ -74,7 +86,11 @@ export function useCrmBindOptions(config?: CrmBindConfig): {
     const formatted: CrmOption[] = records.map((rec: any, idx: number) => {
       const id = String(rec.id ?? `rec-${idx}`);
       const label = String(rec[displayField] || rec.name || rec.title || id);
-      const subtitle = secondaryField && rec[secondaryField] ? String(rec[secondaryField]) : undefined;
+      const subtitle = secondaryField && rec[secondaryField]
+        ? String(rec[secondaryField])
+        : rec.price !== undefined
+        ? `$${rec.price}${rec.tax !== undefined ? ` · Tax: ${rec.tax}%` : ""}`
+        : undefined;
       return { value: id, label, subtitle };
     });
 

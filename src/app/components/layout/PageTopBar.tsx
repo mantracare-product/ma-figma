@@ -12,6 +12,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { InfoTooltip } from "../help/InfoTooltip";
+import { Tooltip } from "../ui/Tooltip";
 
 export interface FilterTag {
   field: string;
@@ -107,6 +108,7 @@ export interface PageTopBarProps {
   isExporting?: boolean;
   secondaryActions?: ReactNode;
   primaryAction?: PrimaryActionConfig | ReactNode;
+  afterPrimaryAction?: ReactNode;
   children?: ReactNode;
 
   // Visual Customization
@@ -147,6 +149,7 @@ export function PageTopBar({
   isExporting = false,
   secondaryActions,
   primaryAction,
+  afterPrimaryAction,
   children,
   className = "",
   isBottomPanelAttached = false,
@@ -638,30 +641,32 @@ export function PageTopBar({
 
           {/* Import Action */}
           {onImport && (
-            <button
-              type="button"
-              onClick={onImport}
-              disabled={isImporting}
-              className="h-[36px] px-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-border rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0 disabled:opacity-60"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <Upload className="w-3.5 h-3.5 text-slate-500" />
-              <span>{isImporting ? "Importing..." : "Import"}</span>
-            </button>
+            <Tooltip text={isImporting ? "Importing..." : "Import"}>
+              <button
+                type="button"
+                onClick={onImport}
+                disabled={isImporting}
+                className="w-[36px] h-[36px] bg-white hover:bg-slate-50 text-slate-700 border border-border rounded-full flex items-center justify-center transition-all cursor-pointer shadow-2xs shrink-0 disabled:opacity-60"
+                aria-label="Import"
+              >
+                <Upload className="w-3.5 h-3.5 text-slate-600" />
+              </button>
+            </Tooltip>
           )}
 
           {/* Export Action */}
           {onExport && (
-            <button
-              type="button"
-              onClick={onExport}
-              disabled={isExporting}
-              className="h-[36px] px-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-border rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0 disabled:opacity-60"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
-              <span>{isExporting ? "Exporting..." : "Export"}</span>
-            </button>
+            <Tooltip text={isExporting ? "Exporting..." : "Export"}>
+              <button
+                type="button"
+                onClick={onExport}
+                disabled={isExporting}
+                className="w-[36px] h-[36px] bg-white hover:bg-slate-50 text-slate-700 border border-border rounded-full flex items-center justify-center transition-all cursor-pointer shadow-2xs shrink-0 disabled:opacity-60"
+                aria-label="Export"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-600" />
+              </button>
+            </Tooltip>
           )}
 
           {/* Additional Secondary Actions or Custom Content */}
@@ -687,6 +692,9 @@ export function PageTopBar({
               )}
             </>
           )}
+
+          {/* After Primary Action (e.g. Gear settings button) */}
+          {afterPrimaryAction}
         </div>
       </div>
     </div>

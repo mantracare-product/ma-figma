@@ -42,6 +42,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 import { AdminSelect } from "../ui/AdminSelect";
 import { getStoredTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import { getStoredServices } from "../../../lib/servicesStore";
+import { MOCK_SERVICES } from "../../../lib/mockServicesData";
 
 export type FieldRendererMode = "runtime" | "admin_default";
 
@@ -555,9 +556,12 @@ function TableInputRenderer({
     // Auto-fill price & tax if product_name changed from a service record
     if (colId === "product_name" || colId === "col_item_name") {
       try {
-        const services = getStoredServices();
+        const services = [...getStoredServices(), ...MOCK_SERVICES];
+        const valStr = String(cellVal || "").trim().toLowerCase();
         const matched = services.find(
-          (s) => s.name === cellVal || String(s.id) === String(cellVal)
+          (s) =>
+            s.name.toLowerCase() === valStr ||
+            String(s.id) === String(cellVal)
         );
         if (matched) {
           updatedRow.product_name = matched.name;
@@ -628,7 +632,9 @@ function TableInputRenderer({
                   {cols.map((col) => (
                     <th
                       key={col.id}
-                      className="px-3 py-2 text-[11px] font-bold text-slate-600 uppercase tracking-wider min-w-[120px]"
+                      className={`px-3 py-2 text-[11px] font-bold text-slate-600 uppercase tracking-wider ${
+                        col.id === "product_name" || col.id === "col_item_name" ? "min-w-[220px]" : "min-w-[100px]"
+                      }`}
                     >
                       {col.name}
                     </th>

@@ -390,20 +390,6 @@ export default function Invoices() {
                 <Wallet className="w-3.5 h-3.5 text-slate-600" />
                 <span>Record Payment</span>
               </button>
-
-              {/* Gear Settings Icon to open Invoice Workflow */}
-              <button
-                type="button"
-                onClick={() => {
-                  navigate("/process?entity=invoice&processId=process-invoice-default", {
-                    state: { processId: "process-invoice-default", processName: invoiceProcess.name },
-                  });
-                }}
-                className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
-                title="Configure Invoice Workflow"
-              >
-                <SettingsIcon className="w-4 h-4" />
-              </button>
             </div>
           }
           primaryAction={{
@@ -411,6 +397,20 @@ export default function Invoices() {
             icon: <Plus className="w-3.5 h-3.5" />,
             onClick: handleCreateInvoice,
           }}
+          afterPrimaryAction={
+            <button
+              type="button"
+              onClick={() => {
+                navigate("/process?entity=invoice&processId=process-invoice-default", {
+                  state: { processId: "process-invoice-default", processName: invoiceProcess.name },
+                });
+              }}
+              className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+              title="Configure Invoice Workflow"
+            >
+              <SettingsIcon className="w-4 h-4" />
+            </button>
+          }
         />
 
         {/* View Mode: List View (Connected seamlessly to Toolbar) */}
@@ -428,6 +428,22 @@ export default function Invoices() {
                     {inv.id}
                   </button>
                 ),
+              },
+              {
+                id: "processId",
+                header: "Process ID",
+                align: "left",
+                render: (inv) => {
+                  const procId = inv.processId || invoiceProcess.id || "PROC-INV-01";
+                  return (
+                    <span
+                      className="font-mono text-xs font-semibold text-slate-600 bg-slate-100/80 px-2 py-0.5 rounded border border-slate-200/60"
+                      style={{ fontFamily: "JetBrains Mono, monospace" }}
+                    >
+                      {procId}
+                    </span>
+                  );
+                },
               },
               {
                 id: "client",

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useLocation } from "react-router";
-import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, CreditCard } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, CreditCard, SquareArrowOutUpRight, ArrowUpRight } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -79,6 +79,7 @@ export interface Stage {
   isInitial?: boolean;
   isFinal?: boolean;
   isFinalStage?: boolean;
+  stageCategory?: "in_progress" | "success" | "lost";
   stagePosition?: "initial" | "intermediate" | "final" | null;
   intentTrigger?: string; // "interested" | "not_interested" | "call_back" | "needs_info" | "disqualified" | "custom"
   intentLabel?: string;
@@ -283,7 +284,9 @@ interface ChevronStageItemProps {
   isLastStage?: boolean;
   isCompact?: boolean;
   isFlexible?: boolean;
+  isLostStage?: boolean;
   onHoverStage?: (info: { name: string; x: number; y: number } | null) => void;
+  onAddAfter?: () => void;
 }
 
 const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
@@ -301,7 +304,9 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
   isLastStage,
   isCompact = false,
   isFlexible = false,
+  isLostStage = false,
   onHoverStage,
+  onAddAfter,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -351,13 +356,13 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
         isFlexible ? "flex-1 min-w-0" : "flex-shrink-0"
       } ${isFirst ? "" : "-ml-3.5"}`}
       onMouseEnter={(e) => {
-        if (isCompact && onHoverStage) {
+        if (onHoverStage) {
           const rect = e.currentTarget.getBoundingClientRect();
           onHoverStage({ name: stage.name, x: rect.left + rect.width / 2, y: rect.top });
         }
       }}
       onMouseLeave={() => {
-        if (isCompact && onHoverStage) {
+        if (onHoverStage) {
           onHoverStage(null);
         }
       }}
@@ -368,7 +373,7 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
         onDoubleClick={() => onEdit(stage)}
         className={`relative flex items-center h-10 select-none cursor-pointer transition-all ${
           isFlexible ? "w-full min-w-0" : "flex-shrink-0"
-        } ${isFirst ? "rounded-l-md" : ""} ${isDragging ? "opacity-35 scale-95" : "opacity-100"} ${
+        } ${isFirst ? "rounded-l-lg" : ""} ${isDragging ? "opacity-35 scale-95" : "opacity-100"} ${
           isOver ? "ring-2 ring-white scale-105 z-20" : ""
         } ${isSelected ? "brightness-110 shadow-md ring-2 ring-white/80 z-20" : "hover:brightness-105 hover:z-10"}`}
         style={{
@@ -376,9 +381,11 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
           clipPath: chevronClip,
           ...(isCompact
             ? { width: "38px", minWidth: "38px", paddingLeft: isFirst ? "8px" : "14px", paddingRight: "6px" }
+            : isLostStage
+            ? { minWidth: isFirst ? "52px" : "62px", maxWidth: "80px", paddingLeft: isFirst ? "8px" : "14px", paddingRight: "14px" }
             : isFlexible
-            ? { minWidth: "0px", width: "100%", paddingLeft: isFirst ? "14px" : "24px", paddingRight: "24px" }
-            : { minWidth: "140px", paddingLeft: isFirst ? "14px" : "24px", paddingRight: "24px" }),
+            ? { minWidth: "125px", width: "100%", paddingLeft: isFirst ? "14px" : "20px", paddingRight: "20px" }
+            : { minWidth: "130px", paddingLeft: isFirst ? "14px" : "24px", paddingRight: "24px" }),
         }}
         title={`Stage: ${stage.name} (Click to view, double click to edit)`}
       >
@@ -409,21 +416,21 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
             </div>
 
             <span
-              className="text-xs font-semibold tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1 text-white"
+              className={`${isLostStage ? "text-[10px]" : "text-xs"} font-semibold tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1 text-white`}
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              {isLastStage && <span className="text-[10px] opacity-90">🏁</span>}
               <span className="truncate">{stage.name}</span>
             </span>
 
-            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 -mr-2">
+            {/* Edit & Delete Actions: strictly visible on hover only */}
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 -mr-2 pointer-events-none group-hover:pointer-events-auto">
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onEdit(stage);
                 }}
-                className="p-1 rounded transition-all text-white/80 hover:text-white hover:bg-black/20"
+                className="p-1 rounded-md transition-all text-white/80 hover:text-white hover:bg-black/25 cursor-pointer"
                 title="Edit stage"
               >
                 <Edit className="w-3 h-3" />
@@ -434,7 +441,7 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
                   e.stopPropagation();
                   onRemove(stage.id);
                 }}
-                className="p-1 rounded transition-all text-white/80 hover:text-rose-200 hover:bg-rose-500/30"
+                className="p-1 rounded-md transition-all text-white/80 hover:text-rose-200 hover:bg-rose-500/30 cursor-pointer"
                 title="Delete stage"
               >
                 <Trash2 className="w-3 h-3" />
@@ -443,6 +450,21 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
           </>
         )}
       </div>
+
+      {/* Subtle + button at the chevron tip on hover */}
+      {onAddAfter && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onAddAfter();
+          }}
+          className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-30 w-5 h-5 rounded-full bg-white text-gray-700 shadow-md border border-gray-200 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-120 hover:bg-blue-600 hover:text-white hover:border-blue-600 cursor-pointer pointer-events-none group-hover:pointer-events-auto"
+          title="Add stage"
+        >
+          <Plus className="w-3 h-3 stroke-[2.5]" />
+        </button>
+      )}
     </div>
   );
 };
@@ -545,6 +567,8 @@ interface SidebarDraggableStageProps {
   onSelect: () => void;
   onMoveStage: (processId: string, dragIndex: number, hoverIndex: number) => void;
   onRemove?: (stageId: string) => void;
+  onEdit?: (stage: Stage) => void;
+  onAddAfter?: (stage: Stage) => void;
 }
 
 const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
@@ -556,6 +580,8 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
   onSelect,
   onMoveStage,
   onRemove,
+  onEdit,
+  onAddAfter,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const isFinal = totalStages > 0 && index === totalStages - 1;
@@ -628,19 +654,67 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
       <span className="flex-1 truncate font-medium">
         {stage.name}
       </span>
-      {onRemove && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove(stage.id);
-          }}
-          className="opacity-0 group-hover/stage:opacity-100 p-1 text-gray-400 hover:text-red-500 rounded hover:bg-red-50 transition-all cursor-pointer shrink-0"
-          title="Delete stage"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      )}
+      {(() => {
+        const isSuccess = stage.stageCategory === "success" || (!stage.isFinalStage && !stage.isFinal && (index === totalStages - 2 || stage.name.toLowerCase().includes("won") || stage.name.toLowerCase().includes("qualified") || stage.name.toLowerCase().includes("success")));
+        const isLost = stage.stageCategory === "lost" || stage.isFinalStage || stage.isFinal || stage.name.toLowerCase().includes("lost") || stage.name.toLowerCase().includes("unqualified") || stage.name.toLowerCase().includes("cancel");
+
+        if (stage.stageCategory === "success" || isSuccess) {
+          return (
+            <span className="px-1 py-0.2 rounded text-[8.5px] font-semibold tracking-wide bg-emerald-50 text-emerald-600 border border-emerald-200/60 shrink-0">
+              Won
+            </span>
+          );
+        }
+        if (stage.stageCategory === "lost" || isLost) {
+          return (
+            <span className="px-1 py-0.2 rounded text-[8.5px] font-semibold tracking-wide bg-rose-50 text-rose-600 border border-rose-200/60 shrink-0">
+              Lost
+            </span>
+          );
+        }
+        return null;
+      })()}
+      <div className="opacity-0 group-hover/stage:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+        {onAddAfter && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddAfter(stage);
+            }}
+            className="p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-all cursor-pointer"
+            title="Add stage"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {onEdit && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(stage);
+            }}
+            className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-all cursor-pointer"
+            title="Edit stage"
+          >
+            <Edit className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {onRemove && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(stage.id);
+            }}
+            className="p-1 text-gray-400 hover:text-red-500 rounded hover:bg-red-50 transition-all cursor-pointer"
+            title="Delete stage"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
     </div>
   );
 };
@@ -893,6 +967,10 @@ export default function Process() {
   const { activeOrganization: organization } = useOrganization();
   const { templates: adminProcessTemplates, instantiateProcessFromTemplate } = useProcessTemplates();
 
+  // Auto-collapse client sidebar when on workflow / process page
+  useEffect(() => {
+    setCollapsed(true);
+  }, [setCollapsed]);
 
   const [processes, setProcesses] = useState<Process[]>(getStoredProcesses);
 
@@ -901,6 +979,19 @@ export default function Process() {
   }, [processes]);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [showEntityDropdown, setShowEntityDropdown] = useState(false);
+  const entityDropdownRef = useRef<HTMLDivElement>(null);
+  const [newStageCategory, setNewStageCategory] = useState<"in_progress" | "success" | "lost">("in_progress");
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (entityDropdownRef.current && !entityDropdownRef.current.contains(e.target as Node)) {
+        setShowEntityDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
 
   const targetProcessFromNav = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -2947,35 +3038,59 @@ export default function Process() {
       return;
     }
 
-    const isFinal = newStageOutcome === "lost" || newStagePosition === "final";
+    const targetCategory: "in_progress" | "success" | "lost" =
+      newStageCategory || (newStageOutcome === "lost" ? "lost" : "in_progress");
+
+    if (targetCategory === "success") {
+      const existingSuccess = selectedProc.stages.filter(s => s.stageCategory === "success");
+      if (existingSuccess.length >= 1) {
+        toast.error("Only one stage is allowed in the Success category");
+        return;
+      }
+    }
+
+    const isLost = targetCategory === "lost";
+    const isSuccess = targetCategory === "success";
 
     const stage: Stage = {
       id: `${selectedProcess}-${Date.now()}`,
       name: newStage.name.trim(),
       description: newStage.description.trim(),
-      color: newStage.color || (isFinal ? "#EF4444" : STAGE_PRESET_COLORS[0]),
+      color: newStage.color || (isLost ? "#EF4444" : isSuccess ? "#10B981" : STAGE_PRESET_COLORS[0]),
       stageType: newStage.type || "Receive Inbound Calls",
       status: "active",
       callTriggerSettings: getDefaultCallTriggerSettings(),
-      isFinalStage: isFinal,
-      isFinal: isFinal,
-      stagePosition: isFinal ? "final" : (newStagePosition === "initial" ? "initial" : "intermediate"),
+      stageCategory: targetCategory,
+      isFinalStage: isLost,
+      isFinal: isLost,
+      stagePosition: isLost ? "final" : isSuccess ? "final" : (newStagePosition === "initial" ? "initial" : "intermediate"),
     };
 
     let updatedStages: Stage[];
     if (newStagePosition === "initial") {
       updatedStages = [stage, ...selectedProc.stages];
-    } else if (isFinal) {
-      // Added from second + or selected Lost: Add into Lost stages
+    } else if (targetCategory === "lost") {
       updatedStages = [...selectedProc.stages, stage];
-    } else {
-      // Added from first + or selected Won: Add into Won side (before first final/lost stage)
-      const firstFinalIdx = selectedProc.stages.findIndex((s) => s.isFinalStage || s.isFinal);
-      if (firstFinalIdx >= 0) {
+    } else if (targetCategory === "success") {
+      // Success stage placed before lost stages
+      const firstLostIdx = selectedProc.stages.findIndex((s) => s.stageCategory === "lost" || s.isFinalStage || s.isFinal);
+      if (firstLostIdx >= 0) {
         updatedStages = [
-          ...selectedProc.stages.slice(0, firstFinalIdx),
+          ...selectedProc.stages.slice(0, firstLostIdx),
           stage,
-          ...selectedProc.stages.slice(firstFinalIdx),
+          ...selectedProc.stages.slice(firstLostIdx),
+        ];
+      } else {
+        updatedStages = [...selectedProc.stages, stage];
+      }
+    } else {
+      // In progress stage: place before success and lost stages
+      const firstOutcomeIdx = selectedProc.stages.findIndex((s) => s.stageCategory === "success" || s.stageCategory === "lost" || s.isFinalStage || s.isFinal);
+      if (firstOutcomeIdx >= 0) {
+        updatedStages = [
+          ...selectedProc.stages.slice(0, firstOutcomeIdx),
+          stage,
+          ...selectedProc.stages.slice(firstOutcomeIdx),
         ];
       } else {
         updatedStages = [...selectedProc.stages, stage];
@@ -2999,6 +3114,7 @@ export default function Process() {
     setNewStage({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "AI Receives Calls" });
     setNewStagePosition(null);
     setNewStageOutcome("won");
+    setNewStageCategory(null);
     setNewStageSelectedNumbers([]);
     setShowNewStageNumberDropdown(false);
     setHasInteractedWithColor(false);
@@ -3148,11 +3264,55 @@ export default function Process() {
             </>
           }
         />
-        {/* Top Control Bar: PageTopBar with Entity Modes + Search + Add New Process */}
+        {/* Top Control Bar: PageTopBar with Entity Dropdown + Search + Add New Process */}
         <PageTopBar
-          modes={entityModes}
-          activeMode={selectedEntity}
-          onModeChange={handleEntityModeChange}
+          leftElement={
+            <div className="relative" ref={entityDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowEntityDropdown(!showEntityDropdown)}
+                className="h-[36px] px-3.5 bg-white hover:bg-gray-50 border border-border/80 rounded-lg text-xs font-semibold flex items-center gap-2 text-gray-800 transition-all shadow-2xs cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+                title="Select Entity Workflow"
+              >
+                <span>{ENTITY_TABS.find((t) => t.id === selectedEntity)?.label || "Entity"} Workflow</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-blue-50 text-blue-600 border border-blue-200">
+                  {processes.filter((p) => (p.entityType || "client") === selectedEntity).length}
+                </span>
+                <ChevronDown className={`w-3.5 h-3.5 text-gray-500 transition-transform ${showEntityDropdown ? "rotate-180" : ""}`} />
+              </button>
+              {showEntityDropdown && (
+                <div className="absolute left-0 top-full mt-1 w-52 bg-white border border-border rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                  {ENTITY_TABS.map((tab) => {
+                    const count = processes.filter((p) => (p.entityType || "client") === tab.id).length;
+                    const isSelected = selectedEntity === tab.id;
+                    const Icon = tab.icon;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => {
+                          handleEntityModeChange(tab.id);
+                          setShowEntityDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                          isSelected ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Icon className="w-3.5 h-3.5 text-gray-500" />
+                          <span>{tab.label}</span>
+                          <span className="text-[10px] text-gray-400 font-normal">({count})</span>
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          }
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search processes..."
@@ -3196,7 +3356,7 @@ export default function Process() {
           primaryAction={
             selectedEntity === "client" || selectedEntity === "appointment"
               ? {
-                label: selectedEntity === "appointment" ? "Add Appointment Process" : "Add New Process",
+                label: selectedEntity === "appointment" ? "Add Appointment Workflow" : "Add Workflow",
                 icon: <Plus className="w-3.5 h-3.5" />,
                 onClick: () => {
                   setNewProcess({ name: "", description: "" });
@@ -3275,11 +3435,6 @@ export default function Process() {
                           {process.name}
                         </span>
                       </div>
-
-                      {/* Blue Circular Badge with Drop Shadow */}
-                      <div className="w-6 h-6 rounded-full bg-[#3B82F6] text-white text-[11px] font-bold flex items-center justify-center shadow-[0_3px_8px_rgba(59,130,246,0.45)] shrink-0">
-                        {process.stages.length}
-                      </div>
                     </div>
 
                     {/* Process Description */}
@@ -3297,10 +3452,24 @@ export default function Process() {
                       <div className="mt-3 pt-3 border-t border-gray-100 pl-6 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
                         {process.stages.length === 0 ? (
                           <div
-                            className="px-3 py-2 text-xs italic text-gray-400 bg-gray-50 rounded-lg"
+                            className="px-3 py-2 text-xs italic text-gray-400 bg-gray-50 rounded-lg flex items-center justify-between"
                             style={{ fontFamily: "Outfit, sans-serif" }}
                           >
-                            No stages yet
+                            <span>No stages yet</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedProcess(process.id);
+                                setNewStagePosition("sequential");
+                                setNewStageOutcome("won");
+                                setShowAddStageModal(true);
+                              }}
+                              className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add</span>
+                            </button>
                           </div>
                         ) : (
                           <div className="space-y-1">
@@ -3324,6 +3493,16 @@ export default function Process() {
                                     setViewMode("stage");
                                   }}
                                   onMoveStage={moveStageForProcess}
+                                  onEdit={(stg) => {
+                                    setSelectedProcess(process.id);
+                                    handleEditStage(stg);
+                                  }}
+                                  onAddAfter={() => {
+                                    setSelectedProcess(process.id);
+                                    setNewStagePosition("sequential");
+                                    setNewStageOutcome("won");
+                                    setShowAddStageModal(true);
+                                  }}
                                   onRemove={(stgId) => {
                                     setProcesses((prev) =>
                                       prev.map((p) =>
@@ -3339,22 +3518,6 @@ export default function Process() {
                             })}
                           </div>
                         )}
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedProcess(process.id);
-                            setNewStagePosition("sequential");
-                            setNewStageOutcome("won");
-                            setShowAddStageModal(true);
-                          }}
-                          className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold text-blue-600 hover:bg-blue-50/80 transition-colors border border-dashed border-blue-200 hover:border-blue-300 mt-2 cursor-pointer"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Add New Stage</span>
-                        </button>
                       </div>
                     )}
                   </div>
@@ -3512,109 +3675,178 @@ export default function Process() {
                           );
                         }
 
-                        const hasAnyOutcomeFlag = allStages.some((s) => s.isFinalStage !== undefined || s.isFinal !== undefined);
-                        const sequentialStages = hasAnyOutcomeFlag
-                          ? allStages.filter((s) => !s.isFinalStage && !s.isFinal)
-                          : (allStages.length > 1 ? allStages.slice(0, -1) : allStages);
-                        const finalStageOptions = hasAnyOutcomeFlag
-                          ? allStages.filter((s) => s.isFinalStage || s.isFinal)
-                          : (allStages.length > 1 ? allStages.slice(-1) : []);
-                        const lastSeqStage = sequentialStages[sequentialStages.length - 1];
+                        const hasExplicitCategories = allStages.some((s) => s.stageCategory !== undefined);
+
+                        const inProgressStages = allStages.filter((s, idx) => {
+                          if (s.stageCategory === "in_progress") return true;
+                          if (s.stageCategory === "success" || s.stageCategory === "lost") return false;
+                          if (s.isFinalStage || s.isFinal) return false;
+                          const nonFinal = allStages.filter((x) => !x.isFinalStage && !x.isFinal);
+                          if (!hasExplicitCategories && nonFinal.length > 0 && s.id === nonFinal[nonFinal.length - 1].id) {
+                            return false;
+                          }
+                          return true;
+                        });
+
+                        const successStages = allStages.filter((s, idx) => {
+                          if (s.stageCategory === "success") return true;
+                          if (s.stageCategory === "in_progress" || s.stageCategory === "lost") return false;
+                          if (s.isFinalStage || s.isFinal) return false;
+                          const nonFinal = allStages.filter((x) => !x.isFinalStage && !x.isFinal);
+                          if (!hasExplicitCategories && nonFinal.length > 0 && s.id === nonFinal[nonFinal.length - 1].id) {
+                            return true;
+                          }
+                          return false;
+                        });
+
+                        const lostStages = allStages.filter((s) => {
+                          if (s.stageCategory === "lost") return true;
+                          if (s.stageCategory === "in_progress" || s.stageCategory === "success") return false;
+                          return !!(s.isFinalStage || s.isFinal);
+                        });
 
                         return (
-                          <div className="space-y-1">
-                            {/* Non-overlapping clean grey Won | Lost indicator header */}
-                            <div className="w-full flex items-center gap-2 px-0.5 select-none">
-                              {/* Won directly above the last stage before the + */}
-                              <div className="flex-1 min-w-0 flex items-center">
-                                {sequentialStages.length > 1 && (
-                                  <div style={{ flex: sequentialStages.length - 1 }} />
-                                )}
-                                <div className="flex-1 min-w-0 text-center">
-                                  <span className="text-[11px] font-semibold tracking-wider text-gray-400 uppercase">
-                                    Won
-                                  </span>
-                                </div>
+                          <div className="flex flex-col lg:flex-row items-stretch gap-3 sm:gap-4 w-full">
+                            {/* 1. In Progress Category - FULL LENGTH */}
+                            <div className="flex-[3] min-w-0 space-y-1.5 flex flex-col justify-between">
+                              <div className="flex items-center px-1 select-none">
+                                <span className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  In Progress
+                                </span>
                               </div>
-
-                              {/* Spacer matching the first + button */}
-                              <div className="w-6 flex-shrink-0" />
-
-                              {/* Lost directly above the lost stages */}
-                              {finalStageOptions.length > 0 ? (
-                                <div
-                                  className="flex items-center justify-center flex-shrink-0 ml-1 text-center"
-                                  style={{ width: `${finalStageOptions.length * 24 + 14}px` }}
-                                >
-                                  <span className="text-[11px] font-semibold tracking-wider text-gray-400 uppercase">
-                                    Lost
-                                  </span>
-                                </div>
-                              ) : (
-                                <div className="w-20 flex-shrink-0 ml-1 text-center">
-                                  <span className="text-[11px] font-semibold tracking-wider text-gray-400 uppercase">
-                                    Lost
-                                  </span>
-                                </div>
-                              )}
-
-                              {/* Spacer matching the second + button */}
-                              <div className="w-6 flex-shrink-0" />
-                            </div>
-
-                            <div className="w-full flex items-center gap-2 py-1 px-0.5">
-                              {/* Sequential Stages (Won area) - occupy full remaining width dynamically */}
-                              <div className="flex-1 min-w-0 flex items-center">
-                                {sequentialStages.map((stage, sIdx) => {
-                                  const originalIndex = allStages.findIndex((s) => s.id === stage.id);
-                                  return (
-                                    <ChevronStageItem
-                                      key={stage.id}
-                                      stage={stage}
-                                      index={originalIndex >= 0 ? originalIndex : sIdx}
-                                      totalStages={allStages.length}
-                                      moveStage={moveStage}
-                                      onRemove={handleRemoveStage}
-                                      onEdit={handleEditStage}
-                                      onSelect={(s) => {
-                                        setExpandedStage(s.id);
-                                        setViewMode("stage");
-                                      }}
-                                      isSelected={expandedStage === stage.id}
-                                      isFirst={sIdx === 0}
-                                      isLast={sIdx === sequentialStages.length - 1}
-                                      color={stage.color || CHEVRON_PALETTE[sIdx % CHEVRON_PALETTE.length]}
-                                      isFlexible={true}
-                                    />
-                                  );
-                                })}
-                              </div>
-
-                              {/* + Icon to Add Sequential Stage (Small Grey) */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setNewStagePosition("sequential");
-                                  setNewStageOutcome("won");
-                                  setShowAddStageModal(true);
-                                }}
-                                className="flex items-center justify-center w-6 h-7 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-600 border border-gray-200/80 transition-all shadow-2xs hover:shadow-xs flex-shrink-0 cursor-pointer"
-                                title="Add sequential stage"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                              </button>
-
-                              {/* Last Stages in compact chevron ribbons with hover name */}
-                              {finalStageOptions.length > 0 ? (
-                                <>
-                                  <div className="flex items-center flex-shrink-0 ml-1">
-                                    {finalStageOptions.map((fStage, fIdx) => {
-                                      const originalIndex = allStages.findIndex((s) => s.id === fStage.id);
+                              <div className="flex items-center w-full">
+                                <div className="flex-1 min-w-0 flex items-center w-full">
+                                  {inProgressStages.length > 0 ? (
+                                    inProgressStages.map((stage, idx) => {
+                                      const originalIndex = allStages.findIndex((s) => s.id === stage.id);
                                       return (
                                         <ChevronStageItem
-                                          key={fStage.id}
-                                          stage={fStage}
-                                          index={originalIndex >= 0 ? originalIndex : sequentialStages.length + fIdx}
+                                          key={stage.id}
+                                          stage={stage}
+                                          index={originalIndex >= 0 ? originalIndex : idx}
+                                          totalStages={allStages.length}
+                                          moveStage={moveStage}
+                                          onRemove={handleRemoveStage}
+                                          onEdit={handleEditStage}
+                                          onSelect={(s) => {
+                                            setExpandedStage(s.id);
+                                            setViewMode("stage");
+                                          }}
+                                          isSelected={expandedStage === stage.id}
+                                          isFirst={idx === 0}
+                                          isLast={idx === inProgressStages.length - 1}
+                                          color={stage.color || CHEVRON_PALETTE[(originalIndex >= 0 ? originalIndex : idx) % CHEVRON_PALETTE.length]}
+                                          isFlexible={true}
+                                          onHoverStage={setHoveredStageTooltip}
+                                          onAddAfter={() => {
+                                            setNewStagePosition("sequential");
+                                            setNewStageCategory("in_progress");
+                                            setNewStageOutcome("won");
+                                            setShowAddStageModal(true);
+                                          }}
+                                        />
+                                      );
+                                    })
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setNewStagePosition("sequential");
+                                        setNewStageCategory("in_progress");
+                                        setNewStageOutcome("won");
+                                        setShowAddStageModal(true);
+                                      }}
+                                      className="h-10 px-3 flex-1 flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-blue-600 border border-dashed border-gray-200 hover:border-blue-300 rounded-md bg-gray-50/50 hover:bg-blue-50/30 transition-colors cursor-pointer"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Add in-progress stage</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 2. Won Category (Only 1 Stage Allowed) */}
+                            <div className="flex-shrink-0 space-y-1.5 flex flex-col justify-between" style={{ minWidth: "120px", maxWidth: "180px" }}>
+                              <div className="flex items-center px-1 select-none">
+                                <span className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  Won
+                                </span>
+                              </div>
+                              <div className="flex items-center w-full">
+                                <div className="flex-1 min-w-0 flex items-center w-full">
+                                  {successStages.length > 0 ? (
+                                    successStages.map((stage, idx) => {
+                                      const originalIndex = allStages.findIndex((s) => s.id === stage.id);
+                                      return (
+                                        <ChevronStageItem
+                                          key={stage.id}
+                                          stage={stage}
+                                          index={originalIndex >= 0 ? originalIndex : idx}
+                                          totalStages={allStages.length}
+                                          moveStage={moveStage}
+                                          onRemove={handleRemoveStage}
+                                          onEdit={handleEditStage}
+                                          onSelect={(s) => {
+                                            setExpandedStage(s.id);
+                                            setViewMode("stage");
+                                          }}
+                                          isSelected={expandedStage === stage.id}
+                                          isFirst={true}
+                                          isLast={true}
+                                          color={stage.color || "#10B981"}
+                                          isLastStage={true}
+                                          isFlexible={true}
+                                          onHoverStage={setHoveredStageTooltip}
+                                          onAddAfter={
+                                            successStages.length >= 1
+                                              ? undefined
+                                              : () => {
+                                                  setNewStagePosition("final");
+                                                  setNewStageCategory("success");
+                                                  setNewStageOutcome("won");
+                                                  setShowAddStageModal(true);
+                                                }
+                                          }
+                                        />
+                                      );
+                                    })
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setNewStagePosition("final");
+                                        setNewStageCategory("success");
+                                        setNewStageOutcome("won");
+                                        setShowAddStageModal(true);
+                                      }}
+                                      className="h-10 px-3 flex-1 flex items-center justify-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-dashed border-gray-200 hover:border-gray-300 rounded-md bg-gray-50/40 hover:bg-gray-100 transition-colors cursor-pointer"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Add won stage</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 3. Lost Category - SQUEEZED SIZE */}
+                            <div className="flex-shrink-0 space-y-1.5 flex flex-col justify-between">
+                              <div className="flex items-center px-1 select-none">
+                                <span className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  Lost
+                                </span>
+                              </div>
+                              <div className="flex items-center">
+                                <div className="flex items-center">
+                                  {lostStages.length > 0 ? (
+                                    lostStages.map((stage, idx) => {
+                                      const originalIndex = allStages.findIndex((s) => s.id === stage.id);
+                                      return (
+                                        <ChevronStageItem
+                                          key={stage.id}
+                                          stage={stage}
+                                          index={originalIndex >= 0 ? originalIndex : idx}
                                           totalStages={allStages.length}
                                           moveStage={moveStage}
                                           onRemove={handleRemoveStage}
@@ -3623,87 +3855,43 @@ export default function Process() {
                                             setExpandedStage(s.id);
                                             setViewMode("stage");
                                           }}
-                                          isSelected={expandedStage === fStage.id}
-                                          isFirst={fIdx === 0}
-                                          isLast={fIdx === finalStageOptions.length - 1}
-                                          color={fStage.color || CHEVRON_PALETTE[(sequentialStages.length + fIdx) % CHEVRON_PALETTE.length] || "#EC4899"}
+                                          isSelected={expandedStage === stage.id}
+                                          isFirst={idx === 0}
+                                          isLast={idx === lostStages.length - 1}
+                                          color={stage.color || "#EF4444"}
                                           isLastStage={true}
-                                          isCompact={true}
+                                          isLostStage={true}
                                           onHoverStage={setHoveredStageTooltip}
+                                          onAddAfter={() => {
+                                            setNewStagePosition("final");
+                                            setNewStageCategory("lost");
+                                            setNewStageOutcome("lost");
+                                            setShowAddStageModal(true);
+                                          }}
                                         />
                                       );
-                                    })}
-                                  </div>
-
-                                  {/* + Icon to Add another Last Stage Option (Small Grey) */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setNewStagePosition("final");
-                                      setNewStageOutcome("lost");
-                                      setShowAddStageModal(true);
-                                    }}
-                                    className="flex items-center justify-center w-6 h-7 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-600 border border-gray-200/80 transition-all shadow-2xs hover:shadow-xs flex-shrink-0 cursor-pointer"
-                                    title="Add last stage option"
-                                  >
-                                    <Plus className="w-3.5 h-3.5" />
-                                  </button>
-                                </>
-                              ) : (
-                                /* When NO last stage is added: + Add Last Stage button (Small Grey) */
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setNewStagePosition("final");
-                                    setNewStageOutcome("lost");
-                                    setShowAddStageModal(true);
-                                  }}
-                                  className="flex items-center gap-1 px-2 h-7 rounded-md border border-dashed border-gray-300 hover:border-gray-400 bg-gray-50 hover:bg-gray-100 text-gray-500 text-xs font-medium transition-all shadow-2xs flex-shrink-0 cursor-pointer ml-1"
-                                  title="Add last stage option"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                  <span>Add Last Stage</span>
-                                </button>
-                              )}
+                                    })
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setNewStagePosition("final");
+                                        setNewStageCategory("lost");
+                                        setNewStageOutcome("lost");
+                                        setShowAddStageModal(true);
+                                      }}
+                                      className="h-10 px-3 flex items-center justify-center gap-1.5 text-xs text-rose-500 hover:text-rose-600 border border-dashed border-rose-200 hover:border-rose-300 rounded-md bg-rose-50/40 hover:bg-rose-50 transition-colors cursor-pointer"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Add lost stage</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         );
                       })()}
-                    </div>
-
-                    {/* Knowledge Base */}
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex items-center justify-between gap-4 flex-wrap">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                          <Database className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                            Knowledge Base
-                          </h3>
-                          <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                            Give the AI reference material scoped to this process. The scope will be pre-selected for you.
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (!selectedProcessData) return;
-                          navigate("/knowledge-base", {
-                            state: {
-                              prefillProcess: {
-                                id: selectedProcessData.id,
-                                name: selectedProcessData.name,
-                                stages: selectedProcessData.stages.map((s) => ({ id: s.id, name: s.name })),
-                              },
-                            },
-                          });
-                        }}
-                      >
-                        <Database className="w-4 h-4" />
-                        Add Knowledge Base
-                      </Button>
                     </div>
 
                     {/* Advanced Settings */}
@@ -6666,6 +6854,38 @@ export default function Process() {
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    {/* Knowledge Base (Moved Below Advanced Settings, No Subtext, Square Arrow Icon) */}
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex items-center justify-between gap-4 flex-wrap">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <Database className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <h3 className="text-lg font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                          Knowledge Base
+                        </h3>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (!selectedProcessData) return;
+                          navigate("/knowledge-base", {
+                            state: {
+                              prefillProcess: {
+                                id: selectedProcessData.id,
+                                name: selectedProcessData.name,
+                                stages: selectedProcessData.stages.map((s) => ({ id: s.id, name: s.name })),
+                              },
+                            },
+                          });
+                        }}
+                        className="flex items-center gap-2 cursor-pointer"
+                      >
+                        <span>Add Knowledge Base</span>
+                        <SquareArrowOutUpRight className="w-4 h-4" />
+                      </Button>
+                    </div>
 
 
 
@@ -6884,7 +7104,6 @@ export default function Process() {
                         </Button>
                       </div>
                     </div>
-                  </div>
                 );
               })()
             ) : (
@@ -6908,7 +7127,7 @@ export default function Process() {
             setShowAddProcessModal(false);
             setNewProcess({ name: "", description: "" });
           }}
-          title={selectedEntity === "appointment" ? "Add Appointment Process" : "Add New Process"}
+          title={selectedEntity === "appointment" ? "Add Appointment Workflow" : "Add Workflow"}
           footer={
             <>
               <Button variant="outline" onClick={() => {
@@ -6921,7 +7140,7 @@ export default function Process() {
                 variant="primary"
                 onClick={handleAddProcess}
               >
-                Add Process
+                Add Workflow
               </Button>
             </>
           }
@@ -7004,35 +7223,7 @@ export default function Process() {
               />
             </div>
 
-            {/* Stage Outcome Dropdown: Won vs Lost */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Stage Outcome <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={newStageOutcome}
-                onChange={(e) => {
-                  const val = e.target.value as "won" | "lost";
-                  setNewStageOutcome(val);
-                  setNewStagePosition(val === "lost" ? "final" : "sequential");
-                  if (!hasInteractedWithColor) {
-                    setNewStage((prev) => ({
-                      ...prev,
-                      color: val === "lost" ? "#EF4444" : "#10B981"
-                    }));
-                  }
-                }}
-                className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all text-slate-900 font-medium cursor-pointer"
-              >
-                <option value="won">Won Stage (Sequential Pipeline)</option>
-                <option value="lost">Lost Stage (Terminal / Dropped)</option>
-              </select>
-              <p className="text-[11px] text-slate-400 mt-1">
-                {newStageOutcome === "won"
-                  ? "Stage is added to the active Won pipeline progression."
-                  : "Stage is added to the terminal Lost outcome section."}
-              </p>
-            </div>
+
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
@@ -7296,24 +7487,7 @@ export default function Process() {
               />
             </div>
 
-            {/* Stage Outcome Dropdown: Won vs Lost */}
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                Stage Outcome
-              </label>
-              <select
-                value={editingStage?.isFinalStage ? "lost" : "won"}
-                onChange={(e) => {
-                  const isLost = e.target.value === "lost";
-                  setEditingStage(editingStage ? { ...editingStage, isFinalStage: isLost } : null);
-                }}
-                className="w-full px-3.5 py-2.5 text-sm border border-border rounded-lg bg-white focus:outline-none focus:border-slate-400 font-medium cursor-pointer"
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              >
-                <option value="won">Won Stage (Sequential Pipeline)</option>
-                <option value="lost">Lost Stage (Terminal / Dropped)</option>
-              </select>
-            </div>
+
 
             <div>
               <label className="block text-sm font-medium mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>

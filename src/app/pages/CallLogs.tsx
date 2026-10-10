@@ -1865,6 +1865,24 @@ export default function CallLogs() {
               ),
             },
             {
+              id: "lastStage",
+              header: "Previous Stage",
+              render: (log) => (
+                <span className="text-xs text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {log.lastStage && log.lastStage !== "N/A" ? log.lastStage : "—"}
+                </span>
+              ),
+            },
+            {
+              id: "currentStage",
+              header: "Last Stage",
+              render: (log) => (
+                <span className="text-xs font-semibold text-[#111827]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {log.currentStage || "—"}
+                </span>
+              ),
+            },
+            {
               id: "client",
               header: "Client",
               render: (log) => (
@@ -1876,23 +1894,6 @@ export default function CallLogs() {
                   )}
                   <span className="text-[#1A73E8]">{log.client}</span>
                 </div>
-              ),
-            },
-            {
-              id: "stage",
-              header: "Stage",
-              render: (log) => (
-                <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  {log.lastStage && log.lastStage !== "N/A" ? (
-                    <span className="flex items-center gap-1">
-                      <span className="text-[#94A3B8]">{log.lastStage}</span>
-                      <span className="text-[#94A3B8]">→</span>
-                      <span className="text-[#111827]">{log.currentStage}</span>
-                    </span>
-                  ) : (
-                    <span className="text-[#111827]">{log.currentStage}</span>
-                  )}
-                </span>
               ),
             },
             {

@@ -369,6 +369,7 @@ class InvoiceService {
       clientPhone: appointment.clientPhone || "",
       appointmentId: appointment.id ? String(appointment.id) : undefined,
       appointmentTitle: appointment.title || "Scheduled Appointment",
+      processId: proc.id,
       currentStageId: "",
       statusLabel: "",
       status: "draft",

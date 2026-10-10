@@ -964,6 +964,9 @@ export default function Deals() {
     color: string;
     isFinalStage?: boolean;
     isInitial?: boolean;
+    stageCategory?: "in_progress" | "success" | "lost";
+    stagePosition?: "initial" | "intermediate" | "final" | null;
+    intentTrigger?: string;
   }> => {
     if (!processName) {
       return currentStageName
@@ -983,6 +986,9 @@ export default function Deals() {
         color: s.color || CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
         isFinalStage: Boolean(s.isFinalStage || s.isFinal),
         isInitial: s.isInitial,
+        stageCategory: (s as any).stageCategory || s.systemCategory,
+        stagePosition: s.stagePosition,
+        intentTrigger: (s as any).intentTrigger,
       }));
     }
 
@@ -1688,6 +1694,195 @@ export default function Deals() {
 
   const dealColumns: TableColumn<CallLog>[] = [
     {
+      key: "id",
+      header: "Process ID",
+      render: (log) => {
+        const formattedId = (log as any).processId
+          ? (log as any).processId
+          : log.id.startsWith("CALL-")
+            ? `PRC-${log.id.replace("CALL-", "")}`
+            : (log.id.startsWith("PRC-") ? log.id : `PRC-${log.id}`);
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedLogForView(log);
+              setViewDrawerTab("general");
+              setHistoryFilter("");
+              setShowViewDrawer(true);
+            }}
+            className="font-mono text-xs font-semibold text-[#1456f0] hover:text-[#1d4ed8] hover:underline cursor-pointer tracking-tight"
+            style={{ fontFamily: "JetBrains Mono, monospace" }}
+            title="Open process details"
+          >
+            {formattedId}
+          </button>
+        );
+      }
+    },
+    {
+      key: "currentStage",
+      header: "Stage",
+      render: (log) => {
+        const stageObjs = getStageObjectsForProcess(log.process, log.currentStage);
+        const activeIdx = getStageIndexForProcess(log.process, log.currentStage);
+        const cleanCurrentStage = (log.currentStage || "").includes(":")
+          ? log.currentStage.split(":")[1].trim().toLowerCase()
+          : (log.currentStage || "").trim().toLowerCase();
+
+        const currentStageObj = stageObjs.find((s) => s.name.trim().toLowerCase() === cleanCurrentStage);
+        const isLostStageObj = (s?: { name: string; stageCategory?: string; intentTrigger?: string }) => {
+          if (!s) return false;
+          if (s.stageCategory === "lost") return true;
+          if (s.intentTrigger === "not_interested") return true;
+          const n = s.name.toLowerCase();
+          return n.includes("not interested") || n.includes("lost") || n.includes("cancelled") || n.includes("declined") || n.includes("failed") || n.includes("no-show");
+        };
+
+        const isWonStageObj = (s?: { name: string; stageCategory?: string; intentTrigger?: string }) => {
+          if (!s) return false;
+          if (s.stageCategory === "success") return true;
+          if (s.intentTrigger === "interested") return true;
+          const n = s.name.toLowerCase();
+          return n.includes("interested") || n.includes("won") || n.includes("reactivated") || n.includes("completed") || n.includes("closed");
+        };
+
+        const isLastOrFinalStageObj = (s?: { name: string; isFinalStage?: boolean; stagePosition?: string | null; stageCategory?: string; intentTrigger?: string }) => {
+          if (!s) return false;
+          return Boolean(s.isFinalStage || s.stagePosition === "final" || s.stageCategory === "lost" || s.stageCategory === "success" || isLostStageObj(s) || isWonStageObj(s));
+        };
+
+        const lightenHex = (hex: string, percent: number = 75): string => {
+          if (!hex || typeof hex !== "string") return "#F1F5F9";
+          let c = hex.replace("#", "").trim();
+          if (c.length === 3) c = c.split("").map((ch) => ch + ch).join("");
+          const num = parseInt(c, 16);
+          if (isNaN(num)) return hex;
+          const factor = percent / 100;
+          const r = Math.max(0, Math.min(255, Math.round(((num >> 16) & 255) + (255 - ((num >> 16) & 255)) * factor)));
+          const g = Math.max(0, Math.min(255, Math.round(((num >> 8) & 255) + (255 - ((num >> 8) & 255)) * factor)));
+          const b = Math.max(0, Math.min(255, Math.round((num & 255) + (255 - (num & 255)) * factor)));
+          return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+        };
+
+        const isCurrentFinal = isLastOrFinalStageObj(currentStageObj);
+
+        return (
+          <div className="flex items-center justify-center -space-x-px">
+            {stageObjs.map((stg, i) => {
+              const stageName = stg.name;
+              const stageColor = stg.color || CHEVRON_PALETTE[i % CHEVRON_PALETTE.length];
+              const segIdx = i + 1;
+              const isActive = segIdx === activeIdx;
+
+              const isThisFinal = isLastOrFinalStageObj(stg);
+              const isThisInProgress = !isThisFinal;
+
+              let isCompleted = false;
+              let isDeactivated = false;
+
+              if (isActive) {
+                // Active stage
+              } else if (isCurrentFinal) {
+                if (isThisInProgress) {
+                  // Keep in-progress stages active/completed when lost or final stage is updated
+                  isCompleted = true;
+                } else {
+                  // Deactivate won stage and other alternate last/outcome stages
+                  isDeactivated = true;
+                }
+              } else {
+                // Currently in an in-progress stage
+                if (isThisInProgress && segIdx < activeIdx) {
+                  isCompleted = true;
+                }
+              }
+
+              const lightBg = lightenHex(stageColor, 78);
+              const lightBorder = lightenHex(stageColor, 40);
+
+              let bg = "transparent";
+              let border = "1px solid #CBD5E1";
+              let opacity = 1;
+
+              if (isActive) {
+                bg = stageColor;
+                border = "1.5px solid #0F172A";
+                opacity = 1;
+              } else if (isCompleted) {
+                bg = stageColor;
+                border = `1px solid ${stageColor}`;
+                opacity = 0.85;
+              } else if (isDeactivated) {
+                // In deactivated form, show the colors of respective stage but light to maintain the UI
+                bg = lightBg;
+                border = `1px solid ${lightBorder}`;
+                opacity = 0.95;
+              } else {
+                // Upcoming unfilled stage
+                bg = "transparent";
+                border = "1px solid #CBD5E1";
+                opacity = 0.45;
+              }
+
+              const isHovered = hoveredStageSegment?.logId === log.id && hoveredStageSegment?.segIdx === segIdx;
+              return (
+                <div
+                  key={stg.id || stageName}
+                  className="relative"
+                  style={{ zIndex: isActive ? 10 : isHovered ? 20 : 1 }}
+                >
+                  {isHovered && (
+                    <div
+                      className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-1 pointer-events-none rounded shadow-md z-[200] flex items-center gap-1.5"
+                      style={{ backgroundColor: "#1A2B4A", color: "#fff", fontSize: "12px" }}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: isDeactivated ? lightBg : stageColor }}
+                      />
+                      <span>{stageName}</span>
+                      {isDeactivated ? (
+                        <span className="text-[10px] text-gray-300 font-semibold">(Inactive)</span>
+                      ) : isActive ? (
+                        <span className="text-[10px] text-blue-300 font-semibold">(Current)</span>
+                      ) : isCompleted ? (
+                        <span className="text-[10px] text-emerald-300 font-semibold">(Completed)</span>
+                      ) : null}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!isDeactivated) handleUpdateLogStage(log, stageName);
+                    }}
+                    onMouseEnter={() => setHoveredStageSegment({ logId: log.id, segIdx })}
+                    onMouseLeave={() => setHoveredStageSegment(null)}
+                    style={{
+                      width: "18px",
+                      height: "8px",
+                      borderRadius: "0px",
+                      backgroundColor: bg,
+                      border: border,
+                      opacity: opacity,
+                      cursor: isDeactivated ? "not-allowed" : "pointer",
+                      display: "block",
+                      padding: 0,
+                      flexShrink: 0,
+                      transition: "all 0.2s ease",
+                    }}
+                    title={`${stageName}${isActive ? " (Current)" : isDeactivated ? " (Inactive)" : isCompleted ? " (Completed)" : ""}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+    },
+    {
       key: "client",
       header: "Client",
       render: (log) => (
@@ -1701,101 +1896,6 @@ export default function Deals() {
           title="Click to view Client Profile"
         >
           {log.client}
-        </span>
-      )
-    },
-    {
-      key: "currentStage",
-      header: "Stage",
-      render: (log) => {
-        const stageObjs = getStageObjectsForProcess(log.process, log.currentStage);
-        const activeIdx = getStageIndexForProcess(log.process, log.currentStage);
-        const cleanCurrentStage = (log.currentStage || "").includes(":")
-          ? log.currentStage.split(":")[1].trim().toLowerCase()
-          : (log.currentStage || "").trim().toLowerCase();
-
-        const currentStageObj = stageObjs.find((s) => s.name.trim().toLowerCase() === cleanCurrentStage);
-        const isCurrentFinal = Boolean(currentStageObj?.isFinalStage);
-        const lastSequentialIdx = stageObjs.reduce((acc, s, idx) => (!s.isFinalStage ? idx + 1 : acc), 0);
-
-        return (
-          <div className="flex items-center justify-center gap-[3px]">
-            {stageObjs.map((stg, i) => {
-              const stageName = stg.name;
-              const stageColor = stg.color || CHEVRON_PALETTE[i % CHEVRON_PALETTE.length];
-              const segIdx = i + 1;
-              const isThisFinal = Boolean(stg.isFinalStage);
-
-              let isCompleted = false;
-              let isActive = false;
-
-              if (segIdx === activeIdx) {
-                isActive = true;
-              } else if (isCurrentFinal) {
-                if (!isThisFinal && segIdx <= lastSequentialIdx) {
-                  isCompleted = true;
-                }
-              } else {
-                if (!isThisFinal && segIdx < activeIdx) {
-                  isCompleted = true;
-                }
-              }
-
-              const isHovered = hoveredStageSegment?.logId === log.id && hoveredStageSegment?.segIdx === segIdx;
-              return (
-                <div key={stg.id || stageName} className="relative">
-                  {isHovered && (
-                    <div
-                      className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-1 pointer-events-none rounded shadow-md z-[200] flex items-center gap-1.5"
-                      style={{ backgroundColor: '#1A2B4A', color: '#fff', fontSize: '12px' }}
-                    >
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stageColor }} />
-                      <span>{stageName}</span>
-                      {isActive && <span className="text-[10px] text-blue-300 font-semibold">(Current)</span>}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleUpdateLogStage(log, stageName);
-                    }}
-                    onMouseEnter={() => setHoveredStageSegment({ logId: log.id, segIdx })}
-                    onMouseLeave={() => setHoveredStageSegment(null)}
-                    style={{
-                      width: '18px',
-                      height: '8px',
-                      borderRadius: '0px',
-                      backgroundColor: (isCompleted || isActive) ? stageColor : 'transparent',
-                      border: (isCompleted || isActive) ? `1px solid ${stageColor}` : '1px solid #CBD5E1',
-                      opacity: isActive ? 1 : isCompleted ? 0.75 : 0.45,
-                      cursor: 'pointer',
-                      display: 'block',
-                      padding: 0,
-                      flexShrink: 0,
-                      transition: 'all 0.2s ease',
-                    }}
-                    title={`${stageName}${isActive ? ' (Current)' : ''}`}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        );
-      }
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (log) => (
-        <span className={`inline-block px-2 py-0.5 rounded-none text-[11px] font-semibold whitespace-nowrap ${
-          log.status === "Completed"
-            ? "bg-success-bg text-success"
-            : log.status === "Pending"
-              ? "bg-warning/10 text-warning"
-              : "bg-error-bg text-error"
-        }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-          {log.status}
         </span>
       )
     },

@@ -52,7 +52,9 @@ import { appointmentService, hasAppointmentAutomation } from "../../lib/appointm
 import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
 import { PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import DocumentsTab from "../components/profile/DocumentsTab";
-import TableComponent, { TableColumn } from "../components/ui/TableComponent";
+import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
+import PageTopBar from "../components/layout/PageTopBar";
+import { Modal } from "../components/ui/Modal";
 import AIScribeModal from "../components/scribe/AIScribeModal";
 import TranscriptDetailDrawer from "../components/scribe/TranscriptDetailDrawer";
 import {
@@ -736,7 +738,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
 
   // All state variables verbatim from Clients.tsx drawer
-  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "invoices" | "documents" | "products" | "transcripts">("overview");
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "appointments" | "invoices" | "documents" | "products" | "transcripts">("overview");
 
   // ── Transcripts Tab State ──
   const [scribeSessions, setScribeSessions] = useState<ScribeSession[]>(getScribeSessions());
@@ -779,7 +781,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [showEmpDropProduct, setShowEmpDropProduct] = useState(false);
   const [empSearchProduct, setEmpSearchProduct] = useState("");
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
+  const [selectedSubmissionForView, setSelectedSubmissionForView] = useState<any | null>(null);
   const [formsTabMode, setFormsTabMode] = useState<"forms" | "flows">("forms");
+  const [formSearchQuery, setFormSearchQuery] = useState("");
   const [expandedFlowStepId, setExpandedFlowStepId] = useState<string | null>(null);
   const [expandedFlowId, setExpandedFlowId] = useState<number | null>(null);
   const [expandedFormGroupId, setExpandedFormGroupId] = useState<number | null>(null);
@@ -1420,6 +1424,117 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     return { form, subs };
   }).filter(group => group.subs.length > 0);
 
+  type FormSubmissionRow = {
+    id: string;
+    templateId: string;
+    formName: string;
+    formId: number;
+    status: string;
+    sentAt: string;
+    submittedAt: string;
+    submission: (typeof clientSubmissions)[number];
+  };
+
+  const formSubmissionRows: FormSubmissionRow[] = useMemo(() => {
+    return clientSubmissions.map((sub) => {
+      const form = allForms.find((f) => f.id === sub.formId);
+      return {
+        id: sub.id,
+        templateId: `TPL-${String(sub.formId).padStart(3, "0")}`,
+        formName: form?.name || `Form #${sub.formId}`,
+        formId: sub.formId,
+        status: sub.status,
+        sentAt: sub.sentAt || "—",
+        submittedAt: sub.submittedAt || "—",
+        submission: sub,
+      };
+    });
+  }, [clientSubmissions, allForms]);
+
+  const filteredFormSubmissionRows = useMemo(() => {
+    if (!formSearchQuery.trim()) return formSubmissionRows;
+    const q = formSearchQuery.toLowerCase();
+    return formSubmissionRows.filter(r =>
+      r.templateId.toLowerCase().includes(q) ||
+      r.formName.toLowerCase().includes(q) ||
+      r.status.toLowerCase().includes(q)
+    );
+  }, [formSubmissionRows, formSearchQuery]);
+
+  const formColumns: TableColumn<FormSubmissionRow>[] = [
+    {
+      id: "templateId",
+      header: "Template ID",
+      render: (row) => (
+        <span
+          className="font-mono text-xs font-semibold text-[#1456f0] hover:underline cursor-pointer tracking-tight"
+          onClick={() => setSelectedSubmissionForView(row.submission)}
+        >
+          {row.templateId}
+        </span>
+      ),
+    },
+    {
+      id: "formName",
+      header: "Form Name",
+      render: (row) => (
+        <span
+          className="font-medium text-slate-800 text-xs hover:underline cursor-pointer"
+          style={{ fontFamily: "DM Sans, sans-serif" }}
+          onClick={() => setSelectedSubmissionForView(row.submission)}
+        >
+          {row.formName}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      render: (row) => (
+        <span
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold w-fit ${
+            row.status === "completed"
+              ? "bg-green-100 text-green-700"
+              : row.status === "pending"
+              ? "bg-amber-100 text-amber-700"
+              : "bg-red-100 text-red-700"
+          }`}
+          style={{ fontFamily: "Outfit, sans-serif" }}
+        >
+          {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
+        </span>
+      ),
+    },
+    {
+      id: "sentAt",
+      header: "Sent",
+      render: (row) => (
+        <span className="text-xs text-[#6B7280]" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {row.sentAt}
+        </span>
+      ),
+    },
+    {
+      id: "submittedAt",
+      header: "Submitted",
+      render: (row) => (
+        <span className="text-xs text-[#1F2937] font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {row.submittedAt}
+        </span>
+      ),
+    },
+  ];
+
+  const formRowActions: TableRowAction<FormSubmissionRow>[] = [
+    {
+      label: "View Submission",
+      icon: <Eye className="w-3.5 h-3.5 text-blue-600" />,
+      onClick: (row) => {
+        setSelectedSubmissionForView(row.submission);
+      },
+    },
+  ];
+
   type FlowStepProgress = {
     step: FlowStep;
     form: Form | undefined;
@@ -1455,6 +1570,15 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
     return { flow, steps, status, requiredDone, requiredTotal: requiredSteps.length };
   }).filter(progress => progress.steps.some(s => s.done));
+
+  const filteredClientFlowProgress = useMemo(() => {
+    if (!formSearchQuery.trim()) return clientFlowProgress;
+    const q = formSearchQuery.toLowerCase();
+    return clientFlowProgress.filter(p =>
+      p.flow.name.toLowerCase().includes(q) ||
+      p.status.toLowerCase().includes(q)
+    );
+  }, [clientFlowProgress, formSearchQuery]);
 
   useEffect(() => {
     const routeState = location.state as { openFormsTab?: boolean; formId?: number; submissionDate?: string } | null;
@@ -1582,7 +1706,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "overview" as const, label: "Overview" },
                 { id: "processes" as const, label: "Processes" },
                 { id: "forms" as const, label: "Forms" },
-                { id: "notes" as const, label: "Notes" },
                 { id: "appointments" as const, label: "Appointments" },
                 { id: "invoices" as const, label: "Invoices" },
                 { id: "documents" as const, label: "Documents" },
@@ -1904,163 +2027,47 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           {/* ── Forms Tab ── */}
           {activeProfileTab === "forms" && (
             <div className="space-y-4">
-              {/* Switch bar */}
-              <div className="inline-flex border border-border rounded-lg overflow-hidden">
-                {(["forms", "flows"] as const).map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => setFormsTabMode(mode)}
-                    className={`px-4 py-2 text-xs font-semibold transition-colors ${formsTabMode === mode ? "text-white" : "bg-white text-[#6B7280] hover:bg-gray-50"
-                      }`}
-                    style={{
-                      fontFamily: "Outfit, sans-serif",
-                      backgroundColor: formsTabMode === mode ? "#4F8EF7" : undefined,
-                    }}
-                  >
-                    {mode === "forms" ? "Forms" : "Intake Flows"}
-                  </button>
-                ))}
-              </div>
+              <PageTopBar
+                modes={[
+                  { id: "forms", label: "Forms", badge: formSubmissionRows.length },
+                  { id: "flows", label: "Intake Flows", badge: clientFlowProgress.length },
+                ]}
+                activeMode={formsTabMode}
+                onModeChange={(mode) => setFormsTabMode(mode as "forms" | "flows")}
+                searchQuery={formSearchQuery}
+                onSearchChange={setFormSearchQuery}
+                searchPlaceholder={formsTabMode === "forms" ? "Search forms..." : "Search intake flows..."}
+              />
 
               {/* ── Forms mode ── */}
               {formsTabMode === "forms" && (
-                clientSubmissions.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-sm" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                      No forms submitted by this client yet.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {groupedSubmissions.map(({ form, subs }) => {
-                      const templateId = `TPL-${String(form.id).padStart(3, "0")}`;
-                      const isGroupExpanded = expandedFormGroupId === form.id;
-                      return (
-                        <div key={form.id} className="p-5 border border-border rounded-xl bg-white space-y-3 shadow-sm">
-                          {/* Header Row */}
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <h3 className="font-bold text-[16px] text-[#1F2937] truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                {form.name}
-                              </h3>
-                              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-[11px] font-medium text-[#6B7280] shrink-0" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                {subs.length}
-                              </span>
-                            </div>
-
-                            <button
-                              onClick={() => setExpandedFormGroupId(isGroupExpanded ? null : form.id)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-gray-50 transition-colors shrink-0"
-                              style={{ fontFamily: "DM Sans, sans-serif", color: "#1F2937" }}
-                            >
-                              View
-                              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isGroupExpanded ? "rotate-180" : ""}`} />
-                            </button>
-                          </div>
-
-                          {/* Stack of Submissions */}
-                          {isGroupExpanded && (
-                            <div className="space-y-3 pt-1">
-                              {subs.map((submission) => {
-                                const isExpanded = expandedSubmissionId === submission.id;
-                                return (
-                                  <div key={submission.id} className="p-4 border border-border rounded-xl bg-white space-y-3">
-                                    <div className="flex items-start justify-between gap-4">
-                                      <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 flex-1">
-                                        <div className="flex flex-col gap-0.5">
-                                          <span className="text-[10px] font-bold uppercase" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
-                                            Template ID
-                                          </span>
-                                          <span className="text-sm" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                                            {templateId}
-                                          </span>
-                                        </div>
-
-                                        <div className="flex flex-col gap-0.5">
-                                          <span className="text-[10px] font-bold uppercase" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
-                                            Status
-                                          </span>
-                                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium w-fit ${submission.status === "completed" ? "bg-green-100 text-green-700"
-                                            : submission.status === "pending" ? "bg-amber-100 text-amber-700"
-                                              : "bg-red-100 text-red-700"
-                                            }`} style={{ fontFamily: "Outfit, sans-serif" }}>
-                                            {submission.status.charAt(0).toUpperCase() + submission.status.slice(1)}
-                                          </span>
-                                        </div>
-
-                                        <div className="flex flex-col gap-0.5">
-                                          <span className="text-[10px] font-bold uppercase" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
-                                            Sent
-                                          </span>
-                                          <span className="text-sm" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                                            {submission.sentAt}
-                                          </span>
-                                        </div>
-
-                                        <div className="flex flex-col gap-0.5">
-                                          <span className="text-[10px] font-bold uppercase" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
-                                            Submitted
-                                          </span>
-                                          <span className="text-sm" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                                            {submission.submittedAt}
-                                          </span>
-                                        </div>
-                                      </div>
-
-                                      <button
-                                        onClick={() => setExpandedSubmissionId(isExpanded ? null : submission.id)}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-gray-50 transition-colors shrink-0"
-                                        style={{ fontFamily: "DM Sans, sans-serif", color: "#1F2937" }}
-                                      >
-                                        View
-                                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
-                                      </button>
-                                    </div>
-
-                                    {/* Expanded Inline Panel */}
-                                    {isExpanded && (
-                                      <div className="mt-3 space-y-3 pt-3 border-t border-border">
-                                        {Object.entries(submission.fields).map(([label, value]: [string, string]) => (
-                                          <div key={label} className="bg-gray-50 rounded-xl p-4">
-                                            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-                                              {label}
-                                            </p>
-                                            {typeof value === "string" && value.startsWith("data:image") ? (
-                                              <div className="border border-slate-200 rounded-lg p-2 bg-white flex items-center justify-center max-w-xs">
-                                                <img src={value} alt={label} className="max-h-20 object-contain" />
-                                              </div>
-                                            ) : (
-                                              <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937" }}>
-                                                {value}
-                                              </p>
-                                            )}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )
+                <div className="bg-white rounded-xl border border-border shadow-xs overflow-hidden">
+                  <TableComponent
+                    data={filteredFormSubmissionRows}
+                    columns={formColumns}
+                    getRowId={(row) => row.id}
+                    rowActions={formRowActions}
+                    onRowClick={(row) => setSelectedSubmissionForView(row.submission)}
+                    enableSelection={false}
+                    enableColumnCustomization={true}
+                    pagination={filteredFormSubmissionRows.length > 20}
+                    defaultRowsPerPage={20}
+                    emptyMessage={formSearchQuery ? "No matching forms found." : "No forms submitted by this client yet."}
+                  />
+                </div>
               )}
 
-              {/* ── Intake Flows mode (new) ── */}
+              {/* ── Intake Flows mode ── */}
               {formsTabMode === "flows" && (
-                clientFlowProgress.length === 0 ? (
+                filteredClientFlowProgress.length === 0 ? (
                   <div className="text-center py-8">
                     <p className="text-sm" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
-                      This client hasn't started any intake flow yet.
+                      {formSearchQuery ? "No matching intake flows found." : "This client hasn't started any intake flow yet."}
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    {clientFlowProgress.map(({ flow, steps, status, requiredDone, requiredTotal }) => {
+                    {filteredClientFlowProgress.map(({ flow, steps, status, requiredDone, requiredTotal }) => {
                       const isFlowExpanded = expandedFlowId === flow.id;
                       return (
                         <div key={flow.id} className="p-5 border border-border rounded-xl bg-white space-y-3 shadow-sm">
@@ -2168,22 +2175,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   </div>
                 )
               )}
-            </div>
-          )}
-
-          {/* ── Notes Tab ── */}
-          {activeProfileTab === "notes" && (
-            <div className="space-y-4">
-              <textarea
-                placeholder="Enter note about this client..."
-                className="w-full px-4 py-3 bg-input-background border border-input rounded-xl resize-none"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-                rows={5}
-              />
-              <Button variant="primary" className="w-full justify-center">
-                <MessageSquare className="w-4 h-4" />
-                Add Note
-              </Button>
             </div>
           )}
 
@@ -2799,7 +2790,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
           {/* ── Documents Tab ── */}
           {activeProfileTab === "documents" && (
-            <DocumentsTab client={client} />
+            <DocumentsTab client={client} entityType="client" />
           )}
 
           {/* ── Transcripts Tab (Matches AI Scribe Page Table Layout) ── */}
@@ -3763,6 +3754,44 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Form Submission Details Modal */}
+          {selectedSubmissionForView && (
+            <Modal
+              isOpen={Boolean(selectedSubmissionForView)}
+              onClose={() => setSelectedSubmissionForView(null)}
+              title={
+                <div>
+                  <h3 className="text-base font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    {allForms.find((f) => f.id === selectedSubmissionForView.formId)?.name || "Form Submission Details"}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-mono mt-0.5">
+                    Template ID: TPL-{String(selectedSubmissionForView.formId).padStart(3, "0")} • Submitted: {selectedSubmissionForView.submittedAt || "Recent"}
+                  </p>
+                </div>
+              }
+              maxWidth="lg"
+            >
+              <div className="space-y-3.5 max-h-[70vh] overflow-y-auto pr-1">
+                {Object.entries(selectedSubmissionForView.fields || {}).map(([label, value]) => (
+                  <div key={label} className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 space-y-1">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      {label}
+                    </p>
+                    {typeof value === "string" && value.startsWith("data:image") ? (
+                      <div className="border border-slate-200 rounded-lg p-2 bg-white flex items-center justify-center max-w-xs mt-1">
+                        <img src={value} alt={label} className="max-h-24 object-contain" />
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-800 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {value ? String(value) : "—"}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Modal>
           )}
         </div>
       </div>

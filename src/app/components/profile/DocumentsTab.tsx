@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   FileText, FileSpreadsheet, FileImage, Plus, Search, Eye, Download,
   Trash2, MoreVertical, ChevronDown, ChevronRight, Upload, PlusCircle, Sparkles,
@@ -390,20 +390,64 @@ export default function DocumentsTab({
     return matchesSearch && matchesStatus;
   });
 
-  // Group templates by categories (Strictly 5 standard categories + custom ones, excluding legacy)
+  // Filter available templates based on entityType scope:
+  // - in client documents: do not show invoice templates or process document templates
+  // - in invoice documents: do not show client templates or process templates (only invoices)
+  // - in process documents: only show process document templates
+  const scopedTemplates = useMemo(() => {
+    const effectiveType = entityType || "client";
+
+    if (effectiveType === "invoice") {
+      return availableTemplates.filter((t) => {
+        const cat = (t.category || "").toLowerCase();
+        return cat === "invoices" || cat === "invoice" || t.entities?.includes("invoice");
+      });
+    }
+
+    if (effectiveType === "process") {
+      return availableTemplates.filter((t) => {
+        const cat = (t.category || "").toLowerCase();
+        if (cat === "invoices" || cat === "invoice") return false;
+        return t.entities?.includes("process") ?? false;
+      });
+    }
+
+    if (effectiveType === "client") {
+      return availableTemplates.filter((t) => {
+        const cat = (t.category || "").toLowerCase();
+        if (cat === "invoices" || cat === "invoice") return false;
+        // If entities are configured, must include "client" and not be process-only
+        if (t.entities && t.entities.length > 0) {
+          return t.entities.includes("client");
+        }
+        return true;
+      });
+    }
+
+    if (effectiveType === "appointment") {
+      return availableTemplates.filter((t) => {
+        const cat = (t.category || "").toLowerCase();
+        if (cat === "invoices" || cat === "invoice") return false;
+        return t.entities?.includes("appointment") ?? true;
+      });
+    }
+
+    return availableTemplates;
+  }, [availableTemplates, entityType]);
+
+  // Group templates by categories derived exclusively from scoped templates
   const legacyToExclude = new Set(["identification", "contract", "financial"]);
-  const allCategoryNames = Array.from(
-    new Set([
-      ...categories,
-      ...availableTemplates.map((t) => t.category || "General"),
-    ])
-  ).filter((cat) => Boolean(cat) && !legacyToExclude.has(cat.toLowerCase()));
+  const allCategoryNames = useMemo(() => {
+    return Array.from(
+      new Set(scopedTemplates.map((t) => t.category || "General"))
+    ).filter((cat) => Boolean(cat) && !legacyToExclude.has(cat.toLowerCase()));
+  }, [scopedTemplates]);
 
   const filteredCategoriesList = allCategoryNames.filter((catName) => {
     if (!templateSearchQuery.trim()) return true;
     const q = templateSearchQuery.toLowerCase();
     const catMatches = catName.toLowerCase().includes(q);
-    const templatesInCat = availableTemplates.filter((t) => (t.category || "General").toLowerCase() === catName.toLowerCase());
+    const templatesInCat = scopedTemplates.filter((t) => (t.category || "General").toLowerCase() === catName.toLowerCase());
     const templateMatches = templatesInCat.some((t) => t.name.toLowerCase().includes(q));
     return catMatches || templateMatches;
   });
@@ -489,7 +533,7 @@ export default function DocumentsTab({
                    {/* Grouped Category Dropdown Accordions */}
                   <div className="max-h-64 overflow-y-auto">
                     {filteredCategoriesList.map((catName) => {
-                      const templatesInCat = availableTemplates.filter(
+                      const templatesInCat = scopedTemplates.filter(
                         (t) => (t.category || "General").toLowerCase() === catName.toLowerCase()
                       );
                       const isExpanded = expandedCategories[catName] ?? (templatesInCat.length > 0);

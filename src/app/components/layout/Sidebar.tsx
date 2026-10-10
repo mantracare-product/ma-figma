@@ -585,6 +585,13 @@ export default function Sidebar() {
     });
   }, [location.pathname, location.search, sections]);
 
+  // Auto-collapse sidebar when navigating to workflow page if currently expanded
+  useEffect(() => {
+    if (location.pathname.startsWith("/process") || location.pathname.startsWith("/workflows")) {
+      setCollapsed(true);
+    }
+  }, [location.pathname, setCollapsed]);
+
   return (
     <aside
       className={`h-full bg-white border-r border-gray-200/90 flex flex-col shrink-0 select-none transition-[width] duration-300 ease-in-out z-30 relative ${

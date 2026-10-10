@@ -14,6 +14,7 @@ import {
 import {
   StoredClientDocument,
   saveClientDocument,
+  getStoredClientDocuments,
 } from "../../../lib/clientDocumentsStore";
 import { loadClientSubmissions, ClientFormSubmission } from "../../../data/submissionsStore";
 import { getScribeSessions, ScribeSession } from "../../../lib/scribeSessionStore";
@@ -858,9 +859,33 @@ export default function GenerateDocumentDrawer({
 
   if (!isOpen) return null;
 
-  const filteredTemplates = templates.filter((tpl) =>
-    tpl.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTemplates = templates
+    .filter((tpl) => {
+      const effectiveType = entityType || "client";
+      const cat = (tpl.category || "").toLowerCase();
+      if (effectiveType === "invoice") {
+        return cat === "invoices" || cat === "invoice" || tpl.entities?.includes("invoice");
+      }
+      if (effectiveType === "process") {
+        if (cat === "invoices" || cat === "invoice") return false;
+        return tpl.entities?.includes("process") ?? false;
+      }
+      if (effectiveType === "client") {
+        if (cat === "invoices" || cat === "invoice") return false;
+        if (tpl.entities && tpl.entities.length > 0) {
+          return tpl.entities.includes("client");
+        }
+        return true;
+      }
+      if (effectiveType === "appointment") {
+        if (cat === "invoices" || cat === "invoice") return false;
+        return tpl.entities?.includes("appointment") ?? true;
+      }
+      return true;
+    })
+    .filter((tpl) =>
+      tpl.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
   // Field change handler
   const handleFieldValueChange = (key: string, val: string) => {
