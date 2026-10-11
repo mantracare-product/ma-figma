@@ -85,6 +85,7 @@ export interface Stage {
   isFinal?: boolean;
   isFinalStage?: boolean;
   stagePosition?: "initial" | "intermediate" | "final" | null;
+  stageCategory?: "in_progress" | "success" | "lost";
   intentTrigger?: string; // "interested" | "not_interested" | "call_back" | "needs_info" | "disqualified" | "custom"
   intentLabel?: string;
   intentDescription?: string;
@@ -471,6 +472,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
         color: "#22C55E",
         isFinalStage: true,
         stagePosition: "final",
+        stageCategory: "success",
         intentTrigger: "interested",
         intentLabel: "Interested",
         intentDescription: "Caller agrees to schedule consultation or requests more info to proceed",
@@ -484,6 +486,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
         color: "#EF4444",
         isFinalStage: true,
         stagePosition: "final",
+        stageCategory: "lost",
         intentTrigger: "not_interested",
         intentLabel: "Not Interested",
         intentDescription: "Caller politely declines or indicates no current need",
@@ -509,6 +512,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
         color: "#F59E0B",
         isFinalStage: true,
         stagePosition: "final",
+        stageCategory: "lost",
         intentTrigger: "call_back",
         intentLabel: "Call Back Later",
         intentDescription: "Caller requests follow-up at a convenient time",
@@ -638,6 +642,75 @@ export function getStoredProcesses(): Process[] {
       return { ...p, entityType: "client" as EntityType };
     }
     return p;
+  });
+
+  // Ensure stageCategory is properly populated for outcome stages, strictly enforcing SINGLE WON STAGE per process
+  list = list.map((p) => {
+    let hasWonStage = false;
+    const updatedStages = p.stages.map((st) => {
+      const lower = (st.name || "").toLowerCase().trim();
+
+      // Check explicit lost intents first to avoid substring collision (e.g. "not interested" containing "interested")
+      const isLostExplicit =
+        st.intentTrigger === "not_interested" ||
+        st.intentTrigger === "call_back" ||
+        lower.includes("not interested") ||
+        lower.includes("not_interested") ||
+        lower.includes("lost") ||
+        lower.includes("unqualified") ||
+        lower.includes("cancel") ||
+        lower.includes("call back") ||
+        (lower.includes("not") && lower.includes("interest"));
+
+      if (isLostExplicit) {
+        if (st.stageCategory !== "lost" || !st.isFinalStage) {
+          changed = true;
+          return { ...st, stageCategory: "lost" as const, isFinalStage: true, isFinal: true };
+        }
+        return st;
+      }
+
+      // Check won candidate
+      const isWonCandidate =
+        !isLostExplicit &&
+        (st.stageCategory === "success" ||
+          st.intentTrigger === "interested" ||
+          lower === "won" ||
+          lower === "interested" ||
+          lower.includes("closed won") ||
+          (lower.includes("interested") && !lower.includes("not")) ||
+          lower.includes("qualified") ||
+          lower.includes("success"));
+
+      if (isWonCandidate) {
+        if (!hasWonStage) {
+          hasWonStage = true;
+          if (st.stageCategory !== "success") {
+            changed = true;
+            return { ...st, stageCategory: "success" as const };
+          }
+          return st;
+        } else {
+          // Process already has a won stage! Enforce single Won stage rule.
+          changed = true;
+          return { ...st, stageCategory: "lost" as const, isFinalStage: true, isFinal: true };
+        }
+      }
+
+      // If stage was previously tagged success, check against single won constraint
+      if (st.stageCategory === "success") {
+        if (!hasWonStage) {
+          hasWonStage = true;
+          return st;
+        } else {
+          changed = true;
+          return { ...st, stageCategory: "lost" as const, isFinalStage: true, isFinal: true };
+        }
+      }
+
+      return st;
+    });
+    return { ...p, stages: updatedStages };
   });
 
   // Ensure singleton processes for non-client entities exist

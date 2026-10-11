@@ -129,8 +129,10 @@ export default function StepParametersFields({
     | "genericCondition"
     | "conditionNodeSingle"
     | "conditionNodeMulti"
+    | "conditionNodeDynamic"
     | "triggerConditionSingle"
     | "triggerConditionMulti"
+    | "triggerConditionDynamic"
   >("monitoredFields");
   const [targetConditionIndex, setTargetConditionIndex] = useState<number | null>(null);
   const [targetTriggerConditionIndex, setTargetTriggerConditionIndex] = useState<number | null>(null);
@@ -425,10 +427,51 @@ export default function StepParametersFields({
             fieldLabel: fieldDef?.label || key,
             fieldSource: fieldDef?.module || "client",
             operator: "Equal To",
+            valueType: "static" as const,
             value: "",
           };
         });
-        onChange({ conditions: [...currentRules, ...newConds] });
+        onChange({ conditions: [...currentRules, ...newConds], triggerConditions: [...currentRules, ...newConds] });
+      }
+    } else if (fieldModalMode === "conditionNodeDynamic") {
+      if (targetConditionIndex !== null && selectedKeys.length > 0) {
+        const key = selectedKeys[0];
+        const fieldDef = getFieldDefByKey(key);
+        const currentRules = Array.isArray(params.conditions) && params.conditions.length > 0
+          ? params.conditions
+          : [{ id: `cond-1`, field: "", operator: "Equal To", valueType: "static", value: "" }];
+        const updated = currentRules.map((c: any, i: number) =>
+          i === targetConditionIndex
+            ? {
+                ...c,
+                valueType: "dynamic",
+                dynamicField: key,
+                dynamicFieldLabel: fieldDef?.label || key,
+                dynamicFieldSource: fieldDef?.module || "client",
+              }
+            : c
+        );
+        onChange({ conditions: updated, triggerConditions: updated });
+      }
+    } else if (fieldModalMode === "triggerConditionDynamic") {
+      if (targetTriggerConditionIndex !== null && selectedKeys.length > 0) {
+        const key = selectedKeys[0];
+        const fieldDef = getFieldDefByKey(key);
+        const currentTrigConds = Array.isArray(params.triggerConditions) && params.triggerConditions.length > 0
+          ? params.triggerConditions
+          : (Array.isArray(params.conditions) ? params.conditions : [{ id: `trig-cond-1`, field: "", operator: "Equal To", valueType: "static", value: "" }]);
+        const updated = currentTrigConds.map((c: any, i: number) =>
+          i === targetTriggerConditionIndex
+            ? {
+                ...c,
+                valueType: "dynamic",
+                dynamicField: key,
+                dynamicFieldLabel: fieldDef?.label || key,
+                dynamicFieldSource: fieldDef?.module || "appointment",
+              }
+            : c
+        );
+        onChange({ triggerConditions: updated, conditions: updated });
       }
     } else if (fieldModalMode === "triggerConditionSingle") {
       if (targetTriggerConditionIndex !== null && selectedKeys.length > 0) {
@@ -605,28 +648,28 @@ export default function StepParametersFields({
     fieldLabel?: string;
     fieldSource?: string;
     operator: string;
+    valueType?: "static" | "dynamic";
     value: any;
+    dynamicField?: string;
+    dynamicFieldLabel?: string;
+    dynamicFieldSource?: string;
   }> = Array.isArray(params.conditions) && params.conditions.length > 0
     ? params.conditions
-    : [
-        {
-          id: `cond-init-1`,
-          field: params.field || "",
-          fieldLabel: params.fieldLabel || "",
-          fieldSource: params.fieldSource || "client",
-          operator: params.operator || "Equal To",
-          value: params.value ?? "",
-        }
-      ];
+    : (Array.isArray(params.triggerConditions) && params.triggerConditions.length > 0
+      ? params.triggerConditions
+      : [
+          {
+            id: `cond-init-1`,
+            field: params.field || "",
+            fieldLabel: params.fieldLabel || "",
+            fieldSource: params.fieldSource || "client",
+            operator: params.operator || "Equal To",
+            valueType: "static",
+            value: params.value ?? "",
+          }
+        ]);
 
-  const triggerConditions: Array<{
-    id: string;
-    field: string;
-    fieldLabel?: string;
-    fieldSource?: string;
-    operator: string;
-    value: any;
-  }> = Array.isArray(params.triggerConditions) ? params.triggerConditions : [];
+  const triggerConditions = conditionRules;
 
   const fieldUpdateBlocks = params.fieldUpdateBlocks ?? [
     { fieldType: "client", fieldToEdit: "", fieldLabel: "", valueSource: "static", updateValue: "" }
@@ -716,346 +759,257 @@ export default function StepParametersFields({
     </div>
   );
 
-  return (
-    <div className="space-y-6 text-left">
-      {/* ───────────── CONDITIONS EDITOR (Only for Trigger Config) ───────────── */}
-      {stepKey === "trigger_config" && (
-        <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-          <div
-            onClick={() => conditionsEnabled && setConditionsSectionExpanded(!conditionsSectionExpanded)}
-            className={`flex items-center justify-between px-4 py-3 ${conditionsEnabled ? "cursor-pointer select-none" : ""}`}
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                Conditions
-              </span>
-              <span className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>— optional</span>
-              <InfoTooltip text="Add rules here to make this step run only in specific situations, like a certain field value or something the caller said." />
-            </div>
-            <div className="flex items-center gap-3">
-              <ChevronDown
-                className={`w-4 h-4 text-muted-foreground transition-transform ${!conditionsEnabled ? "text-gray-300 cursor-not-allowed opacity-50" : conditionsSectionExpanded ? "rotate-180" : ""}`}
-              />
-              <label
-                onClick={(e) => e.stopPropagation()}
-                className="relative inline-flex items-center cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={conditionsEnabled}
-                  onChange={(e) => {
-                    const val = e.target.checked;
-                    onChange({ conditionsEnabled: val });
-                    if (val) setConditionsSectionExpanded(true);
-                  }}
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-              </label>
-            </div>
+  const renderConditionRulesBuilder = (title = "Condition Rules") => {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between pb-1">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+            <Split className="w-4 h-4 text-blue-600" />
+            <span>{title}</span>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setFieldModalMode("conditionNodeMulti");
+              setIsFieldRegistryModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Select Fields from Registry</span>
+          </button>
+        </div>
 
-          {conditionsEnabled && conditionsSectionExpanded && (
-            <div className="border-t border-gray-100 px-5 py-4 space-y-3 bg-gray-50/40">
-              <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                This step will only execute when all specified conditions are met.
-              </p>
+        {conditionRules.map((cond, index) => {
+          const fieldDef = getFieldDefByKey(cond.field);
+          const operators = getOperatorsForField(fieldDef);
+          const isNullaryOp = cond.operator === "Is Empty" || cond.operator === "Is Not Empty";
+          const isDynamic = cond.valueType === "dynamic";
+          const dynamicFieldDef = cond.dynamicField ? getFieldDefByKey(cond.dynamicField) : null;
 
-              {stepTrigger === "incall" || stepTrigger === "inchat" ? (
-                <div className="space-y-4">
-                  {/* Field Conditions */}
-                  <div className="rounded-lg border border-border overflow-hidden bg-white">
-                    <button
-                      onClick={() => setFieldConditionsGroupExpanded(!fieldConditionsGroupExpanded)}
-                      className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/70 hover:bg-gray-100/50 transition-colors text-left"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          Field Conditions
-                        </span>
-                        <InfoTooltip text="Check the value of a specific field, like status or stage, before running this step." />
-                        {fieldConditions.length > 0 && (
-                          <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-semibold">
-                            {fieldConditions.length}
-                          </span>
-                        )}
-                      </div>
-                      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${fieldConditionsGroupExpanded ? "rotate-180" : ""}`} />
-                    </button>
-
-                    {fieldConditionsGroupExpanded && (
-                      <div className="border-t border-border px-4 py-3 space-y-3 bg-white">
-                        <div className="flex items-center justify-between pb-1">
-                          <span className="text-xs font-semibold text-slate-700">Filter Conditions</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFieldModalMode("fieldConditionMulti");
-                              setIsFieldRegistryModalOpen(true);
-                            }}
-                            className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>Select Fields from Registry</span>
-                          </button>
-                        </div>
-
-                        {fieldConditions.map((cond: any, index: number) => (
-                          <div key={cond.id} className="border border-border rounded-lg overflow-hidden bg-white p-3 space-y-3 shadow-2xs">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-semibold text-gray-500">Condition #{index + 1}</span>
-                              <button
-                                onClick={() => onChange({ fieldConditions: fieldConditions.filter((c: any) => c.id !== cond.id) })}
-                                className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1 cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" /> Remove
-                              </button>
-                            </div>
-
-                            {/* Field Registry Selector */}
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <label className="text-[11px] font-semibold text-slate-700">Target Field</label>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setTargetConditionIndex(index);
-                                    setFieldModalMode("fieldConditionSingle");
-                                    setIsFieldRegistryModalOpen(true);
-                                  }}
-                                  className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
-                                >
-                                  {cond.field ? "Change Field" : "Select from Registry"}
-                                </button>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setTargetConditionIndex(index);
-                                  setFieldModalMode("fieldConditionSingle");
-                                  setIsFieldRegistryModalOpen(true);
-                                }}
-                                className="w-full flex items-center justify-between px-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50/70 hover:bg-white hover:border-blue-400 transition-all text-left cursor-pointer"
-                              >
-                                {cond.field ? (
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
-                                      {cond.fieldSource || "field"}
-                                    </span>
-                                    <span className="font-semibold text-slate-900 truncate">
-                                      {cond.fieldLabel || cond.field}
-                                    </span>
-                                    <code className="text-[10px] text-slate-400 font-mono">({cond.field})</code>
-                                  </div>
-                                ) : (
-                                  <span className="text-slate-400">Click to select field from registry...</span>
-                                )}
-                                <Sliders className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
-                              </button>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2">
-                              <select
-                                value={cond.operator}
-                                onChange={e => {
-                                  const updated = fieldConditions.map((c: any) => c.id === cond.id ? { ...c, operator: e.target.value } : c);
-                                  onChange({ fieldConditions: updated });
-                                }}
-                                className="px-3 py-2 text-xs border rounded-md bg-white"
-                              >
-                                <option value="">Operator...</option>
-                                <option value="Equal To">Equal To</option>
-                                <option value="Not Equal To">Not Equal To</option>
-                                <option value="Includes">Includes</option>
-                                <option value="Greater Than">Greater Than</option>
-                                <option value="Less Than">Less Than</option>
-                                <option value="Is Empty">Is Empty</option>
-                                <option value="Is Not Empty">Is Not Empty</option>
-                              </select>
-                              {cond.operator !== "Is Empty" && cond.operator !== "Is Not Empty" && (
-                                <input
-                                  type="text"
-                                  value={cond.value}
-                                  placeholder="Value..."
-                                  onChange={e => {
-                                    const updated = fieldConditions.map((c: any) => c.id === cond.id ? { ...c, value: e.target.value } : c);
-                                    onChange({ fieldConditions: updated });
-                                  }}
-                                  className="px-3 py-2 text-xs border rounded-md"
-                                />
-                              )}
-                            </div>
-                          </div>
-                        ))}
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFieldModalMode("fieldConditionMulti");
-                              setIsFieldRegistryModalOpen(true);
-                            }}
-                            className="flex-1 py-2 text-xs border border-dashed border-blue-300 text-blue-600 bg-blue-50/20 hover:bg-blue-50/50 rounded-lg flex items-center justify-center gap-1.5 font-semibold cursor-pointer transition-colors"
-                          >
-                            <Sliders className="w-3.5 h-3.5" /> Select Fields from Registry
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onChange({
-                              fieldConditions: [...fieldConditions, { id: `field-cond-${Date.now()}`, fieldSource: "", field: "", operator: "Equal To", value: "" }]
-                            })}
-                            className="py-2 px-3 text-xs border border-dashed border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg flex items-center justify-center gap-1 font-medium cursor-pointer transition-colors"
-                          >
-                            <Plus className="w-3.5 h-3.5" /> Add Blank
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Intent Conditions */}
-                  <div className="rounded-lg border border-border overflow-hidden bg-white">
-                    <button
-                      onClick={() => setIntentConditionsGroupExpanded(!intentConditionsGroupExpanded)}
-                      className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/70 hover:bg-gray-100/50 transition-colors text-left"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          Intent Conditions
-                        </span>
-                        <InfoTooltip text="Run this step only when the caller says something matching one of these intents, like asking for billing." />
-                        {intentConditions.length > 0 && (
-                          <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-semibold">
-                            {intentConditions.length}
-                          </span>
-                        )}
-                      </div>
-                      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${intentConditionsGroupExpanded ? "rotate-180" : ""}`} />
-                    </button>
-
-                    {intentConditionsGroupExpanded && (
-                      <div className="border-t border-border px-4 py-3 space-y-3 bg-white">
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={intentInput}
-                            placeholder="Type caller intent (e.g., billing_query)..."
-                            onChange={e => setIntentInput(e.target.value)}
-                            className="flex-1 px-3 py-2 text-xs border rounded-md"
-                          />
-                          <button
-                            onClick={() => {
-                              if (!intentInput.trim()) return;
-                              onChange({ intentConditions: [...intentConditions, { id: `intent-cond-${Date.now()}`, value: intentInput.trim() }] });
-                              setIntentInput("");
-                            }}
-                            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold"
-                          >
-                            Add
-                          </button>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {intentConditions.map((c: any) => (
-                            <span key={c.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium">
-                              {c.value}
-                              <button onClick={() => onChange({ intentConditions: intentConditions.filter((x: any) => x.id !== c.id) })} className="hover:text-red-500">
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                /* Stage / Post-Call Conditions */
-                <div className="space-y-3">
-                  {conditions.map((cond: any, index: number) => (
-                    <div key={cond.id} className="p-3 border rounded-lg space-y-3 bg-white">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-gray-500">Condition #{index + 1}</span>
-                        <button
-                          onClick={() => onChange({ conditions: conditions.filter((c: any) => c.id !== cond.id) })}
-                          className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" /> Remove
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          value={cond.fieldSource}
-                          onChange={e => {
-                            const updated = conditions.map((c: any) => c.id === cond.id ? { ...c, fieldSource: e.target.value, field: "" } : c);
-                            onChange({ conditions: updated });
-                          }}
-                          className="px-3 py-2 text-xs border rounded-md bg-white"
-                        >
-                          <option value="">Select source...</option>
-                          {FETCH_FIELD_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                        </select>
-                        <select
-                          value={cond.field}
-                          disabled={!cond.fieldSource}
-                          onChange={e => {
-                            const updated = conditions.map((c: any) => c.id === cond.id ? { ...c, field: e.target.value } : c);
-                            onChange({ conditions: updated });
-                          }}
-                          className="px-3 py-2 text-xs border rounded-md bg-white"
-                        >
-                          <option value="">Select field...</option>
-                          {(FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields || []).map(f => (
-                            <option key={f.value} value={f.value}>{f.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          value={cond.operator}
-                          onChange={e => {
-                            const updated = conditions.map((c: any) => c.id === cond.id ? { ...c, operator: e.target.value } : c);
-                            onChange({ conditions: updated });
-                          }}
-                          className="px-3 py-2 text-xs border rounded-md bg-white"
-                        >
-                          <option value="">Operator...</option>
-                          <option value="Equal To">Equal To</option>
-                          <option value="Not Equal To">Not Equal To</option>
-                          <option value="Includes">Includes</option>
-                          <option value="Is Empty">Is Empty</option>
-                          <option value="Is Not Empty">Is Not Empty</option>
-                        </select>
-                        {cond.operator !== "Is Empty" && cond.operator !== "Is Not Empty" && (
-                          <input
-                            type="text"
-                            value={cond.value}
-                            placeholder="Value..."
-                            onChange={e => {
-                              const updated = conditions.map((c: any) => c.id === cond.id ? { ...c, value: e.target.value } : c);
-                              onChange({ conditions: updated });
-                            }}
-                            className="px-3 py-2 text-xs border rounded-md"
-                          />
-                        )}
-                      </div>
-                    </div>
-                  ))}
+          return (
+            <div key={cond.id || index} className="border border-border rounded-xl overflow-hidden bg-white p-3.5 space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-500">Condition #{index + 1}</span>
+                {conditionRules.length > 1 && (
                   <button
-                    onClick={() => onChange({
-                      conditions: [...conditions, { id: `cond-${Date.now()}`, fieldSource: "", field: "", operator: "", value: "" }]
-                    })}
-                    className="w-full py-2 text-xs border border-dashed border-gray-300 text-blue-600 rounded-md hover:bg-blue-50/20 flex items-center justify-center gap-1"
+                    type="button"
+                    onClick={() => {
+                      const updated = conditionRules.filter((_, i) => i !== index);
+                      onChange({ conditions: updated, triggerConditions: updated });
+                    }}
+                    className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1 cursor-pointer"
                   >
-                    <Plus className="w-3.5 h-3.5" /> Add Condition
+                    <Trash2 className="w-3.5 h-3.5" /> Remove
                   </button>
+                )}
+              </div>
+
+              {/* Field Selection (Primary Field) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold text-slate-700">Primary Field</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetConditionIndex(index);
+                      setFieldModalMode("conditionNodeSingle");
+                      setIsFieldRegistryModalOpen(true);
+                    }}
+                    className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                  >
+                    {cond.field ? "Change Field" : "Select from Registry"}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetConditionIndex(index);
+                    setFieldModalMode("conditionNodeSingle");
+                    setIsFieldRegistryModalOpen(true);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50/70 hover:bg-white hover:border-blue-400 transition-all text-left cursor-pointer"
+                >
+                  {cond.field ? (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
+                        {cond.fieldSource || fieldDef?.module || "field"}
+                      </span>
+                      <span className="font-semibold text-slate-900 truncate">
+                        {cond.fieldLabel || fieldDef?.label || cond.field}
+                      </span>
+                      <code className="text-[10px] text-slate-400 font-mono">({cond.field})</code>
+                    </div>
+                  ) : (
+                    <span className="text-slate-400">Click to select primary field from registry...</span>
+                  )}
+                  <Sliders className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
+                </button>
+              </div>
+
+              {/* Operator */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Operator</label>
+                <select
+                  value={cond.operator || "Equal To"}
+                  onChange={(e) => {
+                    const newOp = e.target.value;
+                    const updated = conditionRules.map((c, i) =>
+                      i === index ? { ...c, operator: newOp } : c
+                    );
+                    onChange({ conditions: updated, triggerConditions: updated });
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs font-medium focus:border-blue-500 outline-none cursor-pointer"
+                >
+                  {operators.map((op) => (
+                    <option key={op.value} value={op.value}>
+                      {op.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Comparison Value (Static vs Dynamic) */}
+              {!isNullaryOp && (
+                <div className="space-y-2 pt-1 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-slate-700">Comparison Value</label>
+                    {/* Segmented Toggle for Static vs Dynamic */}
+                    <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = conditionRules.map((c, i) =>
+                            i === index ? { ...c, valueType: "static" as const } : c
+                          );
+                          onChange({ conditions: updated, triggerConditions: updated });
+                        }}
+                        className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                          !isDynamic
+                            ? "bg-white text-blue-700 shadow-2xs"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        Static Value
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = conditionRules.map((c, i) =>
+                            i === index ? { ...c, valueType: "dynamic" as const } : c
+                          );
+                          onChange({ conditions: updated, triggerConditions: updated });
+                        }}
+                        className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                          isDynamic
+                            ? "bg-white text-blue-700 shadow-2xs"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        Dynamic Field
+                      </button>
+                    </div>
+                  </div>
+
+                  {isDynamic ? (
+                    /* Dynamic Field Picker */
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTargetConditionIndex(index);
+                          setFieldModalMode("conditionNodeDynamic");
+                          setIsFieldRegistryModalOpen(true);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 text-xs border border-blue-200 rounded-lg bg-blue-50/30 hover:bg-blue-50 hover:border-blue-400 transition-all text-left cursor-pointer"
+                      >
+                        {cond.dynamicField ? (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
+                              {cond.dynamicFieldSource || dynamicFieldDef?.module || "field"}
+                            </span>
+                            <span className="font-semibold text-slate-900 truncate">
+                              {cond.dynamicFieldLabel || dynamicFieldDef?.label || cond.dynamicField}
+                            </span>
+                            <code className="text-[10px] text-slate-400 font-mono">({cond.dynamicField})</code>
+                          </div>
+                        ) : (
+                          <span className="text-blue-500">Select dynamic field to compare against...</span>
+                        )}
+                        <Sliders className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
+                      </button>
+                      <p className="text-[10px] text-slate-400">
+                        Compares {cond.fieldLabel || cond.field || "primary field"} dynamically against {cond.dynamicFieldLabel || cond.dynamicField || "selected secondary field"}.
+                      </p>
+                    </div>
+                  ) : (
+                    /* Static Value Input */
+                    renderFieldValueInput(
+                      cond.field,
+                      cond.fieldSource || fieldDef?.module,
+                      cond.value,
+                      (newVal) => {
+                        const updated = conditionRules.map((c, i) =>
+                          i === index ? { ...c, value: newVal } : c
+                        );
+                        onChange({ conditions: updated, triggerConditions: updated });
+                      },
+                      "Enter static value..."
+                    )
+                  )}
                 </div>
               )}
             </div>
-          )}
+          );
+        })}
+
+        <div className="flex items-center gap-2 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              setFieldModalMode("conditionNodeMulti");
+              setIsFieldRegistryModalOpen(true);
+            }}
+            className="flex-1 py-2 text-xs border border-dashed border-blue-300 text-blue-600 bg-blue-50/20 hover:bg-blue-50/50 rounded-lg flex items-center justify-center gap-1.5 font-semibold cursor-pointer transition-colors"
+          >
+            <Sliders className="w-3.5 h-3.5" /> Select Fields from Registry
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const newRule = {
+                id: `cond-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                field: "",
+                fieldLabel: "",
+                fieldSource: "client",
+                operator: "Equal To",
+                valueType: "static" as const,
+                value: "",
+              };
+              onChange({
+                conditions: [...conditionRules, newRule],
+                triggerConditions: [...conditionRules, newRule],
+              });
+            }}
+            className="py-2 px-3 text-xs border border-dashed border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg flex items-center justify-center gap-1 font-medium cursor-pointer transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add Blank
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6 text-left">
+      {/* ───────────── CONDITIONS EDITOR (Trigger Config) ───────────── */}
+      {stepKey === "trigger_config" && (
+        <div className="w-full rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
+          {renderConditionRulesBuilder("Trigger Conditions")}
         </div>
       )}
 
-      {/* ───────────── PARAMETERS FIELDS ACCORDION ───────────── */}
+            {/* ───────────── PARAMETERS FIELDS ACCORDION ───────────── */}
       <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
         <div
           onClick={() => setParametersSectionExpanded(!parametersSectionExpanded)}
@@ -3269,167 +3223,7 @@ export default function StepParametersFields({
             )}
 
             {/* ───────────── CONDITION NODE RULES ───────────── */}
-            {stepKey === "condition" && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between pb-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                    <Split className="w-4 h-4 text-blue-600" />
-                    <span>Condition Rules</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFieldModalMode("conditionNodeMulti");
-                      setIsFieldRegistryModalOpen(true);
-                    }}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Select Fields from Registry</span>
-                  </button>
-                </div>
-
-                {conditionRules.map((cond, index) => {
-                  const fieldDef = getFieldDefByKey(cond.field);
-                  const operators = getOperatorsForField(fieldDef);
-                  const isNullaryOp = cond.operator === "Is Empty" || cond.operator === "Is Not Empty";
-
-                  return (
-                    <div key={cond.id || index} className="border border-border rounded-xl overflow-hidden bg-white p-3.5 space-y-3 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-gray-500">Condition #{index + 1}</span>
-                        {conditionRules.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = conditionRules.filter((_, i) => i !== index);
-                              onChange({ conditions: updated });
-                            }}
-                            className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" /> Remove
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Field Selection */}
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[11px] font-semibold text-slate-700">Select Field</label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTargetConditionIndex(index);
-                              setFieldModalMode("conditionNodeSingle");
-                              setIsFieldRegistryModalOpen(true);
-                            }}
-                            className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
-                          >
-                            {cond.field ? "Change Field" : "Select from Registry"}
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTargetConditionIndex(index);
-                            setFieldModalMode("conditionNodeSingle");
-                            setIsFieldRegistryModalOpen(true);
-                          }}
-                          className="w-full flex items-center justify-between px-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50/70 hover:bg-white hover:border-blue-400 transition-all text-left cursor-pointer"
-                        >
-                          {cond.field ? (
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
-                                {cond.fieldSource || fieldDef?.module || "field"}
-                              </span>
-                              <span className="font-semibold text-slate-900 truncate">
-                                {cond.fieldLabel || fieldDef?.label || cond.field}
-                              </span>
-                              <code className="text-[10px] text-slate-400 font-mono">({cond.field})</code>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400">Click to select field from registry...</span>
-                          )}
-                          <Sliders className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
-                        </button>
-                      </div>
-
-                      {/* Operator & Value */}
-                      <div className={`grid ${isNullaryOp ? "grid-cols-1" : "grid-cols-2"} gap-2`}>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">Operator</label>
-                          <select
-                            value={cond.operator || "Equal To"}
-                            onChange={(e) => {
-                              const newOp = e.target.value;
-                              const updated = conditionRules.map((c, i) =>
-                                i === index ? { ...c, operator: newOp } : c
-                              );
-                              onChange({ conditions: updated });
-                            }}
-                            className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs font-medium focus:border-blue-500 outline-none cursor-pointer"
-                          >
-                            {operators.map((op) => (
-                              <option key={op.value} value={op.value}>
-                                {op.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {!isNullaryOp && (
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">Field Value</label>
-                            {renderFieldValueInput(
-                              cond.field,
-                              cond.fieldSource || fieldDef?.module,
-                              cond.value,
-                              (newVal) => {
-                                const updated = conditionRules.map((c, i) =>
-                                  i === index ? { ...c, value: newVal } : c
-                                );
-                                onChange({ conditions: updated });
-                              },
-                              "Enter value..."
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFieldModalMode("conditionNodeMulti");
-                      setIsFieldRegistryModalOpen(true);
-                    }}
-                    className="flex-1 py-2 text-xs border border-dashed border-blue-300 text-blue-600 bg-blue-50/20 hover:bg-blue-50/50 rounded-lg flex items-center justify-center gap-1.5 font-semibold cursor-pointer transition-colors"
-                  >
-                    <Sliders className="w-3.5 h-3.5" /> Select Fields from Registry
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newRule = {
-                        id: `cond-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-                        field: "",
-                        fieldLabel: "",
-                        fieldSource: "client",
-                        operator: "Equal To",
-                        value: "",
-                      };
-                      onChange({ conditions: [...conditionRules, newRule] });
-                    }}
-                    className="py-2 px-3 text-xs border border-dashed border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg flex items-center justify-center gap-1 font-medium cursor-pointer transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add Blank
-                  </button>
-                </div>
-              </div>
-            )}
+            {stepKey === "condition" && renderConditionRulesBuilder("Condition Rules")}
 
             {stepKey === "wait" && (
               <div className="space-y-4">
@@ -3631,6 +3425,7 @@ export default function StepParametersFields({
                       {renderField("Process Filter",
                         <select
                           value={params.triggerProcessId || "all"}
+                          disabled={isStageScope || params.scope === "stage"}
                           onChange={(e) => {
                             const pId = e.target.value;
                             const proc = effectiveProcesses.find((p: any) => p.id === pId);
@@ -3641,7 +3436,7 @@ export default function StepParametersFields({
                               triggerStageName: "Any Stage",
                             });
                           }}
-                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
+                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs disabled:opacity-80 disabled:bg-slate-50 disabled:cursor-not-allowed"
                         >
                           <option value="all">Any Process</option>
                           {effectiveProcesses.map((proc: any) => (
@@ -3654,10 +3449,11 @@ export default function StepParametersFields({
                       {(() => {
                         const selectedProc = effectiveProcesses.find((p: any) => p.id === params.triggerProcessId);
                         const stages = selectedProc?.stages || [];
+                        const isStageLocked = isStageScope || params.scope === "stage";
                         return renderField("Stage Filter",
                           <select
                             value={params.triggerStageId || "all"}
-                            disabled={!params.triggerProcessId || params.triggerProcessId === "all"}
+                            disabled={isStageLocked || !params.triggerProcessId || params.triggerProcessId === "all"}
                             onChange={(e) => {
                               const sId = e.target.value;
                               const stg = stages.find((s: any) => s.id === sId);
@@ -3666,7 +3462,7 @@ export default function StepParametersFields({
                                 triggerStageName: stg?.name || "Any Stage",
                               });
                             }}
-                            className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs disabled:opacity-60 disabled:cursor-not-allowed"
+                            className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs disabled:opacity-80 disabled:bg-slate-50 disabled:cursor-not-allowed"
                           >
                             <option value="all">
                               {params.triggerProcessId && params.triggerProcessId !== "all"

@@ -957,10 +957,38 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
 };
 
-export const useInvoices = () => {
+const FALLBACK_INVOICE_CONTEXT: InvoiceContextType = {
+  invoices: [],
+  payments: [],
+  clientCredits: {},
+  getClientCredit: () => 0,
+  addClientCredit: () => {},
+  useClientCredit: () => {},
+  fieldRules: DEFAULT_FIELD_RULES,
+  updateFieldRule: () => {},
+  createInvoiceFromAppointment: () => ({} as ClientInvoice),
+  updateInvoice: () => {},
+  deleteInvoice: () => {},
+  updateInvoiceStatus: () => {},
+  sendInvoice: () => {},
+  simulatePayment: () => {},
+  recordPayment: () => {},
+  getPaymentsByInvoice: () => [],
+  getPaymentsByClient: () => [],
+  voidInvoice: () => {},
+  getInvoiceById: () => undefined,
+  getInvoicesByClient: () => [],
+  getReportData: () => ({ kpis: [], chartData: [] }),
+  getReportRows: () => [],
+  reports: [],
+  saveReport: (report) => ({ ...report, id: "fallback" } as any),
+  deleteReport: () => {},
+};
+
+export const useInvoices = (): InvoiceContextType => {
   const ctx = useContext(InvoiceContext);
   if (!ctx) {
-    throw new Error("useInvoices must be used within an InvoiceProvider");
+    return FALLBACK_INVOICE_CONTEXT;
   }
   return ctx;
 };

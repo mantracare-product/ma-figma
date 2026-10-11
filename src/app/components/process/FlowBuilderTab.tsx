@@ -1508,6 +1508,13 @@ export default function FlowBuilderTab({
       const trigDesc = node.config?.triggerDescription || trigItem?.desc || "";
       const trigIconKey = node.config?.triggerIconKey || trigItem?.iconKey || "zap";
 
+      const targetProc = effectiveProcesses.find(p => p.id === currentProcessId || p.name === processName);
+      const targetStage = targetProc?.stages?.find((s: any) => s.name === stageName || s.id === stageName);
+      const defaultProcessId = (scope === "stage" && targetProc) ? targetProc.id : (node.config?.triggerProcessId || "all");
+      const defaultProcessName = (scope === "stage" && targetProc) ? targetProc.name : (node.config?.triggerProcessName || "Any Process");
+      const defaultStageId = (scope === "stage" && targetStage) ? targetStage.id : (node.config?.triggerStageId || "all");
+      const defaultStageName = (scope === "stage" && targetStage) ? targetStage.name : (node.config?.triggerStageName || "Any Stage");
+
       setConfigNode({
         ...node,
         label: trigLabel,
@@ -1518,14 +1525,17 @@ export default function FlowBuilderTab({
           appointmentServiceFilter: "all",
           appointmentProviderFilter: "all",
           invoicePaymentMode: "all",
-          triggerProcessId: "all",
-          triggerStageId: "all",
           monitoredFields: [],
           matchLogic: "any",
           conditionsEnabled: false,
           conditions: [],
           fieldConditions: [],
           ...(node.config || {}),
+          triggerProcessId: defaultProcessId,
+          triggerProcessName: defaultProcessName,
+          triggerStageId: defaultStageId,
+          triggerStageName: defaultStageName,
+          scope: scope || "stage",
           category: trigCategory,
           triggerType: trigCategory,
           selectedEvent: trigEvent,
@@ -2675,7 +2685,10 @@ export default function FlowBuilderTab({
               executionType: "wait" as const,
               delayValue: 0,
               delayUnit: "Minute",
-              params: configNode.config || {},
+              params: {
+                scope: scope || "stage",
+                ...(configNode.config || {}),
+              },
             }
           : (targetStepId ? (findStepInTree(workflowSteps, targetStepId)?.step || workflowSteps.find(s => s.id === targetStepId) || null) : null);
         const isStepDrawerOpen = Boolean(configNode && targetStep);

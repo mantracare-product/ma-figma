@@ -43,7 +43,28 @@ export function evaluateCondition(condition: any, data: Record<string, any> = {}
   }
 
   const op = (condition.op || condition.operator || "equals").toLowerCase();
-  const targetValue = condition.value ?? condition.filterValue ?? condition.targetValue ?? "";
+  let targetValue = condition.value ?? condition.filterValue ?? condition.targetValue ?? "";
+
+  // Dynamic field value comparison support (e.g. Due Amount > Paid Amount)
+  if (condition.valueType === "dynamic" && condition.dynamicField) {
+    const dynKey = condition.dynamicField;
+    let dynActual = data[dynKey];
+    if (dynActual === undefined && dynKey.includes(".")) {
+      const parts = dynKey.split(".");
+      dynActual = data[parts[parts.length - 1]];
+    }
+    if (dynActual === undefined) {
+      const lowerKey = dynKey.toLowerCase();
+      const shortKey = dynKey.includes(".") ? dynKey.split(".").pop()?.toLowerCase() : lowerKey;
+      const foundKey = Object.keys(data).find(
+        (k) => k.toLowerCase() === lowerKey || (shortKey && k.toLowerCase() === shortKey)
+      );
+      if (foundKey) dynActual = data[foundKey];
+    }
+    if (dynActual !== undefined) {
+      targetValue = dynActual;
+    }
+  }
 
   switch (op) {
     case "equals":

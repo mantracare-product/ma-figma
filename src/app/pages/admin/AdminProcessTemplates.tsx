@@ -27,6 +27,8 @@ import VariablePickerButton, { FETCH_FIELD_SOURCES, FIELDS_BY_SOURCE_MAP } from 
 import StepParametersFields from "../../components/process/StepParametersFields";
 import StepDetailDrawer from "../../components/process/StepDetailDrawer";
 import AddAutomationDrawer from "../../components/process/AddAutomationDrawer";
+import { useAutomationRules, AutomationRule } from "../../../lib/useAutomationStore";
+import StageAutomationsTab from "../../components/process/StageAutomationsTab";
 import { getStoredVoices, VoiceConfigItem, VOICE_STORE_EVENT } from "../../../lib/useVoiceStore";
 import { getActiveAIModels, AI_MODELS_STORE_EVENT, AIModelConfig } from "../../../lib/aiModelsStore";
 import { SelectFieldsModal } from "../../components/help/FieldManager";
@@ -88,6 +90,7 @@ export interface Stage {
   nextProcessTransitions?: ProcessTransitionTarget[];
   stagePosition?: "initial" | "intermediate" | "final" | null;
   stageCategory?: "in_progress" | "success" | "lost";
+  intentTrigger?: string;
   aiSettings?: AISettings;
   // Persisted stage configuration
   stageType?: string;
@@ -579,17 +582,42 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
         {stage.name}
       </span>
       {(() => {
-        const isSuccess = stage.stageCategory === "success" || (!stage.isFinalStage && !stage.isFinal && (index === totalStages - 2 || stage.name.toLowerCase().includes("won") || stage.name.toLowerCase().includes("qualified") || stage.name.toLowerCase().includes("success")));
-        const isLost = stage.stageCategory === "lost" || stage.isFinalStage || stage.isFinal || stage.name.toLowerCase().includes("lost") || stage.name.toLowerCase().includes("unqualified") || stage.name.toLowerCase().includes("cancel");
+        const lower = (stage.name || "").toLowerCase().trim();
+        const isLostExplicit =
+          stage.stageCategory === "lost" ||
+          stage.intentTrigger === "not_interested" ||
+          stage.intentTrigger === "call_back" ||
+          lower.includes("not interested") ||
+          lower.includes("not_interested") ||
+          lower.includes("lost") ||
+          lower.includes("unqualified") ||
+          lower.includes("cancel") ||
+          lower.includes("call back") ||
+          (lower.includes("not") && lower.includes("interest"));
 
-        if (stage.stageCategory === "success" || isSuccess) {
+        const isSuccess =
+          !isLostExplicit &&
+          (stage.stageCategory === "success" ||
+            stage.intentTrigger === "interested" ||
+            lower === "won" ||
+            lower === "interested" ||
+            lower.includes("closed won") ||
+            (lower.includes("interested") && !lower.includes("not")) ||
+            lower.includes("qualified") ||
+            lower.includes("success"));
+
+        const isLost =
+          isLostExplicit ||
+          (!isSuccess && (stage.isFinalStage || stage.isFinal));
+
+        if (isSuccess) {
           return (
             <span className="px-1 py-0.2 rounded text-[8.5px] font-semibold tracking-wide bg-emerald-50 text-emerald-600 border border-emerald-200/60 shrink-0">
               Won
             </span>
           );
         }
-        if (stage.stageCategory === "lost" || isLost) {
+        if (isLost) {
           return (
             <span className="px-1 py-0.2 rounded text-[8.5px] font-semibold tracking-wide bg-rose-50 text-rose-600 border border-rose-200/60 shrink-0">
               Lost
@@ -1325,6 +1353,71 @@ export default function AdminProcessTemplates() {
   // CHANGE 1: Collapsible sections state
   const [workflowStepsExpanded, setWorkflowStepsExpanded] = useState(true);
   const [workflowStepsDrawerOpen, setWorkflowStepsDrawerOpen] = useState(false);
+  const [stageConfigTab, setStageConfigTab] = useState<"general" | "automations">("general");
+  const [editingAutomationRule, setEditingAutomationRule] = useState<AutomationRule | null>(null);
+  const [automationDrawerView, setAutomationDrawerView] = useState<"library" | "flowbuilder">("library");
+  const { rules: allAutomationRules, createRule, updateRule, deleteRule, toggleRule } = useAutomationRules();
+
+  const selectedProcessData = processes.find((p) => p.id === selectedProcess);
+
+  const stageRules = useMemo(() => {
+    if (!expandedStage) return [];
+    const stage = selectedProcessData?.stages.find((s) => s.id === expandedStage);
+    if (!stage) return [];
+
+    return allAutomationRules.filter((r) => {
+      const trigEvt = (r.trigger?.event || "").toLowerCase();
+      const isStageTrigger = trigEvt.startsWith("stage.") || trigEvt.includes("stage") || trigEvt.endsWith(".entered_stage") || r.trigger?.params?.category === "stage";
+
+      const ruleStageId = r.trigger?.params?.stageId || r.trigger?.params?.triggerStageId || r.action?.stageId || (r as any).params?.stageId;
+      const ruleStageName = r.trigger?.params?.stageName || r.trigger?.params?.triggerStageName || r.action?.stageName;
+      const ruleProcId = r.trigger?.params?.processId || r.trigger?.params?.triggerProcessId || r.action?.processId;
+
+      const matchesStage = ruleStageId === stage.id || 
+        (ruleStageName && ruleStageName.toLowerCase() === stage.name.toLowerCase()) ||
+        r.action?.stageId === stage.id;
+
+      const matchesProcess = !ruleProcId || ruleProcId === "all" || ruleProcId === selectedProcess || (selectedProcessData && r.trigger?.params?.processName === selectedProcessData.name);
+
+      return isStageTrigger && matchesStage && matchesProcess;
+    });
+  }, [allAutomationRules, expandedStage, selectedProcess, selectedProcessData]);
+
+  const editingRuleInitialAutomation = useMemo(() => {
+    if (!editingAutomationRule) return null;
+    const isExit = (editingAutomationRule.trigger?.event || "").includes("exit");
+    return {
+      id: editingAutomationRule.id,
+      orgId: editingAutomationRule.orgId || "default",
+      name: editingAutomationRule.name,
+      description: editingAutomationRule.description,
+      scope: "stage" as const,
+      status: editingAutomationRule.enabled ? ("active" as const) : ("draft" as const),
+      trigger: {
+        type: "stage" as const,
+        when: isExit ? ("exit" as const) : ("entry" as const),
+        category: "stage",
+        event: editingAutomationRule.trigger?.event || (isExit ? "stage.exit" : "stage.entry"),
+        params: editingAutomationRule.trigger?.params || {},
+      },
+      steps: (editingAutomationRule.actions || []).map((s: any) => ({
+        ...s,
+        id: s.id,
+        name: s.name,
+        description: s.description || "",
+        iconKey: s.iconKey || "zap",
+        stepKey: s.stepKey,
+        trigger: s.trigger || "stage",
+        executionType: s.executionType || "wait",
+        delayValue: s.delay?.value ?? s.delayValue ?? 0,
+        delayUnit: s.delay?.unit ?? s.delayUnit ?? "minutes",
+        params: s.params || {},
+        branches: s.branches,
+      })),
+      createdAt: editingAutomationRule.createdAt,
+      updatedAt: editingAutomationRule.updatedAt,
+    };
+  }, [editingAutomationRule]);
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
   const [workflowStepCategory, setWorkflowStepCategory] = useState("all");
   const [workflowStepSearch, setWorkflowStepSearch] = useState("");
@@ -2498,8 +2591,6 @@ export default function AdminProcessTemplates() {
     ],
   };
 
-  const selectedProcessData = processes.find((p) => p.id === selectedProcess);
-
   // Pre-applied scoping rules for stage-level automations based on Process > Stage scope rules
   const stageScopeRules: ScopingRule[] = useMemo(() => {
     const currentStage = selectedProcessData?.stages.find((s) => s.id === expandedStage);
@@ -3414,7 +3505,7 @@ export default function AdminProcessTemplates() {
                           return true;
                         });
 
-                        const successStages = allStages.filter((s, idx) => {
+                        const rawSuccessStages = allStages.filter((s, idx) => {
                           if (s.stageCategory === "success") return true;
                           if (s.stageCategory === "in_progress" || s.stageCategory === "lost") return false;
                           if (s.isFinalStage || s.isFinal) return false;
@@ -3425,7 +3516,12 @@ export default function AdminProcessTemplates() {
                           return false;
                         });
 
+                        // Enforce single won stage only
+                        const successStages = rawSuccessStages.slice(0, 1);
+                        const extraSuccessAsLost = rawSuccessStages.slice(1);
+
                         const lostStages = allStages.filter((s) => {
+                          if (extraSuccessAsLost.some((ex) => ex.id === s.id)) return true;
                           if (s.stageCategory === "lost") return true;
                           if (s.stageCategory === "in_progress" || s.stageCategory === "success") return false;
                           return !!(s.isFinalStage || s.isFinal);
@@ -3730,38 +3826,61 @@ export default function AdminProcessTemplates() {
                   <div className="h-full flex flex-col">
                     {/* Stage Header: Tabs + Corner Automations Button matching Client Workflow */}
                     <div className="px-6 py-3.5 border-b border-border bg-white flex items-center justify-between">
-                      {/* Stage Configuration Header */}
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                          Stage Configuration
-                        </span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200">
+                          <button
+                            type="button"
+                            onClick={() => setStageConfigTab("general")}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                              stageConfigTab === "general"
+                                ? "bg-white text-gray-900 shadow-2xs"
+                                : "text-gray-500 hover:text-gray-900"
+                            }`}
+                          >
+                            General
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStageConfigTab("automations")}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                              stageConfigTab === "automations"
+                                ? "bg-white text-gray-900 shadow-2xs"
+                                : "text-gray-500 hover:text-gray-900"
+                            }`}
+                          >
+                            <Zap className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Automations</span>
+                            {stageRules.length > 0 && (
+                              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                                {stageRules.length}
+                              </span>
+                            )}
+                          </button>
+                        </div>
                         <span className="text-xs px-2.5 py-1 rounded-md font-semibold" style={{ backgroundColor: `${stage.color || '#3B82F6'}15`, color: stage.color || '#3B82F6', fontFamily: 'Outfit, sans-serif' }}>
                           {stage.name}
                         </span>
                       </div>
 
-                      {/* Right Corner: Automation Icon Label Button + Stage Delete */}
+                      {/* Right Corner: Add Automation (in automations tab) + Stage Delete */}
                       <div className="flex items-center gap-2.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedWorkflowStepCard(null);
-                            setWorkflowStepsDrawerOpen(true);
-                          }}
-                          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-gray-800 bg-white hover:bg-gray-50 border border-gray-200 shadow-2xs hover:shadow-xs transition-all cursor-pointer group"
-                          style={{ fontFamily: 'DM Sans, sans-serif' }}
-                          title="View and configure automations for this stage"
-                        >
-                          <div className="w-5 h-5 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                            <Zap className="w-3.5 h-3.5" />
-                          </div>
-                          <span>Automations</span>
-                          {workflowSteps.length > 0 && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                              {workflowSteps.length}
-                            </span>
-                          )}
-                        </button>
+                        {stageConfigTab === "automations" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingAutomationRule(null);
+                              setSelectedWorkflowStepCard(null);
+                              setEditingAutomationStepId(undefined);
+                              setAutomationDrawerView("flowbuilder");
+                              setWorkflowStepsDrawerOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-2xs transition-all cursor-pointer"
+                            style={{ fontFamily: 'DM Sans, sans-serif' }}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add Automation</span>
+                          </button>
+                        )}
 
                         <Tooltip text="Delete Stage">
                           <Button
@@ -3781,6 +3900,33 @@ export default function AdminProcessTemplates() {
 
                     {/* Stage Content */}
                     <div className="flex-1 overflow-y-auto p-6">
+                      {stageConfigTab === "automations" ? (
+                        <StageAutomationsTab
+                          stage={stage}
+                          processId={selectedProcess || ""}
+                          processName={selectedProcessData?.name}
+                          rules={stageRules}
+                          onToggleRule={toggleRule}
+                          onEditRule={(rule) => {
+                            setEditingAutomationRule(rule);
+                            setSelectedWorkflowStepCard(null);
+                            setEditingAutomationStepId(undefined);
+                            setAutomationDrawerView("flowbuilder");
+                            setWorkflowStepsDrawerOpen(true);
+                          }}
+                          onDeleteRule={(ruleId) => {
+                            deleteRule(ruleId);
+                            toast.success("Stage automation deleted");
+                          }}
+                          onAddRule={() => {
+                            setEditingAutomationRule(null);
+                            setSelectedWorkflowStepCard(null);
+                            setEditingAutomationStepId(undefined);
+                            setAutomationDrawerView("flowbuilder");
+                            setWorkflowStepsDrawerOpen(true);
+                          }}
+                        />
+                      ) : (
                       <div className="space-y-6">
                           {/* Stage Configuration Section */}
                           <div className="space-y-4">
@@ -4882,27 +5028,6 @@ export default function AdminProcessTemplates() {
                             )}
                           </div>
                         </div>
-
-                      {/* Flow Builder Tab */}
-                      {activeTab === "flowbuilder" && (
-                        <div className="-m-6 h-[calc(100%+3rem)]">
-                          <FlowBuilderTab
-                            processName={selectedProcessData?.name ?? "Current Process"}
-                            stageName={stage.name}
-                            processes={processes}
-                            currentProcessId={selectedProcess ?? undefined}
-                            workflowSteps={workflowSteps}
-                            onWorkflowStepsChange={setWorkflowSteps}
-                            stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
-                            scopingRules={
-                              (selectedProcessData?.scopingRules && selectedProcessData.scopingRules.length > 0)
-                                ? selectedProcessData.scopingRules
-                                : (selectedCategoryFilter && selectedCategoryFilter !== "All")
-                                  ? [{ industryCategory: selectedCategoryFilter, industries: selectedIndustryFilter !== "All" ? [selectedIndustryFilter] : [], locations: selectedLocationFilter !== "All" ? [selectedLocationFilter] : [] }]
-                                  : []
-                            }
-                          />
-                        </div>
                       )}
 
                       {/* Automation Side Drawer */}
@@ -4912,8 +5037,11 @@ export default function AdminProcessTemplates() {
                         onClose={() => {
                           setWorkflowStepsDrawerOpen(false);
                           setEditingAutomationStepId(undefined);
+                          setEditingAutomationRule(null);
                         }}
                         scope="stage"
+                        defaultView={automationDrawerView}
+                        initialAutomation={editingRuleInitialAutomation}
                         isAdmin={true}
                         initialScopingRules={stageScopeRules}
                         onScopingRulesChange={(newRules) => {
@@ -4965,6 +5093,7 @@ export default function AdminProcessTemplates() {
                         stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
                         initialStepIdToConfigure={editingAutomationStepId}
                         onSaveAutomation={(savedAuto) => {
+                          const isExit = savedAuto.trigger.type === "stage" && (savedAuto.trigger as any).when === "exit";
                           const updated = savedAuto.steps.map((s) => ({
                             id: s.id,
                             name: s.name,
@@ -4975,7 +5104,7 @@ export default function AdminProcessTemplates() {
                             delayValue: s.delay?.value || 0,
                             delayUnit: (s.delay?.unit as any) || "minutes",
                             executionType: "wait" as const,
-                            trigger: savedAuto.trigger.type === "stage" && (savedAuto.trigger as any).when === "exit" ? "exit_stage" : "stage",
+                            trigger: isExit ? "exit_stage" as const : "stage" as const,
                           }));
                           setWorkflowSteps(updated);
                           if (selectedProcess && expandedStage) {
@@ -4998,6 +5127,56 @@ export default function AdminProcessTemplates() {
                               )
                             );
                           }
+
+                          // Bidirectional sync with global automation store
+                          const stageObj = selectedProcessData?.stages.find((s) => s.id === expandedStage);
+                          if (stageObj && selectedProcess) {
+                            const rulePayload = {
+                              orgId: organization?.id || "default",
+                              name: savedAuto.name || `On ${isExit ? "Exit" : "Entry"}: ${stageObj.name}`,
+                              description: savedAuto.description || `Automation for stage ${stageObj.name}`,
+                              entityType: (selectedProcessData?.entityType as any) || "client",
+                              isAdmin: true,
+                              createdIn: "admin" as const,
+                              isClientCustomization: false,
+                              source: "custom" as const,
+                              trigger: {
+                                event: isExit ? "stage.exit" : "stage.entry",
+                                label: savedAuto.name || `On Stage ${isExit ? "Exit" : "Entry"}: ${stageObj.name}`,
+                                source: "any" as const,
+                                params: {
+                                  processId: selectedProcess,
+                                  processName: selectedProcessData?.name,
+                                  stageId: stageObj.id,
+                                  stageName: stageObj.name,
+                                  triggerProcessId: selectedProcess,
+                                  triggerProcessName: selectedProcessData?.name,
+                                  triggerStageId: stageObj.id,
+                                  triggerStageName: stageObj.name,
+                                  conditions: (savedAuto.trigger as any)?.params?.conditions || [],
+                                },
+                              },
+                              action: {
+                                type: "moveToStage" as const,
+                                processId: selectedProcess,
+                                stageId: stageObj.id,
+                                processName: selectedProcessData?.name,
+                                stageName: stageObj.name,
+                              },
+                              actions: updated,
+                              enabled: savedAuto.status === "active",
+                              health: "ok" as const,
+                            };
+
+                            if (editingAutomationRule?.id) {
+                              updateRule(editingAutomationRule.id, rulePayload);
+                              toast.success(`Updated automation "${rulePayload.name}"`);
+                            } else {
+                              createRule(rulePayload);
+                              toast.success(`Created stage automation "${rulePayload.name}"`);
+                            }
+                          }
+                          setEditingAutomationRule(null);
                         }}
                       />
 
