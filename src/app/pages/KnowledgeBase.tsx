@@ -1284,6 +1284,11 @@ export default function KnowledgeBase() {
       | { prefillProcess?: { id: string; name: string; stages: { id: string; name: string }[] } }
       | null;
 
+    const searchParams = new URLSearchParams(location.search);
+    const queryProcessId = searchParams.get("processId");
+    const queryProcessName = searchParams.get("processName");
+    const queryAction = searchParams.get("action");
+
     if (navState?.prefillProcess) {
       const incoming = navState.prefillProcess;
 
@@ -1304,7 +1309,25 @@ export default function KnowledgeBase() {
       setCreateOpen(true);
 
       // Clear the nav state so refresh / back-button doesn't reopen the drawer
-      window.history.replaceState({}, document.title);
+      window.history.replaceState({}, document.title, location.pathname);
+    } else if (queryProcessId || queryAction === "create") {
+      if (queryProcessId && queryProcessName) {
+        setProcessTree((prev) => {
+          if (prev.some((p) => p.id === queryProcessId)) return prev;
+          return [
+            ...prev,
+            {
+              id: queryProcessId,
+              name: queryProcessName,
+              stages: [],
+            },
+          ];
+        });
+      }
+      setEditingSource(null);
+      if (queryProcessId) setPrefillProcessId(queryProcessId);
+      setCreateOpen(true);
+      window.history.replaceState({}, document.title, location.pathname);
     }
     // Intentionally run once, on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps

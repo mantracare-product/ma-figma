@@ -34,9 +34,12 @@ export interface CallTriggerSettings {
   customTimezone: string;
   skipDays: string[];
   blackoutDates: Array<{ id: string; date: string; label?: string }>;
+  callingNumber?: string;
+  callingNumbers?: string[];
   recordCalls?: boolean;
   callDurationMinutes?: number;
   hangupWindowMinutes?: number;
+  detectVoicemail?: boolean;
   retryRulesEnabled?: boolean;
   retryAttempts?: number;
   retryDelay?: number;
@@ -51,6 +54,24 @@ export interface CallTriggerSettings {
   transferPhoneNumber?: string;
   transferVoiceResponse?: string;
   transferReason?: string;
+  // AI Model Settings
+  aiModel?: string;
+  aiVoiceSpeed?: number;
+  aiVoice?: string;
+  aiTone?: string;
+  aiStyle?: string;
+  aiSettings?: AISettings;
+}
+
+export interface ChatbotSettings {
+  enableWhatsapp?: boolean;
+  whatsappNumber?: string;
+  enableSms?: boolean;
+  smsNumber?: string;
+  enableWebsite?: boolean;
+  websiteSource?: string;
+  welcomeMessage?: string;
+  botModel?: string;
 }
 
 export interface ProcessTransitionTarget {
@@ -81,6 +102,8 @@ export interface Stage {
   channelSources?: StageChannelSource[];
   enableCalling?: boolean;
   callTriggerSettings?: CallTriggerSettings;
+  enableChatbot?: boolean;
+  chatbotSettings?: ChatbotSettings;
   receptionStationId?: string;
   receptionAutoAdvance?: boolean;
   receptionIsOptional?: boolean;
@@ -120,6 +143,12 @@ export interface Process {
   stages: Stage[];
   aiSettings: AISettings;
   receptionEnabled?: boolean;
+  enableCalling?: boolean;
+  callTriggerSettings?: CallTriggerSettings;
+  enableChatbot?: boolean;
+  chatbotSettings?: ChatbotSettings;
+  connectedToPatientPortal?: boolean;
+  connectedToAiReceptionist?: boolean;
   entityType?: EntityType; // "client" | "appointment" | "invoice" | "insurance" | "claim" (default: "client")
   // Scoping & Tenant Permissions
   industryCategory?: string;
@@ -261,9 +290,12 @@ export const DEFAULT_CALL_TRIGGER_SETTINGS: CallTriggerSettings = {
   customTimezone: "America/New_York",
   skipDays: ["Saturday", "Sunday"],
   blackoutDates: [],
+  callingNumber: "+1 (555) 123-4567",
+  callingNumbers: ["+1 (555) 123-4567"],
   recordCalls: true,
   callDurationMinutes: 15,
   hangupWindowMinutes: 2,
+  detectVoicemail: true,
   retryRulesEnabled: false,
   retryAttempts: 3,
   retryDelay: 5,
@@ -277,6 +309,29 @@ export const DEFAULT_CALL_TRIGGER_SETTINGS: CallTriggerSettings = {
   transferSecondaryPhoneNumber: "",
   transferVoiceResponse: "Please hold while I transfer your call",
   transferReason: "",
+  aiModel: "Gemini 2.5 Flash",
+  aiVoiceSpeed: 1.0,
+  aiVoice: "Ava",
+  aiTone: "Professional",
+  aiStyle: "Balanced",
+  aiSettings: {
+    platform: "Gemini 2.5 Flash",
+    voiceSpeed: 1.0,
+    voice: "Ava",
+    tone: "Professional",
+    style: "Balanced",
+  },
+};
+
+export const DEFAULT_CHATBOT_SETTINGS: ChatbotSettings = {
+  enableWhatsapp: true,
+  whatsappNumber: "+1 (555) 123-4567",
+  enableSms: true,
+  smsNumber: "+1 (555) 123-4567",
+  enableWebsite: true,
+  websiteSource: "Mantra AI Web Widget",
+  welcomeMessage: "Hello! How can I assist you today?",
+  botModel: "Gemini 2.5 Flash",
 };
 
 export function getDefaultCallTriggerSettings(): CallTriggerSettings {
