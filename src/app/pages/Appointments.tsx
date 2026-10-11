@@ -30,7 +30,7 @@ import {
   Check,
   Settings,
 } from "lucide-react";
-import { appointmentService, hasAppointmentAutomation } from "../../lib/appointmentService";
+import { appointmentService, hasAppointmentAutomation, Appointment } from "../../lib/appointmentService";
 import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../lib/invoiceService";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, isProcessMatchingOrg, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
@@ -53,29 +53,6 @@ import { useSearchParams, useNavigate, Link } from "react-router";
 import { useInvoices } from "../context/InvoiceContext";
 import { initialClients } from "./ClientProfile";
 import { useTeamMembers } from "../../lib/teamStore";
-
-interface Appointment {
-  id: number;
-  clientName: string;
-  clientEmail: string;
-  clientPhone: string;
-  employeeId: number | string;
-  serviceId: number | string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM
-  duration: number; // in minutes
-  status: "scheduled" | "completed" | "cancelled" | "no-show" | "pending-accept";
-  notes?: string;
-  rating?: number; // 1-5 stars for completed appointments
-  // Extended fields (additive)
-  title?: string;
-  description?: string;
-  tags?: string[];
-  processId?: string;
-  stageId?: string;
-  currentStageId?: string;
-  statusLabel?: string;
-}
 
 interface Employee {
   id: number | string;
@@ -271,10 +248,10 @@ export default function Appointments() {
   };
 
   const [listViewTab, setListViewTab] = useState<"upcoming" | "done" | "pending" | "all">("all");
-  const [selectedRows, setSelectedRows] = useState<number[]>([]);
-  const [editingRows, setEditingRows] = useState<{ [key: number]: Appointment }>({});
-  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
-  const [hoveredStageBox, setHoveredStageBox] = useState<{ aptId: number; stageIdx: number } | null>(null);
+  const [selectedRows, setSelectedRows] = useState<(string | number)[]>([]);
+  const [editingRows, setEditingRows] = useState<{ [key: string | number]: Appointment }>({});
+  const [confirmDelete, setConfirmDelete] = useState<string | number | null>(null);
+  const [hoveredStageBox, setHoveredStageBox] = useState<{ aptId: string | number; stageIdx: number } | null>(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showProviderDropdown, setShowProviderDropdown] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -544,7 +521,7 @@ export default function Appointments() {
     setSelectedProvider(prov);
 
     const cl = clients.find((c) => c.name === apt.clientName || c.email === apt.clientEmail) || {
-      id: apt.id * 1000,
+      id: (Number(apt.id) || 1) * 1000,
       name: apt.clientName,
       email: apt.clientEmail,
       phone: apt.clientPhone,
@@ -697,8 +674,12 @@ export default function Appointments() {
     }
 
     const service = services.find((s) => s.id === appointmentFormData.serviceId);
+    const maxId = appointments.reduce((max, a) => {
+      const num = typeof a.id === "number" ? a.id : parseInt(String(a.id).replace(/\D/g, ""), 10) || 0;
+      return Math.max(max, num);
+    }, 0);
     const newAppointment: Appointment = {
-      id: Math.max(...appointments.map((a) => a.id)) + 1,
+      id: maxId + 1,
       ...appointmentFormData,
       employeeId: Number(appointmentFormData.employeeId),
       serviceId: Number(appointmentFormData.serviceId),

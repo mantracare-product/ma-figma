@@ -90,13 +90,109 @@ export type SubFieldInputType =
   | "crm_bind"
   | "file";
 
-export type CrmBindModule = "teamMember" | "client" | "organization" | "service" | "process";
+export type CrmBindModule = "client" | "call" | "process" | "appointment" | "service" | "invoice" | "organization" | "teamMember" | "scribe";
+
+export const CRM_MODULE_COLUMNS: Record<CrmBindModule, { key: string; label: string }[]> = {
+  client: [
+    { key: "name", label: "Client Name" },
+    { key: "email", label: "Email Address" },
+    { key: "phone", label: "Phone Number" },
+    { key: "companyName", label: "Company" },
+    { key: "status", label: "Status" },
+    { key: "stage", label: "Stage" },
+    { key: "location", label: "Location" },
+    { key: "responsible", label: "Responsible Person" },
+    { key: "country", label: "Country" },
+    { key: "jobPosition", label: "Role / Job Position" },
+  ],
+  call: [
+    { key: "client", label: "Client Name" },
+    { key: "caller", label: "Caller" },
+    { key: "duration", label: "Call Duration" },
+    { key: "outcome", label: "Call Outcome" },
+    { key: "process", label: "Process" },
+    { key: "date", label: "Call Date" },
+    { key: "status", label: "Call Status" },
+  ],
+  process: [
+    { key: "name", label: "Process Name" },
+    { key: "stage", label: "Stage" },
+    { key: "stages", label: "Stages (All Pipeline Stages)" },
+    { key: "category", label: "Industry Category" },
+    { key: "status", label: "Status" },
+    { key: "stageCount", label: "Number of Stages" },
+    { key: "dealType", label: "Deal / Workflow Type" },
+    { key: "responsible", label: "Responsible Person" },
+    { key: "description", label: "Process Description" },
+  ],
+  appointment: [
+    { key: "title", label: "Appointment Title" },
+    { key: "date", label: "Date & Time" },
+    { key: "status", label: "Status" },
+    { key: "service", label: "Service Name" },
+    { key: "doctorName", label: "Provider / Doctor" },
+    { key: "clientName", label: "Client Name" },
+  ],
+  service: [
+    { key: "name", label: "Service Name" },
+    { key: "price", label: "Price / Cost" },
+    { key: "duration", label: "Duration (min)" },
+    { key: "category", label: "Category" },
+  ],
+  invoice: [
+    { key: "invoiceNumber", label: "Invoice Number" },
+    { key: "clientName", label: "Client Name" },
+    { key: "amount", label: "Total Amount" },
+    { key: "status", label: "Payment Status" },
+    { key: "dueDate", label: "Due Date" },
+  ],
+  organization: [
+    { key: "name", label: "Organization Name" },
+    { key: "industry", label: "Industry" },
+    { key: "website", label: "Website" },
+    { key: "location", label: "Location" },
+  ],
+  teamMember: [
+    { key: "name", label: "Member Name" },
+    { key: "role", label: "Role / Position" },
+    { key: "email", label: "Email Address" },
+    { key: "department", label: "Department" },
+  ],
+  scribe: [
+    { key: "sessionName", label: "Session Name" },
+    { key: "patientName", label: "Patient / Client" },
+    { key: "chiefComplaint", label: "Chief Complaint" },
+    { key: "diagnosis", label: "Assessment / Diagnosis" },
+    { key: "doctorName", label: "Doctor Name" },
+    { key: "sessionDate", label: "Session Date" },
+  ],
+};
+
+export interface FormulaTerm {
+  fieldKey: string;
+  operator?: "+" | "-" | "*" | "/";
+}
+
+export interface FormulaConfig {
+  mode: "static" | "formula";
+  staticValue?: number;
+  terms: FormulaTerm[];
+}
+
+export interface GroupBindingConfig {
+  enabled: boolean;
+  primarySubFieldId: string;
+  secondarySubFieldId: string;
+  bindingType?: "options_filter" | "derived_value";
+}
 
 export interface CrmBindConfig {
   sourceModule: CrmBindModule;
   displayField: string;             // e.g. "name", "title", "email"
   secondaryDisplayField?: string;   // e.g. "role", "phoneNumber"
   selectionMode: "single" | "multiple";
+  primaryKeyField?: string;         // Primary column based on which values will be fetched/matched
+  isPrimaryLookup?: boolean;        // Whether this column is the primary lookup key
 }
 
 export interface ListBindConfig {
@@ -126,6 +222,8 @@ export interface SubFieldConfig {
   listBindConfig?: ListBindConfig; // for list_select sub-fields
   minEntries?: number; // for composite sub-fields
   maxEntries?: number; // for composite sub-fields
+  formulaConfig?: FormulaConfig;
+  groupBindingConfig?: GroupBindingConfig;
   phoneConfig?: {
     countryCodeDisplay?: "name" | "code";
     showFlags?: boolean;
@@ -457,6 +555,10 @@ export interface FieldDefinition {
     min?: number;
     max?: number;
   };
+  formulaConfig?: FormulaConfig;
+  groupBindingConfig?: GroupBindingConfig;
+  primarySubFieldId?: string; // Primary column/sub-field for composite/group fields
+  primaryColumnId?: string;
   phoneConfig?: {
     showCountryCode?: boolean;
     countryCodeDisplay?: "name" | "code";
@@ -2196,6 +2298,12 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     phoneConfig: f.phoneConfig ?? undefined,
     mediaConfig: f.mediaConfig ?? undefined,
     numberConfig: f.numberConfig ?? undefined,
+    formulaConfig: f.formulaConfig ? {
+      mode: f.formulaConfig.mode,
+      staticValue: f.formulaConfig.staticValue,
+      terms: Array.isArray(f.formulaConfig.terms) ? f.formulaConfig.terms.map((t: any) => ({ ...t })) : [],
+    } : undefined,
+    groupBindingConfig: f.groupBindingConfig ? { ...f.groupBindingConfig } : undefined,
     compositeDisplayMode: f.compositeDisplayMode ?? undefined,
     minEntries: typeof f.minEntries === "number" ? f.minEntries : undefined,
     maxEntries: typeof f.maxEntries === "number" ? f.maxEntries : undefined,

@@ -781,7 +781,7 @@ export default function AddAutomationDrawer({
       scopingRules: drawerScopingRules,
       isAdmin,
       updatedAt: new Date().toISOString(),
-    };
+    } as any as Automation;
 
     if (onSaveAutomation) {
       onSaveAutomation(finalAutomation);

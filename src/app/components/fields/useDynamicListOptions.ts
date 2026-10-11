@@ -31,6 +31,12 @@ export function formatEntryValue(item: any): string | null {
     return subParts.length > 0 ? subParts.join(", ") : null;
   }
   if (typeof item === "object") {
+    if (item.name) return String(item.name);
+    if (item.label) return String(item.label);
+    if (item.title) return String(item.title);
+    if (item.stageName) return String(item.stageName);
+    if (item.stage) return formatEntryValue(item.stage);
+
     const parts: string[] = [];
     for (const [k, v] of Object.entries(item)) {
       if (SKIP_KEYS.has(k)) continue;
@@ -207,10 +213,31 @@ export function useDynamicListOptions(
       if (listBindConfig.sourceType === "crm" && listBindConfig.crmModule) {
         const records = fetchCrmRecords(listBindConfig.crmModule);
         const displayProp = listBindConfig.displayField || "name";
-        const opts: FieldOption[] = records.map((rec: any, idx: number) => {
+        const opts: FieldOption[] = [];
+
+        records.forEach((rec: any, idx: number) => {
           const val = String(rec.id ?? `opt_${idx}`);
-          const label = String(rec[displayProp] || rec.name || rec.title || val);
-          return { id: idx + 1, label, value: val, valueType: "text", index: idx + 1 };
+          const rawVal = rec[displayProp];
+
+          if ((displayProp === "stages" || displayProp === "stage") && Array.isArray(rec.stages)) {
+            rec.stages.forEach((stg: any, sIdx: number) => {
+              const stgName = typeof stg === "object" && stg !== null ? (stg.name || stg.label || stg.title || `Stage ${sIdx + 1}`) : String(stg);
+              opts.push({
+                id: opts.length + 1,
+                label: `${stgName} (${rec.name || "Process"})`,
+                value: stgName,
+                valueType: "text",
+                index: opts.length + 1,
+              });
+            });
+            return;
+          }
+
+          let label = formatEntryValue(rawVal);
+          if (!label || label === "[object Object]") {
+            label = String(rec.name || rec.title || val);
+          }
+          opts.push({ id: opts.length + 1, label, value: val, valueType: "text", index: opts.length + 1 });
         });
         return { options: applySortOrder(opts, listConfig?.sortOrder), loading: false };
       }

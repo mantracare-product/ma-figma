@@ -9,27 +9,8 @@ import {
   MoreVertical,
 } from "lucide-react";
 import { Button } from "../ui/Button";
-export interface Appointment {
-  id: number;
-  clientName: string;
-  clientEmail?: string;
-  clientPhone?: string;
-  employeeId: number | string;
-  serviceId: number | string;
-  date: string;
-  time: string;
-  duration: number;
-  status: "scheduled" | "completed" | "cancelled" | "no-show" | "pending-accept";
-  notes?: string;
-  rating?: number;
-  title?: string;
-  description?: string;
-  tags?: string[];
-  processId?: string;
-  stageId?: string;
-  currentStageId?: string;
-  statusLabel?: string;
-}
+import type { Appointment } from "../../../lib/appointmentService";
+export type { Appointment };
 
 export interface Employee {
   id: number | string;

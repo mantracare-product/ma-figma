@@ -1,3 +1,4 @@
+import { CRM_MODULE_COLUMNS } from "../../../context/FieldRegistryContext";
 /**
  * AdminFieldDrawer.tsx
  * Path: src/app/pages/admin/components/AdminFieldDrawer.tsx
@@ -56,7 +57,7 @@ import type {
   TableColumnConfig,
   ScopingRule,
   FieldPermissions,
-  CrmBindModule,
+  CrmBindModule,  FormulaTerm, FormulaConfig, GroupBindingConfig,
   SubFieldConfig,
   SubFieldInputType,
   ListBindConfig,
@@ -1079,6 +1080,7 @@ interface FieldFormState {
   // Composite field configuration
   compositeDisplayMode: "table" | "group";
   tableColumns: TableColumnConfig[];
+  primarySubFieldId?: string;
   minEntries?: number;
   maxEntries?: number;
 
@@ -1126,6 +1128,19 @@ interface FieldFormState {
   // CRM Bind configuration
   crmBindModule: CrmBindModule;
   crmBindSelectionMode: "single" | "multiple";
+  crmBindDisplayField?: string;
+  crmBindPrimaryKeyField?: string;
+  crmBindIsPrimaryLookup?: boolean;
+
+  // Formula & Static for number and money
+  numberValueMode?: "static" | "formula";
+  formulaTerms?: FormulaTerm[];
+  staticNumberValue?: number | "";
+
+  // Group binding configuration
+  groupBindingEnabled?: boolean;
+  groupBindingPrimarySubFieldId?: string;
+  groupBindingSecondarySubFieldId?: string;
 
   // Default value
   defaultValue?: any;
@@ -1241,6 +1256,9 @@ function defaultForm(module: Exclude<FieldModule, "deal">, initialCategory: Prim
     // CRM Bind
     crmBindModule: "teamMember",
     crmBindSelectionMode: "single",
+    crmBindDisplayField: "",
+    crmBindPrimaryKeyField: "",
+    crmBindIsPrimaryLookup: false,
     defaultValue: undefined,
   };
 }
@@ -1374,9 +1392,21 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     newListColumnConfigs: f.newListConfig?.optionList?.columns || [],
     advanceListId: f.newListConfig?.advanceListId || "",
     // CRM Bind
-    crmBindModule: f.crmBindConfig?.sourceModule || "teamMember",
+    crmBindModule: f.crmBindConfig?.sourceModule || "client",
     crmBindSelectionMode: f.crmBindConfig?.selectionMode || "single",
+    crmBindDisplayField: f.crmBindConfig?.displayField || "",
+    crmBindPrimaryKeyField: f.crmBindConfig?.primaryKeyField || "",
+    crmBindIsPrimaryLookup: Boolean(f.crmBindConfig?.isPrimaryLookup),
     defaultValue: f.defaultValue,
+    // Formula / Static for Number and Money
+    numberValueMode: (f.formulaConfig?.mode as ("static" | "formula")) || "static",
+    formulaTerms: f.formulaConfig?.terms || [],
+    staticNumberValue: f.formulaConfig?.staticValue ?? "",
+    // Group Binding
+    primarySubFieldId: f.primarySubFieldId || f.primaryColumnId || (f.tableColumns?.[0]?.id ?? f.subFields?.[0]?.id ?? ""),
+    groupBindingEnabled: Boolean(f.groupBindingConfig?.enabled),
+    groupBindingPrimarySubFieldId: f.groupBindingConfig?.primarySubFieldId || "",
+    groupBindingSecondarySubFieldId: f.groupBindingConfig?.secondarySubFieldId || "",
   };
 }
 
@@ -2167,9 +2197,30 @@ export function AdminFieldDrawer({
 
       // CRM Bind
       crmBindConfig: form.primaryCategory === "crm_bind" ? {
-        sourceModule: form.crmBindModule || "teamMember",
-        displayField: "name",
+        sourceModule: form.crmBindModule || "client",
+        displayField: form.crmBindDisplayField || CRM_MODULE_COLUMNS[form.crmBindModule]?.[0]?.key || "name",
         selectionMode: form.crmBindSelectionMode || "single",
+        primaryKeyField: form.crmBindPrimaryKeyField || form.crmBindDisplayField || CRM_MODULE_COLUMNS[form.crmBindModule]?.[0]?.key || "name",
+        isPrimaryLookup: Boolean(form.crmBindIsPrimaryLookup),
+      } : undefined,
+
+      formulaConfig: (form.primaryCategory === "number" || form.primaryCategory === "money") && form.numberValueMode === "formula" ? {
+        mode: "formula",
+        terms: form.formulaTerms || [],
+      } : (form.primaryCategory === "number" || form.primaryCategory === "money") && form.staticNumberValue !== "" && form.staticNumberValue !== undefined ? {
+        mode: "static",
+        staticValue: Number(form.staticNumberValue),
+        terms: [],
+      } : undefined,
+
+      primarySubFieldId: form.primaryCategory === "composite" ? (form.primarySubFieldId || form.tableColumns[0]?.id || undefined) : undefined,
+      primaryColumnId: form.primaryCategory === "composite" ? (form.primarySubFieldId || form.tableColumns[0]?.id || undefined) : undefined,
+
+      groupBindingConfig: form.primaryCategory === "composite" && form.groupBindingEnabled ? {
+        enabled: true,
+        primarySubFieldId: form.groupBindingPrimarySubFieldId || "",
+        secondarySubFieldId: form.groupBindingSecondarySubFieldId || "",
+        bindingType: "options_filter",
       } : undefined,
 
       currency: form.primaryCategory === "money" ? (form.currency || "INR") : undefined,
@@ -2732,43 +2783,206 @@ export function AdminFieldDrawer({
           )}
 
           {/* 3B. Number Configuration */}
-          {form.primaryCategory === "number" && (
-            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
-              {/* Min & Max Bounds Configuration */}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <label className="block text-xs font-semibold text-slate-700">
-                      Min Value (Optional)
-                    </label>
-                    <InfoTooltip text="Optional minimum allowed number." size="sm" />
-                  </div>
-                  <input
-                    type="number"
-                    value={form.minRange ?? ""}
-                    disabled={isReadOnly}
-                    onChange={(e) => setForm((p) => ({ ...p, minRange: e.target.value !== "" ? Number(e.target.value) : undefined }))}
-                    placeholder="e.g. 0"
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
-                  />
+          {(form.primaryCategory === "number" || form.primaryCategory === "money") && (
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3.5">
+              {/* Value Mode Toggle: Static vs Formula */}
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Value Configuration</label>
+                  <InfoTooltip text="Choose whether to enter a static number or apply a mathematical formula between other number/money fields." size="sm" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <label className="block text-xs font-semibold text-slate-700">
-                      Max Value (Optional)
-                    </label>
-                    <InfoTooltip text="Optional maximum allowed number." size="sm" />
-                  </div>
-                  <input
-                    type="number"
-                    value={form.maxRange ?? ""}
+                <div className="flex bg-slate-200/80 p-0.5 rounded-lg text-xs">
+                  <button
+                    type="button"
                     disabled={isReadOnly}
-                    onChange={(e) => setForm((p) => ({ ...p, maxRange: e.target.value !== "" ? Number(e.target.value) : undefined }))}
-                    placeholder="e.g. 100"
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
-                  />
+                    onClick={() => setForm((p) => ({ ...p, numberValueMode: "static" }))}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                      (form.numberValueMode || "static") === "static"
+                        ? "bg-white text-slate-900 shadow-xs font-bold"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Static Value
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isReadOnly}
+                    onClick={() => {
+                      const avail = getAllFields(form.module).filter(
+                        (f) => (f.inputType === "number" || f.inputType === "money") && f.key !== form.key
+                      );
+                      setForm((p) => ({
+                        ...p,
+                        numberValueMode: "formula",
+                        formulaTerms: p.formulaTerms && p.formulaTerms.length > 0 ? p.formulaTerms : [
+                          { fieldKey: avail[0]?.key || "", operator: "+" },
+                          { fieldKey: avail[1]?.key || avail[0]?.key || "", operator: undefined }
+                        ]
+                      }));
+                    }}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                      form.numberValueMode === "formula"
+                        ? "bg-blue-600 text-white shadow-xs font-bold"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Apply Formula
+                  </button>
                 </div>
               </div>
+
+              {(form.numberValueMode || "static") === "static" ? (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">Static Default Value (Optional)</label>
+                    <InfoTooltip text="Set a static numerical value for this field." size="sm" />
+                  </div>
+                  <input
+                    type="number"
+                    value={form.staticNumberValue ?? ""}
+                    disabled={isReadOnly}
+                    onChange={(e) => setForm((p) => ({ ...p, staticNumberValue: e.target.value !== "" ? Number(e.target.value) : "" }))}
+                    placeholder="Enter default number, e.g. 0"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="text-[11px] text-slate-500">
+                    The value of this field will be automatically derived through mathematical operations (+, −, ×, ÷) between other numeric fields.
+                  </div>
+
+                  {/* Formula Terms List */}
+                  <div className="space-y-2">
+                    {(form.formulaTerms || []).map((term, tIdx) => {
+                      const availFields = getAllFields(form.module).filter(
+                        (f) => (f.inputType === "number" || f.inputType === "money") && f.key !== form.key
+                      );
+                      return (
+                        <div key={tIdx} className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <select
+                              value={term.fieldKey}
+                              disabled={isReadOnly}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((p) => ({
+                                  ...p,
+                                  formulaTerms: (p.formulaTerms || []).map((tm, idx) => idx === tIdx ? { ...tm, fieldKey: val } : tm)
+                                }));
+                              }}
+                              className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                            >
+                              <option value="">Select numeric field...</option>
+                              {availFields.map((f) => (
+                                <option key={f.key} value={f.key}>{f.label} ({f.inputType})</option>
+                              ))}
+                            </select>
+                          </div>
+                          {tIdx < (form.formulaTerms || []).length - 1 && (
+                            <select
+                              value={term.operator || "+"}
+                              disabled={isReadOnly}
+                              onChange={(e) => {
+                                const op = e.target.value as "+" | "-" | "*" | "/";
+                                setForm((p) => ({
+                                  ...p,
+                                  formulaTerms: (p.formulaTerms || []).map((tm, idx) => idx === tIdx ? { ...tm, operator: op } : tm)
+                                }));
+                              }}
+                              className="w-14 px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-blue-600 text-center outline-none focus:border-blue-500 cursor-pointer"
+                            >
+                              <option value="+">+</option>
+                              <option value="-">−</option>
+                              <option value="*">×</option>
+                              <option value="/">÷</option>
+                            </select>
+                          )}
+                          {!isReadOnly && (form.formulaTerms || []).length > 2 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForm((p) => ({
+                                  ...p,
+                                  formulaTerms: (p.formulaTerms || []).filter((_, idx) => idx !== tIdx)
+                                }));
+                              }}
+                              className="p-1 text-slate-400 hover:text-red-500"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const avail = getAllFields(form.module).filter(
+                          (f) => (f.inputType === "number" || f.inputType === "money") && f.key !== form.key
+                        );
+                        setForm((p) => {
+                          const current = p.formulaTerms || [];
+                          const updated = current.map((tm, idx) => idx === current.length - 1 ? { ...tm, operator: tm.operator || "+" } : tm);
+                          return {
+                            ...p,
+                            formulaTerms: [...updated, { fieldKey: avail[0]?.key || "", operator: undefined }]
+                          };
+                        });
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Operand / Field</span>
+                    </button>
+                  )}
+
+                  {/* Formula Preview Box */}
+                  <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 font-mono flex items-center gap-2">
+                    <span className="font-bold text-blue-700">Formula:</span>
+                    <span className="font-semibold">
+                      {(form.formulaTerms || []).map((t) => `${t.fieldKey || "?"} ${t.operator ? `${t.operator} ` : ""}`).join("")}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Min & Max Bounds Configuration for numbers */}
+              {form.primaryCategory === "number" && (
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">Min Value (Optional)</label>
+                      <InfoTooltip text="Optional minimum allowed number." size="sm" />
+                    </div>
+                    <input
+                      type="number"
+                      value={form.minRange ?? ""}
+                      disabled={isReadOnly}
+                      onChange={(e) => setForm((p) => ({ ...p, minRange: e.target.value !== "" ? Number(e.target.value) : undefined }))}
+                      placeholder="e.g. 0"
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">Max Value (Optional)</label>
+                      <InfoTooltip text="Optional maximum allowed number." size="sm" />
+                    </div>
+                    <input
+                      type="number"
+                      value={form.maxRange ?? ""}
+                      disabled={isReadOnly}
+                      onChange={(e) => setForm((p) => ({ ...p, maxRange: e.target.value !== "" ? Number(e.target.value) : undefined }))}
+                      placeholder="e.g. 100"
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -3065,6 +3279,7 @@ export function AdminFieldDrawer({
                 />
               </div>
 
+
               {/* Min & Max Entries constraints */}
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/70">
                 <div>
@@ -3104,6 +3319,74 @@ export function AdminFieldDrawer({
                     className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 shadow-2xs"
                   />
                 </div>
+              </div>
+
+              {/* Dynamic Group Field Binding */}
+              <div className="pt-3 border-t border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Field Dependency Binding
+                    </label>
+                    <InfoTooltip text="Bind a secondary field's options or derived value based on the selection of a primary field (e.g. Process determines Stage)." size="sm" />
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={Boolean(form.groupBindingEnabled)}
+                      disabled={isReadOnly}
+                      onChange={(e) => setForm((p) => ({ ...p, groupBindingEnabled: e.target.checked }))}
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600" />
+                  </label>
+                </div>
+
+                {form.groupBindingEnabled && (
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2.5 animate-in fade-in duration-150">
+                    <div className="text-[11px] text-slate-500">
+                      Configure secondary field values to be dynamically filtered or derived based on the primary field.
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Primary Driving Field</label>
+                        <select
+                          value={form.groupBindingPrimarySubFieldId || ""}
+                          disabled={isReadOnly}
+                          onChange={(e) => setForm((p) => ({ ...p, groupBindingPrimarySubFieldId: e.target.value, primarySubFieldId: e.target.value }))}
+                          className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="">Select primary field...</option>
+                          {form.tableColumns.map((col) => (
+                            <option key={col.id} value={col.id}>{col.name} ({col.type || col.inputType})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Secondary Dependent Field</label>
+                        <select
+                          value={form.groupBindingSecondarySubFieldId || ""}
+                          disabled={isReadOnly}
+                          onChange={(e) => setForm((p) => ({ ...p, groupBindingSecondarySubFieldId: e.target.value }))}
+                          className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="">Select dependent field...</option>
+                          {form.tableColumns
+                            .filter((col) => col.id !== form.groupBindingPrimarySubFieldId)
+                            .map((col) => (
+                              <option key={col.id} value={col.id}>{col.name} ({col.type || col.inputType})</option>
+                            ))}
+                        </select>
+                      </div>
+                    </div>
+                    {form.groupBindingPrimarySubFieldId && form.groupBindingSecondarySubFieldId && (
+                      <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-800 flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>Binding active: Dependent field options are linked to the selected primary field value.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -3250,25 +3533,50 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* 3G. Link to Mantra Entities (formerly CRM Bind) */}
+          {/* 3G. Link to Mantra Entities (All 9 Modules + Column Selector) */}
           {form.primaryCategory === "crm_bind" && (
-            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3.5">
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <label className="text-xs font-semibold text-slate-700">Link to Entity</label>
-                  <InfoTooltip text="Select CRM entity records to dynamically link with real-time sync." size="sm" />
+                  <label className="text-xs font-semibold text-slate-700">Link to Mantra Entity Module</label>
+                  <InfoTooltip text="Select which Mantra module to link to." size="sm" />
                 </div>
                 <AdminSelect
                   value={form.crmBindModule}
                   disabled={isReadOnly}
-                  onChange={(val) => setForm((p) => ({ ...p, crmBindModule: val as CrmBindModule }))}
+                  onChange={(val) => {
+                    const mod = val as CrmBindModule;
+                    const defaultCol = CRM_MODULE_COLUMNS[mod]?.[0]?.key || "name";
+                    setForm((p) => ({ ...p, crmBindModule: mod, crmBindDisplayField: defaultCol }));
+                  }}
                   options={[
-                    { value: "teamMember", label: "Team Members (Staff & Doctors)" },
                     { value: "client", label: "Clients (Profiles & Contacts)" },
-                    { value: "organization", label: "Organizations (Companies / Accounts)" },
+                    { value: "call", label: "Call Logs (Telephony & Inquiries)" },
+                    { value: "process", label: "Processes (Pipelines & Workflows)" },
+                    { value: "appointment", label: "Appointments (Bookings & Sessions)" },
                     { value: "service", label: "Services (Treatments & Catalog)" },
-                    { value: "process", label: "Processes (Workflows & Pipelines)" },
+                    { value: "invoice", label: "Invoices (Billing & Receipts)" },
+                    { value: "organization", label: "Organizations (Accounts & Companies)" },
+                    { value: "teamMember", label: "Team Members (Staff & Providers)" },
+                    { value: "scribe", label: "AI Scribe (Clinical Documentation)" },
                   ]}
+                />
+              </div>
+
+              {/* Column Selection for chosen module */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="text-xs font-semibold text-slate-700">Select Column / Field</label>
+                  <InfoTooltip text="Choose the specific column or property to display and link from this module." size="sm" />
+                </div>
+                <AdminSelect
+                  value={form.crmBindDisplayField || CRM_MODULE_COLUMNS[form.crmBindModule]?.[0]?.key || "name"}
+                  disabled={isReadOnly}
+                  onChange={(val) => setForm((p) => ({ ...p, crmBindDisplayField: val }))}
+                  options={(CRM_MODULE_COLUMNS[form.crmBindModule] || [
+                    { key: "name", label: "Name" },
+                    { key: "title", label: "Title" }
+                  ]).map((c) => ({ value: c.key, label: c.label }))}
                 />
               </div>
 

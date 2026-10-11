@@ -511,7 +511,7 @@ export function AdminCustomFields() {
                 const isAdvanceList =
                   field.inputType === "new_list" &&
                   (field.newListConfig?.sourceMode === "advance_2" ||
-                   field.newListConfig?.sourceMode === "advance_list" ||
+                   (field.newListConfig?.sourceMode as any) === "advance_list" ||
                    Boolean(field.newListConfig?.advanceListId));
 
                 const typeName =

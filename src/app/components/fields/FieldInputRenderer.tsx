@@ -36,7 +36,7 @@ import {
 } from "../../context/FieldRegistryContext";
 import { getStoredAdvanceListById, type AdvanceListColumn, type AdvanceListDefinition } from "../../../lib/advanceListStore";
 import { useCrmBindOptions } from "./useCrmBindOptions";
-import { useDynamicListOptions } from "./useDynamicListOptions";
+import { useDynamicListOptions, formatEntryValue } from "./useDynamicListOptions";
 import { RichTextEditor } from "./RichTextEditor";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 import { AdminSelect } from "../ui/AdminSelect";
@@ -49,6 +49,7 @@ export type FieldRendererMode = "runtime" | "admin_default";
 export interface FieldInputRendererProps {
   // Pass either a full FieldDefinition OR a SubFieldConfig (for table columns / group items)
   field?: Partial<FieldDefinition>;
+  parentField?: Partial<FieldDefinition>;
   subField?: SubFieldConfig;
   value: any;
   onChange: (val: any) => void;
@@ -56,6 +57,8 @@ export interface FieldInputRendererProps {
   disabled?: boolean;
   isSubField?: boolean; // Caps recursion at 1 level
   recordData?: Record<string, any>; // Active in-memory record data for dynamic binding
+  rowValues?: Record<string, any>;
+  drivingFilter?: { isDependent?: boolean; drivingValue?: any };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -360,9 +363,19 @@ function MultiSelectDropdown({
     }
   };
 
+  const getCleanLabel = (opt: any): string => {
+    if (!opt) return "";
+    const raw = opt.label ?? opt.name ?? opt.title ?? opt.value;
+    if (typeof raw === "object") {
+      return formatEntryValue(raw) || "Option";
+    }
+    const s = String(raw);
+    return s === "[object Object]" ? "Option" : s;
+  };
+
   const selectedLabels = options
-    .filter((o) => selected.includes(o.value))
-    .map((o) => o.label);
+    .filter((o) => selected.includes(o.value) || selected.includes(getCleanLabel(o)))
+    .map((o) => getCleanLabel(o));
 
   const displayText =
     selectedLabels.length === 0
@@ -375,7 +388,7 @@ function MultiSelectDropdown({
 
   const filteredOptions = searchQuery.trim()
     ? options.filter((o) =>
-        o.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        getCleanLabel(o).toLowerCase().includes(searchQuery.toLowerCase()) ||
         String(o.value).toLowerCase().includes(searchQuery.toLowerCase())
       )
     : options;
@@ -471,7 +484,7 @@ function MultiSelectDropdown({
                     onChange={() => toggleOption(opt.value)}
                     className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
                   />
-                  <span className="truncate">{opt.label}</span>
+                  <span className="truncate">{getCleanLabel(opt)}</span>
                 </label>
               );
             })
@@ -578,6 +591,27 @@ function TableInputRenderer({
       } catch {}
     }
 
+    // Group Field Dependency Binding: If driving field changes, reset dependent secondary field in this row
+    const binding = field?.groupBindingConfig;
+    const isDrivingCol =
+      binding?.enabled &&
+      (colId === binding.primarySubFieldId ||
+       cols.find((c) => c.id === colId)?.name.toLowerCase().includes("process"));
+
+    if (isDrivingCol) {
+      const secId =
+        binding?.secondarySubFieldId ||
+        cols.find((c) => c.name.toLowerCase().includes("stage") || c.id.toLowerCase().includes("stage"))?.id;
+      if (secId && updatedRow[secId]) {
+        updatedRow[secId] = "";
+      }
+    } else if (cols.find((c) => c.id === colId)?.name.toLowerCase().includes("process")) {
+      const secId = cols.find((c) => c.name.toLowerCase().includes("stage") || c.id.toLowerCase().includes("stage"))?.id;
+      if (secId && updatedRow[secId]) {
+        updatedRow[secId] = "";
+      }
+    }
+
     updated[rIdx] = updatedRow;
     onChange(updated);
   };
@@ -648,19 +682,59 @@ function TableInputRenderer({
                     <td className="px-2.5 py-2 text-center text-[10px] font-bold text-slate-400 bg-slate-50/30">
                       {rIdx + 1}
                     </td>
-                    {cols.map((col) => (
-                      <td key={col.id} className="px-2 py-1.5">
-                        <FieldInputRenderer
-                          subField={col}
-                          value={row[col.id]}
-                          onChange={(val) => handleCellChange(rIdx, col.id, val)}
-                          mode={mode}
-                          disabled={disabled}
-                          isSubField={true}
-                          recordData={recordData}
-                        />
-                      </td>
-                    ))}
+                    {cols.map((col) => {
+                      const binding = field?.groupBindingConfig;
+                      const isSecondaryBound = Boolean(
+                        binding?.enabled &&
+                        (col.id === binding.secondarySubFieldId ||
+                         col.name.toLowerCase() === binding.secondarySubFieldId.toLowerCase() ||
+                         (col.name.toLowerCase().includes("stage") && Boolean(binding.primarySubFieldId)))
+                      );
+
+                      const isStageCol =
+                        isSecondaryBound ||
+                        col.name.toLowerCase().includes("stage") ||
+                        col.id.toLowerCase().includes("stage");
+
+                      let drivingVal: any = undefined;
+                      if (binding?.enabled && binding.primarySubFieldId) {
+                        const primId = binding.primarySubFieldId;
+                        drivingVal = row[primId];
+                        if (drivingVal === undefined) {
+                          const primCol = cols.find(
+                            (c) => c.id === primId || c.name.toLowerCase() === primId.toLowerCase()
+                          );
+                          if (primCol) drivingVal = row[primCol.id];
+                        }
+                      }
+
+                      if (drivingVal === undefined && isStageCol) {
+                        const procCol = cols.find(
+                          (c) => c.name.toLowerCase().includes("process") || c.id.toLowerCase().includes("process")
+                        );
+                        if (procCol) drivingVal = row[procCol.id];
+                      }
+
+                      return (
+                        <td key={col.id} className="px-2 py-1.5">
+                          <FieldInputRenderer
+                            parentField={field}
+                            subField={col}
+                            value={row[col.id]}
+                            onChange={(val) => handleCellChange(rIdx, col.id, val)}
+                            mode={mode}
+                            disabled={disabled}
+                            isSubField={true}
+                            recordData={{ ...recordData, ...row }}
+                            rowValues={row}
+                            drivingFilter={{
+                              isDependent: isSecondaryBound || isStageCol,
+                              drivingValue: drivingVal,
+                            }}
+                          />
+                        </td>
+                      );
+                    })}
                     <td className="px-2 py-1.5 text-center">
                       {!disabled && (
                         <button
@@ -2097,6 +2171,7 @@ function NewListInputRenderer({
 
 export function FieldInputRenderer({
   field,
+  parentField,
   subField,
   value,
   onChange,
@@ -2104,6 +2179,8 @@ export function FieldInputRenderer({
   disabled = false,
   isSubField = false,
   recordData,
+  rowValues,
+  drivingFilter,
 }: FieldInputRendererProps) {
   // Resolve effective metadata
   const rawType = subField?.inputType || field?.inputType || "text";
@@ -2125,6 +2202,42 @@ export function FieldInputRenderer({
     ? "border-blue-300/80 bg-blue-50/20 focus:border-blue-500"
     : "border-slate-200 bg-white focus:border-blue-500";
 
+  // Resolve effective driving filter if not explicitly provided
+  let effectiveDrivingFilter = drivingFilter;
+  if (!effectiveDrivingFilter && parentField?.groupBindingConfig?.enabled) {
+    const binding = parentField.groupBindingConfig;
+    const isSec =
+      subField?.id === binding.secondarySubFieldId ||
+      subField?.name?.toLowerCase() === binding.secondarySubFieldId.toLowerCase() ||
+      (subField?.name?.toLowerCase().includes("stage") && Boolean(binding.primarySubFieldId));
+    if (isSec) {
+      const row = rowValues || recordData || {};
+      let val = row[binding.primarySubFieldId];
+      if (val === undefined && parentField.tableColumns) {
+        const primCol = parentField.tableColumns.find(
+          (c) => c.id === binding.primarySubFieldId || c.name.toLowerCase() === binding.primarySubFieldId.toLowerCase()
+        );
+        if (primCol) val = row[primCol.id];
+      }
+      effectiveDrivingFilter = {
+        isDependent: true,
+        drivingValue: val,
+      };
+    }
+  }
+
+  // Smart fallback: if this is a stages crm_bind subfield and row has a process value
+  if (!effectiveDrivingFilter && subField?.name?.toLowerCase().includes("stage")) {
+    const row = rowValues || recordData || {};
+    const procKey = Object.keys(row).find((k) => k.toLowerCase().includes("process"));
+    if (procKey && row[procKey]) {
+      effectiveDrivingFilter = {
+        isDependent: true,
+        drivingValue: row[procKey],
+      };
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────
   // 1. CRM BIND
   // ─────────────────────────────────────────────────────────────
@@ -2137,6 +2250,7 @@ export function FieldInputRenderer({
         disabled={disabled}
         placeholder={effectivePlaceholder}
         isAdminDefault={isAdminDefault}
+        drivingFilter={effectiveDrivingFilter}
       />
     );
   }
@@ -2288,17 +2402,27 @@ export function FieldInputRenderer({
                         {child.name} {child.required && <span className="text-red-500">*</span>}
                       </label>
                       <FieldInputRenderer
+                        parentField={field}
                         subField={child}
                         value={instance[child.id] ?? (isAdminDefault ? child.defaultValue : undefined)}
                         onChange={(childVal) => {
                           const updated = [...instances];
-                          updated[idx] = { ...updated[idx], [child.id]: childVal };
+                          let nextInst = { ...updated[idx], [child.id]: childVal };
+                          const binding = field?.groupBindingConfig;
+                          if (binding?.enabled && (child.id === binding.primarySubFieldId || child.name.toLowerCase().includes("process"))) {
+                            const secId = binding.secondarySubFieldId || childFields.find((c) => c.name.toLowerCase().includes("stage"))?.id;
+                            if (secId && nextInst[secId]) {
+                              nextInst[secId] = "";
+                            }
+                          }
+                          updated[idx] = nextInst;
                           onChange(updated);
                         }}
                         mode={mode}
                         disabled={disabled}
                         isSubField={true}
-                        recordData={recordData}
+                        recordData={{ ...recordData, ...instance }}
+                        rowValues={instance}
                       />
                     </div>
                   ))}
@@ -2383,15 +2507,25 @@ export function FieldInputRenderer({
                 {child.name} {child.required && <span className="text-red-500">*</span>}
               </label>
               <FieldInputRenderer
+                parentField={field}
                 subField={child}
                 value={groupData[child.id] ?? (isAdminDefault ? child.defaultValue : undefined)}
                 onChange={(childVal) => {
-                  onChange({ ...groupData, [child.id]: childVal });
+                  let nextGroup = { ...groupData, [child.id]: childVal };
+                  const binding = field?.groupBindingConfig;
+                  if (binding?.enabled && (child.id === binding.primarySubFieldId || child.name.toLowerCase().includes("process"))) {
+                    const secId = binding.secondarySubFieldId || childFields.find((c) => c.name.toLowerCase().includes("stage"))?.id;
+                    if (secId && nextGroup[secId]) {
+                      nextGroup[secId] = "";
+                    }
+                  }
+                  onChange(nextGroup);
                 }}
                 mode={mode}
                 disabled={disabled}
                 isSubField={true}
-                recordData={recordData}
+                recordData={{ ...recordData, ...groupData }}
+                rowValues={groupData}
               />
             </div>
           ))}
@@ -2793,6 +2927,7 @@ function CrmBindInput({
   disabled,
   placeholder,
   isAdminDefault,
+  drivingFilter,
 }: {
   config?: CrmBindConfig;
   value: any;
@@ -2800,9 +2935,14 @@ function CrmBindInput({
   disabled?: boolean;
   placeholder?: string;
   isAdminDefault?: boolean;
+  drivingFilter?: {
+    isDependent?: boolean;
+    drivingValue?: any;
+  };
 }) {
-  const { options, loading } = useCrmBindOptions(config);
+  const { options, loading } = useCrmBindOptions(config, drivingFilter);
   const isMultiple = config?.selectionMode === "multiple";
+  const isDependentWaiting = Boolean(drivingFilter?.isDependent) && !drivingFilter?.drivingValue;
 
   if (loading) {
     return (
@@ -2816,7 +2956,7 @@ function CrmBindInput({
     const selectedIds: string[] = Array.isArray(value) ? value : typeof value === "string" && value ? [value] : [];
 
     const handleToggle = (id: string) => {
-      if (disabled) return;
+      if (disabled || isDependentWaiting) return;
       if (selectedIds.includes(id)) {
         onChange(selectedIds.filter((i) => i !== id));
       } else {
@@ -2827,7 +2967,9 @@ function CrmBindInput({
     return (
       <div className="space-y-1.5">
         <div className="flex flex-wrap gap-1.5 min-h-[34px] p-1.5 bg-slate-50/70 border border-slate-200 rounded-lg">
-          {options.length === 0 ? (
+          {isDependentWaiting ? (
+            <span className="text-xs text-slate-400 italic px-1">Select Process first to load stages</span>
+          ) : options.length === 0 ? (
             <span className="text-xs text-slate-400 italic px-1">No live records found in this module</span>
           ) : (
             options.map((opt) => {
@@ -2858,23 +3000,33 @@ function CrmBindInput({
 
   // Single mode
   const currentVal = typeof value === "string" ? value : "";
+  const matchedOpt = options.find(
+    (o) => o.value === currentVal || o.label === currentVal || (currentVal && currentVal.startsWith(o.label))
+  );
+  const effectiveVal = matchedOpt ? matchedOpt.label : currentVal;
+
+  const effectivePlaceholder = isDependentWaiting
+    ? "Select Process first..."
+    : isAdminDefault
+    ? "— No Default (Select on Record) —"
+    : placeholder || "Select product or service...";
 
   return (
     <AdminSelect
-      value={currentVal}
-      disabled={disabled}
+      value={effectiveVal}
+      disabled={disabled || isDependentWaiting}
       onChange={(val) => {
         const found = options.find((o) => o.value === val || o.label === val);
         onChange(found ? found.label : val);
       }}
-      placeholder={isAdminDefault ? "— No Default (Select on Record) —" : (placeholder || "Select product or service...")}
+      placeholder={effectivePlaceholder}
       options={options.map((opt) => ({
         value: opt.label,
         label: opt.label,
         subtitle: opt.subtitle,
       }))}
       allowSearch={true}
-      allowCustomOptions={true}
+      allowCustomOptions={!isDependentWaiting}
       size="sm"
     />
   );

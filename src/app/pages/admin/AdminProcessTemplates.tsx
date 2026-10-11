@@ -2342,6 +2342,7 @@ export default function AdminProcessTemplates() {
   const [newProcessEntityType, setNewProcessEntityType] = useState<EntityType>("client");
   const [newStage, setNewStage] = useState({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "AI Receives Calls" });
   const [newStagePosition, setNewStagePosition] = useState<"initial" | "final" | "sequential" | null>(null);
+  const [insertAfterStageId, setInsertAfterStageId] = useState<string | null>(null);
   const [newStageOutcome, setNewStageOutcome] = useState<"won" | "lost">("won");
   const [newStageCategory, setNewStageCategory] = useState<"in_progress" | "success" | "lost" | null>(null);
   const [newStageSelectedNumbers, setNewStageSelectedNumbers] = useState<string[]>([]);
@@ -2772,6 +2773,7 @@ export default function AdminProcessTemplates() {
   const handleQuickAddStage = () => {
     setNewStagePosition("sequential");
     setNewStageOutcome("won");
+    setInsertAfterStageId(null);
     setShowAddStageModal(true);
   };
 
@@ -2816,7 +2818,17 @@ export default function AdminProcessTemplates() {
     };
 
     let updatedStages: Stage[];
-    if (newStagePosition === "initial") {
+    const prevIdx = insertAfterStageId
+      ? selectedProc.stages.findIndex((s) => s.id === insertAfterStageId)
+      : -1;
+
+    if (prevIdx >= 0) {
+      updatedStages = [
+        ...selectedProc.stages.slice(0, prevIdx + 1),
+        stage,
+        ...selectedProc.stages.slice(prevIdx + 1),
+      ];
+    } else if (newStagePosition === "initial") {
       updatedStages = [stage, ...selectedProc.stages];
     } else if (targetCategory === "lost") {
       updatedStages = [...selectedProc.stages, stage];
@@ -2864,6 +2876,7 @@ export default function AdminProcessTemplates() {
     setNewStagePosition(null);
     setNewStageOutcome("won");
     setNewStageCategory(null);
+    setInsertAfterStageId(null);
     setNewStageSelectedNumbers([]);
     setShowNewStageNumberDropdown(false);
     setHasInteractedWithColor(false);
@@ -3186,10 +3199,22 @@ export default function AdminProcessTemplates() {
                                   setSelectedProcess(process.id);
                                   handleEditStage(stg);
                                 }}
-                                onAddAfter={() => {
+                                onAddAfter={(stg) => {
                                   setSelectedProcess(process.id);
-                                  setNewStagePosition("sequential");
-                                  setNewStageOutcome("won");
+                                  const isWon = stg?.stageCategory === "success" || stg?.name?.toLowerCase().includes("won");
+                                  const isLost = stg?.stageCategory === "lost" || stg?.isFinalStage || stg?.isFinal;
+                                  if (isWon || isLost) {
+                                    setNewStagePosition("final");
+                                    setNewStageCategory("lost");
+                                    setNewStageOutcome("lost");
+                                    setInsertAfterStageId(stg?.id || null);
+                                    setNewStage((prev) => ({ ...prev, color: "#EF4444" }));
+                                  } else {
+                                    setNewStagePosition("sequential");
+                                    setNewStageCategory("in_progress");
+                                    setNewStageOutcome("won");
+                                    setInsertAfterStageId(stg?.id || null);
+                                  }
                                   setShowAddStageModal(true);
                                 }}
                                 onRemove={(stgId) => {
@@ -3443,6 +3468,7 @@ export default function AdminProcessTemplates() {
                                             setNewStagePosition("sequential");
                                             setNewStageCategory("in_progress");
                                             setNewStageOutcome("won");
+                                            setInsertAfterStageId(stage.id);
                                             setShowAddStageModal(true);
                                           }}
                                         />
@@ -3499,16 +3525,14 @@ export default function AdminProcessTemplates() {
                                           isLastStage={true}
                                           isFlexible={true}
                                           onHoverStage={setHoveredStageTooltip}
-                                          onAddAfter={
-                                            successStages.length >= 1
-                                              ? undefined
-                                              : () => {
-                                                  setNewStagePosition("final");
-                                                  setNewStageCategory("success");
-                                                  setNewStageOutcome("won");
-                                                  setShowAddStageModal(true);
-                                                }
-                                          }
+                                          onAddAfter={() => {
+                                            setNewStagePosition("final");
+                                            setNewStageCategory("lost");
+                                            setNewStageOutcome("lost");
+                                            setInsertAfterStageId(stage.id);
+                                            setNewStage((prev) => ({ ...prev, color: "#EF4444" }));
+                                            setShowAddStageModal(true);
+                                          }}
                                         />
                                       );
                                     })
@@ -3567,6 +3591,8 @@ export default function AdminProcessTemplates() {
                                             setNewStagePosition("final");
                                             setNewStageCategory("lost");
                                             setNewStageOutcome("lost");
+                                            setInsertAfterStageId(stage.id);
+                                            setNewStage((prev) => ({ ...prev, color: "#EF4444" }));
                                             setShowAddStageModal(true);
                                           }}
                                         />
@@ -3595,23 +3621,6 @@ export default function AdminProcessTemplates() {
                       })()}
                     </div>
 
-                    {/* Knowledge Base */}
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex items-center justify-between gap-4 flex-wrap">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                          <Database className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                            Knowledge Base
-                          </h3>
-                          <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                            Give the AI reference material scoped to this process. Reference documents are managed across tenant scopes.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
                     {/* Advanced Settings */}
                     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                       <button
@@ -3634,794 +3643,6 @@ export default function AdminProcessTemplates() {
 
                       {advancedSettingsExpanded && (
                         <div className="px-6 pb-6 space-y-4 border-t border-gray-200 pt-6 bg-gray-50/50">
-                          {/* AI Voice & Model */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-                            <button
-                              type="button"
-                              onClick={() => setAiDefaultSettingsExpanded(!aiDefaultSettingsExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                  <Bot className="w-5 h-5 text-blue-600" />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    AI Voice &amp; Model
-                                  </span>
-                                  <Tooltip text="Settings defined here are automatically applied to all stages by default." placement="top">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    window.location.href = '/settings?tab=voice-config';
-                                  }}
-                                  className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
-                                >
-                                  <Settings className="w-4 h-4 text-gray-500" />
-                                </button>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${aiDefaultSettingsExpanded ? 'rotate-180' : ''}`} />
-                              </div>
-                            </button>
-
-                            {aiDefaultSettingsExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                <div>
-                                  <label className="block text-sm font-semibold mb-2 text-gray-700">AI Model</label>
-                                  <select
-                                    value={selectedProcessData.aiSettings.platform}
-                                    onChange={(e) => handleUpdateProcessAI("platform", e.target.value)}
-                                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
-                                  >
-                                    <option value="Gemini 2.5 Flash">Gemini 2.5 Flash</option>
-                                    <option value="GPT-4o Mini">GPT-4o Mini</option>
-                                    <option value="Deepseek V4 Flash">Deepseek V4 Flash</option>
-                                  </select>
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-1.5">
-                                      <label className="text-sm font-semibold text-gray-700">
-                                        Voice Speed
-                                      </label>
-                                      <Tooltip text="Controls how fast the AI speaks during calls.">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
-                                    <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-bold rounded-lg">
-                                      {selectedProcessData.aiSettings.voiceSpeed}x
-                                    </span>
-                                  </div>
-                                  <input
-                                    type="range"
-                                    min="0.5"
-                                    max="2"
-                                    step="0.1"
-                                    value={selectedProcessData.aiSettings.voiceSpeed}
-                                    onChange={(e) => handleUpdateProcessAI("voiceSpeed", parseFloat(e.target.value))}
-                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                                  />
-                                  <div className="flex justify-between text-xs mt-2 text-gray-500 font-medium">
-                                    <span>0.5x</span>
-                                    <span>2.0x</span>
-                                  </div>
-                                </div>
-
-                                {/* Voice / Tone / Style — 3-column grid */}
-                                <div className="grid grid-cols-3 gap-3">
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-semibold text-gray-700">Voice</label>
-                                      <Tooltip text="Choose the voice your AI receptionist uses on calls.">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
-                                    <select
-                                      value={selectedProcessData.aiSettings.voice || "Ava"}
-                                      onChange={(e) => handleUpdateProcessAI("voice", e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      <option>Ava</option>
-                                      <option>Eva</option>
-                                      <option>Aria</option>
-                                      <option>Sam</option>
-                                      <option>Jack</option>
-                                      <option>Mango</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-semibold text-gray-700">Tone</label>
-                                      <Tooltip text="Select the default tone of voice the AI will use during calls (e.g. Professional, Friendly).">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
-                                    <select
-                                      value={selectedProcessData.aiSettings.tone || "Professional"}
-                                      onChange={(e) => handleUpdateProcessAI("tone", e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      <option value="Professional">Professional</option>
-                                      <option value="Friendly">Friendly</option>
-                                      <option value="Empathetic">Empathetic</option>
-                                      <option value="Casual">Casual</option>
-                                      <option value="Persuasive">Persuasive</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-semibold text-gray-700">Style</label>
-                                      <Tooltip text="Select the default conversational style (e.g. Concise, Detailed).">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
-                                    <select
-                                      value={selectedProcessData.aiSettings.style || "Balanced"}
-                                      onChange={(e) => handleUpdateProcessAI("style", e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      <option value="Balanced">Balanced</option>
-                                      <option value="Concise">Concise</option>
-                                      <option value="Detailed">Detailed</option>
-                                    </select>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-
-
-
-
-
-                          {/* Extension Digits */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
-                            <button
-                              type="button"
-                              onClick={() => setExtensionDigitsExpanded(!extensionDigitsExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <PhoneForwarded className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Extension Digits
-                                  </span>
-                                  <Tooltip text="Configure extension digits for call routing" placement="top">
-                                    <Info className="w-4 h-4 text-muted-foreground cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                                  {savedExtensionEntries.length > 0 ? `${savedExtensionEntries.length} set` : 'Not set'}
-                                </span>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${extensionDigitsExpanded ? 'rotate-180' : ''}`} />
-                              </div>
-                            </button>
-
-                            {extensionDigitsExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                <p className="text-sm text-gray-600 leading-relaxed">
-                                  You can set up extension codes that your AI Receptionist can handle to reroute the caller. i.e. 'press 3 for billing department'.
-                                </p>
-                                <p className="text-sm text-gray-600 leading-relaxed">
-                                  The caller can dial an extension to transfer the call. They can either dial the extension after the original greeting phrase, or they can ask the AI to dial an extension anytime. Make sure to use the format +1XXXXXXXXXX for the phone number.
-                                </p>
-                                <div className="flex gap-2">
-                                  <button className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5">
-                                    <ExternalLink className="w-3.5 h-3.5" /> Learn More
-                                  </button>
-                                  <button className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5">
-                                    <Download className="w-3.5 h-3.5" /> Download Sample
-                                  </button>
-                                  <button className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5">
-                                    <Upload className="w-3.5 h-3.5" /> Upload File
-                                  </button>
-                                </div>
-                                <div className="bg-blue-50 border-l-4 border-blue-500 rounded-r-lg p-4">
-                                  <p className="text-sm text-blue-800">
-                                    <span className="font-semibold">Tip:</span> If you are using this feature, we recommend you tell callers about it in the greeting phrase. For example, 'If you already know your party's extension, you can dial it after I finish talking. You can also dial it anytime by saying dial an extension'.
-                                  </p>
-                                </div>
-
-                                {/* Extension entries */}
-                                <div className="space-y-3">
-                                  {extensionEntries.map((entry) => (
-                                    <div key={entry.id} className="flex items-center gap-2">
-                                      <div className="flex-1">
-                                        <div className="flex items-center gap-1 mb-1">
-                                          <label className="text-xs font-semibold text-gray-500">AI's Extension:</label>
-                                          <Tooltip text="The extension digits a caller can dial (or ask the AI to dial) to reach this stage.">
-                                            <Info className="w-3 h-3 text-gray-400 cursor-help" />
-                                          </Tooltip>
-                                        </div>
-                                        <input
-                                          type="text"
-                                          placeholder="234"
-                                          value={entry.extension}
-                                          onChange={(e) => setExtensionEntries(extensionEntries.map(x => x.id === entry.id ? { ...x, extension: e.target.value } : x))}
-                                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-                                        />
-                                      </div>
-                                      <div className="flex-1">
-                                        <div className="flex items-center gap-1 mb-1">
-                                          <label className="text-xs font-semibold text-gray-500">Route to:</label>
-                                          <Tooltip text="The phone number this extension transfers the caller to.">
-                                            <Info className="w-3 h-3 text-gray-400 cursor-help" />
-                                          </Tooltip>
-                                        </div>
-                                        <div className="flex gap-1">
-                                          <select
-                                            value={entry.countryCode}
-                                            onChange={(e) => setExtensionEntries(extensionEntries.map(x => x.id === entry.id ? { ...x, countryCode: e.target.value } : x))}
-                                            className="px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500 bg-white"
-                                          >
-                                            <option value="us">🇺🇸 +1</option>
-                                            <option value="gb">🇬🇧 +44</option>
-                                            <option value="ca">🇨🇦 +1</option>
-                                          </select>
-                                          <input
-                                            type="text"
-                                            placeholder="+1"
-                                            value={entry.phoneNumber}
-                                            onChange={(e) => setExtensionEntries(extensionEntries.map(x => x.id === entry.id ? { ...x, phoneNumber: e.target.value } : x))}
-                                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-                                          />
-                                        </div>
-                                      </div>
-                                      <button
-                                        onClick={() => setExtensionEntries(extensionEntries.filter(x => x.id !== entry.id))}
-                                        className="mt-5 p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                                      >
-                                        <X className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-
-                                <button
-                                  onClick={() => setExtensionEntries([...extensionEntries, { id: Date.now(), extension: '', countryCode: 'us', phoneNumber: '' }])}
-                                  className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors"
-                                >
-                                  + Add Extension
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setSavedExtensionEntries([...extensionEntries]);
-                                    toast.success("Extension entry added");
-                                  }}
-                                  className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
-                                >
-                                  Save
-                                </button>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Record Calls */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
-                            <div className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-                              <div className="flex items-center gap-3">
-                                <Mic className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Record Calls
-                                  </span>
-                                  <Tooltip text="Enable call recording" placement="top">
-                                    <Info className="w-4 h-4 text-muted-foreground cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={advancedSettings.recordCalls}
-                                  onChange={(e) => {
-                                    setAdvancedSettings({ ...advancedSettings, recordCalls: e.target.checked });
-                                    toast.success(e.target.checked ? "Call recording enabled" : "Call recording disabled");
-                                  }}
-                                  className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                              </label>
-                            </div>
-                          </div>
-
-                          {/* Call Duration */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
-                            <button
-                              type="button"
-                              onClick={() => setCallDurationExpanded(!callDurationExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <Clock className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Call Duration
-                                  </span>
-                                  <Tooltip text="Set the maximum call length and when the AI should start wrapping up the conversation.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <ChevronDown
-                                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${callDurationExpanded ? 'rotate-180' : ''}`}
-                              />
-                            </button>
-
-                            {callDurationExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                <div className="flex items-end gap-4">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                        Call Duration (min)
-                                      </label>
-                                      <Tooltip text="Maximum call duration allowed for a call.">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      value={callDurationMinutes}
-                                      onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 1;
-                                        setCallDurationMinutes(val);
-                                        if (hangupWindowMinutes >= val) {
-                                          setHangupWindowMinutes(val - 1 > 0 ? val - 1 : 1);
-                                        }
-                                      }}
-                                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
-                                  </div>
-
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                        Hangup Window
-                                      </label>
-                                      <Tooltip text="During the last X minutes of the total call duration, the AI will proactively try to wrap up the conversation and end the call gracefully.">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm text-gray-500 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Last</span>
-                                      <input
-                                        type="number"
-                                        min={1}
-                                        max={callDurationMinutes - 1}
-                                        value={hangupWindowMinutes}
-                                        onChange={(e) => {
-                                          const val = parseInt(e.target.value) || 1;
-                                          if (val >= callDurationMinutes) {
-                                            toast.error(`Hangup window must be less than the call duration (${callDurationMinutes} min)`);
-                                            return;
-                                          }
-                                          setHangupWindowMinutes(val);
-                                        }}
-                                        className="flex-1 min-w-0 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                      />
-                                      <span className="text-sm text-gray-500 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                        {hangupWindowMinutes === 1 ? 'minute' : 'minutes'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Retry Rules */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
-                            <button
-                              type="button"
-                              onClick={() => setRetryRulesExpanded(!retryRulesExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <RefreshCw className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Retry Rules
-                                  </span>
-                                  <Tooltip text="Automatically retry the call if it fails, based on the rules below.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                                  {retryRulesEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${retryRulesExpanded ? 'rotate-180' : ''}`} />
-                              </div>
-                            </button>
-
-                            {retryRulesExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
-                                      Enable Retry Rules
-                                    </span>
-                                    <Tooltip text="If call fails, automatically retry calling based on rules configured below.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={retryRulesEnabled}
-                                      onChange={(e) => setRetryRulesEnabled(e.target.checked)}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Retry Attempts
-                                    </label>
-                                    <Tooltip text="Number of call retry attempts to make before failing permanently.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={10}
-                                    value={retryAttempts}
-                                    onChange={(e) => setRetryAttempts(parseInt(e.target.value) || 1)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Delay Between Retries (minutes)
-                                    </label>
-                                    <Tooltip text="Time to wait between each retry attempt.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    value={retryDelay}
-                                    onChange={(e) => setRetryDelay(parseInt(e.target.value) || 1)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Fallback Stage
-                                    </label>
-                                    <Tooltip text="Workflow stage to transition call task to if all retry attempts fail.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <select
-                                    value={retryFallbackStage}
-                                    onChange={(e) => setRetryFallbackStage(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors appearance-none"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  >
-                                    <option value="Do Nothing">Do Nothing</option>
-                                    {selectedProcessData?.stages.map((s) => (
-                                      <option key={s.id} value={s.name}>
-                                        {s.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Skip Day Rules */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
-                            <button
-                              type="button"
-                              onClick={() => setSkipDayRulesExpanded(!skipDayRulesExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <Calendar className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Skip Day Rules
-                                  </span>
-                                  <Tooltip text="Avoid placing outbound calls on selected days or dates.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                                  {skipDayRulesEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${skipDayRulesExpanded ? 'rotate-180' : ''}`} />
-                              </div>
-                            </button>
-
-                            {skipDayRulesExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
-                                      Enable Skip Day Rules
-                                    </span>
-                                    <Tooltip text="Avoid making automated outbound calls on selected days/dates.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={skipDayRulesEnabled}
-                                      onChange={(e) => setSkipDayRulesEnabled(e.target.checked)}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Weekly Off Days
-                                    </label>
-                                    <Tooltip text="Days of the week to skip automated calling.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => {
-                                      const isActive = weeklyOffDays.includes(day);
-                                      return (
-                                        <button
-                                          key={day}
-                                          type="button"
-                                          onClick={() =>
-                                            setWeeklyOffDays((prev) =>
-                                              isActive ? prev.filter((d) => d !== day) : [...prev, day]
-                                            )
-                                          }
-                                          className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-all ${isActive
-                                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                                            : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600'
-                                            }`}
-                                          style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                        >
-                                          {day}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Custom Off Dates
-                                    </label>
-                                    <Tooltip text="Specific calendar dates on which no calls will be placed.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="date"
-                                      value={customOffDate}
-                                      onChange={(e) => setCustomOffDate(e.target.value)}
-                                      className="flex-1 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (customOffDate && !customOffDatesList.includes(customOffDate)) {
-                                          setCustomOffDatesList((prev) => [...prev, customOffDate]);
-                                          setCustomOffDate('');
-                                        }
-                                      }}
-                                      className="w-9 h-9 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors flex-shrink-0"
-                                    >
-                                      <Plus className="w-4 h-4 text-white" />
-                                    </button>
-                                  </div>
-
-                                  {customOffDatesList.length > 0 && (
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                      {customOffDatesList.map((date) => (
-                                        <span
-                                          key={date}
-                                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-medium"
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          {date}
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setCustomOffDatesList((prev) => prev.filter((d) => d !== date))
-                                            }
-                                            className="hover:text-blue-900 transition-colors"
-                                          >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                  <p className="mt-2 text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>
-                                    Calls will not be scheduled on selected days and dates.
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Business Hours */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
-                            <button
-                              type="button"
-                              onClick={() => setBusinessHoursExpanded(!businessHoursExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <Clock className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Business Hours
-                                  </span>
-                                  <Tooltip text="Restrict when the AI actively receives calls/messages or makes outbound calls to specific hours per day.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${businessHoursEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                  {businessHoursEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${businessHoursExpanded ? 'rotate-180' : ''}`} />
-                              </div>
-                            </button>
-
-                            {businessHoursExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                {/* Enable toggle */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
-                                      Enable Business Hours
-                                    </span>
-                                    <Tooltip text="When enabled, this process/stage will only actively operate within the hours defined below.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={businessHoursEnabled}
-                                      onChange={(e) => setBusinessHoursEnabled(e.target.checked)}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-
-                                {/* Timezone */}
-                                <div>
-                                  <label className="text-sm font-medium block mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>Timezone</label>
-                                  <select
-                                    value={businessHoursTimezone}
-                                    onChange={(e) => setBusinessHoursTimezone(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                  >
-                                    <option value="America/New_York">Eastern Time (ET)</option>
-                                    <option value="America/Chicago">Central Time (CT)</option>
-                                    <option value="America/Denver">Mountain Time (MT)</option>
-                                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                                    <option value="Asia/Kolkata">India Standard Time (IST)</option>
-                                    <option value="Europe/London">GMT / London</option>
-                                  </select>
-                                </div>
-
-                                {/* Per-day hours */}
-                                <div className="space-y-2">
-                                  <label className="text-sm font-medium block" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>Hours by Day</label>
-                                  {(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const).map((day) => {
-                                    const dayData = businessHoursByDay[day];
-                                    return (
-                                      <div key={day} className="flex items-center gap-3 p-2.5 bg-white border border-gray-200 rounded-lg">
-                                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                                          <input
-                                            type="checkbox"
-                                            className="sr-only peer"
-                                            checked={dayData.enabled}
-                                            onChange={(e) =>
-                                              setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], enabled: e.target.checked } }))
-                                            }
-                                          />
-                                          <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
-                                        </label>
-                                        <span className="text-sm font-semibold w-10 shrink-0" style={{ fontFamily: 'DM Sans, sans-serif', color: dayData.enabled ? '#020817' : '#9CA3AF' }}>
-                                          {day}
-                                        </span>
-                                        <input
-                                          type="time"
-                                          value={dayData.start}
-                                          disabled={!dayData.enabled}
-                                          onChange={(e) =>
-                                            setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], start: e.target.value } }))
-                                          }
-                                          className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 disabled:bg-gray-50"
-                                        />
-                                        <span className="text-xs text-gray-400">to</span>
-                                        <input
-                                          type="time"
-                                          value={dayData.end}
-                                          disabled={!dayData.enabled}
-                                          onChange={(e) =>
-                                            setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], end: e.target.value } }))
-                                          }
-                                          className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 disabled:bg-gray-50"
-                                        />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-
-                                {/* Outside-hours behavior */}
-                                <div>
-                                  <label className="text-sm font-medium block mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                    When contacted outside business hours
-                                  </label>
-                                  <select
-                                    value={outsideHoursAction}
-                                    onChange={(e) => setOutsideHoursAction(e.target.value as typeof outsideHoursAction)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors mb-3"
-                                  >
-                                    <option value="message">Play/Send a custom message</option>
-                                    <option value="voicemail">Route to voicemail</option>
-                                    <option value="queue">Queue until next business hours</option>
-                                  </select>
-                                  {outsideHoursAction === "message" && (
-                                    <textarea
-                                      value={outsideHoursMessage}
-                                      onChange={(e) => setOutsideHoursMessage(e.target.value)}
-                                      rows={3}
-                                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:border-blue-500 transition-colors"
-                                      placeholder="We're currently closed. Our business hours are..."
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
                           {/* Detect Voicemail */}
                           <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
                             <button
@@ -4509,31 +3730,14 @@ export default function AdminProcessTemplates() {
                   <div className="h-full flex flex-col">
                     {/* Stage Header: Tabs + Corner Automations Button matching Client Workflow */}
                     <div className="px-6 py-3.5 border-b border-border bg-white flex items-center justify-between">
-                      {/* Left: General & AI Agent Tabs */}
-                      <div className="flex items-center gap-2">
-                        {[
-                          { id: "general", label: "General" },
-                          { id: "ai-agent", label: "AI Agent" },
-                        ].map((tab) => {
-                          const isActive =
-                            activeTab === tab.id ||
-                            (tab.id === "general" && (activeTab === "basic" || activeTab === "automation")) ||
-                            (tab.id === "ai-agent" && activeTab === "advanced");
-                          return (
-                            <button
-                              key={tab.id}
-                              onClick={() => setActiveTab(tab.id)}
-                              className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all cursor-pointer ${
-                                isActive
-                                  ? "bg-primary text-primary-foreground shadow-xs"
-                                  : "text-muted-foreground hover:bg-muted hover:text-gray-900"
-                              }`}
-                              style={{ fontFamily: 'DM Sans, sans-serif' }}
-                            >
-                              {tab.label}
-                            </button>
-                          );
-                        })}
+                      {/* Stage Configuration Header */}
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                          Stage Configuration
+                        </span>
+                        <span className="text-xs px-2.5 py-1 rounded-md font-semibold" style={{ backgroundColor: `${stage.color || '#3B82F6'}15`, color: stage.color || '#3B82F6', fontFamily: 'Outfit, sans-serif' }}>
+                          {stage.name}
+                        </span>
                       </div>
 
                       {/* Right Corner: Automation Icon Label Button + Stage Delete */}
@@ -4577,9 +3781,7 @@ export default function AdminProcessTemplates() {
 
                     {/* Stage Content */}
                     <div className="flex-1 overflow-y-auto p-6">
-                      {/* General Tab */}
-                      {(activeTab === "general" || activeTab === "basic") && (
-                        <div className="space-y-6">
+                      <div className="space-y-6">
                           {/* Stage Configuration Section */}
                           <div className="space-y-4">
                             {/* Type and Right Column Field Row */}
@@ -4950,12 +4152,7 @@ export default function AdminProcessTemplates() {
                             )}
 
                           </div>
-                        </div>
-                      )}
 
-                      {/* AI Agent Tab */}
-                      {activeTab === "ai-agent" && (
-                        <div className="space-y-6">
                           {/* 1. AI Model Settings Section */}
                           <div className="space-y-3">
                             <div>
@@ -5685,7 +4882,6 @@ export default function AdminProcessTemplates() {
                             )}
                           </div>
                         </div>
-                      )}
 
                       {/* Flow Builder Tab */}
                       {activeTab === "flowbuilder" && (
@@ -6059,6 +5255,7 @@ export default function AdminProcessTemplates() {
             setNewStage({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "Receive Inbound Calls" });
             setNewStagePosition(null);
             setNewStageOutcome("won");
+            setInsertAfterStageId(null);
             setNewStageSelectedNumbers([]);
             setShowNewStageNumberDropdown(false);
             setHasInteractedWithColor(false);
@@ -6075,6 +5272,7 @@ export default function AdminProcessTemplates() {
                   setNewStage({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "Receive Inbound Calls" });
                   setNewStagePosition(null);
                   setNewStageOutcome("won");
+                  setInsertAfterStageId(null);
                   setNewStageSelectedNumbers([]);
                   setShowNewStageNumberDropdown(false);
                   setHasInteractedWithColor(false);
@@ -6110,35 +5308,6 @@ export default function AdminProcessTemplates() {
               />
             </div>
 
-            {/* Stage Outcome Dropdown: Won vs Lost */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Stage Outcome <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={newStageOutcome}
-                onChange={(e) => {
-                  const val = e.target.value as "won" | "lost";
-                  setNewStageOutcome(val);
-                  setNewStagePosition(val === "lost" ? "final" : "sequential");
-                  if (!hasInteractedWithColor) {
-                    setNewStage((prev) => ({
-                      ...prev,
-                      color: val === "lost" ? "#EF4444" : "#10B981"
-                    }));
-                  }
-                }}
-                className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all text-slate-900 font-medium cursor-pointer"
-              >
-                <option value="won">Won Stage (Sequential Pipeline)</option>
-                <option value="lost">Lost Stage (Terminal / Dropped)</option>
-              </select>
-              <p className="text-[11px] text-slate-400 mt-1">
-                {newStageOutcome === "won"
-                  ? "Stage is added to the active Won pipeline progression."
-                  : "Stage is added to the terminal Lost outcome section."}
-              </p>
-            </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
@@ -6329,24 +5498,6 @@ export default function AdminProcessTemplates() {
               />
             </div>
 
-            {/* Stage Outcome Dropdown: Won vs Lost */}
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                Stage Outcome
-              </label>
-              <select
-                value={editingStage?.isFinalStage ? "lost" : "won"}
-                onChange={(e) => {
-                  const isLost = e.target.value === "lost";
-                  setEditingStage(editingStage ? { ...editingStage, isFinalStage: isLost } : null);
-                }}
-                className="w-full px-3.5 py-2.5 text-sm border border-border rounded-lg bg-white focus:outline-none focus:border-slate-400 font-medium cursor-pointer"
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              >
-                <option value="won">Won Stage (Sequential Pipeline)</option>
-                <option value="lost">Lost Stage (Terminal / Dropped)</option>
-              </select>
-            </div>
 
             <div>
               <label className="block text-sm font-medium mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>

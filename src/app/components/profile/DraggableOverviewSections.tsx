@@ -383,7 +383,71 @@ export default function DraggableOverviewSections({
   // User explicitly added field keys in this record view
   const [userAddedFieldKeys, setUserAddedFieldKeys] = useState<Set<string>>(new Set());
 
-  // Sections and their fields filtered strictly according to activeOrganization scope and showAlways settings
+  // ── Auto-Calculate Formula Fields ─────────────────────────────────────────
+  useEffect(() => {
+    if (!fieldValues || !allRegistryFields) return;
+
+    const getNumericVal = (fKey: string): number | null => {
+      if (!fKey) return null;
+      if (fieldValues[fKey] !== undefined && fieldValues[fKey] !== "" && fieldValues[fKey] !== null) {
+        const num = Number(fieldValues[fKey]);
+        return isNaN(num) ? null : num;
+      }
+      for (const [k, v] of Object.entries(fieldValues)) {
+        if ((k === fKey || k.endsWith(`_${fKey}`)) && v !== undefined && v !== "" && v !== null) {
+          const num = Number(v);
+          if (!isNaN(num)) return num;
+        }
+      }
+      return null;
+    };
+
+    allRegistryFields.forEach((field) => {
+      if (
+        (field.inputType === "number" || field.inputType === "money") &&
+        field.formulaConfig?.mode === "formula" &&
+        Array.isArray(field.formulaConfig.terms) &&
+        field.formulaConfig.terms.length >= 2
+      ) {
+        const terms = field.formulaConfig.terms;
+        const firstVal = getNumericVal(terms[0].fieldKey);
+        if (firstVal === null) return;
+
+        let result = firstVal;
+        let valid = true;
+
+        for (let i = 1; i < terms.length; i++) {
+          const prevOp = terms[i - 1].operator || "+";
+          const nextVal = getNumericVal(terms[i].fieldKey);
+          if (nextVal === null) {
+            valid = false;
+            break;
+          }
+          if (prevOp === "+") result += nextVal;
+          else if (prevOp === "-") result -= nextVal;
+          else if (prevOp === "*") result *= nextVal;
+          else if (prevOp === "/") result = nextVal !== 0 ? result / nextVal : 0;
+        }
+
+        if (valid) {
+          const cleanResult = Math.round(result * 10000) / 10000;
+          const currentVal = getNumericVal(field.key);
+          if (currentVal !== cleanResult) {
+            let targetKey = field.key;
+            for (const k of Object.keys(fieldValues)) {
+              if (k.endsWith(`_${field.key}`)) {
+                targetKey = k;
+                break;
+              }
+            }
+            onFieldValueChange(targetKey, cleanResult);
+          }
+        }
+      }
+    });
+  }, [fieldValues, allRegistryFields, onFieldValueChange]);
+
+  // Sections and their fields filtered strictly according to activeOrganization scope
   const visibleSections = useMemo(() => {
     const procId = activeProcessId || activeProcessName;
     return sections
@@ -396,23 +460,11 @@ export default function DraggableOverviewSections({
         ...sec,
         fieldKeys: (sec.fieldKeys || []).filter((k) => {
           if (SYSTEM_FIELD_KEYS.has(k)) return true;
-          if (!allowedFieldKeys.has(k) && !userAddedFieldKeys.has(k)) return false;
-
-          // If showAlways is false (turned off), do NOT show in section unless it has a value on this record or was added via + Add Field popup
-          const regField = allRegistryFields.find((f) => f.key === k);
-          if (regField && regField.showAlways === false) {
-            const scopedKey = `${sec.id}_${k}`;
-            const val = fieldValues[scopedKey] !== undefined ? fieldValues[scopedKey] : fieldValues[k];
-            const hasVal = val !== undefined && val !== null && val !== "" && (!Array.isArray(val) || val.length > 0);
-            if (!hasVal && !userAddedFieldKeys.has(k)) {
-              return false;
-            }
-          }
-
+          // Retain fields assigned to this section so newly added fields never vanish on drawer reopening
           return true;
         }),
       }));
-  }, [sections, matchingCustomSecIds, allowedFieldKeys, activeOrganization, SYSTEM_SEC_IDS, SYSTEM_FIELD_KEYS, activeProcessId, activeProcessName, allRegistryFields, fieldValues, userAddedFieldKeys]);
+  }, [sections, matchingCustomSecIds, activeOrganization, SYSTEM_SEC_IDS, SYSTEM_FIELD_KEYS, activeProcessId, activeProcessName]);
 
   // User custom option additions per field
   const [newOptionInputs, setNewOptionInputs] = useState<Record<string, string>>({});
@@ -746,6 +798,11 @@ export default function DraggableOverviewSections({
             </span>
             <label className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider truncate flex items-center gap-1">
               <span>{label}</span>
+              {regField?.formulaConfig?.mode === "formula" && (
+                <span className="text-[9px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1 py-0.2 rounded shadow-2xs tracking-normal lowercase font-mono" title="Calculated via formula">
+                  fx
+                </span>
+              )}
               {regField?.tooltip && (
                 <InfoTooltip text={regField.tooltip} size="sm" />
               )}

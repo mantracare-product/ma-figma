@@ -143,7 +143,7 @@ export default function AppointmentDetailDrawer({
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
 
   // Sync with appointmentService in real time
-  const [liveAppointment, setLiveAppointment] = useState<Appointment | undefined>(appointment);
+  const [liveAppointment, setLiveAppointment] = useState<ServiceAppointment | undefined>(appointment);
   useEffect(() => {
     setLiveAppointment(appointment);
   }, [appointment]);

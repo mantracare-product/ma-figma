@@ -4,9 +4,9 @@ import {
   Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
   MessageSquare, MessageCircle, LogIn, ArrowRightCircle, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
   Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle,
-  Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Workflow, Layers, Mic,
+  Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Wallet, CreditCard, AlertTriangle, Pencil, LayoutGrid, List, Workflow, Layers, Mic,
   GripVertical, MoreVertical, Settings as SettingsIcon, Share2, Send, Stethoscope, Video,
-  Tag, ShieldCheck,
+  Tag, ShieldCheck, UserPlus,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -47,11 +47,14 @@ import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
 import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
 import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { ClientInvoice } from "../types/invoiceTypes";
-import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../lib/invoiceService";
+import { invoiceService, hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../lib/invoiceService";
 import { appointmentService, hasAppointmentAutomation } from "../../lib/appointmentService";
 import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
-import { PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
+import { PROCESS_STORE_EVENT, getStoredProcesses, Process } from "../../lib/useProcessStore";
 import DocumentsTab from "../components/profile/DocumentsTab";
+import InvoiceProgressBar from "../components/invoices/InvoiceProgressBar";
+import { CHEVRON_PALETTE } from "../components/common/ChevronStageRibbon";
+import { DEFAULT_ENTITY_PROCESSES } from "../../lib/useProcessStore";
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import PageTopBar from "../components/layout/PageTopBar";
 import { Modal } from "../components/ui/Modal";
@@ -201,15 +204,34 @@ const processStages: { [key: string]: string[] } = {
   "Insurance Verification": ["Initial Contact", "Document Check", "Verification", "Approval"],
 };
 
-const availableProcesses = [
-  "Patient Intake",
-  "Follow-up Calls",
-  "Billing Support",
-  "Appointment Scheduling",
-  "Insurance Verification",
-];
+const getAvailableProcessesList = () => {
+  const stored = getStoredProcesses();
+  const names = stored.map((p) => p.name).filter(Boolean);
+  const defaults = [
+    "Patient Intake",
+    "Follow-up Calls",
+    "Billing Support",
+    "Appointment Scheduling",
+    "Insurance Verification",
+  ];
+  return Array.from(new Set([...names, ...defaults]));
+};
 
 const getStagesForProcess = (processName: string) => {
+  if (!processName) return [];
+  const storedProcesses = getStoredProcesses();
+  const matched = storedProcesses.find(
+    (p) => p.name?.toLowerCase() === processName.toLowerCase() || p.id === processName
+  );
+  if (matched && matched.stages && matched.stages.length > 0) {
+    return matched.stages.map((s, idx) => ({
+      id: s.id || String(idx + 1),
+      label: s.name,
+      fullLabel: `${matched.name}: ${s.name}`,
+      category: matched.name,
+    }));
+  }
+
   const stageMapping: { [key: string]: Array<{ id: string; label: string; fullLabel?: string; category: string }> } = {
     "Patient Intake": [
       { id: "1", label: "Initial Contact", fullLabel: "Patient Intake: Initial Contact", category: "Patient Intake" },
@@ -367,7 +389,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       return initialClients;
     }
   });
-  const client = clients.find((c) => c.id === id) ?? null;
+  const isNewClient = id === "new";
+  const initialTarget = isNewClient ? null : (clients.find((c) => c.id === id) ?? null);
 
   // Persist any client mutations back to sessionStorage
   useEffect(() => {
@@ -414,11 +437,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       title: "Company & Professional",
       fieldKeys: ["company", "role"],
     },
-    {
-      id: "sec-process-pipeline",
-      title: "Processes & Pipeline",
-      fieldKeys: ["status", "processes"],
-    },
   ];
 
   const SYSTEM_FIELD_KEYS = new Set([
@@ -442,11 +460,20 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     const matchingFields = (registryAllFields || []).filter((f) => isFieldMatchingOrg(f, org));
     const allowedFieldKeys = new Set(matchingFields.map((f) => f.key));
 
-    // Start with default template if no existing sections
+    // Start with default template or localStorage overrides if no existing sections
+    let fallbackSections = DEFAULT_CLIENT_SECTIONS;
+    try {
+      const globalSaved = localStorage.getItem("ma_client_overview_sections");
+      if (globalSaved) {
+        const parsed = JSON.parse(globalSaved);
+        if (Array.isArray(parsed) && parsed.length > 0) fallbackSections = parsed;
+      }
+    } catch {}
+
     const baseSections: OverviewSection[] =
       existingSections && existingSections.length > 0
         ? existingSections.map((s) => ({ ...s, fieldKeys: [...s.fieldKeys] }))
-        : JSON.parse(JSON.stringify(DEFAULT_CLIENT_SECTIONS));
+        : JSON.parse(JSON.stringify(fallbackSections));
 
     // System section IDs that should never be deleted
     const SYSTEM_SEC_IDS = new Set([
@@ -454,17 +481,17 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       "sec-general-info",
       "sec-company-details",
       "sec-company-role",
-      "sec-process-pipeline",
     ]);
 
-    // Filter out hardcoded sec-custom-fields, and any custom section that does NOT match current org scope
+    // Filter out hardcoded sec-custom-fields and sec-process-pipeline, and any custom section that does NOT match current org scope
     let updatedSections = baseSections.filter((s) => {
-      if (s.id === "sec-custom-fields") return false;
+      if (s.id === "sec-custom-fields" || s.id === "sec-process-pipeline") return false;
       if (SYSTEM_SEC_IDS.has(s.id) || !s.isCustom) return true;
       return matchingCustomSecIds.has(s.id);
     });
 
     // Update existing custom sections with latest title/description/icon and merge/filter fields
+    const registryKeySet = new Set((registryAllFields || []).map((f) => f.key));
     updatedSections = updatedSections.map((s) => {
       const regSec = matchingCustomSecs.find((cs) => cs.id === s.id);
 
@@ -484,8 +511,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         });
       }
 
-      // CRITICAL: Filter fields in this section to only system fields or fields matching current org!
-      const scopedFieldKeys = mergedKeys.filter((k) => SYSTEM_FIELD_KEYS.has(k) || allowedFieldKeys.has(k));
+      // Preserve all fields that are system fields, org fields, already assigned to this section, or in the registry
+      const scopedFieldKeys = mergedKeys.filter(
+        (k) => SYSTEM_FIELD_KEYS.has(k) || allowedFieldKeys.has(k) || s.fieldKeys.includes(k) || registryKeySet.has(k)
+      );
 
       return {
         ...s,
@@ -525,25 +554,91 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     return updatedSections;
   };
 
-  const [clientName, setClientName] = useState(client?.name || "");
-  const [clientEmail, setClientEmail] = useState(client?.email || "");
-  const [clientPhone, setClientPhone] = useState(client?.phone || "");
-  const [clientCompany, setClientCompany] = useState(client?.companyName || "");
-  const [clientRole, setClientRole] = useState(client?.jobPosition || "");
-  const [clientStatus, setClientStatus] = useState(client?.status || "Active");
-  const [clientLocation, setClientLocation] = useState(client?.location || "");
-  const [clientCountry, setClientCountry] = useState(client?.country || "");
-  const [selectedProcesses, setSelectedProcesses] = useState<string[]>(client?.processes ?? []);
+  const [clientName, setClientName] = useState(initialTarget?.name || "");
+  const [clientEmail, setClientEmail] = useState(initialTarget?.email || "");
+  const [clientPhone, setClientPhone] = useState(initialTarget?.phone || "");
+  const [clientCompany, setClientCompany] = useState(initialTarget?.companyName || "");
+  const [clientRole, setClientRole] = useState(initialTarget?.jobPosition || "");
+  const [clientStatus, setClientStatus] = useState(initialTarget?.status || "Active");
+  const [clientLocation, setClientLocation] = useState(initialTarget?.location || "");
+  const [clientCountry, setClientCountry] = useState(initialTarget?.country || "");
+  const [selectedProcesses, setSelectedProcesses] = useState<string[]>(initialTarget?.processes ?? []);
   const [dynamicFieldValues, setDynamicFieldValues] = useState<Record<string, any>>({});
 
+  // Keep form fields synced whenever id route changes or client is selected
+  useEffect(() => {
+    if (id && id !== "new") {
+      let target = clients.find((c) => String(c.id) === String(id));
+      if (!target) {
+        try {
+          const saved = sessionStorage.getItem("clients");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            target = parsed.find((c: any) => String(c.id) === String(id));
+          }
+        } catch {}
+      }
+      if (target) {
+        setClientName(target.name || "");
+        setClientEmail(target.email || "");
+        setClientPhone(target.phone || "");
+        setClientCompany(target.companyName || "");
+        setClientRole(target.jobPosition || "");
+        setClientStatus(target.status || "Active");
+        setClientLocation(target.location || "");
+        setClientCountry(target.country || "");
+        setSelectedProcesses(target.processes ?? []);
+        if ((target as any).customSections) {
+          setClientSections((target as any).customSections);
+        }
+        const dyn: Record<string, any> = {};
+        Object.keys(target).forEach((k) => {
+          if (!HARDCODED_KEYS.has(k)) {
+            dyn[k] = (target as any)[k];
+          }
+        });
+        setDynamicFieldValues(dyn);
+      }
+    }
+  }, [id, clients]);
+
+  const client: Client | null = useMemo(() => {
+    if (isNewClient) {
+      return {
+        id: "new",
+        name: clientName || "New Client",
+        email: clientEmail || "",
+        phone: clientPhone || "",
+        country: clientCountry || "US",
+        countryCode: "+1",
+        countryFlag: "🇺🇸",
+        processes: selectedProcesses || [],
+        stage: selectedProcesses.length > 0 ? "Initial Contact" : "Unassigned",
+        responsible: "Unassigned",
+        lastContact: new Date().toISOString().split("T")[0],
+        status: clientStatus || "Active",
+        location: clientLocation || "",
+        companyName: clientCompany || "",
+        jobPosition: clientRole || "",
+      };
+    }
+    return initialTarget;
+  }, [id, isNewClient, initialTarget, clientName, clientEmail, clientPhone, clientCountry, selectedProcesses, clientStatus, clientLocation, clientCompany, clientRole]);
+
   const [clientSections, setClientSections] = useState<OverviewSection[]>(() => {
-    const savedSections = (client as any)?.customSections;
+    let savedSections = (initialTarget as any)?.customSections;
+    if (!savedSections) {
+      try {
+        const globalSaved = localStorage.getItem("ma_client_overview_sections");
+        if (globalSaved) savedSections = JSON.parse(globalSaved);
+      } catch {}
+    }
     return computeMergedClientSections(
       savedSections,
       getCustomSections("client"),
       getAllFields("client"),
       activeOrganization,
-      client?.visibleFieldKeys
+      initialTarget?.visibleFieldKeys
     );
   });
 
@@ -585,7 +680,13 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       setClientCountry(client.country || "");
       setSelectedProcesses(client.processes || []);
 
-      const savedSections = (client as any).customSections;
+      let savedSections = (client as any).customSections;
+      if (!savedSections) {
+        try {
+          const globalSaved = localStorage.getItem("ma_client_overview_sections");
+          if (globalSaved) savedSections = JSON.parse(globalSaved);
+        } catch {}
+      }
       const merged = computeMergedClientSections(
         savedSections,
         getCustomSections("client"),
@@ -712,33 +813,143 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   const handleSectionsChange = (newSections: OverviewSection[]) => {
     setClientSections(newSections);
+    try {
+      localStorage.setItem("ma_client_overview_sections", JSON.stringify(newSections));
+    } catch {}
     if (client) {
       const allAssignedKeys = newSections.flatMap((s) => s.fieldKeys);
-      setClients((prev) =>
-        prev.map((c) => {
+      setClients((prev) => {
+        const updated = prev.map((c) => {
           if (c.id !== client.id) return c;
           return {
             ...c,
             customSections: newSections,
             visibleFieldKeys: allAssignedKeys,
           } as any;
-        })
-      );
+        });
+        try {
+          sessionStorage.setItem("clients", JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+      try {
+        window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT));
+        window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+      } catch {}
     }
   };
 
-  const { getInvoicesByClient, simulatePayment } = useInvoices();
+  const { getInvoicesByClient, updateInvoiceStatus, deleteInvoice, voidInvoice, simulatePayment } = useInvoices();
+  const [selectedDealProcessFilter, setSelectedDealProcessFilter] = useState<string>("Patient Intake");
+  const [showDealProcessesDropdown, setShowDealProcessesDropdown] = useState<boolean>(false);
+  const [hoveredDealStageSegment, setHoveredDealStageSegment] = useState<{ logId: string; segIdx: number } | null>(null);
+
+  const [selectedApptProcessFilter, setSelectedApptProcessFilter] = useState<string>("");
+  const [showApptProcessesDropdown, setShowApptProcessesDropdown] = useState<boolean>(false);
+  const [hoveredApptStageBox, setHoveredApptStageBox] = useState<{ aptId: any; stageIdx: number } | null>(null);
   const [selectedInvoiceForDrawer, setSelectedInvoiceForDrawer] = useState<ClientInvoice | null>(null);
   const [isInvoiceDrawerOpen, setIsInvoiceDrawerOpen] = useState(false);
   const [isCreateInvoiceDrawerOpen, setIsCreateInvoiceDrawerOpen] = useState(false);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [invoiceSearchQuery, setInvoiceSearchQuery] = useState("");
+  const [invoiceWorkflowFilter, setInvoiceWorkflowFilter] = useState("all");
+  const [appointmentWorkflowFilter, setAppointmentWorkflowFilter] = useState("all");
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<string>("all");
   const [showScribeModal, setShowScribeModal] = useState(false);
 
 
   // All state variables verbatim from Clients.tsx drawer
-  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "appointments" | "invoices" | "documents" | "products" | "transcripts">("overview");
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "appointments" | "invoices" | "documents" | "products">("overview");
+
+  // Assign Process Dropdown state
+  const [isAssignProcessOpen, setIsAssignProcessOpen] = useState(false);
+  const [selectedAssignProcess, setSelectedAssignProcess] = useState("");
+  const [selectedAssignStage, setSelectedAssignStage] = useState("");
+
+  const handleSaveNewClient = () => {
+    if (!clientName.trim()) {
+      toast.error("Please enter a client name");
+      return;
+    }
+    const newId = `CL-${String(Math.floor(100 + Math.random() * 900))}`;
+    const now = new Date();
+    const allAssignedKeys = clientSections.flatMap((s) => s.fieldKeys);
+    const createdClient: Client = {
+      id: newId,
+      name: clientName.trim(),
+      email: clientEmail.trim(),
+      phone: clientPhone.trim(),
+      country: clientCountry || "US",
+      countryCode: "+1",
+      countryFlag: "🇺🇸",
+      processes: selectedProcesses,
+      stage: selectedProcesses.length > 0 ? "Initial Contact" : "Unassigned",
+      responsible: "Unassigned",
+      lastContact: now.toISOString().split("T")[0],
+      status: clientStatus || "Active",
+      location: clientLocation || "",
+      companyName: clientCompany || "",
+      jobPosition: clientRole || "",
+      customSections: clientSections,
+      visibleFieldKeys: allAssignedKeys,
+      ...dynamicFieldValues,
+    };
+
+    appendActivity({
+      clientId: newId,
+      processId: "system",
+      processName: "Client Onboarding",
+      type: "status_change",
+      status: "completed",
+      sourceStepName: "Client Onboarding",
+      details: {
+        primary: "Client got created",
+        secondary: "Client profile created via drawer",
+      },
+    } as any);
+
+    try {
+      localStorage.setItem("ma_client_overview_sections", JSON.stringify(clientSections));
+    } catch {}
+
+    const updated = [createdClient, ...clients];
+    setClients(updated);
+    sessionStorage.setItem("clients", JSON.stringify(updated));
+    try {
+      window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT));
+      window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+    } catch {}
+    toast.success("Client created successfully!");
+    handleClose();
+  };
+
+  const handleConfirmAssignProcess = () => {
+    if (!selectedAssignProcess) return;
+    const currentProcs = client?.processes || [];
+    if (!currentProcs.includes(selectedAssignProcess)) {
+      const updatedProcs = [...currentProcs, selectedAssignProcess];
+      setSelectedProcesses(updatedProcs);
+      if (client && client.id !== "new") {
+        setClients((prev) =>
+          prev.map((c) =>
+            c.id === client.id
+              ? { ...c, processes: updatedProcs, stage: selectedAssignStage || c.stage }
+              : c
+          )
+        );
+      }
+    }
+    if (selectedAssignStage && client) {
+      setDrawerProcessStages((prev) => ({
+        ...prev,
+        [selectedAssignProcess]: selectedAssignStage,
+      }));
+    }
+    setIsAssignProcessOpen(false);
+    setSelectedAssignProcess("");
+    setSelectedAssignStage("");
+    toast.success(`Process ${selectedAssignProcess} assigned successfully!`);
+  };
 
   // ── Transcripts Tab State ──
   const [scribeSessions, setScribeSessions] = useState<ScribeSession[]>(getScribeSessions());
@@ -819,7 +1030,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [appointmentSearchQuery, setAppointmentSearchQuery] = useState("");
   const [appointmentStatusFilter, setAppointmentStatusFilter] = useState<string>("all");
   const [appointmentRefreshKey, setAppointmentRefreshKey] = useState(0);
-  const [automationVersion, setAutomationVersion] = useState(0);
+    const [automationVersion, setAutomationVersion] = useState(0);
+  const availableProcesses = useMemo(() => {
+    return getAvailableProcessesList();
+  }, [automationVersion]);
 
   useEffect(() => {
     const handleUpdate = () => setAutomationVersion((v) => v + 1);
@@ -927,6 +1141,152 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     toast.success("Appointment scheduled successfully!");
     setShowScheduleApptFromActivity(false);
   };
+  const getDealStageObjectsForProcess = (processName: string, currentStageName?: string): Array<{
+    id: string;
+    name: string;
+    color: string;
+    isFinalStage?: boolean;
+    isInitial?: boolean;
+    stageCategory?: "in_progress" | "success" | "lost";
+    stagePosition?: "initial" | "intermediate" | "final" | null;
+    intentTrigger?: string;
+  }> => {
+    if (!processName) {
+      return currentStageName
+        ? [{ id: "1", name: currentStageName, color: CHEVRON_PALETTE[0] }]
+        : [];
+    }
+    const cleanName = processName.trim().toLowerCase();
+    const storedProcs = getStoredProcesses();
+    const foundProc = storedProcs.find(
+      (p) => p.name.trim().toLowerCase() === cleanName || p.id === processName
+    );
+    if (foundProc && foundProc.stages && foundProc.stages.length > 0) {
+      return foundProc.stages.map((s, idx) => ({
+        id: s.id || `stg-${idx}`,
+        name: s.name,
+        color: s.color || CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
+        isFinalStage: Boolean(s.isFinalStage || s.isFinal),
+        isInitial: s.isInitial,
+        stageCategory: (s as any).stageCategory || s.systemCategory,
+        stagePosition: s.stagePosition,
+        intentTrigger: (s as any).intentTrigger,
+      }));
+    }
+    const options = getStagesForProcess(processName);
+    if (options && options.length > 0) {
+      return options.map((o, idx) => ({
+        id: `stg-${idx}`,
+        name: o.label,
+        color: CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
+        isFinalStage: idx === options.length - 1,
+      }));
+    }
+    if (currentStageName) {
+      const clean = currentStageName.includes(":") ? currentStageName.split(":")[1].trim() : currentStageName.trim();
+      return [{ id: "1", name: clean, color: CHEVRON_PALETTE[0] }];
+    }
+    return [];
+  };
+
+  const getDealStageIndexForProcess = (processName: string, currentStageName: string): number => {
+    const objs = getDealStageObjectsForProcess(processName, currentStageName);
+    const cleanCurrent = (currentStageName || "").includes(":")
+      ? currentStageName.split(":")[1].trim().toLowerCase()
+      : (currentStageName || "").trim().toLowerCase();
+    const idx = objs.findIndex((o) => o.name.trim().toLowerCase() === cleanCurrent);
+    return idx >= 0 ? idx + 1 : 1;
+  };
+
+  const lightenHex = (hex: string, percent: number = 75): string => {
+    if (!hex || typeof hex !== "string") return "#F1F5F9";
+    let col = hex.replace("#", "").trim();
+    if (col.length === 3) col = col.split("").map((ch) => ch + ch).join("");
+    const num = parseInt(col, 16);
+    if (isNaN(num)) return hex;
+    const factor = percent / 100;
+    const r = Math.max(0, Math.min(255, Math.round(((num >> 16) & 255) + (255 - ((num >> 16) & 255)) * factor)));
+    const g = Math.max(0, Math.min(255, Math.round(((num >> 8) & 255) + (255 - ((num >> 8) & 255)) * factor)));
+    const b = Math.max(0, Math.min(255, Math.round((num & 255) + (255 - (num & 255)) * factor)));
+    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+  };
+
+  const handleUpdateLogStage = (log: any, stageName: string) => {
+    if (!client) return;
+    setDrawerProcessStages((prev) => ({ ...prev, [log.process]: stageName }));
+    updateProcessCallLogStage(String(client.id), log.process, stageName);
+    toast.success(`Stage updated to ${stageName}`);
+  };
+
+  const appointmentProcesses: Process[] = useMemo(() => {
+    const procs = getStoredProcesses();
+    const apptProcs = procs.filter((p) => p.entityType === "appointment");
+    return apptProcs.length > 0 ? apptProcs : [DEFAULT_ENTITY_PROCESSES.appointment];
+  }, [automationVersion]);
+
+  useEffect(() => {
+    if (appointmentProcesses.length > 0) {
+      if (!selectedApptProcessFilter || !appointmentProcesses.some((p) => p.id === selectedApptProcessFilter)) {
+        setSelectedApptProcessFilter(appointmentProcesses[0].id);
+      }
+    }
+  }, [appointmentProcesses, selectedApptProcessFilter]);
+
+  const selectedApptProc: Process = useMemo(() => {
+    return appointmentProcesses.find((p) => p.id === selectedApptProcessFilter) || appointmentProcesses[0];
+  }, [appointmentProcesses, selectedApptProcessFilter]);
+
+  const handleQuickApptStageChange = (apt: any, stage: any) => {
+    const stored = sessionStorage.getItem("appointments_v1");
+    const all: any[] = stored ? JSON.parse(stored) : [];
+    const updated = all.map((a: any) =>
+      String(a.id) === String(apt.id)
+        ? {
+            ...a,
+            currentStageId: stage.id,
+            stageId: stage.id,
+            statusLabel: stage.name,
+            status: stage.systemCategory === "completed" || stage.name.toLowerCase().includes("completed") ? "completed" : a.status
+          }
+        : a
+    );
+    sessionStorage.setItem("appointments_v1", JSON.stringify(updated));
+    setAppointmentRefreshKey((k) => k + 1);
+    toast.success(`Appointment moved to ${stage.name} ✓`);
+  };
+
+  const invoiceProcess: Process = useMemo(() => {
+    const procs = getStoredProcesses();
+    return procs.find((p) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
+  }, [automationVersion]);
+
+  const getInvoiceActivityText = (inv: ClientInvoice) => {
+    switch (inv.status) {
+      case "paid":
+        return `Payment received (${inv.total.toFixed(2)}) - ${inv.paidAt?.split("T")[0] || "Completed"}`;
+      case "viewed":
+        return "Viewed by client online";
+      case "sent":
+        return "Sent via WhatsApp & Email";
+      case "overdue":
+        return "Payment past due - Overdue notice sent";
+      case "void":
+        return "Invoice voided";
+      default:
+        return "Draft created";
+    }
+  };
+
+  const handleUpdateInvoiceStatus = (invoiceId: string, newStatusOrStageId: any) => {
+    const stage = invoiceProcess.stages.find((s) => s.id === newStatusOrStageId || s.systemCategory === newStatusOrStageId);
+    if (stage) {
+      invoiceService.moveToStage(invoiceId, stage.id, { type: "manual", ruleName: `Stage changed to ${stage.name}` });
+      toast.success(`Invoice moved to ${stage.name} ✓`);
+    } else {
+      updateInvoiceStatus(invoiceId, newStatusOrStageId);
+    }
+  };
+
   const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([]);
   const [processSearchQuery, setProcessSearchQuery] = useState("");
 
@@ -1172,11 +1532,31 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   }, [client, drawerProcessStages]);
 
   const drawerActivityItems = useMemo(() => {
+    if (isNewClient || client.id === "new") {
+      return [];
+    }
+
     const findProcessId = (heading: string) => {
       const process = drawerClientProcesses.find((p) => p.name === heading);
       return process?.id || "process-1";
     };
     const mockItems = [
+      {
+        id: "act-created-initial",
+        processId: "system",
+        processName: "Client Creation",
+        clientId: client.id,
+        type: "status_change" as const,
+        timestamp: "2024-04-01T09:00:00",
+        date: "Apr 1, 2024",
+        time: "9:00 AM",
+        status: "completed",
+        sourceStepName: "Client Onboarding",
+        details: {
+          primary: "Client got created",
+          secondary: "Client record registered",
+        },
+      },
       {
         id: "act-1",
         processId: findProcessId("Patient Intake"),
@@ -1373,7 +1753,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       status: r.status === "success" ? "Completed" : r.status,
     }));
 
-    const rawList = realActivity.length > 0 ? realActivity : mockItems;
+    const isSeedClient = ["CL-001", "CL-002", "CL-003", "CL-004", "CL-005", "CL-006", "CL-007", "CL-008", "CL-009", "CL-010", "CL-011", "CL-012"].includes(String(client.id));
+    const rawList = realActivity.length > 0 ? realActivity : (isSeedClient ? mockItems : []);
 
     const toChronologicalOrder = (entries: typeof rawList) =>
       [...entries].sort((a, b) => {
@@ -1387,7 +1768,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       });
 
     return [...toChronologicalOrder(rawList)].reverse();
-  }, [client?.id, drawerClientProcesses]);
+  }, [client?.id, drawerClientProcesses, isNewClient]);
 
   const getDrawerActivityCount = (processId: string) => {
     if (processId === "all") return drawerActivityItems.length;
@@ -1670,24 +2051,35 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             </div>
             <div className="flex-1">
               <h2 className="text-xl font-bold mb-1" style={{ color: "#1F2937", fontFamily: "DM Sans, sans-serif" }}>
-                {client.name}
+                {isNewClient ? (clientName || "Add New Client") : client.name}
               </h2>
               <span
                 className="inline-block px-2.5 py-1.5 text-[11px] font-bold"
                 style={{
                   fontFamily: "Outfit, sans-serif",
                   backgroundColor:
-                    client.status === "Active" ? "#DCFCE7" : client.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
+                    isNewClient ? "#EFF6FF" : client.status === "Active" ? "#DCFCE7" : client.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
                   color:
-                    client.status === "Active" ? "#10B981" : client.status === "Pending" ? "#F59E0B" : "#6B7280",
+                    isNewClient ? "#2563EB" : client.status === "Active" ? "#10B981" : client.status === "Pending" ? "#F59E0B" : "#6B7280",
                   borderRadius: "6px",
                   padding: "6px 10px",
                 }}
               >
-                {client.status}
+                {isNewClient ? "New Client" : client.status}
               </span>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
+              {isNewClient && (
+                <button
+                  type="button"
+                  onClick={handleSaveNewClient}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  <Check className="w-4 h-4" />
+                  Save Client
+                </button>
+              )}
               <button
                 onClick={handleClose}
                 className="hover:bg-gray-100 p-1.5 rounded-lg transition-colors flex-shrink-0 cursor-pointer"
@@ -1709,7 +2101,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "appointments" as const, label: "Appointments" },
                 { id: "invoices" as const, label: "Invoices" },
                 { id: "documents" as const, label: "Documents" },
-                { id: "transcripts" as const, label: "Transcripts" },
                 { id: "products" as const, label: "Product/Services" },
               ] as const
             ).map((tab) => (
@@ -1805,226 +2196,443 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           {activeProfileTab === "processes" && (
             <div className="space-y-4">
               {(() => {
-                // Filter processes client-side by search query
-                const filteredProcesses = drawerClientProcesses.filter((p) =>
-                  p.name.toLowerCase().includes(processSearchQuery.toLowerCase())
+                const storedLogs = getStoredCallLogs().filter(
+                  (l) => l.clientId === client.id || l.client.toLowerCase() === client.name.toLowerCase()
+                );
+                const matchingLogs = storedLogs.filter(
+                  (l) => l.process.toLowerCase() === selectedDealProcessFilter.toLowerCase()
                 );
 
-                const isAllSelected = filteredProcesses.length > 0 && filteredProcesses.every((p) => selectedProcessIds.includes(p.id));
-                const handleToggleSelectAll = () => {
-                  if (isAllSelected) {
-                    setSelectedProcessIds((prev) => prev.filter((id) => !filteredProcesses.some((fp) => fp.id === id)));
-                  } else {
-                    const newSelected = [...selectedProcessIds];
-                    filteredProcesses.forEach((p) => {
-                      if (!newSelected.includes(p.id)) {
-                        newSelected.push(p.id);
-                      }
-                    });
-                    setSelectedProcessIds(newSelected);
-                  }
-                };
+                const effectiveLogs = matchingLogs.length > 0 ? matchingLogs : [
+                  {
+                    id: `PRC-${client.id}-1`,
+                    processId: `PRC-${client.id}-1`,
+                    client: client.name,
+                    clientId: client.id,
+                    type: "Outbound",
+                    status: "In Progress",
+                    process: selectedDealProcessFilter,
+                    currentStage: drawerProcessStages[selectedDealProcessFilter] || "Initial Contact",
+                    duration: "4:30",
+                    date: "2024-04-13 14:30",
+                    hasRecording: true,
+                    hasTranscript: false,
+                    hasScheduledCall: true,
+                    responsible: (client as any).responsible || "Unassigned",
+                  } as any,
+                ];
 
-                return (
-                  <div className="space-y-3">
-                    {/* Search bar — right-aligned, no redundant label */}
-                    <div className="flex items-center justify-end px-1">
-                      <div className="relative w-52">
-                        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5" style={{ color: "#9CA3AF" }} />
-                        <input
-                          type="text"
-                          placeholder="Search process..."
-                          value={processSearchQuery}
-                          onChange={(e) => setProcessSearchQuery(e.target.value)}
-                          className="pl-8 pr-3 py-1.5 w-full text-xs bg-white border rounded-lg focus:outline-none transition-colors"
-                          style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937", borderColor: "#E5E7EB" }}
-                          onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                          onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                        />
-                      </div>
-                    </div>
+                const searchLower = processSearchQuery.toLowerCase().trim();
+                const filteredClientDealLogs = effectiveLogs.filter((log) => {
+                  if (!searchLower) return true;
+                  return (
+                    log.id.toLowerCase().includes(searchLower) ||
+                    log.process.toLowerCase().includes(searchLower) ||
+                    log.currentStage.toLowerCase().includes(searchLower)
+                  );
+                });
 
-                    {/* Table View */}
-                    {(() => {
-                      const processColumns: TableColumn<any>[] = [
-                        {
-                          header: "Process / Deal",
-                          accessorKey: "name",
-                          align: "left",
-                          render: (process, idx) => {
-                            const processCode = `PRC-${client.id}-${idx + 1}`;
-                            return (
-                              <div className="flex flex-col" style={{ maxWidth: "200px" }}>
-                                <span
-                                  title={process.name}
-                                  className="hover:underline overflow-hidden text-ellipsis whitespace-nowrap"
-                                  style={{ color: "#4F8EF7", fontWeight: "600", fontFamily: "DM Sans, sans-serif", fontSize: "13px" }}
-                                >
-                                  {process.name}
-                                </span>
-                                <span className="whitespace-nowrap" style={{ fontSize: "11px", color: "#9CA3AF" }}>{processCode}</span>
-                              </div>
-                            );
-                          },
-                        },
-                        {
-                          header: "Stage",
-                          align: "center",
-                          render: (process) => {
-                            const currentStage = drawerProcessStages[process.id] || process.currentStage;
-                            const stages = getStagesForProcess(process.name);
-                            const currentIndex = stages.findIndex((s) => s.label === currentStage);
-                            return (
-                              <div className="flex flex-col items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex items-center" style={{ gap: "3px" }}>
-                                  {stages.map((stage, sIdx) => {
-                                    const isFilled = sIdx <= currentIndex;
-                                    const stageKey = `${process.id}-${sIdx}`;
-                                    return (
-                                      <div key={stage.id} style={{ position: "relative" }}>
-                                        <button
-                                          type="button"
-                                          onMouseEnter={() => setHoveredStage(stageKey)}
-                                          onMouseLeave={() => setHoveredStage(null)}
-                                          style={{
-                                            width: "22px",
-                                            height: "6px",
-                                            borderRadius: "1.5px",
-                                            backgroundColor: isFilled ? "#0EA5E9" : "#E5E7EB",
-                                            border: isFilled ? "none" : "1px solid #D1D5DB",
-                                            cursor: "pointer",
-                                            transition: "all 0.2s",
-                                            padding: 0,
-                                          }}
-                                          className="hover:opacity-80"
-                                        />
-                                        {hoveredStage === stageKey && (
-                                          <div style={{ position: "absolute", bottom: "12px", left: "50%", transform: "translateX(-50%)", backgroundColor: "#1A2B4A", color: "#FFFFFF", fontSize: "10px", borderRadius: "4px", padding: "2px 6px", whiteSpace: "nowrap", zIndex: 10, pointerEvents: "none" }}>
-                                            {stage.label}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                <span style={{ fontSize: "11px", color: "#9CA3AF", fontFamily: "Outfit, sans-serif", fontWeight: 400 }}>{currentStage}</span>
-                              </div>
-                            );
-                          },
-                        },
-                        {
-                          header: "Deal Type",
-                          accessorKey: "dealType",
-                          align: "center",
-                          render: (process) => (
-                            <span className="whitespace-nowrap" style={{ fontSize: "13px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                              {process.dealType}
-                            </span>
-                          ),
-                        },
-                        {
-                          header: "Source",
-                          accessorKey: "source",
-                          align: "center",
-                          render: (process) => (
-                            <span className="whitespace-nowrap" style={{ fontSize: "13px", color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
-                              {process.source}
-                            </span>
-                          ),
-                        },
-                        {
-                          header: "Status",
-                          accessorKey: "status",
-                          align: "center",
-                          render: (process) => (
-                            <span
-                              className="px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap"
-                              style={{
-                                backgroundColor: process.status === "Completed" ? "#D1FAE5" : process.status === "In Progress" ? "#FED7AA" : process.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
-                                color: process.status === "Completed" ? "#065F46" : process.status === "In Progress" ? "#C2410C" : process.status === "Pending" ? "#92400E" : "#6B7280",
-                                borderColor: process.status === "Completed" ? "#A7F3D0" : process.status === "In Progress" ? "#FED7AA" : process.status === "Pending" ? "#FDE68A" : "#E5E7EB",
-                              }}
-                            >
-                              {process.status}
-                            </span>
-                          ),
-                        },
-                        {
-                          header: "Created",
-                          accessorKey: "created",
-                          align: "center",
-                          render: (process) => (
-                            <span className="whitespace-nowrap" style={{ fontSize: "12px", color: "#6B7280" }}>{process.created}</span>
-                          ),
-                        },
-                        {
-                          header: "Responsible",
-                          accessorKey: "responsible",
-                          align: "left",
-                          render: (process) => {
-                            const initials = process.responsible
-                              ? process.responsible.split(" ").map((n) => n[0]).join("")
-                              : "JS";
-                            return (
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className="flex items-center justify-center rounded-full text-xs font-semibold"
-                                  style={{ width: "26px", height: "26px", backgroundColor: "#EBF4FF", color: "#4F8EF7", fontFamily: "DM Sans, sans-serif", flexShrink: 0 }}
-                                >
-                                  {initials}
-                                </div>
-                                <span className="whitespace-nowrap" style={{ fontSize: "13px", color: "#1F2937", fontWeight: "500" }}>{process.responsible}</span>
-                              </div>
-                            );
-                          },
-                        },
-                      ];
-
+                const dealColumns: TableColumn<CallLog>[] = [
+                  {
+                    key: "id",
+                    header: "Process ID",
+                    render: (log) => {
+                      const formattedId = (log as any).processId
+                        ? (log as any).processId
+                        : log.id.startsWith("CALL-")
+                          ? `PRC-${log.id.replace("CALL-", "")}`
+                          : (log.id.startsWith("PRC-") ? log.id : `PRC-${log.id}`);
                       return (
-                        <TableComponent
-                          columns={processColumns}
-                          data={filteredProcesses}
-                          getRowId={(p) => p.id}
-                          enableSelection={true}
-                          selectedIds={new Set(selectedProcessIds)}
-                          onSelectionChange={(newSet) => setSelectedProcessIds(Array.from(newSet))}
-                          onRowClick={(process) => {
-                            const allLogs = getStoredCallLogs();
-                            const matchingLog = allLogs.find(
-                              (l) => (l.clientId === client.id || l.client.toLowerCase() === client.name.toLowerCase()) &&
-                                     (l.process.toLowerCase() === process.name.toLowerCase())
-                            ) || {
-                              id: process.id.startsWith("CALL-") ? process.id : `CALL-${process.name.toUpperCase().replace(/\s+/g, "-")}`,
-                              client: client.name,
-                              clientId: client.id,
-                              type: "Outbound",
-                              status: process.status,
-                              process: process.name,
-                              currentStage: process.currentStage,
-                              duration: "4:32",
-                              date: process.created !== "—" ? process.created : "2024-04-10 14:30",
-                              hasRecording: true,
-                              hasTranscript: true,
-                              hasScheduledCall: true,
-                            };
-
-                            setSelectedProcessLog(matchingLog);
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedProcessLog(log);
                             setProcessDetailTab("general");
                             setShowProcessDetailDrawer(true);
                           }}
-                          emptyMessage="No processes found"
-                        />
+                          className="font-mono text-xs font-semibold text-[#1456f0] hover:text-[#1d4ed8] hover:underline cursor-pointer tracking-tight"
+                          style={{ fontFamily: "JetBrains Mono, monospace" }}
+                          title="Open process details"
+                        >
+                          {formattedId}
+                        </button>
                       );
-                    })()}
+                    },
+                  },
+                  {
+                    key: "currentStage",
+                    header: "Stage",
+                    render: (log) => {
+                      const stageObjs = getDealStageObjectsForProcess(log.process, log.currentStage);
+                      const activeIdx = getDealStageIndexForProcess(log.process, log.currentStage);
+                      const cleanCurrentStage = (log.currentStage || "").includes(":")
+                        ? log.currentStage.split(":")[1].trim().toLowerCase()
+                        : (log.currentStage || "").trim().toLowerCase();
+
+                      const currentStageObj = stageObjs.find((s) => s.name.trim().toLowerCase() === cleanCurrentStage);
+                      const isLostStageObj = (s?: any) => {
+                        if (!s) return false;
+                        if (s.stageCategory === "lost" || s.intentTrigger === "not_interested") return true;
+                        const n = s.name.toLowerCase();
+                        return n.includes("not interested") || n.includes("lost") || n.includes("cancelled") || n.includes("declined") || n.includes("failed") || n.includes("no-show");
+                      };
+
+                      const isWonStageObj = (s?: any) => {
+                        if (!s) return false;
+                        if (s.stageCategory === "success" || s.intentTrigger === "interested") return true;
+                        const n = s.name.toLowerCase();
+                        return n.includes("interested") || n.includes("won") || n.includes("reactivated") || n.includes("completed") || n.includes("closed");
+                      };
+
+                      const isLastOrFinalStageObj = (s?: any) => {
+                        if (!s) return false;
+                        return Boolean(s.isFinalStage || s.stagePosition === "final" || isLostStageObj(s) || isWonStageObj(s));
+                      };
+
+                      const isCurrentFinal = isLastOrFinalStageObj(currentStageObj);
+
+                      return (
+                        <div className="flex items-center justify-center -space-x-px" onClick={(e) => e.stopPropagation()}>
+                          {stageObjs.map((stg, i) => {
+                            const stageName = stg.name;
+                            const stageColor = stg.color || CHEVRON_PALETTE[i % CHEVRON_PALETTE.length];
+                            const segIdx = i + 1;
+                            const isActive = segIdx === activeIdx;
+
+                            const isThisFinal = isLastOrFinalStageObj(stg);
+                            const isThisInProgress = !isThisFinal;
+
+                            let isCompleted = false;
+                            let isDeactivated = false;
+
+                            if (isActive) {
+                              // Active stage
+                            } else if (isCurrentFinal) {
+                              if (isThisInProgress) isCompleted = true;
+                              else isDeactivated = true;
+                            } else {
+                              if (isThisInProgress && segIdx < activeIdx) isCompleted = true;
+                            }
+
+                            const lightBg = lightenHex(stageColor, 78);
+                            const lightBorder = lightenHex(stageColor, 40);
+
+                            let bg = "transparent";
+                            let border = "1px solid #CBD5E1";
+                            let opacity = 1;
+
+                            if (isActive) {
+                              bg = stageColor;
+                              border = "1.5px solid #0F172A";
+                            } else if (isCompleted) {
+                              bg = stageColor;
+                              border = `1px solid ${stageColor}`;
+                              opacity = 0.85;
+                            } else if (isDeactivated) {
+                              bg = lightBg;
+                              border = `1px solid ${lightBorder}`;
+                              opacity = 0.95;
+                            } else {
+                              bg = "transparent";
+                              border = "1px solid #CBD5E1";
+                              opacity = 0.45;
+                            }
+
+                            const isHovered = hoveredDealStageSegment?.logId === log.id && hoveredDealStageSegment?.segIdx === segIdx;
+                            return (
+                              <div
+                                key={stg.id || stageName}
+                                className="relative"
+                                style={{ zIndex: isActive ? 10 : isHovered ? 20 : 1 }}
+                              >
+                                {isHovered && (
+                                  <div
+                                    className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-1 pointer-events-none rounded shadow-md z-[200] flex items-center gap-1.5"
+                                    style={{ backgroundColor: "#1A2B4A", color: "#fff", fontSize: "12px" }}
+                                  >
+                                    <span
+                                      className="w-2 h-2 rounded-full flex-shrink-0"
+                                      style={{ backgroundColor: isDeactivated ? lightBg : stageColor }}
+                                    />
+                                    <span>{stageName}</span>
+                                    {isDeactivated ? (
+                                      <span className="text-[10px] text-gray-300 font-semibold">(Inactive)</span>
+                                    ) : isActive ? (
+                                      <span className="text-[10px] text-blue-300 font-semibold">(Current)</span>
+                                    ) : isCompleted ? (
+                                      <span className="text-[10px] text-emerald-300 font-semibold">(Completed)</span>
+                                    ) : null}
+                                  </div>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!isDeactivated) handleUpdateLogStage(log, stageName);
+                                  }}
+                                  onMouseEnter={() => setHoveredDealStageSegment({ logId: log.id, segIdx })}
+                                  onMouseLeave={() => setHoveredDealStageSegment(null)}
+                                  style={{
+                                    width: "18px",
+                                    height: "8px",
+                                    borderRadius: "0px",
+                                    backgroundColor: bg,
+                                    border: border,
+                                    opacity: opacity,
+                                    cursor: isDeactivated ? "not-allowed" : "pointer",
+                                    display: "block",
+                                    padding: 0,
+                                    flexShrink: 0,
+                                    transition: "all 0.2s ease",
+                                  }}
+                                  title={stageName}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    },
+                  },
+                  {
+                    key: "client",
+                    header: "Client",
+                    render: (log) => (
+                      <span
+                        className="cursor-pointer hover:underline font-semibold text-xs"
+                        style={{ color: "#1A73E8", fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        {log.client || client.name}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "date",
+                    header: "Created",
+                    render: (log) => (
+                      <span className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {log.date || "2024-04-13 14:30"}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "activity",
+                    header: "Activity",
+                    render: (log) => (
+                      <div className="flex items-center justify-start gap-1.5 text-xs whitespace-nowrap">
+                        <span style={{ color: log.status === "Pending" ? "#DC2626" : "#64748B", fontFamily: "Outfit, sans-serif" }}>
+                          {log.status === "Pending" ? "Scheduled call" : "Last contact"} - {log.date ? new Date(log.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Apr 13"}
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span className="truncate max-w-[140px]" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif" }}>
+                          {log.status === "Pending" ? "Follow up needed" : log.currentStage}
+                        </span>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: "responsible",
+                    header: "Responsible",
+                    render: (log) => (
+                      <span className="text-xs text-gray-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {(client as any).responsible || (log as any).responsible || "Unassigned"}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "alert",
+                    header: "Alert",
+                    render: () => <span className="text-xs font-medium text-slate-400">—</span>,
+                  },
+                ];
+
+                return (
+                  <div className="space-y-3">
+                    {/* Topbar powered by PageTopBar component matching /deal */}
+                    <div className="relative">
+                      <PageTopBar
+                        leftElement={
+                          <div className="flex items-center gap-1.5">
+                            {/* Process Filter Dropdown matching Deals.tsx */}
+                            <div className="relative shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setShowDealProcessesDropdown(!showDealProcessesDropdown)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors cursor-pointer"
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              >
+                                <span className="truncate max-w-[160px] font-semibold text-gray-800">
+                                  {selectedDealProcessFilter}
+                                </span>
+                                <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                              </button>
+
+                              {showDealProcessesDropdown && (
+                                <>
+                                  <div
+                                    className="fixed inset-0 z-40"
+                                    onClick={() => setShowDealProcessesDropdown(false)}
+                                  />
+                                  <div className="absolute top-full left-0 mt-1.5 w-60 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                                    {availableProcesses.map((process) => (
+                                      <button
+                                        key={process}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedDealProcessFilter(process);
+                                          setShowDealProcessesDropdown(false);
+                                        }}
+                                        className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                                          selectedDealProcessFilter === process
+                                            ? "bg-primary/10 text-primary font-semibold"
+                                            : "text-gray-700 hover:bg-muted"
+                                        }`}
+                                        style={{ fontFamily: "Outfit, sans-serif" }}
+                                      >
+                                        <span className="truncate">{process}</span>
+                                        {selectedDealProcessFilter === process && (
+                                          <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />
+                                        )}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        }
+                        searchQuery={processSearchQuery}
+                        onSearchChange={setProcessSearchQuery}
+                        searchPlaceholder="Search processes..."
+                        resultsCount={filteredClientDealLogs.length}
+                        primaryAction={{
+                          label: "Assign Process",
+                          onClick: () => setIsAssignProcessOpen((prev) => !prev),
+                          icon: <Plus className="w-4 h-4" />,
+                          className: "bg-blue-600 hover:bg-blue-700 text-white",
+                        }}
+                      />
+
+                      {isAssignProcessOpen && (
+                        <div
+                          className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-200 p-4 z-30 animate-in fade-in zoom-in-95 duration-150"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-between pb-2.5 border-b border-gray-100 mb-3">
+                            <h4 className="text-sm font-bold text-gray-900">Assign Process</h4>
+                            <button
+                              type="button"
+                              onClick={() => setIsAssignProcessOpen(false)}
+                              className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1">Process</label>
+                              <select
+                                value={selectedAssignProcess}
+                                onChange={(e) => {
+                                  const proc = e.target.value;
+                                  setSelectedAssignProcess(proc);
+                                  const stgs = getStagesForProcess(proc);
+                                  setSelectedAssignStage(stgs[0]?.label || "");
+                                }}
+                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:border-blue-500 cursor-pointer"
+                              >
+                                <option value="">Select a process...</option>
+                                {availableProcesses.map((p) => (
+                                  <option key={p} value={p}>{p}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1">Stage</label>
+                              <select
+                                value={selectedAssignStage}
+                                onChange={(e) => setSelectedAssignStage(e.target.value)}
+                                disabled={!selectedAssignProcess}
+                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:border-blue-500 disabled:opacity-50 cursor-pointer"
+                              >
+                                <option value="">Select a stage...</option>
+                                {getStagesForProcess(selectedAssignProcess).map((s) => (
+                                  <option key={s.id || s.label} value={s.label}>{s.label}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="pt-2 flex justify-end gap-2 border-t border-gray-100">
+                              <button
+                                type="button"
+                                onClick={() => setIsAssignProcessOpen(false)}
+                                className="px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleConfirmAssignProcess}
+                                disabled={!selectedAssignProcess}
+                                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                              >
+                                Assign
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Table View matching Deals.tsx exactly */}
+                    <TableComponent
+                      columns={dealColumns}
+                      data={filteredClientDealLogs}
+                      getRowId={(log) => log.id}
+                      emptyMessage="No deals or processes found for this client in the selected workflow."
+                      onRowClick={(log) => {
+                        setSelectedProcessLog(log);
+                        setProcessDetailTab("general");
+                        setShowProcessDetailDrawer(true);
+                      }}
+                      rowActions={[
+                        {
+                          label: "View",
+                          icon: <Eye className="w-3.5 h-3.5" />,
+                          onClick: (log) => {
+                            setSelectedProcessLog(log);
+                            setProcessDetailTab("general");
+                            setShowProcessDetailDrawer(true);
+                          },
+                        },
+                        {
+                          label: "Edit",
+                          icon: <Pencil className="w-3.5 h-3.5" />,
+                          onClick: () => {
+                            toast.info("Edit coming soon");
+                          },
+                        },
+                        {
+                          label: "Delete",
+                          icon: <Trash2 className="w-3.5 h-3.5 text-rose-500" />,
+                          isDanger: true,
+                          onClick: () => {
+                            toast.info("Process entry removed");
+                          },
+                        },
+                      ]}
+                    />
                   </div>
                 );
               })()}
             </div>
           )}
 
-
-
-          {/* ── Forms Tab ── */}
+{/* ── Forms Tab ── */}
           {activeProfileTab === "forms" && (
             <div className="space-y-4">
               <PageTopBar
@@ -2185,7 +2793,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             const clientAppts = all.filter((a: any) =>
               (client?.email && a.clientEmail && a.clientEmail.toLowerCase() === client.email.toLowerCase()) ||
               (client?.phone && a.clientPhone && a.clientPhone.replace(/\D/g, "") === client.phone.replace(/\D/g, "")) ||
-              (client?.name && a.clientName && a.clientName.toLowerCase() === client.name.toLowerCase())
+              (client?.name && a.clientName && a.clientName.toLowerCase() === client.name.toLowerCase()) ||
+              String(a.clientId) === String(client?.id)
             );
 
             const getResolvedServiceName = (appt: any) => {
@@ -2194,23 +2803,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               if (appt.serviceId !== undefined && appt.serviceId !== null) {
                 const fromStore = getStoredServices().find((s) => String(s.id) === String(appt.serviceId));
                 if (fromStore) return fromStore.name;
-                const fromMock = MOCK_SERVICES.find((s) => s.id === String(appt.serviceId) || s.id === `srv-${appt.serviceId}`);
-                if (fromMock) return fromMock.name;
               }
-              if (appt.title) {
-                for (const s of getStoredServices()) {
-                  if (appt.title.toLowerCase().includes(s.name.toLowerCase())) return s.name;
-                }
-                for (const m of MOCK_SERVICES) {
-                  if (appt.title.toLowerCase().includes(m.name.toLowerCase())) return m.name;
-                }
-                if (appt.title.toLowerCase().includes("initial consultation")) return "Initial Consultation";
-                if (appt.title.toLowerCase().includes("consultation")) return "Consultation";
-                if (appt.title.toLowerCase().includes("follow-up") || appt.title.toLowerCase().includes("follow up")) return "Follow-up Visit";
-                if (appt.title.toLowerCase().includes("dental")) return "Dental Cleaning";
-                if (appt.title.toLowerCase().includes("x-ray") || appt.title.toLowerCase().includes("xray")) return "X-Ray Imaging";
-              }
-              return "—";
+              if (appt.title) return appt.title;
+              return "Consultation";
             };
 
             const searchLower = appointmentSearchQuery.toLowerCase().trim();
@@ -2222,58 +2817,23 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 (appt.service && appt.service.toLowerCase().includes(searchLower)) ||
                 srvName.includes(searchLower) ||
                 (appt.date && appt.date.toLowerCase().includes(searchLower));
-              const matchesStatus =
-                appointmentStatusFilter === "all" ||
-                appt.status === appointmentStatusFilter ||
-                (appointmentStatusFilter === "pending" && (appt.status === "pending-accept" || appt.status === "pending"));
-              return matchesSearch && matchesStatus;
+              const matchesProc =
+                !selectedApptProcessFilter ||
+                appt.processId === selectedApptProcessFilter ||
+                appt.processName === selectedApptProc?.name ||
+                !appt.processId;
+              return matchesSearch && matchesProc;
             });
 
-            const handleOpenApptTranscript = (appt: any, pName: string) => {
-              const currentSessions = getScribeSessions();
-              const matched = currentSessions.find((s) =>
-                (s.appointmentId && (s.appointmentId === String(appt.id) || s.appointmentId === `apt-${appt.id}`)) ||
-                (s.clientId === String(client.id) && (s.sessionName?.includes(String(appt.id)) || s.transcript?.fullText?.includes(appt.title)))
-              );
-
-              if (matched) {
-                setSelectedTranscriptSession(matched);
-                setIsTranscriptDrawerOpen(true);
-                return;
-              }
-
-              // Create & link a structured transcript for this appointment
-              const srvName = getResolvedServiceName(appt);
-              const scenario = PRESET_SCENARIOS[0];
-              const newSession: ScribeSession = {
-                id: `scribe-apt-${appt.id}-${Date.now()}`,
-                clientId: String(client.id),
-                clientName: client.name,
-                patientAge: client.age || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? 34 : 45),
-                patientGender: client.gender || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? "Female" : "Male"),
-                appointmentId: String(appt.id),
-                sessionName: `${appt.title || "Consultation"} (${appt.date || "Scheduled"})`,
-                doctorId: String(appt.employeeId || "doc-1"),
-                doctorName: pName || "Dr. Priya Sharma",
-                sessionDate: appt.date || new Date().toISOString(),
-                durationSeconds: 76,
-                status: "completed",
-                createdAt: Date.now(),
-                transcript: {
-                  fullText: scenario.transcriptText,
-                  utterances: scenario.utterances,
-                },
-                extractedData: {
-                  ...scenario.extractedData,
-                  chiefComplaint: appt.notes || `${appt.title || "Patient"} consultation encounter`,
-                  diagnosis: srvName !== "—" ? `${srvName} Assessment` : "Clinical Consultation Assessment",
-                },
-              };
-
-              saveScribeSession(newSession);
-              setScribeSessions(getScribeSessions());
-              setSelectedTranscriptSession(newSession);
-              setIsTranscriptDrawerOpen(true);
+            const formatApptDateTime = (dateStr: string) => {
+              if (!dateStr) return "—";
+              try {
+                const d = new Date(dateStr.includes("T") ? dateStr : `${dateStr}T00:00:00`);
+                if (!isNaN(d.getTime())) {
+                  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                }
+              } catch {}
+              return dateStr;
             };
 
             const ALL_EMPLOYEES_MAP: Record<string, string> = {
@@ -2284,109 +2844,299 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               "6": "Lisa Anderson",
             };
 
-            const formatDateTime = (dateStr: string, timeStr: string) => {
-              let datePart = dateStr || "—";
-              try {
-                const parts = dateStr?.split("-");
-                if (parts?.length === 3) {
-                  const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-                  datePart = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-                }
-              } catch { /* noop */ }
-              if (!timeStr) return datePart;
-              try {
-                const [h, m] = timeStr.split(":");
-                const hour = parseInt(h, 10);
-                const ampm = hour >= 12 ? "PM" : "AM";
-                const h12 = hour % 12 || 12;
-                return `${datePart}, ${h12}:${m} ${ampm}`;
-              } catch { return datePart; }
-            };
+            const apptColumns: TableColumn<any>[] = [
+              {
+                header: "Appointment ID",
+                accessorKey: "id",
+                align: "left",
+                render: (apt) => {
+                  const formattedId = `APT-${String(apt.id).padStart(4, "0")}`;
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActivityBookingValues({
+                          title: apt.title || "Consultation",
+                          description: apt.notes || "",
+                          note: apt.notes || "",
+                          tags: "",
+                          processId: apt.processId || selectedApptProc.id || "",
+                          stageId: apt.currentStageId || "",
+                          date: apt.date || new Date().toISOString().split("T")[0],
+                          startHour: 10,
+                          startMinute: 0,
+                          sessionType: apt.location?.toLowerCase().includes("person") ? "inPerson" : "video",
+                          client: { id: client.id, name: client.name, email: client.email || "", phone: client.phone || "" },
+                          provider: { id: apt.employeeId || 1, name: ALL_EMPLOYEES_MAP[String(apt.employeeId)] || "John Smith", email: "provider@healthcare.com" },
+                          generateInvoice: false,
+                        });
+                        setShowScheduleApptFromActivity(true);
+                      }}
+                      className="font-mono text-xs font-semibold text-[#1456f0] hover:text-[#1d4ed8] hover:underline cursor-pointer tracking-tight"
+                      style={{ fontFamily: "JetBrains Mono, monospace" }}
+                      title="Open appointment details"
+                    >
+                      {formattedId}
+                    </button>
+                  );
+                },
+              },
+              {
+                header: "Stages",
+                accessorKey: "currentStageId",
+                align: "left",
+                minWidth: 160,
+                render: (apt) => {
+                  const aptProc = appointmentProcesses.find((p) => p.id === apt.processId || p.name === apt.processId) || selectedApptProc;
+                  const stages = aptProc.stages && aptProc.stages.length > 0 ? aptProc.stages : [
+                    { id: "stg-1", name: "Scheduled", color: "#3B82F6" },
+                    { id: "stg-2", name: "In Progress", color: "#F59E0B" },
+                    { id: "stg-3", name: "Completed", color: "#10B981" },
+                  ];
+                  const stageKey = (apt.currentStageId || apt.stageId || "").trim();
+                  const matchedStage = stageKey
+                    ? stages.find(
+                        (s) =>
+                          s.id.toLowerCase() === stageKey.toLowerCase() ||
+                          s.name.toLowerCase() === stageKey.toLowerCase() ||
+                          (apt.statusLabel && s.name.toLowerCase() === apt.statusLabel.toLowerCase())
+                      )
+                    : (stages.find((s) => apt.statusLabel && s.name.toLowerCase() === apt.statusLabel.toLowerCase()) || stages[0]);
+                  const activeIdx = matchedStage ? stages.findIndex((s) => s.id === matchedStage.id) : 0;
 
-            const getStatusPill = (status: string) => {
-              const s = (status || "").toLowerCase();
-              let cls = "bg-amber-100 text-amber-800";
-              let label = status;
-              if (s === "completed") { cls = "bg-emerald-100 text-emerald-800"; label = "Completed"; }
-              else if (s === "scheduled" || s === "confirmed") { cls = "bg-blue-100 text-blue-800"; label = "Scheduled"; }
-              else if (s === "cancelled") { cls = "bg-rose-100 text-rose-800"; label = "Cancelled"; }
-              else if (s === "no-show") { cls = "bg-slate-100 text-slate-700"; label = "No Show"; }
-              else if (s === "pending-accept" || s === "pending") { cls = "bg-amber-100 text-amber-800"; label = "Pending"; }
-              return (
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${cls}`}>
-                  {label}
-                </span>
-              );
-            };
+                  return (
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center -space-x-px">
+                        {stages.map((stg, i) => {
+                          const isStgSuccess = stg.systemCategory === "completed" || stg.name.toLowerCase().includes("completed") || stg.name.toLowerCase().includes("won");
+                          const isStgLost = stg.systemCategory === "cancelled" || stg.name.toLowerCase().includes("cancel") || stg.name.toLowerCase().includes("no-show");
+                          const isStgFinal = Boolean(stg.isFinalStage || stg.isFinal || isStgSuccess || isStgLost);
+                          const isStgInProgress = !isStgFinal;
+                          const isActive = activeIdx >= 0 && i === activeIdx;
+
+                          let isCompleted = false;
+                          let isDeactivated = false;
+
+                          if (isActive) {
+                            // active
+                          } else if (isStgFinal) {
+                            if (isStgInProgress) isCompleted = true;
+                            else isDeactivated = true;
+                          } else {
+                            if (isStgInProgress && activeIdx >= 0 && i < activeIdx) isCompleted = true;
+                          }
+
+                          const stgColor = stg.color || "#1E88E5";
+                          const lightBg = lightenHex(stgColor, 78);
+                          const lightBorder = lightenHex(stgColor, 40);
+
+                          let bg = "transparent";
+                          let border = "1px solid #CBD5E1";
+                          let opacity = 1;
+
+                          if (isActive) {
+                            bg = stgColor;
+                            border = "1.5px solid #0F172A";
+                          } else if (isCompleted) {
+                            bg = stgColor;
+                            border = `1px solid ${stgColor}`;
+                            opacity = 0.85;
+                          } else if (isDeactivated) {
+                            bg = lightBg;
+                            border = `1px solid ${lightBorder}`;
+                            opacity = 0.95;
+                          } else {
+                            bg = "transparent";
+                            border = "1px solid #CBD5E1";
+                            opacity = 0.45;
+                          }
+
+                          const isHovered = hoveredApptStageBox?.aptId === apt.id && hoveredApptStageBox?.stageIdx === i;
+
+                          return (
+                            <div key={stg.id} className="relative" style={{ zIndex: isActive ? 10 : isHovered ? 20 : 1 }}>
+                              {isHovered && (
+                                <div
+                                  className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded text-[11px] font-medium shadow-md pointer-events-none"
+                                  style={{ backgroundColor: "#1A2B4A", color: "#fff", zIndex: 200 }}
+                                >
+                                  {stg.name}{isDeactivated ? " (Inactive)" : isActive ? " (Current)" : isCompleted ? " (Completed)" : ""}
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleQuickApptStageChange(apt, stg)}
+                                onMouseEnter={() => setHoveredApptStageBox({ aptId: apt.id, stageIdx: i })}
+                                onMouseLeave={() => setHoveredApptStageBox(null)}
+                                style={{
+                                  width: "18px",
+                                  height: "8px",
+                                  borderRadius: "0px",
+                                  backgroundColor: bg,
+                                  border: border,
+                                  opacity: opacity,
+                                  cursor: "pointer",
+                                  display: "block",
+                                  padding: 0,
+                                  flexShrink: 0,
+                                  transition: "all 0.15s ease",
+                                }}
+                                title={stg.name}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                },
+              },
+              {
+                header: "Client",
+                accessorKey: "clientName",
+                align: "left",
+                minWidth: 160,
+                render: (apt) => (
+                  <span
+                    className="font-medium text-xs text-slate-900 cursor-pointer hover:text-blue-600 hover:underline"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    {apt.clientName || client.name}
+                  </span>
+                ),
+              },
+              {
+                header: "Date",
+                accessorKey: "date",
+                align: "left",
+                render: (apt) => (
+                  <span className="text-xs text-slate-800 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    {formatApptDateTime(apt.date)}
+                  </span>
+                ),
+              },
+              {
+                header: "Time",
+                accessorKey: "time",
+                align: "left",
+                render: (apt) => (
+                  <span className="text-xs text-slate-600 tabular-nums" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    {apt.time ? `${apt.time} (${apt.duration || 60}m)` : "10:00 AM (60m)"}
+                  </span>
+                ),
+              },
+              {
+                header: "Provider",
+                accessorKey: "employeeId",
+                align: "left",
+                render: (apt) => (
+                  <span className="text-xs text-slate-700 font-medium truncate">
+                    {ALL_EMPLOYEES_MAP[String(apt.employeeId)] || apt.provider?.name || "John Smith"}
+                  </span>
+                ),
+              },
+              {
+                header: "Service",
+                accessorKey: "serviceId",
+                align: "left",
+                render: (apt) => (
+                  <span className="text-xs font-semibold text-slate-800 truncate">
+                    {getResolvedServiceName(apt)}
+                  </span>
+                ),
+              },
+            ];
 
             return (
               <div className="space-y-4" key={appointmentRefreshKey}>
-                {/* Toolbar */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 flex-wrap flex-1 w-full sm:w-auto">
-                    <div className="relative flex-1 min-w-[200px] max-w-xs">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Search appointment or service..."
-                        value={appointmentSearchQuery}
-                        onChange={(e) => setAppointmentSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      />
-                    </div>
-                    <select
-                      value={appointmentStatusFilter}
-                      onChange={(e) => setAppointmentStatusFilter(e.target.value)}
-                      className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <option value="all">All Statuses</option>
-                      <option value="scheduled">Scheduled</option>
-                      <option value="completed">Completed</option>
-                      <option value="pending">Pending</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                  </div>
-                  {(() => {
-                    const clientProcId = client.processes?.[0];
-                    const apptAutoConfigured = hasAppointmentAutomation(clientProcId);
-                    return (
-                      <>
+                {/* TopBar matching Appointments.tsx exactly */}
+                <PageTopBar
+                  leftElement={
+                    <div className="flex items-center gap-1.5">
+                      {/* Workflow selection - ONLY appointment workflows, NO 'all' */}
+                      <div className="relative shrink-0">
                         <button
-                          onClick={() => {
-                            if (!apptAutoConfigured) {
-                              toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
-                              return;
-                            }
-                            setActivityBookingValues({
-                              title: "Consultation Appointment",
-                              description: "",
-                              note: "",
-                              tags: "",
-                              processId: clientProcId || "",
-                              stageId: "",
-                              date: new Date().toISOString().split("T")[0],
-                              startHour: 10,
-                              startMinute: 0,
-                              sessionType: "video",
-                              client: { id: client.id, name: client.name, email: client.email || "", phone: client.phone || "" },
-                              provider: { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
-                              generateInvoice: hasAppointmentInvoiceAutomation(clientProcId),
-                            });
-                            setShowScheduleApptFromActivity(true);
-                          }}
-                          className="px-4 py-2 bg-[#1F2937] hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                          type="button"
+                          onClick={() => setShowApptProcessesDropdown(!showApptProcessesDropdown)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors cursor-pointer"
                           style={{ fontFamily: "Outfit, sans-serif" }}
+                          title="Select Workflow"
                         >
-                          <Plus className="w-4 h-4" /> Book Appointment
+                          <span className="truncate max-w-[160px] font-semibold text-gray-800">
+                            {selectedApptProc?.name || "Appointment Scheduling"}
+                          </span>
+                          <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                         </button>
-                      </>
-                    );
-                  })()}
-                </div>
 
-                {!hasAppointmentAutomation(client.processes?.[0]) && (
+                        {showApptProcessesDropdown && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-40"
+                              onClick={() => setShowApptProcessesDropdown(false)}
+                            />
+                            <div className="absolute top-full left-0 mt-1.5 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                              {appointmentProcesses.map((proc) => (
+                                <button
+                                  key={proc.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedApptProcessFilter(proc.id);
+                                    setShowApptProcessesDropdown(false);
+                                  }}
+                                  className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                                    selectedApptProcessFilter === proc.id
+                                      ? "bg-blue-50/80 text-blue-600 font-semibold"
+                                      : "text-gray-700 hover:bg-gray-50"
+                                  }`}
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  <span className="truncate">{proc.name}</span>
+                                  {selectedApptProcessFilter === proc.id && (
+                                    <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  }
+                  searchQuery={appointmentSearchQuery}
+                  onSearchChange={setAppointmentSearchQuery}
+                  searchPlaceholder="Search appointments (client, email, notes)..."
+                  resultsCount={filteredAppts.length}
+                  primaryAction={{
+                    label: "Book Appointment",
+                    onClick: () => {
+                      if (!hasAppointmentAutomation(selectedApptProc.id)) {
+                        toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
+                        return;
+                      }
+                      setActivityBookingValues({
+                        title: "Consultation Appointment",
+                        description: "",
+                        note: "",
+                        tags: "",
+                        processId: selectedApptProc.id || "",
+                        stageId: "",
+                        date: new Date().toISOString().split("T")[0],
+                        startHour: 10,
+                        startMinute: 0,
+                        sessionType: "video",
+                        client: { id: client.id, name: client.name, email: client.email || "", phone: client.phone || "" },
+                        provider: { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
+                        generateInvoice: hasAppointmentInvoiceAutomation(selectedApptProc.id),
+                      });
+                      setShowScheduleApptFromActivity(true);
+                    },
+                    icon: <Plus className="w-4 h-4" />,
+                    className: "bg-[#1F2937] hover:bg-slate-800 text-white",
+                  }}
+                />
+
+                {!hasAppointmentAutomation(selectedApptProc.id) && (
                   <div className="mb-4 px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 flex items-center justify-between">
                     <span className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
@@ -2398,672 +3148,330 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   </div>
                 )}
 
-                {/* Table */}
-                {filteredAppts.length === 0 ? (
-                  <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-6">
-                    <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      {clientAppts.length === 0 ? "No appointments yet" : "No appointments match your filter"}
-                    </p>
-                  </div>
-                ) : (
-                  (() => {
-                    const apptColumns: TableColumn<any>[] = [
-                      {
-                        key: "title",
-                        header: "Title",
-                        align: "left",
-                        render: (appt) => (
-                          <span className="font-bold text-slate-900 max-w-[180px] truncate block">
-                            {appt.title || "Appointment"}
-                          </span>
-                        ),
+                {/* TableComponent matching Appointments.tsx */}
+                <TableComponent
+                  columns={apptColumns}
+                  data={filteredAppts}
+                  getRowId={(apt) => apt.id}
+                  emptyMessage={clientAppts.length === 0 ? "No appointments yet for this client." : "No appointments match your search."}
+                  rowActions={[
+                    {
+                      label: "View Details",
+                      icon: <Calendar className="w-3.5 h-3.5 text-blue-600" />,
+                      onClick: (apt) => {
+                        setActivityBookingValues({
+                          title: apt.title || "Consultation",
+                          description: apt.notes || "",
+                          note: apt.notes || "",
+                          tags: "",
+                          processId: apt.processId || selectedApptProc.id || "",
+                          stageId: apt.currentStageId || "",
+                          date: apt.date || new Date().toISOString().split("T")[0],
+                          startHour: 10,
+                          startMinute: 0,
+                          sessionType: "video",
+                          client: { id: client.id, name: client.name, email: client.email || "", phone: client.phone || "" },
+                          provider: { id: apt.employeeId || 1, name: ALL_EMPLOYEES_MAP[String(apt.employeeId)] || "John Smith", email: "provider@healthcare.com" },
+                          generateInvoice: false,
+                        });
+                        setShowScheduleApptFromActivity(true);
                       },
-                      {
-                        key: "dateTime",
-                        header: "Date & Time",
-                        align: "center",
-                        render: (appt) => (
-                          <span className="whitespace-nowrap text-slate-700">
-                            {formatDateTime(appt.date, appt.time)}
-                          </span>
-                        ),
+                    },
+                    {
+                      label: "Mark Done",
+                      icon: <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />,
+                      onClick: (apt) => {
+                        handleUpdateApptStatus(apt.id, "completed");
                       },
-                      {
-                        key: "provider",
-                        header: "Provider",
-                        align: "center",
-                        render: (appt) => {
-                          const providerName =
-                            ALL_EMPLOYEES_MAP[String(appt.employeeId)] ||
-                            appt.provider?.name ||
-                            "John Smith";
-                          return <span className="whitespace-nowrap text-slate-700">{providerName}</span>;
-                        },
-                      },
-                      {
-                        key: "service",
-                        header: "Product / Service",
-                        align: "left",
-                        render: (appt) => (
-                          <span className="text-slate-600 max-w-[180px] truncate block">
-                            {getResolvedServiceName(appt)}
-                          </span>
-                        ),
-                      },
-                      {
-                        key: "transcript",
-                        header: "View Transcript",
-                        align: "center",
-                        render: (appt) => {
-                          const providerName =
-                            ALL_EMPLOYEES_MAP[String(appt.employeeId)] ||
-                            appt.provider?.name ||
-                            "John Smith";
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenApptTranscript(appt, providerName)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#1A73E8] rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              <FileText className="w-3.5 h-3.5 text-[#1A73E8]" />
-                              View Transcript
-                            </button>
-                          );
-                        },
-                      },
-                      {
-                        key: "status",
-                        header: "Status",
-                        align: "center",
-                        render: (appt) => getStatusPill(appt.status),
-                      },
-                      {
-                        key: "actions",
-                        header: "Actions",
-                        align: "right",
-                        render: (appt) => {
-                          const providerName =
-                            ALL_EMPLOYEES_MAP[String(appt.employeeId)] ||
-                            appt.provider?.name ||
-                            "John Smith";
-                          const isCompleted = appt.status === "completed";
-                          const isCancelled = appt.status === "cancelled";
-
-                          return (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center"
-                                  title="Actions"
-                                >
-                                  <MoreVertical className="w-4 h-4" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-40 bg-white border border-slate-200 rounded-xl shadow-lg p-1 z-50">
-                                <DropdownMenuItem
-                                  onClick={() => handleOpenApptTranscript(appt, providerName)}
-                                  className="px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 rounded-lg cursor-pointer flex items-center gap-2"
-                                  style={{ fontFamily: "Outfit, sans-serif" }}
-                                >
-                                  <FileText className="w-3.5 h-3.5" />
-                                  View Transcript
-                                </DropdownMenuItem>
-                                {!isCompleted && (
-                                  <DropdownMenuItem
-                                    onClick={() => handleUpdateApptStatus(appt.id, "completed")}
-                                    className="px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 rounded-lg cursor-pointer flex items-center gap-2"
-                                    style={{ fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    <Check className="w-3.5 h-3.5" />
-                                    Complete
-                                  </DropdownMenuItem>
-                                )}
-                                {!isCancelled && !isCompleted && (
-                                  <DropdownMenuItem
-                                    onClick={() => handleUpdateApptStatus(appt.id, "cancelled")}
-                                    className="px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer flex items-center gap-2"
-                                    style={{ fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                    Cancel
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem
-                                  onClick={() => handleDeleteAppt(appt.id)}
-                                  className="px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer flex items-center gap-2"
-                                  style={{ fontFamily: "Outfit, sans-serif" }}
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          );
-                        },
-                      },
-                    ];
-
-                    return (
-                      <TableComponent
-                        columns={apptColumns}
-                        data={filteredAppts}
-                        getRowId={(appt, idx) => appt.id || idx}
-                        emptyMessage={clientAppts.length === 0 ? "No appointments yet" : "No appointments match your filter"}
-                      />
-                    );
-                  })()
-                )}
+                    },
+                    {
+                      label: "Cancel / Delete",
+                      icon: <Trash2 className="w-3.5 h-3.5 text-rose-600" />,
+                      isDanger: true,
+                      onClick: (apt) => handleDeleteAppt(apt.id),
+                    },
+                  ]}
+                />
               </div>
             );
           })()}
 
-          {/* ── Invoices Tab ── */}
+{/* ── Invoices Tab ── */}
           {activeProfileTab === "invoices" && (() => {
             const allClientInvoices = getInvoicesByClient(client.id);
 
-            // Filter logic
             const filteredInvoices = allClientInvoices.filter((inv) => {
-              // Search query filter
               const searchLower = invoiceSearchQuery.toLowerCase().trim();
               const matchesSearch =
                 !searchLower ||
                 inv.id.toLowerCase().includes(searchLower) ||
                 (inv.appointmentTitle && inv.appointmentTitle.toLowerCase().includes(searchLower)) ||
-                inv.lineItems.some((li) => li.description.toLowerCase().includes(searchLower));
+                (inv.lineItems && inv.lineItems.some((li: any) => li.description?.toLowerCase().includes(searchLower)));
 
-              // Status filter
               let matchesStatus = true;
-              if (invoiceStatusFilter === "in_progress") {
-                matchesStatus = inv.status === "draft" || inv.status === "sent" || inv.status === "viewed";
-              } else if (invoiceStatusFilter !== "all") {
+              if (invoiceStatusFilter !== "all") {
                 matchesStatus = inv.status === invoiceStatusFilter;
               }
 
               return matchesSearch && matchesStatus;
             });
 
-            const totalInvoiced = allClientInvoices.filter(i => i.status !== "void").reduce((sum, i) => sum + i.total, 0);
-            const totalPaid = allClientInvoices.filter(i => i.status === "paid").reduce((sum, i) => sum + i.total, 0);
-            const totalOutstanding = allClientInvoices.filter(i => i.status === "sent" || i.status === "viewed" || i.status === "overdue").reduce((sum, i) => sum + i.total, 0);
+            const invoiceColumns: TableColumn<ClientInvoice>[] = [
+              {
+                id: "invoiceId",
+                header: "Invoice ID",
+                align: "left",
+                render: (inv) => (
+                  <button
+                    onClick={() => {
+                      setSelectedInvoiceForDrawer(inv);
+                      setIsInvoiceDrawerOpen(true);
+                    }}
+                    className="hover:underline hover:text-blue-600 transition-colors text-left font-mono font-bold text-xs text-slate-700 cursor-pointer"
+                  >
+                    {inv.id}
+                  </button>
+                ),
+              },
+              {
+                id: "processId",
+                header: "Process ID",
+                align: "left",
+                render: (inv) => {
+                  const procId = inv.processId || invoiceProcess.id || "PROC-INV-01";
+                  return (
+                    <span
+                      className="font-mono text-xs font-semibold text-slate-600 bg-slate-100/80 px-2 py-0.5 rounded border border-slate-200/60"
+                      style={{ fontFamily: "JetBrains Mono, monospace" }}
+                    >
+                      {procId}
+                    </span>
+                  );
+                },
+              },
+              {
+                id: "client",
+                header: "Client",
+                align: "left",
+                render: (inv) => (
+                  <span
+                    className="text-left font-bold text-xs text-[#1A73E8]"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    {inv.clientName || client.name}
+                  </span>
+                ),
+              },
+              {
+                id: "amount",
+                header: "Amount",
+                align: "center",
+                render: (inv) => (
+                  <span className="font-bold text-xs text-slate-900 font-mono">
+                    ${inv.total.toFixed(2)}
+                  </span>
+                ),
+              },
+              {
+                id: "balance",
+                header: "Balance",
+                align: "center",
+                render: (inv) => (
+                  <span className="font-bold text-xs text-slate-700 font-mono">
+                    ${(inv.status === "paid" || inv.status === "void" ? 0 : Math.max(0, inv.total - (inv.amountPaid || 0))).toFixed(2)}
+                  </span>
+                ),
+              },
+              {
+                id: "stage",
+                header: "Stage",
+                align: "center",
+                render: (inv) => {
+                  return (
+                    <div className="flex items-center justify-center">
+                      <InvoiceProgressBar
+                        status={inv.status}
+                        currentStageId={inv.currentStageId}
+                        stages={invoiceProcess.stages}
+                        onStatusChange={(newSt) => handleUpdateInvoiceStatus(inv.id, newSt)}
+                        interactive={true}
+                        logId={inv.id}
+                      />
+                    </div>
+                  );
+                },
+              },
+              {
+                id: "dueDate",
+                header: "Due Date",
+                align: "left",
+                render: (inv) => (
+                  <span
+                    className="text-xs font-semibold"
+                    style={{ color: inv.status === "overdue" ? "#DC2626" : "#475569", fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {inv.dueDate || "—"}
+                  </span>
+                ),
+              },
+              {
+                id: "created",
+                header: "Created",
+                align: "left",
+                render: (inv) => (
+                  <span className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {(inv.createdAt || new Date().toISOString()).replace("T", " ").substring(0, 16)}
+                  </span>
+                ),
+              },
+              {
+                id: "lastActivity",
+                header: "Last Activity",
+                align: "left",
+                render: (inv) => (
+                  <span
+                    className="text-xs font-medium"
+                    style={{ color: inv.status === "overdue" ? "#DC2626" : "#475569", fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {getInvoiceActivityText(inv)}
+                  </span>
+                ),
+              },
+              {
+                id: "responsible",
+                header: "Responsible",
+                align: "left",
+                render: (inv) => (
+                  <span className="text-xs font-medium text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {inv.createdBy === "system" ? "Automated Flow" : (inv.createdBy || "John Smith")}
+                  </span>
+                ),
+              },
+            ];
 
             return (
               <div className="space-y-4">
-                {/* Header Toolbar */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 flex-wrap flex-1 w-full sm:w-auto">
-                    {/* Search Input */}
-                    <div className="relative flex-1 min-w-[200px] max-w-xs">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Search invoice # or product..."
-                        value={invoiceSearchQuery}
-                        onChange={(e) => setInvoiceSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                      />
-                    </div>
-
-                    {/* Quick Filter Chip: Invoices in progress */}
-                    <button
-                      onClick={() =>
-                        setInvoiceStatusFilter(
-                          invoiceStatusFilter === "in_progress" ? "all" : "in_progress"
-                        )
-                      }
-                      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
-                        invoiceStatusFilter === "in_progress"
-                          ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                      }`}
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      Invoices in progress
-                    </button>
-
-                    {/* Status Dropdown Filter */}
-                    <select
-                      value={invoiceStatusFilter}
-                      onChange={(e) => setInvoiceStatusFilter(e.target.value)}
-                      className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                    >
-                      <option value="all">All Statuses</option>
-                      <option value="draft">Draft</option>
-                      <option value="sent">Sent</option>
-                      <option value="viewed">Viewed</option>
-                      <option value="paid">Paid</option>
-                      <option value="overdue">Overdue</option>
-                      <option value="void">Void</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setIsRecordPaymentOpen(true)}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <DollarSign className="w-4 h-4" /> Collect Payment
-                    </button>
-                    {/* + Create Invoice Button */}
-                    <button
-                      onClick={() => {
-                        if (!hasInvoiceAutomation(client.processes?.[0])) {
-                          toast.error("Please build an automation first before creating invoices. Navigate to Automation to configure workflow rules.");
-                          return;
-                        }
-                        setIsCreateInvoiceDrawerOpen(true);
-                      }}
-                      className="px-4 py-2 bg-[#1F2937] hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <Plus className="w-4 h-4" /> + Create Invoice
-                    </button>
-                  </div>
-
-                </div>
-
-                {/* Summary stat strip */}
-                <div className="grid grid-cols-3 gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
-                  <div>
-                    <span className="text-slate-400 font-medium block">Total Invoiced</span>
-                    <span className="text-sm font-bold text-slate-900">${totalInvoiced.toFixed(2)}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 font-medium block">Paid</span>
-                    <span className="text-sm font-bold text-emerald-600">${totalPaid.toFixed(2)}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 font-medium block">Outstanding</span>
-                    <span className="text-sm font-bold text-amber-600">${totalOutstanding.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                {/* Invoices Table */}
-                {(() => {
-                  const invoiceColumns: TableColumn<any>[] = [
+                {/* PageTopBar matching Invoices.tsx exactly */}
+                <PageTopBar
+                  searchQuery={invoiceSearchQuery}
+                  onSearchChange={setInvoiceSearchQuery}
+                  searchPlaceholder="Search invoices..."
+                  filterPresets={[
                     {
-                      header: "ID",
-                      accessorKey: "id",
-                      align: "left",
-                      render: (inv) => (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedInvoiceForDrawer(inv);
-                            setIsInvoiceDrawerOpen(true);
-                          }}
-                          className="font-bold text-blue-600 hover:underline"
-                        >
-                          {inv.id}
-                        </button>
-                      ),
-                    },
-                    {
-                      header: "Name / Title",
-                      accessorKey: "appointmentTitle",
-                      align: "left",
-                      render: (inv) => (
-                        <span className="font-bold text-slate-900 max-w-[180px] truncate block">
-                          {inv.appointmentTitle || "Standalone Invoice"}
-                        </span>
-                      ),
-                    },
-                    {
-                      header: "Amount",
-                      accessorKey: "total",
-                      align: "right",
-                      render: (inv) => (
-                        <span className="font-bold text-slate-900">
-                          ${inv.total.toFixed(2)}
-                        </span>
-                      ),
-                    },
-                    {
-                      header: "Products",
-                      align: "left",
-                      render: (inv) => {
-                        const productNames = (inv.lineItems || []).map((li: any) => li.description);
-                        const productSummary =
-                          productNames.length <= 2
-                            ? productNames.join(", ")
-                            : `${productNames.slice(0, 2).join(", ")} +${productNames.length - 2} more`;
-                        return (
-                          <span className="text-slate-600 max-w-[220px] truncate block" title={productNames.join(", ")}>
-                            {productSummary || "N/A"}
-                          </span>
-                        );
+                      id: "all",
+                      label: "All Invoices",
+                      count: allClientInvoices.length,
+                      isActive: invoiceStatusFilter === "all" && !invoiceSearchQuery,
+                      onClick: () => {
+                        setInvoiceStatusFilter("all");
+                        setInvoiceSearchQuery("");
                       },
                     },
                     {
-                      header: "Status",
-                      accessorKey: "status",
-                      align: "center",
-                      render: (inv) => (
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                            inv.status === "paid"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : inv.status === "sent"
-                              ? "bg-blue-100 text-blue-800"
-                              : inv.status === "overdue"
-                              ? "bg-rose-100 text-rose-800"
-                              : inv.status === "viewed"
-                              ? "bg-purple-100 text-purple-800"
-                              : "bg-amber-100 text-amber-800"
-                          }`}
-                        >
-                          {inv.status}
-                        </span>
-                      ),
+                      id: "paid",
+                      label: "Paid Invoices",
+                      count: allClientInvoices.filter((i) => i.status === "paid").length,
+                      isActive: invoiceStatusFilter === "paid",
+                      onClick: () => setInvoiceStatusFilter("paid"),
                     },
-                  ];
+                    {
+                      id: "overdue",
+                      label: "Overdue Invoices",
+                      count: allClientInvoices.filter((i) => i.status === "overdue").length,
+                      isActive: invoiceStatusFilter === "overdue",
+                      onClick: () => setInvoiceStatusFilter("overdue"),
+                    },
+                    {
+                      id: "draft",
+                      label: "Draft Invoices",
+                      count: allClientInvoices.filter((i) => i.status === "draft").length,
+                      isActive: invoiceStatusFilter === "draft",
+                      onClick: () => setInvoiceStatusFilter("draft"),
+                    },
+                  ]}
+                  secondaryActions={
+                    <button
+                      type="button"
+                      onClick={() => setIsRecordPaymentOpen(true)}
+                      className="px-3.5 h-[36px] bg-white hover:bg-gray-50 text-slate-700 border border-border rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-2xs shrink-0 cursor-pointer"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                      title="Record Payment"
+                    >
+                      <Wallet className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Record Payment</span>
+                    </button>
+                  }
+                  primaryAction={{
+                    label: "Create Invoice",
+                    icon: <Plus className="w-3.5 h-3.5" />,
+                    onClick: () => {
+                      if (!hasInvoiceAutomation(selectedDealProcessFilter)) {
+                        toast.error("Please build an automation first before creating invoices. Navigate to Automation to configure workflow rules.");
+                        return;
+                      }
+                      setIsCreateInvoiceDrawerOpen(true);
+                    },
+                    className: "bg-[#1F2937] hover:bg-slate-800 text-white",
+                  }}
+                />
 
-                  return (
-                    <TableComponent
-                      columns={invoiceColumns}
-                      data={filteredInvoices}
-                      getRowId={(inv) => inv.id}
-                      onRowClick={(inv) => {
+                {/* TableComponent matching Invoices.tsx exactly */}
+                <TableComponent
+                  columns={invoiceColumns}
+                  data={filteredInvoices}
+                  getRowId={(inv) => inv.id}
+                  onRowClick={(inv) => {
+                    setSelectedInvoiceForDrawer(inv);
+                    setIsInvoiceDrawerOpen(true);
+                  }}
+                  rowActions={[
+                    {
+                      label: "Add Payment",
+                      icon: <CreditCard className="w-3.5 h-3.5 text-emerald-600" />,
+                      onClick: (inv) => {
+                        if (inv.status !== "paid" && inv.status !== "void") {
+                          setSelectedInvoiceForDrawer(inv);
+                          setIsRecordPaymentOpen(true);
+                        } else {
+                          toast.error("Invoice is already paid or void");
+                        }
+                      },
+                    },
+                    {
+                      label: "View Invoice",
+                      icon: <Eye className="w-3.5 h-3.5 text-blue-600" />,
+                      onClick: (inv) => {
                         setSelectedInvoiceForDrawer(inv);
                         setIsInvoiceDrawerOpen(true);
-                      }}
-                      rowActions={[
-                        {
-                          label: "View Invoice",
-                          icon: <Eye className="w-3.5 h-3.5" />,
-                          onClick: (inv) => {
-                            setSelectedInvoiceForDrawer(inv);
-                            setIsInvoiceDrawerOpen(true);
-                          },
-                        },
-                      ]}
-                      emptyMessage="No invoices match your filter"
-                    />
-                  );
-                })()}
+                      },
+                    },
+                    {
+                      label: "Delete / Void",
+                      icon: <Trash2 className="w-3.5 h-3.5 text-rose-600" />,
+                      isDanger: true,
+                      onClick: (inv) => {
+                        if (inv.status === "draft") {
+                          deleteInvoice(inv.id);
+                          toast.success(`Draft invoice ${inv.id} deleted`);
+                        } else {
+                          voidInvoice(inv.id);
+                          toast.success(`Invoice ${inv.id} voided`);
+                        }
+                      },
+                    },
+                  ]}
+                  emptyMessage={allClientInvoices.length === 0 ? "No invoices found for this client." : "No invoices match your filter."}
+                />
               </div>
             );
           })()}
 
-          {/* ── Documents Tab ── */}
+{/* ── Documents Tab ── */}
           {activeProfileTab === "documents" && (
             <DocumentsTab client={client} entityType="client" />
           )}
 
           {/* ── Transcripts Tab (Matches AI Scribe Page Table Layout) ── */}
-          {activeProfileTab === "transcripts" && (() => {
-            const clientTranscripts = scribeSessions.filter((s) => {
-              if (!client) return false;
-              const cId = String(client.id || "").toLowerCase().trim();
-              const sCId = String(s.clientId || "").toLowerCase().trim();
-              const idMatch =
-                (sCId && sCId === cId) ||
-                (sCId && sCId === cId.replace("cl-", "")) ||
-                (parseInt(cId.replace("cl-", ""), 10) > 0 && sCId === String(parseInt(cId.replace("cl-", ""), 10)));
-              const nameMatch =
-                Boolean(s.clientName && client.name && s.clientName.toLowerCase().trim() === client.name.toLowerCase().trim());
-              return idMatch || nameMatch;
-            });
-
-            const filteredTranscripts = clientTranscripts.filter((s) => {
-              if (!transcriptSearchQuery.trim()) return true;
-              const q = transcriptSearchQuery.toLowerCase();
-              return (
-                (client?.name && client.name.toLowerCase().includes(q)) ||
-                s.clientName.toLowerCase().includes(q) ||
-                s.sessionName?.toLowerCase().includes(q) ||
-                s.doctorName?.toLowerCase().includes(q) ||
-                s.extractedData?.diagnosis?.toLowerCase().includes(q) ||
-                s.extractedData?.chiefComplaint?.toLowerCase().includes(q) ||
-                s.transcript?.fullText?.toLowerCase().includes(q)
-              );
-            });
-
-            const allSelected =
-              filteredTranscripts.length > 0 &&
-              filteredTranscripts.every((s) => transcriptSelectedRows.has(s.id));
-            const someSelected =
-              filteredTranscripts.some((s) => transcriptSelectedRows.has(s.id)) && !allSelected;
-
-            const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-              if (e.target.checked) {
-                setTranscriptSelectedRows(new Set(filteredTranscripts.map((s) => s.id)));
-              } else {
-                setTranscriptSelectedRows(new Set());
-              }
-            };
-
-            const handleSelectRow = (id: string) => {
-              const next = new Set(transcriptSelectedRows);
-              if (next.has(id)) next.delete(id);
-              else next.add(id);
-              setTranscriptSelectedRows(next);
-            };
-
-            const formatTranscriptTime = (seconds: number) => {
-              const mins = Math.floor(seconds / 60);
-              const secs = seconds % 60;
-              return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-            };
-
-            const getTranscriptStatusBadge = (status?: string) => {
-              if (status === "recording" || status === "transcribed") {
-                return (
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    In Progress
-                  </span>
-                );
-              }
-              if (status === "upcoming" || status === "scheduled") {
-                return (
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    Upcoming
-                  </span>
-                );
-              }
-              return (
-                <span
-                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  Completed
-                </span>
-              );
-            };
-
-            const handleDeleteTranscript = (sessionId: string, e: React.MouseEvent) => {
-              e.stopPropagation();
-              deleteScribeSession(sessionId);
-              setTranscriptOpenMenuId(null);
-              setScribeSessions(getScribeSessions());
-              toast.success("Transcript deleted");
-            };
-
-            return (
-              <div className="space-y-4">
-                {/* ─── Search & Action Bar ───────────────────────────────────────────── */}
-                <div className="bg-card rounded-t-xl p-4 border border-border shadow-sm">
-                  <div className="flex items-center gap-3">
-                    {/* Search Bar */}
-                    <div className="flex-1">
-                      <div className="relative search-bar-container">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none z-10" />
-                        <div className="w-full h-[44px] bg-input-background border border-input rounded-xl flex items-center pl-10 pr-3">
-                          <input
-                            type="text"
-                            placeholder="Search transcripts by diagnosis, doctor, keyword..."
-                            value={transcriptSearchQuery}
-                            onChange={(e) => setTranscriptSearchQuery(e.target.value)}
-                            className="flex-1 bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground h-full"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          />
-                          {transcriptSearchQuery && (
-                            <button
-                              onClick={() => setTranscriptSearchQuery("")}
-                              className="text-xs text-muted-foreground hover:text-foreground px-2"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              ✕ Clear
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Capsule Button to Add Scribe */}
-                    <Button
-                      variant="primary"
-                      onClick={() => setShowScribeModal(true)}
-                      className="h-[44px] px-5 rounded-full whitespace-nowrap flex items-center gap-2 text-xs font-semibold shadow-xs"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Add Scribe</span>
-                    </Button>
-                  </div>
-                </div>
-
-                {/* ─── Transcripts Table ─── */}
-                {(() => {
-                  const transcriptColumns: TableColumn<any>[] = [
-                    {
-                      header: "Name",
-                      accessorKey: "clientName",
-                      align: "left",
-                      render: (s) => (
-                        <span
-                          className="font-medium text-sm text-[#1A73E8] hover:underline cursor-pointer"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        >
-                          {client?.name || s.clientName}
-                        </span>
-                      ),
-                    },
-                    {
-                      header: "Session",
-                      align: "center",
-                      render: (s) => (
-                        <span className="text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {s.appointmentId && s.appointmentId !== "none"
-                            ? new Date(s.sessionDate || s.createdAt).toLocaleDateString("en-IN", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })
-                            : (s.sessionDate
-                                ? new Date(s.sessionDate).toLocaleDateString("en-IN", {
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
-                                  })
-                                : "—")}
-                        </span>
-                      ),
-                    },
-                    {
-                      header: "Duration",
-                      accessorKey: "durationSeconds",
-                      align: "center",
-                      render: (s) => (
-                        <span className="font-mono text-xs text-foreground">
-                          {formatTranscriptTime(s.durationSeconds)}
-                        </span>
-                      ),
-                    },
-                    {
-                      header: "Responsible",
-                      accessorKey: "doctorName",
-                      align: "left",
-                      render: (s) => (
-                        <span className="text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {s.doctorName || "Dr. Priya Sharma"}
-                        </span>
-                      ),
-                    },
-                    {
-                      header: "Created At",
-                      accessorKey: "createdAt",
-                      align: "center",
-                      render: (s) => (
-                        <span className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {new Date(s.createdAt).toLocaleDateString("en-IN", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </span>
-                      ),
-                    },
-                    {
-                      header: "Status",
-                      accessorKey: "status",
-                      align: "center",
-                      render: (s) => getTranscriptStatusBadge(s.status),
-                    },
-                  ];
-
-                  return (
-                    <TableComponent
-                      columns={transcriptColumns}
-                      data={filteredTranscripts}
-                      getRowId={(s) => s.id}
-                      enableSelection={true}
-                      selectedIds={transcriptSelectedRows}
-                      onSelectionChange={(newSet) => setTranscriptSelectedRows(newSet)}
-                      onRowClick={(s) => {
-                        setSelectedTranscriptSession(s);
-                        setIsTranscriptDrawerOpen(true);
-                      }}
-                      rowActions={[
-                        {
-                          label: "View Transcript",
-                          icon: <Eye className="w-3.5 h-3.5 text-[#1A73E8]" />,
-                          onClick: (s) => {
-                            setSelectedTranscriptSession(s);
-                            setIsTranscriptDrawerOpen(true);
-                          },
-                        },
-                        {
-                          label: "Download PDF",
-                          icon: <Download className="w-3.5 h-3.5 text-[#1A73E8]" />,
-                          onClick: (s) => {
-                            issuePrescriptionDocument(s);
-                            toast.success(`Prescription downloaded for ${client?.name || s.clientName}!`);
-                          },
-                        },
-                        {
-                          label: "Share via WhatsApp",
-                          icon: <Share2 className="w-3.5 h-3.5 text-emerald-600" />,
-                          onClick: (s) => {
-                            setTranscriptWhatsAppTarget(s);
-                            setShowTranscriptWhatsAppModal(true);
-                          },
-                        },
-                        {
-                          label: "Delete Record",
-                          icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
-                          isDanger: true,
-                          onClick: (s) => handleDeleteTranscript(s.id, { stopPropagation: () => {} } as any),
-                        },
-                      ]}
-                      emptyMessage={transcriptSearchQuery ? "No matching transcripts" : `No transcripts for ${client?.name || "this client"}`}
-                    />
-                  );
-                })()}
-              </div>
-            );
-          })()}
-
-          {/* ── Products & Services Tab ── */}
           {activeProfileTab === "products" && (() => {
             const assignedIds = new Set(clientProductList.map((p) => p.id));
             const unassignedServices = globalServiceList.filter(

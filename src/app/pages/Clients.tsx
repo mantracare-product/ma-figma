@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate, Outlet } from "react-router";
+import { useNavigate, useLocation, Outlet } from "react-router";
 import { Search, Filter, Plus, Upload, Download, MoreVertical, Eye, Phone, Trash2, Settings as SettingsIcon, FileText, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail, MapPin, Clock, MessageSquare, Edit, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, User, CalendarClock, ArrowRight, List, Play, ChevronDown, ChevronUp, GripVertical, X, Building, Briefcase, Users, GitBranch, Globe, Copy, Shield, Info, AlertCircle, AlertTriangle, CheckCircle2, RefreshCw, FileSpreadsheet, Webhook } from "lucide-react";
 import { useDrag, useDrop } from "react-dnd";
 import { Button } from "../components/ui/Button";
@@ -760,7 +760,7 @@ export default function Clients() {
               />
             ) : (
               <button
-                onClick={() => navigate(`/clients/${client.id}`)}
+                onClick={() => { const targetId = client.id && client.id !== "new" ? client.id : `CL-${Date.now()}`; navigate(`/clients/${targetId}`); }}
                 className="font-medium text-xs hover:underline cursor-pointer text-left"
                 style={{
                   fontFamily: 'DM Sans, sans-serif',
@@ -1575,7 +1575,7 @@ export default function Clients() {
             isExporting={isExporting}
             primaryAction={{
               label: "Add Client",
-              onClick: () => setShowAddModal(true),
+              onClick: () => navigate("/clients/new"),
             }}
             customFilterModalContent={
               <div className="flex" style={{ maxHeight: '580px' }}>
@@ -2842,7 +2842,7 @@ export default function Clients() {
                 header: "Name",
                 render: (client) => (
                   <button
-                    onClick={() => navigate(`/clients/${client.id}`)}
+                    onClick={() => { const targetId = client.id && client.id !== "new" ? client.id : `CL-${Date.now()}`; navigate(`/clients/${targetId}`); }}
                     className="font-medium text-xs hover:underline cursor-pointer"
                     style={{
                       fontFamily: "DM Sans, sans-serif",
@@ -2897,7 +2897,7 @@ export default function Clients() {
               {
                 label: "View Profile",
                 icon: <Eye className="w-3.5 h-3.5" />,
-                onClick: (client) => navigate(`/clients/${client.id}`),
+                onClick: (client) => { const targetId = client.id && client.id !== "new" ? client.id : `CL-${Date.now()}`; navigate(`/clients/${targetId}`); },
               },
               {
                 label: "Call",
