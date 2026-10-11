@@ -14,12 +14,14 @@ import {
 } from "../components/ui/dropdown-menu";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
 import ScheduleCallDrawer, { ScheduleCallClientOption } from "../components/telephony/ScheduleCallDrawer";
 import { useClients, type Client } from "../../lib/clientsStore";
 import { getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
+import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 
 interface CallLog {
   id: string;
@@ -222,16 +224,14 @@ function MetricGroup({
           {label}
         </p>
         <ChevronDown
-          className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
-            open ? "rotate-180" : ""
-          }`}
+          className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? "rotate-180" : ""
+            }`}
         />
       </button>
       {open && (
         <div
-          className={`grid gap-2.5 items-stretch ${
-            columns === 3 ? "grid-cols-3" : "grid-cols-2"
-          }`}
+          className={`grid gap-2.5 items-stretch ${columns === 3 ? "grid-cols-3" : "grid-cols-2"
+            }`}
           style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
         >
           {children}
@@ -321,10 +321,10 @@ const SENTIMENT_OPTIONS: Array<{
   tone: MetricTone;
   phrases: string[];
 }> = [
-  { value: "Positive", tone: "success", phrases: ["Warm greeting", "Engaged and responsive", "Upbeat throughout", "Resolution confirmed"] },
-  { value: "Neutral",  tone: "neutral", phrases: ["Steady tone", "Clarifying details", "Matter-of-fact", "Calm and focused"] },
-  { value: "Negative", tone: "warning", phrases: ["Sounded hesitant", "Signs of frustration", "Uncertain responses", "Needed reassurance"] },
-];
+    { value: "Positive", tone: "success", phrases: ["Warm greeting", "Engaged and responsive", "Upbeat throughout", "Resolution confirmed"] },
+    { value: "Neutral", tone: "neutral", phrases: ["Steady tone", "Clarifying details", "Matter-of-fact", "Calm and focused"] },
+    { value: "Negative", tone: "warning", phrases: ["Sounded hesitant", "Signs of frustration", "Uncertain responses", "Needed reassurance"] },
+  ];
 
 function pickSentiment(rng: () => number) {
   const weights = [0.5, 0.35, 0.15]; // positive, neutral, negative
@@ -351,8 +351,8 @@ function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
     call.status !== "Completed"
       ? { value: "No Outcome", tone: "neutral", phrase: call.status === "Failed" ? "Call did not connect" : "Call hasn't happened yet" }
       : call.lastStage && call.lastStage !== "N/A" && call.lastStage !== call.currentStage
-      ? { value: "Stage Advanced", tone: "success", phrase: `${call.lastStage} → ${call.currentStage}` }
-      : { value: "No Change", tone: "neutral", phrase: `Remained at ${call.currentStage}` };
+        ? { value: "Stage Advanced", tone: "success", phrase: `${call.lastStage} → ${call.currentStage}` }
+        : { value: "No Change", tone: "neutral", phrase: `Remained at ${call.currentStage}` };
 
   const rawDuration = call.duration;
   const noDuration = !rawDuration || rawDuration === "0:00";
@@ -404,9 +404,9 @@ function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
   }
 
   // ── Sentiment arc ────────────────────────────────────────────────────────
-  const sentimentStart    = isCompleted ? pickSentiment(rng) : { ...noData };
-  const sentimentMid      = isCompleted ? pickSentiment(rng) : { ...noData };
-  const sentimentEnd      = isCompleted ? pickSentiment(rng) : { ...noData };
+  const sentimentStart = isCompleted ? pickSentiment(rng) : { ...noData };
+  const sentimentMid = isCompleted ? pickSentiment(rng) : { ...noData };
+  const sentimentEnd = isCompleted ? pickSentiment(rng) : { ...noData };
 
   // ── Talk-time ────────────────────────────────────────────────────────────
   let aiSpokePercent: CallReviewMetrics["aiSpokePercent"];
@@ -419,15 +419,15 @@ function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
     const stretch = Math.round(randRange(rng, 20, 60));
     const silence = Math.round(randRange(rng, 5, 25));
     const warmth = Math.round(randRange(rng, 40, 80));
-    aiSpokePercent  = { value: `${ai}%`,       phrase: `${Math.round(ai / 100 * parseFloat(rawDuration || "4") * 60)}s of the call` };
-    longestStretch  = { value: `${stretch}s`,  phrase: stretch < 40 ? "Short enough to stay natural" : "Slightly long for a single stretch" };
-    silencePercent  = { value: `${silence}%`,  phrase: silence < 15 ? "Less than average" : "A normal amount of pause" };
-    warmthPercent   = { value: `${warmth}%`,   phrase: warmth >= 60 ? "Friendly and empathetic" : "Fairly professional tone" };
+    aiSpokePercent = { value: `${ai}%`, phrase: `${Math.round(ai / 100 * parseFloat(rawDuration || "4") * 60)}s of the call` };
+    longestStretch = { value: `${stretch}s`, phrase: stretch < 40 ? "Short enough to stay natural" : "Slightly long for a single stretch" };
+    silencePercent = { value: `${silence}%`, phrase: silence < 15 ? "Less than average" : "A normal amount of pause" };
+    warmthPercent = { value: `${warmth}%`, phrase: warmth >= 60 ? "Friendly and empathetic" : "Fairly professional tone" };
   } else {
-    aiSpokePercent  = { value: "—", phrase: "No data for this call" };
-    longestStretch  = { value: "—", phrase: "No data for this call" };
-    silencePercent  = { value: "—", phrase: "No data for this call" };
-    warmthPercent   = { value: "—", phrase: "No data for this call" };
+    aiSpokePercent = { value: "—", phrase: "No data for this call" };
+    longestStretch = { value: "—", phrase: "No data for this call" };
+    silencePercent = { value: "—", phrase: "No data for this call" };
+    warmthPercent = { value: "—", phrase: "No data for this call" };
   }
 
   return {
@@ -682,7 +682,7 @@ export default function CallLogs() {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const totalRecords = 5380; // Mock total for demonstration
 
   // Team members and stages for filters
@@ -712,33 +712,29 @@ export default function CallLogs() {
 
   // Comprehensive stage pipeline (for progress visualization) - matching /deals exactly
   const stagePipeline = [
-    { id: 1, label: "Initial Contact", fullLabel: "Patient Intake: Initial Contact", category: "Patient Intake" },
-    { id: 2, label: "Insurance Verify", fullLabel: "Patient Intake: Insurance Verify", category: "Patient Intake" },
-    { id: 3, label: "Schedule Appointment", fullLabel: "Patient Intake: Schedule Appointment", category: "Patient Intake" },
-    { id: 4, label: "Post-Visit Check", fullLabel: "Follow-up Calls: Post-Visit Check", category: "Follow-up Calls" },
-    { id: 5, label: "Medication Reminder", fullLabel: "Follow-up Calls: Medication Reminder", category: "Follow-up Calls" },
-    { id: 6, label: "Billing Inquiry", fullLabel: "Payment Reminder: Billing Inquiry", category: "Payment Reminder" },
-    { id: 7, label: "Issue Resolution", fullLabel: "Payment Reminder: Issue Resolution", category: "Payment Reminder" },
-    { id: 8, label: "Payment Notice", fullLabel: "Payment Reminder: Payment Notice", category: "Payment Reminder" },
-    { id: 9, label: "Payment Collected", fullLabel: "Payment Reminder: Payment Collected", category: "Payment Reminder" },
-    { id: 10, label: "Slot Selection", fullLabel: "Appointment Scheduling: Slot Selection", category: "Appointment Scheduling" },
-    { id: 11, label: "Confirmation", fullLabel: "Appointment Scheduling: Confirmation", category: "Appointment Scheduling" },
-    { id: 12, label: "Document Check", fullLabel: "Insurance Verification: Document Check", category: "Insurance Verification" },
-    { id: 13, label: "Verification", fullLabel: "Insurance Verification: Verification", category: "Insurance Verification" },
-    { id: 14, label: "Approval", fullLabel: "Insurance Verification: Approval", category: "Insurance Verification" },
+    { id: 1, label: "Initial Contact", fullLabel: "Client Intake: Initial Contact", category: "Client Intake" },
+    { id: 2, label: "Contacted", fullLabel: "Client Intake: Contacted", category: "Client Intake" },
+    { id: 3, label: "Interested", fullLabel: "Client Intake: Interested", category: "Client Intake" },
+    { id: 4, label: "Call Back Later", fullLabel: "Client Intake: Call Back Later", category: "Client Intake" },
+    { id: 5, label: "Not Interested", fullLabel: "Client Intake: Not Interested", category: "Client Intake" },
+    { id: 6, label: "Outreach", fullLabel: "Client Reactivation: Outreach", category: "Client Reactivation" },
+    { id: 7, label: "Contacted", fullLabel: "Client Reactivation: Contacted", category: "Client Reactivation" },
+    { id: 8, label: "Reactivated", fullLabel: "Client Reactivation: Reactivated", category: "Client Reactivation" },
+    { id: 9, label: "Call Back Later", fullLabel: "Client Reactivation: Call Back Later", category: "Client Reactivation" },
+    { id: 10, label: "Lost", fullLabel: "Client Reactivation: Lost", category: "Client Reactivation" },
   ];
 
-  // Helper to get stage position (1-14) from current stage name
+  // Helper to get stage position from current stage name
   const getStagePosition = (stageName: string): number => {
     // Try to find exact match in pipeline
-    const exactMatch = stagePipeline.find(s => s.label === stageName);
-    if (exactMatch) return exactMatch.id;
+    const exactIndex = stagePipeline.findIndex(s => s.label === stageName);
+    if (exactIndex !== -1) return exactIndex + 1;
 
     // Try to find partial match for legacy stage names
-    const partialMatch = stagePipeline.find(s =>
+    const partialIndex = stagePipeline.findIndex(s =>
       s.label.toLowerCase().includes(stageName.toLowerCase())
     );
-    if (partialMatch) return partialMatch.id;
+    if (partialIndex !== -1) return partialIndex + 1;
 
     // Default to position 1 if no match
     return 1;
@@ -748,21 +744,12 @@ export default function CallLogs() {
   const getCategoryFromStage = (stageName: string): string => {
     // Direct category mapping for common stage names
     const stageToCategory: { [key: string]: string } = {
-      "Initial Contact": "Patient Intake",
-      "Insurance Verification": "Insurance Verification",
-      "Insurance Verify": "Patient Intake",
-      "Schedule Appointment": "Patient Intake",
-      "Post-Visit Check": "Follow-up Calls",
-      "Medication Reminder": "Follow-up Calls",
-      "Follow-up": "Follow-up Calls",
-      "Billing Inquiry": "Billing Support",
-      "Issue Resolution": "Billing Support",
-      "Payment Reminder": "Billing Support",
-      "Slot Selection": "Appointment Scheduling",
-      "Confirmation": "Appointment Scheduling",
-      "Document Check": "Insurance Verification",
-      "Verification": "Insurance Verification",
-      "Approval": "Insurance Verification",
+      "Initial Contact": "Client Intake",
+      "Interested": "Client Intake",
+      "Not Interested": "Client Intake",
+      "Outreach": "Client Reactivation",
+      "Reactivated": "Client Reactivation",
+      "Lost": "Client Reactivation",
     };
 
     // Try direct mapping first
@@ -779,7 +766,7 @@ export default function CallLogs() {
     }
 
     // Default to first category
-    return "Patient Intake";
+    return "Client Intake";
   };
 
   // Selection state
@@ -840,9 +827,9 @@ export default function CallLogs() {
   const scMonth = scCalendarMonth.getMonth();
   const scDaysInMonth = getDaysInMonth(scYear, scMonth);
   const scFirstDay = getFirstDayOfMonth(scYear, scMonth);
-  const scMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const scMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const today = new Date();
-  today.setHours(0,0,0,0);
+  today.setHours(0, 0, 0, 0);
 
   const handleScPrevMonth = () => setScCalendarMonth(new Date(scYear, scMonth - 1, 1));
   const handleScNextMonth = () => setScCalendarMonth(new Date(scYear, scMonth + 1, 1));
@@ -868,8 +855,8 @@ export default function CallLogs() {
     }
     setScIsScheduling(true);
     setTimeout(() => {
-      const dateStr = `${scSelectedDate.getFullYear()}-${String(scSelectedDate.getMonth()+1).padStart(2,'0')}-${String(scSelectedDate.getDate()).padStart(2,'0')}`;
-      const timeStr = `${String(scHour).padStart(2,'0')}:${String(scMinute).padStart(2,'0')}`;
+      const dateStr = `${scSelectedDate.getFullYear()}-${String(scSelectedDate.getMonth() + 1).padStart(2, '0')}-${String(scSelectedDate.getDate()).padStart(2, '0')}`;
+      const timeStr = `${String(scHour).padStart(2, '0')}:${String(scMinute).padStart(2, '0')}`;
       const newCall: CallLog = {
         id: `CALL-${Date.now()}`,
         client: scSelectedClient.name,
@@ -1079,7 +1066,7 @@ export default function CallLogs() {
   const totalPages = Math.ceil(totalRecords / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
   const endIndex = Math.min(startIndex + rowsPerPage, totalRecords);
-  const paginatedLogs = filteredLogs.slice(0, rowsPerPage); // Show only first page of filtered results
+  const paginatedLogs = filteredLogs.slice(startIndex, endIndex);
 
   // Check if all rows on current page are selected
   const currentPageLogIds = paginatedLogs.map((l) => l.id);
@@ -1263,12 +1250,12 @@ export default function CallLogs() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
           title="Call Logs"
           subtitle="View and manage call logs and recordings with precision"
           badge={
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               Telephony
             </span>
           }
@@ -1278,16 +1265,16 @@ export default function CallLogs() {
 
         {/* Active Client Filter Banner */}
         {activeClientFilter && (
-          <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Filter className="w-4 h-4 text-primary" />
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-2.5 px-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 bg-primary/10 rounded-lg flex items-center justify-center">
+                <Filter className="w-3.5 h-3.5 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-medium text-foreground">
+                <p className="text-xs font-medium text-foreground">
                   Showing call logs for <span className="font-semibold">{activeClientFilter}</span>
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[10px] text-muted-foreground">
                   Click the button to view all call logs
                 </p>
               </div>
@@ -1296,43 +1283,28 @@ export default function CallLogs() {
               variant="outline"
               size="sm"
               onClick={handleClearClientFilter}
-              className="flex items-center gap-2"
+              className="flex items-center gap-1.5 text-xs py-1"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
               Clear Filter
             </Button>
           </div>
         )}
 
-        {/* Action Bar */}
-        <div className="bg-card rounded-xl p-4 border border-border shadow-sm">
-          <div className="flex items-center gap-4">
-            {/* Search Bar */}
-            <div className="flex-1 relative">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search call logs..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => setShowSearchModal(true)}
-                  className="w-full pl-9 pr-4 py-2 bg-input-background border border-input rounded-lg text-sm"
-                />
-              </div>
-
-              {/* Advanced Search Dropdown Panel */}
-              {showSearchModal && (
-                <>
-                  {/* Backdrop to close panel */}
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowSearchModal(false)}
-                  />
-
-                  {/* Dropdown Panel */}
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-border z-50 overflow-hidden">
-                    <div className="flex" style={{ maxHeight: '700px' }}>
+        {/* Action Bar powered by PageTopBar */}
+        <PageTopBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search call logs..."
+          showSearchModal={showSearchModal}
+          onSearchModalToggle={setShowSearchModal}
+          primaryAction={{
+            label: "Schedule Call",
+            icon: <CalendarClock className="w-3.5 h-3.5" />,
+            onClick: () => setShowScheduleCallDrawer(true),
+          }}
+          customFilterModalContent={
+            <div className="flex" style={{ maxHeight: '700px' }}>
                       {/* Left Sidebar - Saved Searches */}
                       <div className="w-56 border-r border-border p-4 overflow-y-auto bg-muted/30">
                         <div className="space-y-1">
@@ -1704,29 +1676,9 @@ export default function CallLogs() {
                           </Button>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
-
-            {/* Schedule Call Button */}
-            <button
-              id="schedule-call-btn"
-              onClick={() => setShowScheduleCallDrawer(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap"
-              style={{
-                background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
-                color: '#ffffff',
-                boxShadow: '0 2px 8px rgba(99,102,241,0.35)',
-                border: 'none',
-              }}
-            >
-              <CalendarClock className="w-4 h-4" />
-              Schedule Call
-            </button>
-          </div>
-        </div>
+          }
+        />
 
         {/* Add Field Modal */}
         {showAddFieldModal && (
@@ -1899,335 +1851,138 @@ export default function CallLogs() {
           </div>
         )}
 
-        {/* List View */}
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
-          <div
-            ref={tableScrollRef}
-            className="overflow-x-auto scrollbar-hide"
-            style={{ scrollBehavior: 'auto' }}
-            onScroll={() => {
-              if (tableScrollRef.current) {
-                const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
-                setShowScrollIndicator(scrollWidth > clientWidth && scrollLeft < scrollWidth - clientWidth);
-                setShowScrollLeftIndicator(scrollLeft > 0);
-              }
-            }}
-          >
-            <table className="w-full">
-              <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                <tr>
-                  <th className="px-4 py-2.5 w-10">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      ref={(el) => {
-                        if (el) el.indeterminate = someSelected;
-                      }}
-                      onChange={handleSelectAll}
-                      className="w-4 h-4 cursor-pointer"
-                    />
-                  </th>
-                  <th className="px-2 py-2.5 w-8"></th>
-                  {visibleColumns.callId && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Call ID</th>}
-                  {visibleColumns.client && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Client</th>}
-                  {visibleColumns.stage && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Stage</th>}
-                  {visibleColumns.status && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>}
-                  {visibleColumns.date && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Date & Time</th>}
-                  {visibleColumns.duration && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Duration</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {paginatedLogs.map((log) => (
-                  <tr
-                    key={log.id}
-                    className={`transition-colors ${selectedRows.has(log.id)
-                      ? "bg-[#E8F0FE]"
-                      : "hover:bg-[#F1F5F9]"
-                      }`}
-                  >
-                    <td className="px-4 py-2.5">
-                      <input
-                        type="checkbox"
-                        checked={selectedRows.has(log.id)}
-                        onChange={() => handleSelectRow(log.id)}
-                        className="w-4 h-4 cursor-pointer"
-                      />
-                    </td>
-                    {/* Hamburger menu column */}
-                    <td className="px-2 py-2.5 relative">
-                      <div className="hamburger-menu-container">
-                        <button
-                          onClick={() => setOpenMenuCallId(openMenuCallId === log.id ? null : log.id)}
-                          className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center"
-                          style={{ width: '24px', height: '24px' }}
-                        >
-                          <MoreVertical className="w-4 h-4" style={{ color: '#9CA3AF' }} />
-                        </button>
-
-                        {/* Hamburger menu popup */}
-                        {openMenuCallId === log.id && (
-                          <div
-                            className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-50"
-                            style={{
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                              minWidth: '160px',
-                              padding: '4px'
-                            }}
-                          >
-                            <button
-                              onClick={() => {
-                                setSelectedCallForDetails(log);
-                                setShowCallDetailsDrawer(true);
-                                setOpenMenuCallId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                              style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                            >
-                              <Eye className="w-4 h-4" />
-                              <span>View</span>
-                            </button>
-                            <button
-                              onClick={() => {
-                                toast.info('Call feature coming soon');
-                                setOpenMenuCallId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                              style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                            >
-                              <Phone className="w-4 h-4" />
-                              <span>Call</span>
-                            </button>
-                            <button
-                              onClick={() => {
-                                toast.success(`Call log ${log.id} deleted`);
-                                setOpenMenuCallId(null);
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                              style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              <span>Delete</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    {visibleColumns.callId && (
-                      <td className="px-4 py-2.5 font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        <button
-                          onClick={() => {
-                            setSelectedCallForDetails(log);
-                            setShowCallDetailsDrawer(true);
-                          }}
-                          className="hover:underline text-left"
-                          style={{ color: '#1A73E8', cursor: 'pointer' }}
-                        >
-                          #{log.id}
-                        </button>
-                      </td>
-                    )}
-                    {visibleColumns.client && (
-                      <td className="px-4 py-2.5 font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        <div className="flex items-center" style={{ gap: '6px' }}>
-                          {log.type === "Outbound" ? (
-                            <PiPhoneOutgoing style={{ width: '14px', height: '14px', color: '#1A73E8', flexShrink: 0 }} />
-                          ) : (
-                            <PiPhoneIncoming style={{ width: '14px', height: '14px', color: '#22C55E', flexShrink: 0 }} />
-                          )}
-                          <span
-                            className="text-left"
-                            style={{ color: '#1A73E8' }}
-                          >
-                            {log.client}
-                          </span>
-                        </div>
-                      </td>
-                    )}
-                    {visibleColumns.stage && (
-                      <td className="px-4 py-2.5 text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        {log.lastStage && log.lastStage !== "N/A" ? (
-                          <span className="flex items-center gap-1 flex-wrap">
-                            <span style={{ color: '#94A3B8' }}>{log.lastStage}</span>
-                            <span style={{ color: '#94A3B8', margin: '0 2px' }}>→</span>
-                            <span style={{ color: '#111827' }}>{log.currentStage}</span>
-                          </span>
-                        ) : (
-                          <span style={{ color: '#111827' }}>{log.currentStage}</span>
-                        )}
-                      </td>
-                    )}
-                    {visibleColumns.status && (
-                      <td className="px-4 py-2.5 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${log.status === "Completed"
-                          ? "bg-success-bg text-success"
-                          : log.status === "Pending"
-                            ? "bg-warning/10 text-warning"
-                            : "bg-error-bg text-error"
-                          }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-                          {log.status}
-                        </span>
-                      </td>
-                    )}
-                    {visibleColumns.date && <td className="px-4 py-2.5 text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.date}</td>}
-                    {visibleColumns.duration && <td className="px-4 py-2.5 text-xs text-center tabular-nums" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.duration}</td>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination Controls */}
-          <div className="border-t border-border px-4 py-3">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Rows per page:</span>
-                  <select
-                    value={rowsPerPage}
-                    onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
-                    className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
-                  >
-                    <option value={15}>15</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                  </select>
+        {/* ─── Call Logs Table with TableComponent ─────────────────────── */}
+        {(() => {
+          const callColumns: TableColumn<CallLog>[] = [
+            {
+              id: "callId",
+              header: "Call ID",
+              render: (log) => (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCallForDetails(log);
+                    setShowCallDetailsDrawer(true);
+                  }}
+                  className="hover:underline font-medium cursor-pointer text-[#1A73E8]"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  #{log.id}
+                </button>
+              ),
+            },
+            {
+              id: "lastStage",
+              header: "Previous Stage",
+              render: (log) => (
+                <span className="text-xs text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {log.lastStage && log.lastStage !== "N/A" ? log.lastStage : "—"}
+                </span>
+              ),
+            },
+            {
+              id: "currentStage",
+              header: "Last Stage",
+              render: (log) => (
+                <span className="text-xs font-semibold text-[#111827]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {log.currentStage || "—"}
+                </span>
+              ),
+            },
+            {
+              id: "client",
+              header: "Client",
+              render: (log) => (
+                <div className="flex items-center gap-1.5 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  {log.type === "Outbound" ? (
+                    <PiPhoneOutgoing className="w-3.5 h-3.5 text-[#1A73E8] shrink-0" />
+                  ) : (
+                    <PiPhoneIncoming className="w-3.5 h-3.5 text-[#22C55E] shrink-0" />
+                  )}
+                  <span className="text-[#1A73E8]">{log.client}</span>
                 </div>
-                <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                  Showing {startIndex + 1}–{endIndex} of {totalRecords.toLocaleString()}
+              ),
+            },
+            {
+              id: "status",
+              header: "Status",
+              render: (log) => (
+                <span
+                  className={`inline-block px-2 py-0.5 rounded-none text-[10px] font-semibold whitespace-nowrap ${
+                    log.status === "Completed"
+                      ? "bg-success-bg text-success"
+                      : log.status === "Pending"
+                      ? "bg-warning/10 text-warning"
+                      : "bg-error-bg text-error"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {log.status}
                 </span>
-              </div>
+              ),
+            },
+            {
+              id: "date",
+              header: "Date & Time",
+              render: (log) => <span className="text-[#64748B] text-xs">{log.date}</span>,
+            },
+            {
+              id: "duration",
+              header: "Duration",
+              render: (log) => <span className="text-[#64748B] text-xs tabular-nums">{log.duration}</span>,
+            },
+          ];
 
-              <div className="flex items-center gap-1">
-                <Tooltip text="First Page">
-                  <button
-                    onClick={() => setCurrentPage(1)}
-                    disabled={currentPage === 1}
-                    className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronsLeft className="w-3.5 h-3.5" />
-                  </button>
-                </Tooltip>
-                <Tooltip text="Previous Page">
-                  <button
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-                </Tooltip>
-                <span className="text-xs px-2 hidden sm:inline" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                  Page {currentPage} of {totalPages}
-                </span>
-                <span className="text-xs px-2 sm:hidden" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                  {currentPage}/{totalPages}
-                </span>
-                <Tooltip text="Next Page">
-                  <button
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </Tooltip>
-                <Tooltip text="Last Page">
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={currentPage === totalPages}
-                    className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ChevronsRight className="w-3.5 h-3.5" />
-                  </button>
-                </Tooltip>
-              </div>
-            </div>
-          </div>
+          const callRowActions: TableRowAction<CallLog>[] = [
+            {
+              label: "View",
+              icon: <Eye className="w-3.5 h-3.5" />,
+              onClick: (log) => {
+                setSelectedCallForDetails(log);
+                setShowCallDetailsDrawer(true);
+              },
+            },
+            {
+              label: "Call",
+              icon: <Phone className="w-3.5 h-3.5" />,
+              onClick: () => {
+                toast.info("Call feature coming soon");
+              },
+            },
+            {
+              label: "Delete",
+              icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+              isDanger: true,
+              onClick: (log) => {
+                toast.success(`Call log ${log.id} deleted`);
+              },
+            },
+          ];
 
-          {/* Scroll Right Button - Semicircle */}
-          <button
-            className="absolute right-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-            style={{
-              top: '50%',
-              transform: 'translateY(-50%)',
-              height: '112px',
-              width: '40px',
-              backgroundColor: 'rgba(255, 255, 255, 0.5)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              borderTopLeftRadius: '9999px',
-              borderBottomLeftRadius: '9999px',
-              borderTopRightRadius: '0',
-              borderBottomRightRadius: '0',
-              opacity: showScrollIndicator ? 1 : 0.2,
-              pointerEvents: showScrollIndicator ? 'auto' : 'none'
-            }}
-            onMouseEnter={(e) => {
-              if (showScrollIndicator) {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-                e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) {
-                  (icon as SVGElement).style.transform = 'scale(1.1)';
-                }
-                handleScrollRightMouseEnter();
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-              e.currentTarget.style.boxShadow = '';
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) {
-                (icon as SVGElement).style.transform = 'scale(1)';
-              }
-              handleScrollMouseLeave();
-            }}
-          >
-            <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
-          </button>
-
-          {/* Scroll Left Button - Semicircle */}
-          <button
-            className="absolute left-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-            style={{
-              top: '50%',
-              transform: 'translateY(-50%)',
-              height: '112px',
-              width: '40px',
-              backgroundColor: 'rgba(255, 255, 255, 0.5)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              borderTopRightRadius: '9999px',
-              borderBottomRightRadius: '9999px',
-              borderTopLeftRadius: '0',
-              borderBottomLeftRadius: '0',
-              opacity: showScrollLeftIndicator ? 1 : 0.2,
-              pointerEvents: showScrollLeftIndicator ? 'auto' : 'none'
-            }}
-            onMouseEnter={(e) => {
-              if (showScrollLeftIndicator) {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-                e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) {
-                  (icon as SVGElement).style.transform = 'scale(1.1)';
-                }
-                handleScrollLeftMouseEnter();
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-              e.currentTarget.style.boxShadow = '';
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) {
-                (icon as SVGElement).style.transform = 'scale(1)';
-              }
-              handleScrollMouseLeave();
-            }}
-          >
-            <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
-          </button>
-        </div>
+          return (
+            <TableComponent
+              data={filteredLogs}
+              columns={callColumns}
+              getRowId={(log) => log.id}
+              rowActions={callRowActions}
+              selectedIds={selectedRows}
+              onSelectionChange={setSelectedRows}
+              bulkActions={[
+                {
+                  label: "Delete Selected",
+                  icon: <Trash2 className="w-3.5 h-3.5" />,
+                  variant: "danger",
+                  onClick: (ids) => {
+                    toast.success(`${ids.size} call logs deleted`);
+                    setSelectedRows(new Set());
+                  },
+                },
+              ]}
+              defaultRowsPerPage={20}
+              emptyMessage="No call logs found matching your filters."
+            />
+          );
+        })()}
 
         {/* Trigger Calls Modal */}
         <Modal
@@ -2448,16 +2203,16 @@ export default function CallLogs() {
         values={{
           client: scSelectedClient
             ? {
-                id: scSelectedClient.id,
-                name: scSelectedClient.name,
-                email: scSelectedClient.email,
-                phone: scSelectedClient.phone,
-                countryCode: scSelectedClient.countryCode,
-                countryFlag: scSelectedClient.countryFlag,
-                country: scSelectedClient.country,
-                status: scSelectedClient.status,
-                processes: scSelectedClient.processes,
-              }
+              id: scSelectedClient.id,
+              name: scSelectedClient.name,
+              email: scSelectedClient.email,
+              phone: scSelectedClient.phone,
+              countryCode: scSelectedClient.countryCode,
+              countryFlag: scSelectedClient.countryFlag,
+              country: scSelectedClient.country,
+              status: scSelectedClient.status,
+              processes: scSelectedClient.processes,
+            }
             : null,
           clientSearch: scClientSearch,
           process: scSelectedProcess,

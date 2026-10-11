@@ -115,23 +115,20 @@ export default function Overview() {
   const [filterCallType, setFilterCallType] = useState("Call Type");
 
   return (
-    <div className="min-h-screen bg-[#fafafa] p-6 lg:p-8">
-      <div className="max-w-[1440px] mx-auto space-y-6">
-        {/* Header with 4 Dropdown Filters */}
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <h1
-              className="text-3xl font-bold text-[#222222] tracking-tight"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              Overview Analytics
-            </h1>
-            <p className="text-sm text-[#64748b] font-normal leading-relaxed">
-              Track call performance and automation health with precision
-            </p>
-          </div>
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
+        <PageHeader
+          title="Overview Analytics"
+          subtitle="Track call performance and automation health with precision"
+          badge={
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+              Analytics
+            </span>
+          }
+        />
 
-          {/* 4 Filter Dropdown Pills */}
+        {/* 4 Dropdown Filter Pills */}
+        <div className="flex items-center justify-end">
           <div className="flex flex-wrap items-center gap-3">
             {/* Filter by process */}
             <div className="space-y-1">
@@ -142,7 +139,7 @@ export default function Overview() {
                 <select
                   value={filterProcess}
                   onChange={(e) => setFilterProcess(e.target.value)}
-                  className="appearance-none bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
+                  className="appearance-none bg-white border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
                 >
                   <option value="All Processes">All Processes</option>
                   <option value="Patient Intake">Patient Intake</option>
@@ -162,7 +159,7 @@ export default function Overview() {
                 <select
                   value={filterStage}
                   onChange={(e) => setFilterStage(e.target.value)}
-                  className="appearance-none bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
+                  className="appearance-none bg-white border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
                 >
                   <option value="All Stages">All Stages</option>
                   <option value="Initial Contact">Initial Contact</option>
@@ -182,7 +179,7 @@ export default function Overview() {
                 <select
                   value={filterDate}
                   onChange={(e) => setFilterDate(e.target.value)}
-                  className="appearance-none bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
+                  className="appearance-none bg-white border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
                 >
                   <option value="All Time">All Time</option>
                   <option value="Today">Today</option>
@@ -202,7 +199,7 @@ export default function Overview() {
                 <select
                   value={filterCallType}
                   onChange={(e) => setFilterCallType(e.target.value)}
-                  className="appearance-none bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
+                  className="appearance-none bg-white border border-slate-200/80 rounded-full pl-3.5 pr-8 py-1.5 text-xs font-semibold text-[#222222] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20 cursor-pointer"
                 >
                   <option value="Call Type">Call Type</option>
                   <option value="Outbound">Outbound</option>

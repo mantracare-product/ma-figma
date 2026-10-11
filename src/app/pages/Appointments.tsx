@@ -27,46 +27,34 @@ import {
   LayoutGrid,
   List,
   CalendarClock,
-  Settings,
   Check,
+  Settings,
 } from "lucide-react";
+import { appointmentService, hasAppointmentAutomation, Appointment } from "../../lib/appointmentService";
+import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../lib/invoiceService";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, isProcessMatchingOrg, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
+import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
+import { useOrganization } from "../context/OrganizationContext";
+import { appendActivity } from "../../lib/activityEngine";
+import { logStageMove } from "../../lib/useAutomationStore";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
+
+import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
+import AppointmentDetailDrawer from "../components/appointments/AppointmentDetailDrawer";
 import AppointmentCard from "../components/appointments/AppointmentCard";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppointmentDrawer";
 import TeamAvailabilityTab from "../components/appointments/TeamAvailabilityTab";
 import TargetUserLocationBar from "../components/appointments/TargetUserLocationBar";
-import { useSearchParams } from "react-router";
+import AppointmentCalendarView from "../components/appointments/AppointmentCalendarView";
+import { useSearchParams, useNavigate, Link } from "react-router";
 import { useClients } from "../../lib/clientsStore";
 import { useInvoices } from "../context/InvoiceContext";
 import { initialClients } from "./ClientProfile";
 import { useTeamMembers } from "../../lib/teamStore";
 
-interface Appointment {
-  id: number;
-  clientName: string;
-  clientEmail: string;
-  clientPhone: string;
-  employeeId: number | string;
-  serviceId: number | string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM
-  duration: number; // in minutes
-  status: "scheduled" | "completed" | "cancelled" | "no-show" | "pending-accept";
-  notes?: string;
-  rating?: number; // 1-5 stars for completed appointments
-  // Extended fields (additive)
-  title?: string;
-  description?: string;
-  tags?: string[];
-  processId?: string;
-  stageId?: string;
-  source?: string;
-  roomName?: string;
-  tokenNumber?: string;
-  checkedInAt?: string;
-}
 
 interface Employee {
   id: number | string;
@@ -93,8 +81,10 @@ const processStages: Record<string, string[]> = {
 };
 
 export default function Appointments() {
+  const navigate = useNavigate();
   const { invoices, createInvoiceFromAppointment, voidInvoice } = useInvoices();
   const { bookableMembers, teamMembers } = useTeamMembers();
+  const { activeOrganization } = useOrganization();
 
   // Dynamic bookable employees list
   const employees: Employee[] = useMemo(() => {
@@ -124,83 +114,28 @@ export default function Appointments() {
     { id: 4, name: "X-Ray Imaging", duration: 20, price: 80 },
   ];
 
-  const [appointments, setAppointments] = useState<Appointment[]>(() => {
-    try {
-      const saved = localStorage.getItem("appointments_v1") || sessionStorage.getItem("appointments_v1");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [
-      {
-        id: 101,
-        clientName: "Sunita Rao",
-        clientEmail: "sunita.rao@example.com",
-        clientPhone: "+91 91234 56780",
-        employeeId: 1,
-        serviceId: 1,
-        date: new Date().toISOString().split("T")[0],
-        time: "10:30",
-        duration: 30,
-        status: "scheduled",
-        notes: "Cardiology consult check-in via AI Receptionist",
-        source: "ai_receptionist",
-        roomName: "Dr. Sharma - Room 101",
-        tokenNumber: "D-001",
-        processId: "Appointment Scheduling",
-        stageId: "Confirmed",
-      },
-      {
-        id: 1,
-        clientName: "James Wilson",
-        clientEmail: "james.w@example.com",
-        clientPhone: "+1 (555) 123-4567",
-        employeeId: 1,
-        serviceId: 1,
-        date: "2026-05-12",
-        time: "09:00",
-        duration: 60,
-        status: "pending-accept",
-        notes: "First-time patient",
-      },
-      {
-        id: 2,
-        clientName: "Emma Brown",
-        clientEmail: "emma.b@example.com",
-        clientPhone: "+1 (555) 234-5678",
-        employeeId: 2,
-        serviceId: 2,
-        date: "2026-05-12",
-        time: "10:30",
-        duration: 30,
-        status: "scheduled",
-      },
-      {
-        id: 3,
-        clientName: "Oliver Davis",
-        clientEmail: "oliver.d@example.com",
-        clientPhone: "+1 (555) 345-6789",
-        employeeId: 1,
-        serviceId: 4,
-        date: "2026-05-13",
-        time: "14:00",
-        duration: 20,
-        status: "scheduled",
-      },
-      {
-        id: 4,
-        clientName: "Sophia Martinez",
-        clientEmail: "sophia.m@example.com",
-        clientPhone: "+1 (555) 456-7890",
-        employeeId: 5,
-        serviceId: 3,
-        date: "2026-05-14",
-        time: "11:00",
-        duration: 45,
-        status: "scheduled",
-      },
-    ];
-  });
+  const [appointments, setAppointments] = useState<Appointment[]>(() => appointmentService.getAppointments() as any);
+  const [stageFilter, setStageFilter] = useState<string>("all");
+
+  useEffect(() => {
+    return appointmentService.subscribe((updated) => {
+      setAppointments(updated as any);
+    });
+  }, []);
+
+  const [, setStoreTick] = useState(0);
+  useEffect(() => {
+    const handleStoreChange = () => setStoreTick((t) => t + 1);
+    window.addEventListener(AUTOMATION_STORE_EVENT, handleStoreChange);
+    window.addEventListener(PROCESS_STORE_EVENT, handleStoreChange);
+    return () => {
+      window.removeEventListener(AUTOMATION_STORE_EVENT, handleStoreChange);
+      window.removeEventListener(PROCESS_STORE_EVENT, handleStoreChange);
+    };
+  }, []);
 
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date());
   const [view, setView] = useState<"calendar" | "list" | "availability">("list");
   const [calendarViewMode, setCalendarViewMode] = useState<"day" | "week" | "month">("month");
   const [selectedUserId, setSelectedUserId] = useState<string | number>(() => employees[0]?.id || 1);
@@ -211,10 +146,114 @@ export default function Appointments() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [selectedAppointmentForDrawer, setSelectedAppointmentForDrawer] = useState<Appointment | null>(null);
+  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
+
+  // Process filter state for topbar - starts from the process directly, no "all"
+  const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>("");
+  const [showProcessesDropdown, setShowProcessesDropdown] = useState<boolean>(false);
+
+  // Dynamic scoped appointment processes based on client organization (category, industry, location)
+  const appointmentProcesses: Process[] = useMemo(() => {
+    const procs = getStoredProcesses();
+    const apptProcs = procs.filter((p) => p.entityType === "appointment");
+    if (activeOrganization) {
+      const scoped = apptProcs.filter((p) => isProcessMatchingOrg(p, activeOrganization));
+      if (scoped.length > 0) return scoped;
+    }
+    return apptProcs.length > 0 ? apptProcs : [DEFAULT_ENTITY_PROCESSES.appointment];
+  }, [activeOrganization]);
+
+  // Auto-select first process if none selected or invalid (unless explicitly "all")
+  useEffect(() => {
+    if (appointmentProcesses.length > 0) {
+      if (!selectedProcessFilter || (selectedProcessFilter !== "all" && !appointmentProcesses.some((p) => p.id === selectedProcessFilter))) {
+        setSelectedProcessFilter(appointmentProcesses[0].id);
+      }
+    }
+  }, [appointmentProcesses, selectedProcessFilter]);
+
+  // Active appointment process (or selected process) for stages and execution
+  const appointmentProcess: Process = useMemo(() => {
+    if (selectedProcessFilter && selectedProcessFilter !== "all") {
+      const found = appointmentProcesses.find((p) => p.id === selectedProcessFilter);
+      if (found) return found;
+    }
+    return appointmentProcesses[0] || DEFAULT_ENTITY_PROCESSES.appointment;
+  }, [appointmentProcesses, selectedProcessFilter]);
+
+  const appointmentWorkflowStages: Stage[] = useMemo(() => {
+    return appointmentProcess.stages || DEFAULT_ENTITY_PROCESSES.appointment.stages;
+  }, [appointmentProcess]);
+
+  // Dynamic process stages map for ScheduleAppointmentDrawer
+  const dynamicProcessStages = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    appointmentProcesses.forEach((p) => {
+      map[p.name] = (p.stages || []).map((s) => s.name);
+    });
+    return Object.keys(map).length > 0 ? map : processStages;
+  }, [appointmentProcesses]);
+
+  const handleQuickStageChange = (apt: Appointment, targetStage: Stage) => {
+    let newStatus: Appointment["status"] = apt.status;
+    if (targetStage.systemCategory === "completed") newStatus = "completed";
+    else if (targetStage.systemCategory === "cancelled") newStatus = "cancelled";
+    else if (targetStage.systemCategory === "rescheduled") newStatus = "rescheduled" as any;
+    else if (targetStage.systemCategory === "booked") newStatus = "scheduled";
+
+    const updated = {
+      ...apt,
+      processId: appointmentProcess.id,
+      currentStageId: targetStage.id,
+      statusLabel: targetStage.name,
+      status: newStatus,
+    };
+
+    setAppointments((prev) => prev.map((a) => (a.id === apt.id ? updated : a)));
+    appointmentService.saveAppointments(
+      appointmentService.getAppointments().map((a) => (a.id === apt.id ? updated : a))
+    );
+
+    logStageMove({
+      orgId: "default",
+      recordType: "appointment",
+      recordId: String(apt.id),
+      fromStageId: apt.currentStageId,
+      fromStageName: apt.statusLabel,
+      toStageId: targetStage.id,
+      toStageName: targetStage.name,
+      processId: appointmentProcess.id,
+      processName: appointmentProcess.name,
+      cause: {
+        type: "manual",
+        ruleName: `Stage changed to ${targetStage.name} from appointments table`,
+      },
+    });
+
+    const prevStage = appointmentWorkflowStages.find((s) => s.id === apt.stageId || s.id === apt.currentStageId);
+    appendActivity({
+      clientId: (apt as any).clientId || `APT-${apt.id}`,
+      processId: appointmentProcess.id,
+      processName: appointmentProcess.name,
+      type: "stage_change",
+      createdBy: "user",
+      fromStage: prevStage?.name || "Initial Stage",
+      toStage: targetStage.name,
+      details: {
+        primary: `Moved to stage "${targetStage.name}"`,
+        secondary: `Appointment #${apt.id} for ${apt.clientName}`,
+      },
+    });
+
+    toast.success(`Appointment moved to "${targetStage.name}"`);
+  };
+
   const [listViewTab, setListViewTab] = useState<"upcoming" | "done" | "pending" | "all">("all");
-  const [selectedRows, setSelectedRows] = useState<number[]>([]);
-  const [editingRows, setEditingRows] = useState<{ [key: number]: Appointment }>({});
-  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [selectedRows, setSelectedRows] = useState<(string | number)[]>([]);
+  const [editingRows, setEditingRows] = useState<{ [key: string | number]: Appointment }>({});
+  const [confirmDelete, setConfirmDelete] = useState<string | number | null>(null);
+  const [hoveredStageBox, setHoveredStageBox] = useState<{ aptId: string | number; stageIdx: number } | null>(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showProviderDropdown, setShowProviderDropdown] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -262,8 +301,10 @@ export default function Appointments() {
 
   useEffect(() => {
     try {
-      localStorage.setItem("appointments_v1", JSON.stringify(appointments));
-      sessionStorage.setItem("appointments_v1", JSON.stringify(appointments));
+      if (appointments && appointments.length > 0) {
+        sessionStorage.setItem("appointments_v1", JSON.stringify(appointments));
+        localStorage.setItem("appointments_v1", JSON.stringify(appointments));
+      }
     } catch {}
   }, [appointments]);
 
@@ -320,7 +361,7 @@ export default function Appointments() {
   const [bookingStartMinute, setBookingStartMinute] = useState(0);
   const [drawerMode, setDrawerMode] = useState<"create" | "reschedule">("create");
   const [bookingServiceId, setBookingServiceId] = useState("");
-  const [bookingGenerateInvoice, setBookingGenerateInvoice] = useState(true);
+  const [bookingGenerateInvoice, setBookingGenerateInvoice] = useState(() => hasAppointmentInvoiceAutomation());
   const [bookingLineItems, setBookingLineItems] = useState<any[]>([]);
   const [bookingDiscountAmount, setBookingDiscountAmount] = useState(0);
   const [bookingLocation, setBookingLocation] = useState("Main Clinic — Suite 400");
@@ -521,7 +562,7 @@ export default function Appointments() {
     setSelectedProvider(prov);
 
     const cl = clients.find((c) => c.name === apt.clientName || c.email === apt.clientEmail) || {
-      id: apt.id * 1000,
+      id: (Number(apt.id) || 1) * 1000,
       name: apt.clientName,
       email: apt.clientEmail,
       phone: apt.clientPhone,
@@ -555,6 +596,12 @@ export default function Appointments() {
   };
 
   const handleBookingComplete = () => {
+    if (drawerMode !== "reschedule" && !hasAppointmentAutomation(bookingProcessId || (selectedProcessFilter !== "all" ? selectedProcessFilter : undefined))) {
+      toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
+      navigate("/automation");
+      return;
+    }
+
     if (!selectedClient || !selectedProvider || !selectedDate || !bookingTitle.trim()) {
       toast.error("Please fill in all required fields");
       return;
@@ -566,67 +613,51 @@ export default function Appointments() {
     const parsedTags = bookingTags ? bookingTags.split(",").map((t) => t.trim()).filter(Boolean) : undefined;
 
     if (drawerMode === "reschedule" && selectedAppointment) {
-      setAppointments(
-        appointments.map((a) =>
-          a.id === selectedAppointment.id
-            ? {
-                ...a,
-                clientName: selectedClient.name,
-                clientEmail: selectedClient.email,
-                clientPhone: selectedClient.phone,
-                employeeId: selectedProvider.id,
-                date: selectedDate,
-                time: timeStr,
-                notes: bookingNote || `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
-                title: bookingTitle.trim(),
-                description: bookingDescription.trim() || undefined,
-                tags: parsedTags,
-                processId: bookingProcessId || undefined,
-                stageId: bookingStageId || undefined,
-              }
-            : a
-        )
-      );
+      appointmentService.rescheduleAppointment(selectedAppointment.id, selectedDate, timeStr, bookingNote);
+      setAppointments(appointmentService.getAppointments() as any);
+      if (selectedAppointmentForDrawer && selectedAppointmentForDrawer.id === selectedAppointment.id) {
+        const found = appointmentService.getAppointmentById(selectedAppointment.id);
+        if (found) setSelectedAppointmentForDrawer(found);
+      }
       toast.success("Appointment rescheduled successfully!");
     } else {
-      const newAppointment: Appointment = {
-        id: appointments.length > 0 ? Math.max(...appointments.map((a) => a.id)) + 1 : 1,
+      const targetProc = bookingProcessId
+        ? appointmentProcesses.find((p) => p.id === bookingProcessId || p.name === bookingProcessId)
+        : (appointmentProcess || appointmentProcesses[0]);
+
+      const targetStage = targetProc?.stages?.find(
+        (s) => s.id === bookingStageId || s.name === bookingStageId
+      );
+
+      const res = appointmentService.createAppointment({
         clientName: selectedClient.name,
         clientEmail: selectedClient.email,
         clientPhone: selectedClient.phone,
         employeeId: selectedProvider.id,
-        serviceId: 1,
+        serviceId: bookingServiceId ? Number(bookingServiceId) : 1,
         date: selectedDate,
         time: timeStr,
         duration: 60,
-        status: "scheduled",
         notes: bookingNote || `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
         title: bookingTitle.trim(),
         description: bookingDescription.trim() || undefined,
         tags: parsedTags,
-        processId: bookingProcessId || undefined,
-        stageId: bookingStageId || undefined,
-      };
+        clientId: selectedClient.id ? String(selectedClient.id) : undefined,
+        location: bookingLocation,
+        sessionType,
+        processId: targetProc?.id || bookingProcessId,
+        stageId: targetStage?.id || bookingStageId || undefined,
+        generateInvoice: bookingGenerateInvoice ?? false,
+        lineItems: bookingLineItems && bookingLineItems.length > 0 ? bookingLineItems : undefined,
+        source: "screen",
+      });
 
-      setAppointments([...appointments, newAppointment]);
+      if (res.appointment) {
+        setAppointments(appointmentService.getAppointments() as any);
+      }
 
-      if (bookingGenerateInvoice && bookingLineItems && bookingLineItems.length > 0) {
-        const inv = createInvoiceFromAppointment(
-          {
-            id: newAppointment.id,
-            clientId: String(selectedClient.id || "c-1"),
-            clientName: selectedClient.name,
-            clientEmail: selectedClient.email,
-            clientPhone: selectedClient.phone,
-            title: bookingTitle.trim(),
-          },
-          bookingLineItems,
-          {
-            discountAmount: bookingDiscountAmount,
-            createdBy: "Admin User",
-          }
-        );
-        toast.success(`Appointment scheduled — Invoice ${inv.id} created!`);
+      if (res.invoiceId) {
+        toast.success(`Appointment scheduled — Invoice ${res.invoiceId} created!`);
       } else {
         toast.success("Appointment scheduled successfully!");
       }
@@ -663,6 +694,9 @@ export default function Appointments() {
     setBookingStartHour(9);
     setBookingStartMinute(0);
     setBookingLocation("Main Clinic — Suite 400");
+    setBookingGenerateInvoice(hasAppointmentInvoiceAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined));
+    setBookingLineItems([]);
+    setBookingDiscountAmount(0);
 
     // Reset client filters and search
     setClientSearchQuery("");
@@ -692,8 +726,12 @@ export default function Appointments() {
     }
 
     const service = services.find((s) => s.id === appointmentFormData.serviceId);
+    const maxId = appointments.reduce((max, a) => {
+      const num = typeof a.id === "number" ? a.id : parseInt(String(a.id).replace(/\D/g, ""), 10) || 0;
+      return Math.max(max, num);
+    }, 0);
     const newAppointment: Appointment = {
-      id: Math.max(...appointments.map((a) => a.id)) + 1,
+      id: maxId + 1,
       ...appointmentFormData,
       employeeId: Number(appointmentFormData.employeeId),
       serviceId: Number(appointmentFormData.serviceId),
@@ -731,27 +769,24 @@ export default function Appointments() {
   };
 
   const handleDeleteAppointment = (appointmentId: number) => {
-    setAppointments(appointments.filter((a) => a.id !== appointmentId));
-    const linkedInvoice = invoices.find(i => String(i.appointmentId) === String(appointmentId));
-    if (linkedInvoice && linkedInvoice.status !== "paid") {
-      voidInvoice(linkedInvoice.id);
-      toast.success(`Appointment cancelled & Invoice ${linkedInvoice.id} voided`);
-    } else {
-      toast.success("Appointment cancelled");
-    }
+    appointmentService.cancelAppointment(appointmentId);
+    toast.success("Appointment cancelled & invoice voided if unpaid");
   };
 
   const handleStatusChange = (appointmentId: number, status: Appointment["status"]) => {
-    setAppointments(appointments.map((a) => (a.id === appointmentId ? { ...a, status } : a)));
     if (status === "cancelled") {
-      const linkedInvoice = invoices.find(i => String(i.appointmentId) === String(appointmentId));
-      if (linkedInvoice && linkedInvoice.status !== "paid") {
-        voidInvoice(linkedInvoice.id);
-        toast.success(`Appointment marked cancelled & Invoice ${linkedInvoice.id} voided`);
-        return;
+      appointmentService.cancelAppointment(appointmentId);
+    } else if (status === "completed") {
+      appointmentService.completeAppointment(appointmentId);
+    } else {
+      const targetStage = appointmentProcess.stages.find(s => s.systemCategory === status);
+      if (targetStage) {
+        appointmentService.moveToStage(appointmentId, targetStage.id);
+      } else {
+        appointmentService.updateAppointment(appointmentId, { status });
       }
     }
-    toast.success(`Appointment marked as ${status}`);
+    toast.success("Appointment status updated");
   };
 
   const openEditModal = (appointment: Appointment) => {
@@ -774,7 +809,7 @@ export default function Appointments() {
       const vis = resolveVisibility(f);
       const val = (appointment as any)[f.key];
       const hasValue = val !== undefined && val !== null && val !== "";
-      
+
       if (hasValue) {
         values[f.key] = String(val);
       }
@@ -815,35 +850,68 @@ export default function Appointments() {
   };
 
   const filteredAppointments = appointments.filter((apt) => {
+    const query = searchQuery.toLowerCase().trim();
+    const apptIdStr = `apt-${apt.id}`;
     const matchesSearch =
-      apt.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      apt.clientEmail.toLowerCase().includes(searchQuery.toLowerCase());
+      !query ||
+      apptIdStr.includes(query) ||
+      String(apt.id).includes(query) ||
+      apt.clientName.toLowerCase().includes(query) ||
+      apt.clientEmail.toLowerCase().includes(query) ||
+      (apt.clientPhone && apt.clientPhone.toLowerCase().includes(query)) ||
+      (apt.notes && apt.notes.toLowerCase().includes(query)) ||
+      (apt.title && apt.title.toLowerCase().includes(query));
     const matchesEmployee = effectiveEmployeeFilter === "all" || apt.employeeId === effectiveEmployeeFilter;
 
-    // Filter by list view tab (only applies when in list view)
+    // Filter by status dropdown / list view tab
     let matchesTab = true;
-    if (view === "list") {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const aptDate = new Date(apt.date + "T00:00:00");
-
-      switch (listViewTab) {
-        case "upcoming":
-          matchesTab = apt.status === "scheduled";
-          break;
-        case "done":
-          matchesTab = apt.status === "completed";
-          break;
-        case "pending":
-          matchesTab = apt.status === "pending-accept";
-          break;
-        case "all":
-          matchesTab = true;
-          break;
-      }
+    switch (listViewTab) {
+      case "upcoming":
+        matchesTab = apt.status === "scheduled";
+        break;
+      case "done":
+        matchesTab = apt.status === "completed";
+        break;
+      case "pending":
+        matchesTab = apt.status === "pending-accept";
+        break;
+      case "all":
+        matchesTab = true;
+        break;
     }
+    const matchesStage =
+      stageFilter === "all" ||
+      apt.currentStageId === stageFilter ||
+      (apt.statusLabel && apt.statusLabel.toLowerCase() === stageFilter.toLowerCase()) ||
+      apt.status === stageFilter;
 
-    return matchesSearch && matchesEmployee && matchesTab;
+    const effectiveProcessId = (() => {
+      // 1. If appointment's currentStageId belongs to any known appointment process, that process is authoritative
+      if (apt.currentStageId || apt.stageId) {
+        const sid = (apt.currentStageId || apt.stageId || "").trim().toLowerCase();
+        for (const p of appointmentProcesses) {
+          if (p.stages?.some((s) => s.id.toLowerCase() === sid)) {
+            return p.id;
+          }
+        }
+      }
+      // 2. Otherwise match by apt.processId
+      if (apt.processId) {
+        const found = appointmentProcesses.find(
+          (p) => p.id === apt.processId || p.name.toLowerCase() === apt.processId?.toLowerCase()
+        );
+        return found ? found.id : apt.processId;
+      }
+      return "";
+    })();
+
+    const matchesProcess =
+      selectedProcessFilter === "all" ||
+      effectiveProcessId === appointmentProcess.id ||
+      effectiveProcessId === selectedProcessFilter ||
+      (!effectiveProcessId && (!selectedProcessFilter || selectedProcessFilter === appointmentProcesses[0]?.id));
+
+    return matchesSearch && matchesEmployee && matchesTab && matchesStage && matchesProcess;
   });
 
   const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentDate);
@@ -903,1239 +971,511 @@ export default function Appointments() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
           title="Appointments"
           subtitle="Schedule and manage appointments with your clients"
           badge={
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               Schedule
             </span>
           }
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <HowItWorksButton label="How Appointments Works" onClick={() => setShowHelp(true)} />
           </div>
         </PageHeader>
 
-        {/* Navigation & Controls Row: Segmented View Switcher (List | Calendar | Availability) + Book Appointment */}
-        <div className="flex items-center justify-end gap-3">
-            {/* Segmented View Switcher */}
-            <div className="inline-flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setView("list")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  view === "list"
-                    ? "bg-[#181e25] text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-                }`}
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-                title="List View"
-              >
-                <List className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">List</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("calendar")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  view === "calendar"
-                    ? "bg-[#181e25] text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-                }`}
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-                title="Calendar View"
-              >
-                <CalendarIcon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Calendar</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("availability")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  view === "availability"
-                    ? "bg-[#181e25] text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
-                }`}
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-                title="Team Availability & Days Off"
-              >
-                <CalendarClock className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Availability</span>
-              </button>
-            </div>
-
-            {/* Module Default Process Config Gear Button */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowProcessSettings((prev) => !prev)}
-                className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all border border-slate-200 cursor-pointer shadow-xs active:scale-95"
-                title={`Module Process: ${moduleDefaultProcess} (Click to change)`}
-              >
-                <Settings className="w-4 h-4 text-slate-600 hover:text-slate-900" />
-              </button>
-
-              {showProcessSettings && (
-                <div className="absolute right-0 top-11 w-64 bg-white rounded-xl shadow-xl border border-slate-200 p-3 z-50 animate-in fade-in zoom-in-95 duration-100">
-                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
-                    <div>
-                      <p className="text-xs font-bold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>Appointment Process</p>
-                      <p className="text-[10px] text-slate-500">Auto-assigned to appointments & kiosk</p>
-                    </div>
-                    <button 
-                      type="button"
-                      onClick={() => setShowProcessSettings(false)}
-                      className="text-slate-400 hover:text-slate-600 text-xs p-1"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div className="space-y-1">
-                    {Object.keys(processStages).map((proc) => {
-                      const isSelected = moduleDefaultProcess === proc;
-                      return (
-                        <button
-                          key={proc}
-                          type="button"
-                          onClick={() => handleSetModuleDefaultProcess(proc)}
-                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-left transition-colors cursor-pointer ${
-                            isSelected
-                              ? "bg-blue-50 text-[#1456f0] font-semibold"
-                              : "text-slate-700 hover:bg-slate-50"
-                          }`}
-                        >
-                          <span>{proc}</span>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-[#1456f0]" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Book Appointment CTA (Electric Blue Pill) */}
-            <button
-              type="button"
-              onClick={() => {
-                resetBookingWorkflow();
-                setShowAddModal(true);
-              }}
-              className="inline-flex items-center justify-center gap-1.5 px-4.5 py-2 rounded-full bg-[#1456f0] hover:bg-[#1044bf] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer active:scale-98"
-              style={{ fontFamily: "Outfit, sans-serif", height: '36px' }}
-            >
-              <Plus className="w-4 h-4" />
-              Book Appointment
-            </button>
-          </div>
-
-        {/* Calendar View */}
-        {view === "calendar" && (
-          <div className="bg-white rounded-2xl border border-border shadow-sm p-6">
-            {/* DAY VIEW */}
-            {currentCalendarViewMode === "day" && (
-              <>
-                {/* Day View Header */}
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-2xl font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                      {currentDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-                    </h2>
-                    <p className="text-sm" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
-                      {currentDate.toLocaleDateString("en-US", { weekday: "long" })}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    {/* View Mode Tabs */}
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex items-center bg-white border" style={{ borderColor: '#E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
-                        <button
-                          onClick={() => setCalendarViewMode("day")}
-                          style={{
-                            width: '64px',
-                            height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: calendarViewMode === "day" ? "#FFFFFF" : "#6B7280",
-                            backgroundColor: calendarViewMode === "day" ? "#1A73E8" : "#FFFFFF",
-                            border: 'none',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          Day
-                        </button>
-                        <button
-                          onClick={() => setCalendarViewMode("week")}
-                          style={{
-                            width: '64px',
-                            height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: calendarViewMode === "week" ? "#FFFFFF" : "#6B7280",
-                            backgroundColor: calendarViewMode === "week" ? "#1A73E8" : "#FFFFFF",
-                            border: 'none',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          Week
-                        </button>
-                        <button
-                          onClick={() => setCalendarViewMode("month")}
-                          style={{
-                            width: '64px',
-                            height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: calendarViewMode === "month" ? "#FFFFFF" : "#6B7280",
-                            backgroundColor: calendarViewMode === "month" ? "#1A73E8" : "#FFFFFF",
-                            border: 'none',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          Month
-                        </button>
-
-                      </div>
-                      <InfoTooltip text="Choose how far ahead you want to see your schedule." />
-                    </div>
-
-                    {/* Navigation */}
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => navigateDay("prev")}>
-                        <ChevronLeft className="w-4 h-4" />
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>
-                        Today
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => navigateDay("next")}>
-                        <ChevronRight className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Time Grid */}
-                <div className="flex">
-                  {/* Time labels column */}
-                  <div style={{ width: '60px', paddingTop: '0px' }}>
-                    {Array.from({ length: 10 }, (_, i) => i + 9).map((hour) => (
-                      <div
-                        key={hour}
-                        style={{
-                          height: '60px',
-                          fontSize: '11px',
-                          color: '#9CA3AF',
-                          textAlign: 'right',
-                          paddingRight: '12px',
-                          paddingTop: '4px',
-                          fontFamily: 'Outfit, sans-serif',
-                        }}
-                      >
-                        {String(hour).padStart(2, '0')}:00
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Day column */}
-                  <div style={{ flex: 1, position: 'relative', backgroundColor: formatDate(currentDate) === formatDate(new Date()) ? '#EFF6FF' : '#FFFFFF' }}>
-                    {/* Hour grid lines */}
-                    {Array.from({ length: 10 }, (_, i) => i).map((i) => (
-                      <div
-                        key={i}
-                        style={{
-                          position: 'absolute',
-                          top: `${i * 60}px`,
-                          left: 0,
-                          right: 0,
-                          height: '60px',
-                          borderTop: '1px solid #F3F4F6',
-                        }}
-                      />
-                    ))}
-
-                    {/* Appointment blocks */}
-                    {getAppointmentsForDate(formatDate(currentDate)).map((apt) => {
-                      const [hours, minutes] = apt.time.split(':').map(Number);
-                      const topPosition = ((hours - 9) * 60) + minutes;
-                      const height = Math.max(apt.duration, 40);
-
-                      const employee = employees.find((e) => String(e.id) === String(apt.employeeId));
-                      const service = services.find((s) => s.id === apt.serviceId);
-                      const endHour = hours + Math.floor((minutes + apt.duration) / 60);
-                      const endMinute = (minutes + apt.duration) % 60;
-
-                      return (
-                        <div
-                          key={apt.id}
-                          onClick={() => openEditModal(apt)}
-                          className="cursor-pointer hover:opacity-90"
-                          style={{
-                            position: 'absolute',
-                            top: `${topPosition}px`,
-                            left: '8px',
-                            right: '8px',
-                            height: `${height}px`,
-                            minHeight: '40px',
-                            backgroundColor: '#DBEAFE',
-                            borderLeft: '3px solid #1A73E8',
-                            borderRadius: '4px',
-                            padding: '8px',
-                            zIndex: 5,
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <div style={{ fontSize: '11px', color: '#1A73E8', fontFamily: 'Outfit, sans-serif', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {apt.time} – {String(endHour).padStart(2, '0')}:{String(endMinute).padStart(2, '0')}
-                          </div>
-                          <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#111827', fontFamily: 'DM Sans, sans-serif', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {apt.clientName}
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#6B7280', fontFamily: 'Outfit, sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {service?.name} · {employee?.name}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* WEEK VIEW */}
-            {currentCalendarViewMode === "week" && (() => {
-              const weekDates = getWeekDates(currentDate);
-              const todayStr = formatDate(new Date());
-
-              return (
-                <>
-                  {/* Week View Header */}
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                      {monthNames[currentDate.getMonth()]}
-                    </h2>
-
-                    <div className="flex items-center gap-3">
-                      {/* View Mode Tabs */}
-                      <div className="flex items-center bg-white border" style={{ borderColor: '#E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
-                        <button
-                          onClick={() => setCalendarViewMode("day")}
-                          style={{
-                            width: '64px',
-                            height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: calendarViewMode === "day" ? "#FFFFFF" : "#6B7280",
-                            backgroundColor: calendarViewMode === "day" ? "#1A73E8" : "#FFFFFF",
-                            border: 'none',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          Day
-                        </button>
-                        <button
-                          onClick={() => setCalendarViewMode("week")}
-                          style={{
-                            width: '64px',
-                            height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: calendarViewMode === "week" ? "#FFFFFF" : "#6B7280",
-                            backgroundColor: calendarViewMode === "week" ? "#1A73E8" : "#FFFFFF",
-                            border: 'none',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          Week
-                        </button>
-                        <button
-                          onClick={() => setCalendarViewMode("month")}
-                          style={{
-                            width: '64px',
-                            height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: calendarViewMode === "month" ? "#FFFFFF" : "#6B7280",
-                            backgroundColor: calendarViewMode === "month" ? "#1A73E8" : "#FFFFFF",
-                            border: 'none',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          Month
-                        </button>
-
-                      </div>
-
-                      {/* Navigation */}
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => navigateWeek("prev")}>
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>
-                          Today
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => navigateWeek("next")}>
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Day headers */}
-                  <div className="flex mb-4">
-                    <div style={{ width: '60px' }} />
-                    {weekDates.map((date, i) => {
-                      const dateStr = formatDate(date);
-                      const isToday = dateStr === todayStr;
-                      const dayName = date.toLocaleDateString("en-US", { weekday: "short" });
-                      const dayNum = date.getDate();
-
-                      return (
-                        <div key={i} style={{ flex: 1, textAlign: 'center', fontFamily: 'Outfit, sans-serif' }}>
-                          <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '4px' }}>{dayName}</div>
-                          <div
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: '28px',
-                              height: '28px',
-                              fontSize: '14px',
-                              fontWeight: 600,
-                              color: isToday ? '#FFFFFF' : '#111827',
-                              backgroundColor: isToday ? '#06B6D4' : 'transparent',
-                              borderRadius: '50%',
-                            }}
-                          >
-                            {dayNum}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Time Grid */}
-                  <div className="flex">
-                    {/* Time labels column */}
-                    <div style={{ width: '60px', paddingTop: '0px' }}>
-                      {Array.from({ length: 10 }, (_, i) => i + 9).map((hour) => (
-                        <div
-                          key={hour}
-                          style={{
-                            height: '60px',
-                            fontSize: '11px',
-                            color: '#9CA3AF',
-                            textAlign: 'right',
-                            paddingRight: '12px',
-                            paddingTop: '4px',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          {String(hour).padStart(2, '0')}:00
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Week columns */}
-                    <div style={{ flex: 1, display: 'flex', position: 'relative' }}>
-                      {weekDates.map((date, dayIndex) => {
-                        const dateStr = formatDate(date);
-                        const isToday = dateStr === todayStr;
-
-                        return (
-                          <div
-                            key={dayIndex}
-                            style={{
-                              flex: 1,
-                              position: 'relative',
-                              backgroundColor: isToday ? '#EFF6FF' : '#FFFFFF',
-                              borderRight: dayIndex < 6 ? '1px solid #F3F4F6' : 'none',
-                            }}
-                          >
-                            {/* Hour grid lines */}
-                            {Array.from({ length: 10 }, (_, i) => i).map((i) => (
-                              <div
-                                key={i}
-                                style={{
-                                  position: 'absolute',
-                                  top: `${i * 60}px`,
-                                  left: 0,
-                                  right: 0,
-                                  height: '60px',
-                                  borderTop: '1px solid #F3F4F6',
-                                }}
-                              />
-                            ))}
-
-                            {/* Appointment blocks */}
-                            {getAppointmentsForDate(dateStr).map((apt) => {
-                              const [hours, minutes] = apt.time.split(':').map(Number);
-                              const topPosition = ((hours - 9) * 60) + minutes;
-                              const height = Math.max(apt.duration, 40);
-
-                              const employee = employees.find((e) => String(e.id) === String(apt.employeeId));
-                              const service = services.find((s) => s.id === apt.serviceId);
-                              const endHour = hours + Math.floor((minutes + apt.duration) / 60);
-                              const endMinute = (minutes + apt.duration) % 60;
-
-                              return (
-                                <div
-                                  key={apt.id}
-                                  onClick={() => openEditModal(apt)}
-                                  className="cursor-pointer hover:opacity-90"
-                                  style={{
-                                    position: 'absolute',
-                                    top: `${topPosition}px`,
-                                    left: '4px',
-                                    right: '4px',
-                                    height: `${height}px`,
-                                    minHeight: '40px',
-                                    backgroundColor: '#DBEAFE',
-                                    borderLeft: '3px solid #1A73E8',
-                                    borderRadius: '4px',
-                                    padding: '6px',
-                                    zIndex: 5,
-                                    overflow: 'hidden',
-                                  }}
-                                >
-                                  <div style={{ fontSize: '11px', color: '#1A73E8', fontFamily: 'Outfit, sans-serif', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {apt.time} – {String(endHour).padStart(2, '0')}:{String(endMinute).padStart(2, '0')}
-                                  </div>
-                                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#111827', fontFamily: 'DM Sans, sans-serif', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {apt.clientName}
-                                  </div>
-                                  <div style={{ fontSize: '11px', color: '#6B7280', fontFamily: 'Outfit, sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {service?.name} · {employee?.name}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
-
-            {/* MONTH VIEW */}
-            {currentCalendarViewMode === "month" && (
-              <>
-                {/* Calendar Header */}
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                    {monthNames[month]} {year}
-                  </h2>
-
-                  <div className="flex items-center gap-3">
-                    {/* View Mode Tabs */}
-                    <div className="flex items-center bg-white border" style={{ borderColor: '#E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
-                      <button
-                        onClick={() => setCalendarViewMode("day")}
-                        style={{
-                          width: '64px',
-                          height: '32px',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: calendarViewMode === "day" ? "#FFFFFF" : "#6B7280",
-                          backgroundColor: calendarViewMode === "day" ? "#1A73E8" : "#FFFFFF",
-                          border: 'none',
-                          fontFamily: 'Outfit, sans-serif',
-                        }}
-                      >
-                        Day
-                      </button>
-                      <button
-                        onClick={() => setCalendarViewMode("week")}
-                        style={{
-                          width: '64px',
-                          height: '32px',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: calendarViewMode === "week" ? "#FFFFFF" : "#6B7280",
-                          backgroundColor: calendarViewMode === "week" ? "#1A73E8" : "#FFFFFF",
-                          border: 'none',
-                          fontFamily: 'Outfit, sans-serif',
-                        }}
-                      >
-                        Week
-                      </button>
-                      <button
-                        onClick={() => setCalendarViewMode("month")}
-                        style={{
-                          width: '64px',
-                          height: '32px',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: calendarViewMode === "month" ? "#FFFFFF" : "#6B7280",
-                          backgroundColor: calendarViewMode === "month" ? "#1A73E8" : "#FFFFFF",
-                          border: 'none',
-                          fontFamily: 'Outfit, sans-serif',
-                        }}
-                      >
-                        Month
-                      </button>
-                    </div>
-
-                    {/* Navigation */}
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => navigateMonth("prev")}>
-                        <ChevronLeft className="w-4 h-4" />
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>
-                        Today
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => navigateMonth("next")}>
-                        <ChevronRight className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Calendar Grid */}
-                <div className="grid grid-cols-7 gap-0 rounded-t-xl overflow-hidden bg-gradient-to-r from-[#181e25] to-[#2c3e50] mb-1">
-                  {/* Day headers */}
-                  {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((day) => (
-                    <div
-                      key={day}
-                      className="text-center py-2.5 text-xs font-semibold text-white tracking-wider uppercase"
-                      style={{
-                        fontFamily: 'Outfit, sans-serif',
-                      }}
-                    >
-                      {day}
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-7 gap-0 border border-slate-200 rounded-b-xl overflow-hidden">
-
-                  {/* Empty cells for days before month starts */}
-                  {Array.from({ length: startingDayOfWeek }).map((_, i) => (
-                    <div
-                      key={`empty-${i}`}
-                      className="border bg-muted/30"
-                      style={{
-                        minHeight: '120px',
-                        borderColor: '#E5E7EB',
-                        borderWidth: '1px',
-                      }}
-                    />
-                  ))}
-
-                  {/* Calendar days */}
-                  {Array.from({ length: daysInMonth }).map((_, i) => {
-                    const day = i + 1;
-                    const dateStr = formatDate(new Date(year, month, day));
-                    const dayAppointments = getAppointmentsForDate(dateStr);
-                    const isToday = dateStr === formatDate(new Date());
-
-                    return (
-                      <div
-                        key={day}
-                        className="border bg-white"
-                        style={{
-                          minHeight: '120px',
-                          borderColor: '#E5E7EB',
-                          borderWidth: '1px',
-                          padding: '8px',
-                          position: 'relative',
-                        }}
-                      >
-                        {/* Date number */}
-                        <div
-                          style={{
-                            position: 'absolute',
-                            top: '8px',
-                            right: '8px',
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            color: isToday ? '#FFFFFF' : '#374151',
-                            backgroundColor: isToday ? '#1A73E8' : 'transparent',
-                            width: isToday ? '24px' : 'auto',
-                            height: isToday ? '24px' : 'auto',
-                            borderRadius: isToday ? '50%' : '0',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontFamily: 'DM Sans, sans-serif',
-                          }}
-                        >
-                          {day}
-                        </div>
-
-                        {/* Events */}
-                        <div style={{ marginTop: '32px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          {dayAppointments.slice(0, 2).map((apt) => {
-                            const statusColor =
-                              apt.status === "completed" ? "#22C55E" :
-                                apt.status === "scheduled" ? "#3B82F6" :
-                                  "#F97316";
-
-                            return (
-                              <div
-                                key={apt.id}
-                                onClick={() => openBookingDrawerForReschedule(apt)}
-                                className="cursor-pointer hover:opacity-80"
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  padding: '4px 6px',
-                                  backgroundColor: '#F9FAFB',
-                                  borderRadius: '4px',
-                                  height: '22px',
-                                }}
-                              >
-                                {/* Color dot */}
-                                <div
-                                  style={{
-                                    width: '8px',
-                                    height: '8px',
-                                    borderRadius: '50%',
-                                    backgroundColor: statusColor,
-                                    flexShrink: 0,
-                                  }}
-                                />
-                                {/* Time */}
-                                <span
-                                  style={{
-                                    fontSize: '11px',
-                                    color: '#6B7280',
-                                    fontFamily: 'Outfit, sans-serif',
-                                    flexShrink: 0,
-                                  }}
-                                >
-                                  {apt.time}
-                                </span>
-                                {/* Client name */}
-                                <span
-                                  style={{
-                                    fontSize: '12px',
-                                    fontWeight: 'bold',
-                                    color: '#111827',
-                                    fontFamily: 'DM Sans, sans-serif',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  {apt.clientName.length > 10 ? apt.clientName.substring(0, 10) + '...' : apt.clientName}
-                                </span>
-                              </div>
-                            );
-                          })}
-                          {dayAppointments.length > 2 && (
-                            <div
-                              style={{
-                                fontSize: '11px',
-                                color: '#1A73E8',
-                                fontFamily: 'Outfit, sans-serif',
-                                cursor: 'pointer',
-                                marginTop: '2px',
-                              }}
-                            >
-                              +{dayAppointments.length - 2} more
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
+        {!hasAppointmentAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined) && (
+          <div className="flex items-center justify-between px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 shadow-2xs">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              Automated Appointment Booking is locked — please build the automation first in Automation to enable booking appointments and stage workflows.
+            </span>
+            <Link to="/automation" className="text-blue-600 hover:underline font-semibold text-xs ml-2">
+              Build automation &rarr;
+            </Link>
           </div>
         )}
 
-        {/* List View */}
+        {/* Unified Search & Controls Toolbar powered by PageTopBar */}
+        <PageTopBar
+          leftElement={
+            <div className="flex items-center gap-1.5">
+              {/* Process Filter Dropdown */}
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors cursor-pointer"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  title="Select Process"
+                >
+                  <span className="truncate max-w-[160px] font-semibold text-gray-800">
+                    {selectedProcessFilter === "all"
+                      ? "All Processes"
+                      : appointmentProcesses.find((p) => p.id === selectedProcessFilter)?.name || appointmentProcesses[0]?.name || "Select Process"}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                </button>
+
+                {showProcessesDropdown && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowProcessesDropdown(false)}
+                    />
+                    <div className="absolute top-full left-0 mt-1.5 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedProcessFilter("all");
+                          setStageFilter("all");
+                          setShowProcessesDropdown(false);
+                        }}
+                        className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                          selectedProcessFilter === "all" ? "bg-blue-50/80 text-blue-600 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        <span className="truncate">All Processes</span>
+                        {selectedProcessFilter === "all" && (
+                          <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
+                        )}
+                      </button>
+                      {appointmentProcesses.map((proc) => (
+                        <button
+                          key={proc.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedProcessFilter(proc.id);
+                            setStageFilter("all");
+                            setShowProcessesDropdown(false);
+                          }}
+                          className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                            selectedProcessFilter === proc.id ? "bg-blue-50/80 text-blue-600 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                          }`}
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          <span className="truncate">{proc.name}</span>
+                          {selectedProcessFilter === proc.id && (
+                            <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          }
+          modes={[
+            { id: "list", label: "List", icon: <List className="w-3.5 h-3.5" /> },
+            { id: "calendar", label: "Calendar", icon: <CalendarIcon className="w-3.5 h-3.5" /> },
+            { id: "availability", label: "Availability", icon: <CalendarClock className="w-3.5 h-3.5" /> },
+          ]}
+          activeMode={view}
+          onModeChange={(m) => setView(m as typeof view)}
+          searchQuery={view !== "availability" ? searchQuery : ""}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search appointments (client, email, notes)..."
+          filterPresets={[
+            {
+              id: "all",
+              label: "All",
+              count: statsSource.length,
+              isActive: stageFilter === "all",
+              onClick: () => { setStageFilter("all"); setListViewTab("all"); },
+            },
+            ...appointmentProcess.stages.map((stg) => ({
+              id: stg.id,
+              label: stg.name,
+              count: statsSource.filter((a) => a.currentStageId === stg.id || a.status === stg.systemCategory).length,
+              isActive: stageFilter === stg.id,
+              onClick: () => { setStageFilter(stg.id); },
+            })),
+          ]}
+          filterFields={[
+            ...(devUserRole !== "provider"
+              ? [
+                  {
+                    id: "provider",
+                    label: "Provider",
+                    type: "select" as const,
+                    options: [
+                      { label: "All Providers", value: "all" },
+                      ...employees.map((emp) => ({ label: emp.name, value: String(emp.id) })),
+                    ],
+                    value: String(selectedEmployee),
+                    onChange: (v: string) => setSelectedEmployee(v === "all" ? "all" : Number(v)),
+                  },
+                ]
+              : []),
+          ]}
+          primaryAction={{
+            label: "Book Appointment",
+            onClick: () => {
+              if (!hasAppointmentAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined)) {
+                toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
+                navigate("/automation");
+                return;
+              }
+              resetBookingWorkflow();
+              setShowAddModal(true);
+            },
+          }}
+          afterPrimaryAction={
+            <button
+              type="button"
+              onClick={() => {
+                const targetProcId = selectedProcessFilter !== "all" ? selectedProcessFilter : appointmentProcess.id;
+                navigate(`/process?entity=appointment&processId=${targetProcId}`, {
+                  state: { processId: targetProcId, processName: appointmentProcess.name },
+                });
+              }}
+              className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+              title="Configure Appointment Workflow"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          }
+        />
+
+        {/* Calendar View */}
+        {view === "calendar" && (
+          <AppointmentCalendarView
+            currentDate={currentDate}
+            setCurrentDate={setCurrentDate}
+            selectedCalendarDate={selectedCalendarDate}
+            setSelectedCalendarDate={setSelectedCalendarDate}
+            appointments={appointments}
+            getAppointmentsForDate={getAppointmentsForDate}
+            employees={employees}
+            services={services}
+            openBookingDrawerForReschedule={openBookingDrawerForReschedule}
+            onBookForDate={(dateStr) => {
+              if (!hasAppointmentAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined)) {
+                toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
+                navigate("/automation");
+                return;
+              }
+              resetBookingWorkflow();
+              setSelectedDate(dateStr);
+              setShowAddModal(true);
+            }}
+            formatDate={formatDate}
+          />
+        )}
+        {/* List View (TableComponent) */}
         {view === "list" && (
           <div className="space-y-4">
-            {/* Filter Tabs - Flat Underline Style */}
-            <div
-              style={{
-                backgroundColor: '#FFFFFF',
-                borderBottom: '1px solid #E5E7EB',
-                display: 'flex',
-                width: '100%',
-              }}
-            >
-              {[
-                { key: "upcoming", label: "Upcoming", count: statsSource.filter(a => a.status === "scheduled").length },
-                { key: "done", label: "Done", count: statsSource.filter(a => a.status === "completed").length },
-                { key: "pending", label: "Pending", count: statsSource.filter(a => a.status === "pending-accept").length },
-                { key: "all", label: "All", count: statsSource.length },
-              ].map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setListViewTab(tab.key as typeof listViewTab)}
-                  style={{
-                    flex: '1',
-                    height: '48px',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    color: listViewTab === tab.key ? "#1A73E8" : "#6B7280",
-                    backgroundColor: 'transparent',
-                    border: 'none',
-                    borderBottom: listViewTab === tab.key ? '2px solid #1A73E8' : '2px solid transparent',
-                    fontFamily: 'Outfit, sans-serif',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  {tab.label} {tab.count}
-                </button>
-              ))}
-            </div>
+            {/* TableComponent with sharp edges */}
+            <TableComponent
+              data={filteredAppointments}
+              columns={[
+                {
+                  header: "Appointment ID",
+                  accessorKey: "id",
+                  align: "left",
+                  width: 140,
+                  render: (apt) => {
+                    const formattedId = `APT-${String(apt.id).padStart(4, "0")}`;
+                    return (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedAppointmentForDrawer(apt);
+                          setIsDetailDrawerOpen(true);
+                        }}
+                        className="font-mono text-xs font-semibold text-[#1456f0] hover:text-[#1d4ed8] hover:underline cursor-pointer tracking-tight"
+                        style={{ fontFamily: "JetBrains Mono, monospace" }}
+                        title="Open appointment details"
+                      >
+                        {formattedId}
+                      </button>
+                    );
+                  },
+                },
+                {
+                  header: "Stages",
+                  accessorKey: "currentStageId",
+                  align: "left",
+                  minWidth: 160,
+                  render: (apt) => {
+                    const aptProc = appointmentProcesses.find((p) => p.id === apt.processId || p.name === apt.processId) || appointmentProcess;
+                    const stages = aptProc.stages && aptProc.stages.length > 0 ? aptProc.stages : appointmentWorkflowStages;
+                    const stageKey = (apt.currentStageId || apt.stageId || "").trim();
+                    const matchedStage = stageKey
+                      ? stages.find(
+                          (s) =>
+                            s.id.toLowerCase() === stageKey.toLowerCase() ||
+                            s.name.toLowerCase() === stageKey.toLowerCase() ||
+                            (apt.statusLabel && s.name.toLowerCase() === apt.statusLabel.toLowerCase())
+                        )
+                      : (stages.find((s) => apt.statusLabel && s.name.toLowerCase() === apt.statusLabel.toLowerCase()) || (hasAppointmentAutomation(apt.processId || aptProc.id) ? stages[0] : undefined));
+                    const activeIdx = matchedStage ? stages.findIndex((s) => s.id === matchedStage.id) : -1;
 
-            {/* Subheader */}
-            <div className="flex items-center justify-between" style={{ marginTop: '8px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '12px', color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                All sessions
-              </span>
-              <span style={{ fontSize: '12px', color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                Total {filteredAppointments.length}
-              </span>
-            </div>
+                    if (!matchedStage || activeIdx === -1) {
+                      return (
+                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/80 tracking-tight"
+                            title="No stage marked — please build the automation first"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Please build the automation first
+                          </span>
+                        </div>
+                      );
+                    }
 
-            {/* Card Container */}
-            <div
-              style={{
-                backgroundColor: "#FFFFFF",
-                border: "1px solid #E5E7EB",
-                borderRadius: "12px",
-                padding: "20px",
-                width: "100%",
-              }}
-            >
-              {filteredAppointments.length === 0 ? (
-                <div className="text-center py-16">
-                  <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <CalendarIcon className="w-10 h-10 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2" style={{ color: "#020817" }}>
-                    No {listViewTab === "all" ? "" : listViewTab + " "}appointments found
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {searchQuery ? "Try adjusting your search" : listViewTab === "done" ? "No completed appointments yet" : "Get started by booking your first appointment"}
-                  </p>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(2, 1fr)",
-                    gap: "16px",
-                  }}
-                >
-                  {filteredAppointments.map((apt) => {
-                    const employee = employees.find((e) => String(e.id) === String(apt.employeeId));
-                    const service = services.find((s) => s.id === apt.serviceId);
+                    const isCurrentSuccess = matchedStage && (matchedStage.systemCategory === "completed" || matchedStage.systemCategory === "won" || matchedStage.name.toLowerCase().includes("completed") || matchedStage.name.toLowerCase().includes("won"));
+                    const isCurrentLost = matchedStage && (matchedStage.isFinalStage || matchedStage.isFinal || matchedStage.systemCategory === "cancelled" || matchedStage.systemCategory === "lost" || matchedStage.name.toLowerCase().includes("cancel") || matchedStage.name.toLowerCase().includes("lost") || matchedStage.name.toLowerCase().includes("no-show"));
+                    const isCurrentFinal = Boolean(isCurrentSuccess || isCurrentLost || matchedStage?.isFinalStage || matchedStage?.isFinal);
+
+                    const lightenHex = (hex: string, percent: number = 75): string => {
+                      if (!hex || typeof hex !== "string") return "#F1F5F9";
+                      let c = hex.replace("#", "").trim();
+                      if (c.length === 3) c = c.split("").map((ch) => ch + ch).join("");
+                      const num = parseInt(c, 16);
+                      if (isNaN(num)) return hex;
+                      const factor = percent / 100;
+                      const r = Math.max(0, Math.min(255, Math.round(((num >> 16) & 255) + (255 - ((num >> 16) & 255)) * factor)));
+                      const g = Math.max(0, Math.min(255, Math.round(((num >> 8) & 255) + (255 - ((num >> 8) & 255)) * factor)));
+                      const b = Math.max(0, Math.min(255, Math.round((num & 255) + (255 - (num & 255)) * factor)));
+                      return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+                    };
 
                     return (
-                      <AppointmentCard
-                        key={apt.id}
-                        appointment={apt}
-                        employee={employee}
-                        service={service}
-                        onCancel={(id) => {
-                          setAppointments(appointments.map(a =>
-                            a.id === id ? { ...a, status: "cancelled" } : a
-                          ));
-                          toast.success("Appointment cancelled");
-                        }}
-                        onReschedule={(id) => {
-                          const apt = appointments.find(a => a.id === id);
-                          if (apt) {
-                            openBookingDrawerForReschedule(apt);
-                          }
-                        }}
-                        onMarkComplete={(id) => {
-                          setAppointments(appointments.map(a =>
-                            a.id === id ? { ...a, status: "completed", rating: 4 } : a
-                          ));
-                          toast.success("Appointment marked as completed");
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center -space-x-px">
+                          {stages.map((stg, i) => {
+                            const isStgLost = stg.isFinalStage || stg.isFinal || stg.systemCategory === "cancelled" || stg.systemCategory === "lost" || stg.name.toLowerCase().includes("cancel") || stg.name.toLowerCase().includes("lost") || stg.name.toLowerCase().includes("no-show");
+                            const isStgSuccess = stg.systemCategory === "completed" || stg.systemCategory === "won" || stg.name.toLowerCase().includes("completed") || stg.name.toLowerCase().includes("won");
+                            const isStgFinal = isStgLost || isStgSuccess || Boolean(stg.isFinalStage || stg.isFinal);
+                            const isStgInProgress = !isStgFinal;
+                            const isActive = activeIdx >= 0 && i === activeIdx;
 
-            {/* Old Table Code - Keep for reference but hidden */}
-            <div className="hidden bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr style={{ backgroundColor: '#1C2B4A', height: '48px' }}>
-                    <th style={{ width: '40px', padding: '0 12px' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedRows.length === filteredAppointments.length && filteredAppointments.length > 0}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedRows(filteredAppointments.map(a => a.id));
-                            const editing: { [key: number]: Appointment } = {};
-                            filteredAppointments.forEach(apt => {
-                              editing[apt.id] = { ...apt };
-                            });
-                            setEditingRows(editing);
-                          } else {
-                            setSelectedRows([]);
-                            setEditingRows({});
-                          }
-                        }}
-                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                      />
-                    </th>
-                    <th style={{ width: '160px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Client</th>
-                    <th style={{ width: '180px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Email</th>
-                    <th style={{ width: '130px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Phone</th>
-                    <th style={{ width: '150px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Date & Time</th>
-                    <th style={{ width: '130px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Provider</th>
-                    <th style={{ width: '180px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Service</th>
-                    <th style={{ width: '80px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Duration</th>
-                    <th style={{ width: '110px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Status</th>
-                    <th style={{ width: '120px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredAppointments.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="text-center py-16">
-                        <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <CalendarIcon className="w-10 h-10 text-muted-foreground" />
-                        </div>
-                        <h3 className="text-lg font-semibold mb-2" style={{ color: "#020817" }}>
-                          No appointments found
-                        </h3>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          {searchQuery ? "Try adjusting your search" : "Get started by booking your first appointment"}
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredAppointments.map((apt) => {
-                      const employee = employees.find((e) => String(e.id) === String(apt.employeeId));
-                      const service = services.find((s) => s.id === apt.serviceId);
-                      const isSelected = selectedRows.includes(apt.id);
-                      const isEditing = isSelected && editingRows[apt.id];
-                      const editData = isEditing ? editingRows[apt.id] : apt;
-                      const isDeleting = confirmDelete === apt.id;
+                            let isCompleted = false;
+                            let isDeactivated = false;
 
-                      const getStatusBadgeStyle = (status: Appointment["status"]) => {
-                        switch (status) {
-                          case "scheduled":
-                            return { bg: '#DBEAFE', color: '#1D4ED8' };
-                          case "completed":
-                            return { bg: '#DCFCE7', color: '#15803D' };
-                          case "pending-accept":
-                            return { bg: '#FEF3C7', color: '#B45309' };
-                          case "cancelled":
-                            return { bg: '#FEE2E2', color: '#B91C1C' };
-                          case "no-show":
-                            return { bg: '#F3F4F6', color: '#6B7280' };
-                          default:
-                            return { bg: '#F3F4F6', color: '#6B7280' };
-                        }
-                      };
+                            if (isActive) {
+                              // Active stage
+                            } else if (isCurrentFinal) {
+                              if (isStgInProgress) {
+                                isCompleted = true;
+                              } else {
+                                isDeactivated = true;
+                              }
+                            } else {
+                              if (isStgInProgress && activeIdx >= 0 && i < activeIdx) {
+                                isCompleted = true;
+                              }
+                            }
 
-                      const statusStyle = getStatusBadgeStyle(apt.status);
+                            const stgColor = stg.color || "#1E88E5";
+                            const lightBg = lightenHex(stgColor, 78);
+                            const lightBorder = lightenHex(stgColor, 40);
 
-                      return (
-                        <tr
-                          key={apt.id}
-                          style={{
-                            height: '52px',
-                            borderBottom: '1px solid #F3F4F6',
-                            backgroundColor: isDeleting ? '#FEF2F2' : '#FFFFFF',
-                          }}
-                        >
-                          <td style={{ padding: '0 12px' }}>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedRows([...selectedRows, apt.id]);
-                                  setEditingRows({ ...editingRows, [apt.id]: { ...apt } });
-                                } else {
-                                  setSelectedRows(selectedRows.filter(id => id !== apt.id));
-                                  const newEditing = { ...editingRows };
-                                  delete newEditing[apt.id];
-                                  setEditingRows(newEditing);
-                                }
-                              }}
-                              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                            />
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                value={editData.clientName}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, clientName: e.target.value }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded"
-                                style={{ fontSize: '13px', borderColor: '#1A73E8' }}
-                              />
-                            ) : (
-                              <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                {apt.clientName}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <input
-                                type="email"
-                                value={editData.clientEmail}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, clientEmail: e.target.value }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded"
-                                style={{ fontSize: '13px', borderColor: '#1A73E8' }}
-                              />
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                                {apt.clientEmail}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <input
-                                type="tel"
-                                value={editData.clientPhone}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, clientPhone: e.target.value }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded"
-                                style={{ fontSize: '13px', borderColor: '#1A73E8' }}
-                              />
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                                {apt.clientPhone}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <div className="flex gap-1">
-                                <input
-                                  type="date"
-                                  value={editData.date}
-                                  onChange={(e) => {
-                                    setEditingRows({
-                                      ...editingRows,
-                                      [apt.id]: { ...editData, date: e.target.value }
-                                    });
-                                  }}
-                                  className="px-2 py-1 border rounded text-xs"
-                                  style={{ borderColor: '#1A73E8', width: '90px' }}
-                                />
-                                <input
-                                  type="time"
-                                  value={editData.time}
-                                  onChange={(e) => {
-                                    setEditingRows({
-                                      ...editingRows,
-                                      [apt.id]: { ...editData, time: e.target.value }
-                                    });
-                                  }}
-                                  className="px-2 py-1 border rounded text-xs"
-                                  style={{ borderColor: '#1A73E8', width: '60px' }}
-                                />
-                              </div>
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#374151', fontFamily: 'Outfit, sans-serif' }}>
-                                {new Date(apt.date + "T00:00:00").toLocaleDateString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric"
-                                })} · {apt.time}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <select
-                                value={editData.employeeId}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, employeeId: Number(e.target.value) }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded text-xs"
-                                style={{ borderColor: '#1A73E8' }}
-                              >
-                                {employees.map((emp) => (
-                                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#374151', fontFamily: 'Outfit, sans-serif' }}>
-                                {employee?.name}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <select
-                                value={editData.serviceId}
-                                onChange={(e) => {
-                                  const selectedService = services.find(s => s.id === Number(e.target.value));
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: {
-                                      ...editData,
-                                      serviceId: Number(e.target.value),
-                                      duration: selectedService?.duration || editData.duration
-                                    }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded text-xs"
-                                style={{ borderColor: '#1A73E8' }}
-                              >
-                                {services.map((svc) => (
-                                  <option key={svc.id} value={svc.id}>
-                                    {svc.name} - {svc.duration} min (${svc.price})
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#374151', fontFamily: 'Outfit, sans-serif' }}>
-                                {service?.name}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            <span style={{ fontSize: '13px', color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                              {isEditing ? editData.duration : apt.duration} min
-                            </span>
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <select
-                                value={editData.status}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, status: e.target.value as Appointment["status"] }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded text-xs capitalize"
-                                style={{ borderColor: '#1A73E8' }}
-                              >
-                                <option value="scheduled">Scheduled</option>
-                                <option value="completed">Completed</option>
-                                <option value="pending-accept">Pending Accept</option>
-                                <option value="cancelled">Cancelled</option>
-                                <option value="no-show">No Show</option>
-                              </select>
-                            ) : (
-                              <span
-                                className="px-2 py-1 rounded-full text-xs font-semibold capitalize"
-                                style={{
-                                  backgroundColor: statusStyle.bg,
-                                  color: statusStyle.color,
-                                  fontFamily: 'Outfit, sans-serif',
-                                }}
-                              >
-                                {apt.status}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isDeleting ? (
-                              <div className="flex gap-2">
+                            const isHovered = hoveredStageBox?.aptId === apt.id && hoveredStageBox?.stageIdx === i;
+
+                            let bg = "transparent";
+                            let border = "1px solid #CBD5E1";
+                            let opacity = 1;
+
+                            if (isActive) {
+                              bg = stgColor;
+                              border = "1.5px solid #0F172A";
+                              opacity = 1;
+                            } else if (isCompleted) {
+                              bg = stgColor;
+                              border = `1px solid ${stgColor}`;
+                              opacity = 0.85;
+                            } else if (isDeactivated) {
+                              bg = lightBg;
+                              border = `1px solid ${lightBorder}`;
+                              opacity = 0.95;
+                            } else {
+                              bg = "transparent";
+                              border = "1px solid #CBD5E1";
+                              opacity = 0.45;
+                            }
+
+                            return (
+                              <div key={stg.id} className="relative" style={{ zIndex: isActive ? 10 : isHovered ? 20 : 1 }}>
+                                {isHovered && (
+                                  <div
+                                    className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded text-[11px] font-medium shadow-md pointer-events-none"
+                                    style={{ backgroundColor: "#1A2B4A", color: "#fff", zIndex: 200 }}
+                                  >
+                                    {stg.name}{isDeactivated ? " (Inactive)" : isActive ? " (Current)" : isCompleted ? " (Completed)" : ""}
+                                  </div>
+                                )}
                                 <button
+                                  type="button"
                                   onClick={() => {
-                                    handleDeleteAppointment(apt.id);
-                                    setConfirmDelete(null);
+                                    if (!isDeactivated) handleQuickStageChange(apt, stg);
                                   }}
-                                  className="px-2 py-1 rounded text-xs font-semibold"
-                                  style={{ backgroundColor: '#EF4444', color: '#FFFFFF' }}
-                                >
-                                  Confirm
-                                </button>
-                                <button
-                                  onClick={() => setConfirmDelete(null)}
-                                  className="px-2 py-1 rounded text-xs font-semibold"
-                                  style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}
-                                >
-                                  Undo
-                                </button>
+                                  onMouseEnter={() => setHoveredStageBox({ aptId: apt.id, stageIdx: i })}
+                                  onMouseLeave={() => setHoveredStageBox(null)}
+                                  style={{
+                                    width: "18px",
+                                    height: "8px",
+                                    borderRadius: "0px",
+                                    backgroundColor: bg,
+                                    border: border,
+                                    opacity: opacity,
+                                    cursor: isDeactivated ? "not-allowed" : "pointer",
+                                    display: "block",
+                                    padding: 0,
+                                    flexShrink: 0,
+                                    transition: "all 0.15s ease",
+                                  }}
+                                  title={stg.name}
+                                />
                               </div>
-                            ) : (
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  onClick={() => handleStatusChange(apt.id, "completed")}
-                                  className="hover:opacity-80"
-                                  title="Mark Complete"
-                                  style={{ color: '#6B7280' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.color = '#22C55E')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
-                                >
-                                  <CheckCircle className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleStatusChange(apt.id, "no-show")}
-                                  className="hover:opacity-80"
-                                  title="Mark No Show"
-                                  style={{ color: '#6B7280' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.color = '#F97316')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
-                                >
-                                  <AlertCircle className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => openBookingDrawerForReschedule(apt)}
-                                  className="hover:opacity-80"
-                                  title="Edit"
-                                  style={{ color: '#6B7280' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.color = '#1A73E8')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => setConfirmDelete(apt.id)}
-                                  className="hover:opacity-80"
-                                  title="Cancel"
-                                  style={{ color: '#6B7280' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {/* End of old table code */}
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  },
+                },
+                {
+                  header: "Client",
+                  accessorKey: "clientName",
+                  align: "left",
+                  minWidth: 160,
+                  render: (apt) => (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedAppointmentForDrawer(apt);
+                        setIsDetailDrawerOpen(true);
+                      }}
+                      className="font-medium text-xs text-slate-900 cursor-pointer hover:text-blue-600 hover:underline"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      {apt.clientName}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Date",
+                  accessorKey: "date",
+                  align: "left",
+                  width: 130,
+                  render: (apt) => {
+                    let dateText = apt.date || "—";
+                    try {
+                      if (apt.date) {
+                        const d = new Date(apt.date.includes("T") ? apt.date : `${apt.date}T00:00:00`);
+                        if (!isNaN(d.getTime())) {
+                          dateText = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                        }
+                      }
+                    } catch {
+                      // ignore
+                    }
+                    return (
+                      <span className="text-xs text-slate-800 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        {dateText}
+                      </span>
+                    );
+                  },
+                },
+                {
+                  header: "Time",
+                  accessorKey: "time",
+                  align: "left",
+                  width: 125,
+                  render: (apt) => (
+                    <span className="text-xs text-slate-600 tabular-nums" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      {apt.time ? `${apt.time} (${apt.duration || 60}m)` : "—"}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Provider",
+                  accessorKey: "employeeId",
+                  align: "left",
+                  width: 150,
+                  render: (apt) => {
+                    const emp = employees.find((e) => String(e.id) === String(apt.employeeId));
+                    return (
+                      <span className="text-xs text-slate-700 font-medium truncate">
+                        {emp?.name || "Unassigned"}
+                      </span>
+                    );
+                  },
+                },
+                {
+                  header: "Service",
+                  accessorKey: "serviceId",
+                  align: "left",
+                  minWidth: 150,
+                  render: (apt) => {
+                    const svc = services.find((s) => s.id === apt.serviceId);
+                    return (
+                      <span className="text-xs font-semibold text-slate-800 truncate">
+                        {svc?.name || apt.title || "Consultation"}
+                      </span>
+                    );
+                  },
+                },
+              ]}
+                getRowId={(apt) => apt.id}
+                onRowClick={(apt) => {
+                  setSelectedAppointmentForDrawer(apt);
+                  setIsDetailDrawerOpen(true);
+                }}
+                emptyMessage="No appointments found. Adjust your filters or book a new appointment."
+                tableId="appointments-master-table"
+                rowActions={[
+                  {
+                    label: "View Details",
+                    icon: <CalendarIcon className="w-3.5 h-3.5 text-blue-600" />,
+                    onClick: (apt) => {
+                      setSelectedAppointmentForDrawer(apt);
+                      setIsDetailDrawerOpen(true);
+                    },
+                  },
+                  {
+                    label: "Reschedule",
+                    icon: <Clock className="w-3.5 h-3.5 text-amber-600" />,
+                    onClick: (apt) => openBookingDrawerForReschedule(apt),
+                  },
+                  {
+                    label: "Mark Done",
+                    icon: <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />,
+                    hidden: (apt) => apt.status === "completed",
+                    onClick: (apt) => {
+                      try {
+                        appointmentService.completeAppointment(apt.id);
+                        setAppointments(appointmentService.getAppointments() as any);
+                        toast.success("Appointment marked as completed");
+                      } catch (e) {
+                        console.warn(e);
+                      }
+                    },
+                  },
+                  {
+                    label: "Cancel / Delete",
+                    icon: <Trash2 className="w-3.5 h-3.5 text-rose-600" />,
+                    isDanger: true,
+                    onClick: (apt) => {
+                      try {
+                        appointmentService.cancelAppointment(apt.id, "Cancelled by user");
+                        setAppointments(appointmentService.getAppointments() as any);
+                        toast.success("Appointment cancelled & invoice voided if unpaid");
+                      } catch (e) {
+                        console.warn(e);
+                      }
+                    },
+                  },
+                ]}
+              />
           </div>
         )}
 
@@ -2203,7 +1543,7 @@ export default function Appointments() {
         onSave={handleBookingComplete}
         employees={employees}
         clients={clients}
-        processStages={processStages}
+        processStages={dynamicProcessStages}
         customFields={appointmentCustomFields}
         visibleCustomFieldKeys={apptVisibleFieldKeys}
         customFieldValues={customFieldValues}
@@ -2233,6 +1573,52 @@ export default function Appointments() {
         />
       )}
 
+      {/* Appointment Detail Drawer */}
+      <AppointmentDetailDrawer
+        isOpen={isDetailDrawerOpen && Boolean(selectedAppointmentForDrawer)}
+        onClose={() => {
+          setIsDetailDrawerOpen(false);
+          setSelectedAppointmentForDrawer(null);
+        }}
+        appointment={
+          selectedAppointmentForDrawer
+            ? appointments.find((a) => String(a.id) === String(selectedAppointmentForDrawer.id)) || selectedAppointmentForDrawer
+            : null
+        }
+        onUpdateAppointment={(updated) => {
+          setAppointments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+          setSelectedAppointmentForDrawer(updated);
+        }}
+        onReschedule={(apt) => {
+          setIsDetailDrawerOpen(false);
+          openBookingDrawerForReschedule(apt);
+        }}
+        onMarkComplete={(id) => {
+          try {
+            const completed = appointmentService.completeAppointment(id);
+            setAppointments(appointmentService.getAppointments() as any);
+            if (selectedAppointmentForDrawer && selectedAppointmentForDrawer.id === id) {
+              setSelectedAppointmentForDrawer(completed);
+            }
+          } catch (e) {
+            console.warn(e);
+          }
+        }}
+        onDelete={(id) => {
+          try {
+            appointmentService.cancelAppointment(id, "Cancelled from drawer");
+            setAppointments(appointmentService.getAppointments() as any);
+            setIsDetailDrawerOpen(false);
+            setSelectedAppointmentForDrawer(null);
+            toast.success("Appointment cancelled & invoice voided if unpaid");
+          } catch (e) {
+            console.warn(e);
+          }
+        }}
+        employees={employees}
+        services={services}
+      />
+
       <HowItWorksModal
         isOpen={showHelp}
         onClose={() => setShowHelp(false)}
@@ -2246,6 +1632,7 @@ export default function Appointments() {
         ]}
         guideUrl="/guide/appointments"
       />
+
     </div>
   );
 }

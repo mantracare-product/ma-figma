@@ -1,12 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
-  Phone, Download, Play, Pause, Headphones, User, Zap, GitBranch, RefreshCw, Star, Info, CalendarClock
+  Phone, Download, Play, Pause, Headphones, User, Zap, GitBranch, RefreshCw, Star, Info, CalendarClock,
+  Bot, FileText, Sparkles, MessageSquare
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Tooltip } from "../ui/Tooltip";
 import { Drawer } from "../ui/drawer";
 import { toast } from "sonner";
 import { CallLog, getStoredCallLogs } from "../../../lib/processLogsStore";
+import { TableComponent, TableColumn } from "../ui/TableComponent";
 
 export type MetricTone = "success" | "neutral" | "warning";
 
@@ -327,13 +329,11 @@ export default function CallDetailDrawer({
   callLogs: callLogsProp,
   onSelectCallId,
 }: CallDetailDrawerProps) {
-  const [activeDrawerTab, setActiveDrawerTab] = useState<"summary" | "call-review" | "review">("summary");
+  const [activeDrawerTab, setActiveDrawerTab] = useState<"overview" | "retry-history" | "call-review">("overview");
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
-  const [callFeedback, setCallFeedback] = useState("");
-  const [isSavingFeedback, setIsSavingFeedback] = useState(false);
   const [currentCallId, setCurrentCallId] = useState<string | null>(callProp?.id || callId || null);
 
   useEffect(() => {
@@ -380,23 +380,12 @@ export default function CallDetailDrawer({
   }
 
   const handleClose = () => {
-    setActiveDrawerTab("summary");
+    setActiveDrawerTab("overview");
     setIsPlaying(false);
     setPlaybackSpeed(1);
     setRating(0);
     setHoverRating(0);
-    setCallFeedback("");
     onClose();
-  };
-
-  const handleSaveFeedback = () => {
-    setIsSavingFeedback(true);
-    setTimeout(() => {
-      setIsSavingFeedback(false);
-      toast.success("Feedback saved successfully");
-      setRating(0);
-      setCallFeedback("");
-    }, 600);
   };
 
   const handleSelectCall = (targetId: string) => {
@@ -407,371 +396,548 @@ export default function CallDetailDrawer({
     }
   };
 
-  const renderStars = () => {
-    const stars = [];
-    for (let i = 1; i <= 5; i++) {
-      stars.push(
-        <button
-          key={i}
-          type="button"
-          onClick={() => setRating(i)}
-          onMouseEnter={() => setHoverRating(i)}
-          onMouseLeave={() => setHoverRating(0)}
-          className="focus:outline-none transition-transform hover:scale-110 p-1"
-        >
-          <Star
-            className={`w-6 h-6 ${(hoverRating || rating) >= i
-              ? "fill-yellow-400 text-yellow-400"
-              : "text-gray-300 hover:text-gray-400"
-              }`}
-          />
-        </button>
-      );
-    }
-    return stars;
+  const getClientPhone = (clientId?: string, clientName?: string): string => {
+    try {
+      const raw = sessionStorage.getItem("clients");
+      const cs = raw ? JSON.parse(raw) : [];
+      const found = cs.find((c: any) => (clientId && c.id === clientId) || (clientName && c.name?.toLowerCase() === clientName.toLowerCase()));
+      if (found?.phone) return found.phone;
+    } catch {}
+    return "7795163421";
   };
+
+  const getCallMessages = (call: CallLog) => {
+    const clientName = call.client || "Client";
+    const firstName = clientName.split(" ")[0] || clientName;
+    return [
+      {
+        id: "m1",
+        sender: "ai",
+        time: "00:03",
+        text: `Hi ${firstName} — this is Arushi calling from MantraCare. You recently submitted an enquiry with us, so I wanted to understand how we can help.`,
+      },
+      {
+        id: "m2",
+        sender: "client",
+        time: "00:14",
+        text: "Hi, Arushi. I just wanted to know which are the available consultation slots.",
+      },
+      {
+        id: "m3",
+        sender: "ai",
+        time: "00:22",
+        text: `The line cut off a little there, ${firstName} — could you repeat that for me?`,
+      },
+      {
+        id: "m4",
+        sender: "client",
+        time: "00:31",
+        text: "Sorry about that! I wanted to check what consultation packages are available.",
+      },
+      {
+        id: "m5",
+        sender: "ai",
+        time: "00:46",
+        text: "We offer comprehensive initial evaluations and ongoing care packages. Would you prefer a virtual consultation or an in-clinic appointment?",
+      },
+      {
+        id: "m6",
+        sender: "client",
+        time: "01:02",
+        text: "A virtual consultation would be ideal. What days and timings are open?",
+      },
+      {
+        id: "m7",
+        sender: "ai",
+        time: "01:18",
+        text: "We have openings tomorrow afternoon at 3:00 PM and Thursday morning at 11:00 AM. Which one works better for your schedule?",
+      },
+      {
+        id: "m8",
+        sender: "client",
+        time: "01:30",
+        text: "Tomorrow at 3:00 PM works great. Please book that for me.",
+      },
+      {
+        id: "m9",
+        sender: "ai",
+        time: "01:45",
+        text: `Confirmed! I've scheduled your consultation for tomorrow at 3:00 PM and updated your stage to ${call.currentStage}. Confirmation details have been emailed. Thank you for choosing MantraCare!`,
+      },
+    ];
+  };
+
+  const clientPhone = selectedCall ? ((selectedCall as any)?.phone || getClientPhone(selectedCall.clientId, selectedCall.client)) : "7795163421";
+  const messages = selectedCall ? getCallMessages(selectedCall) : [];
+
+  interface RetryHistoryRow {
+    id: string;
+    callType: string;
+    process: string;
+    initialStage: string;
+    updatedStage: string;
+    status: "COMPLETED" | "BUSY" | "FAILED" | "NO ANSWER" | "PENDING";
+    createdAt: string;
+    scheduledOn: string;
+  }
+
+  const retryHistoryData: RetryHistoryRow[] = useMemo(() => {
+    if (!selectedCall) return [];
+    const proc = (selectedCall.process || "DERMATEST").toUpperCase();
+    const initialStg = selectedCall.lastStage && selectedCall.lastStage !== "N/A" ? selectedCall.lastStage : "New";
+    const updatedStg = selectedCall.currentStage || "Appointment Booked";
+    const dateStr = selectedCall.date || "Oct 10, 2026, 07:26 PM";
+
+    return [
+      {
+        id: `retry-${selectedCall.id}-1`,
+        callType: selectedCall.type || "Outbound",
+        process: proc,
+        initialStage: initialStg,
+        updatedStage: updatedStg,
+        status: (selectedCall.status?.toUpperCase() === "PENDING" ? "PENDING" : selectedCall.status?.toUpperCase() === "FAILED" ? "FAILED" : "COMPLETED") as any,
+        createdAt: dateStr,
+        scheduledOn: "-",
+      },
+      {
+        id: `retry-${selectedCall.id}-2`,
+        callType: selectedCall.type || "Outbound",
+        process: proc,
+        initialStage: initialStg,
+        updatedStage: "N/A",
+        status: "BUSY",
+        createdAt: "Oct 10, 2026, 07:20 PM",
+        scheduledOn: "-",
+      },
+      {
+        id: `retry-${selectedCall.id}-3`,
+        callType: selectedCall.type || "Outbound",
+        process: proc,
+        initialStage: initialStg,
+        updatedStage: "Follow-Up Later",
+        status: "COMPLETED",
+        createdAt: "Oct 10, 2026, 07:15 PM",
+        scheduledOn: "-",
+      },
+      {
+        id: `retry-${selectedCall.id}-4`,
+        callType: selectedCall.type || "Outbound",
+        process: proc,
+        initialStage: initialStg,
+        updatedStage: "Appointment Booked",
+        status: "COMPLETED",
+        createdAt: "Oct 10, 2026, 07:10 PM",
+        scheduledOn: "-",
+      },
+      {
+        id: `retry-${selectedCall.id}-5`,
+        callType: selectedCall.type || "Outbound",
+        process: proc,
+        initialStage: initialStg,
+        updatedStage: "Follow-Up Later",
+        status: "COMPLETED",
+        createdAt: "Oct 10, 2026, 07:05 PM",
+        scheduledOn: "-",
+      },
+    ];
+  }, [selectedCall]);
+
+  const retryColumns: TableColumn<RetryHistoryRow>[] = [
+    {
+      id: "callType",
+      header: "CALL TYPE",
+      render: (r) => (
+        <span className="text-slate-800 text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {r.callType}
+        </span>
+      ),
+    },
+    {
+      id: "process",
+      header: "PROCESS",
+      render: (r) => (
+        <span className="text-slate-600 text-xs tracking-wider font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {r.process}
+        </span>
+      ),
+    },
+    {
+      id: "initialStage",
+      header: "INITIAL STAGE",
+      render: (r) => (
+        <span className="text-slate-700 text-xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {r.initialStage}
+        </span>
+      ),
+    },
+    {
+      id: "updatedStage",
+      header: "UPDATED STAGE",
+      render: (r) => (
+        <span className="text-slate-800 text-xs font-medium truncate max-w-[160px] inline-block" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {r.updatedStage}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "STATUS",
+      render: (r) => {
+        const isCompleted = r.status === "COMPLETED";
+        const isBusy = r.status === "BUSY";
+        return (
+          <span
+            className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase whitespace-nowrap ${
+              isCompleted
+                ? "bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0]"
+                : isBusy
+                ? "bg-[#FFF1F2] text-[#E11D48] border border-[#FECDD3]"
+                : "bg-slate-100 text-slate-700 border border-slate-200"
+            }`}
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            {r.status}
+          </span>
+        );
+      },
+    },
+    {
+      id: "createdAt",
+      header: "CREATED AT",
+      render: (r) => (
+        <span className="text-slate-500 text-xs font-mono" style={{ fontFamily: "JetBrains Mono, monospace" }}>
+          {r.createdAt}
+        </span>
+      ),
+    },
+    {
+      id: "scheduledOn",
+      header: "SCHEDULED ON",
+      render: (r) => (
+        <span className="text-slate-400 text-xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {r.scheduledOn}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <Drawer
       isOpen={isOpen}
       onClose={handleClose}
+      maxWidth="sm:max-w-4xl lg:max-w-5xl"
       title={
-        <>
-          <h2 className="text-2xl font-semibold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-            Call Details
-          </h2>
+        <div>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+              Conversation Details
+            </h2>
+            {selectedCall && (
+              <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200/60 rounded-full text-xs font-mono font-medium">
+                #{selectedCall.id}
+              </span>
+            )}
+          </div>
           {selectedCall && (
-            <span className="px-4 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
-              #{selectedCall.id}
-            </span>
+            <div className="flex items-center gap-3 mt-3">
+              <div className="w-10 h-10 rounded-full bg-[#1A73E8] text-white flex items-center justify-center font-bold text-base shadow-xs flex-shrink-0">
+                {selectedCall.client ? selectedCall.client.charAt(0).toUpperCase() : "F"}
+              </div>
+              <div>
+                <p className="font-semibold text-sm text-slate-900 lowercase leading-tight" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  {selectedCall.client}
+                </p>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">
+                  {clientPhone}
+                </p>
+              </div>
+            </div>
           )}
-        </>
+        </div>
       }
     >
       {selectedCall ? (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full bg-[#F8FAFC]">
           {/* Sticky Tab Bar */}
-          <div className="bg-white border-b" style={{ borderColor: '#E5E7EB' }}>
-            <div className="flex items-center">
-              <button
-                onClick={() => setActiveDrawerTab("summary")}
-                className={`flex-1 flex items-center justify-center text-center transition-all ${activeDrawerTab === "summary" ? "text-primary" : "hover:bg-muted/30"
-                  }`}
-                style={{
-                  height: '44px',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  fontFamily: 'Outfit, sans-serif',
-                  color: activeDrawerTab === "summary" ? "#1A73E8" : "#6B7280",
-                  borderBottom: activeDrawerTab === "summary" ? "2px solid #1A73E8" : "2px solid transparent",
-                  backgroundColor: activeDrawerTab === "summary" ? "#FFFFFF" : undefined,
-                }}
-              >
-                Summary
-              </button>
-              <button
-                onClick={() => setActiveDrawerTab("call-review")}
-                className={`flex-1 flex items-center justify-center text-center transition-all ${activeDrawerTab === "call-review" ? "text-primary" : "hover:bg-muted/30"
-                  }`}
-                style={{
-                  height: '44px',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  fontFamily: 'Outfit, sans-serif',
-                  color: activeDrawerTab === "call-review" ? "#1A73E8" : "#6B7280",
-                  borderBottom: activeDrawerTab === "call-review" ? "2px solid #1A73E8" : "2px solid transparent",
-                  backgroundColor: activeDrawerTab === "call-review" ? "#FFFFFF" : undefined,
-                }}
-              >
-                Call Analysis
-              </button>
-              <button
-                onClick={() => setActiveDrawerTab("review")}
-                className={`flex-1 flex items-center justify-center text-center transition-all ${activeDrawerTab === "review" ? "text-primary" : "hover:bg-muted/30"
-                  }`}
-                style={{
-                  height: '44px',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  fontFamily: 'Outfit, sans-serif',
-                  color: activeDrawerTab === "review" ? "#1A73E8" : "#6B7280",
-                  borderBottom: activeDrawerTab === "review" ? "2px solid #1A73E8" : "2px solid transparent",
-                  backgroundColor: activeDrawerTab === "review" ? "#FFFFFF" : undefined,
-                }}
-              >
-                Feedback
-              </button>
-            </div>
+          <div className="bg-white border-b border-gray-200 px-6 flex items-center gap-6 flex-shrink-0">
+            <button
+              onClick={() => setActiveDrawerTab("overview")}
+              className={`py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+                activeDrawerTab === "overview"
+                  ? "border-[#1A73E8] text-[#1A73E8]"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+              style={{ fontFamily: 'Outfit, sans-serif' }}
+            >
+              Overview
+            </button>
+            <button
+              onClick={() => setActiveDrawerTab("retry-history")}
+              className={`py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+                activeDrawerTab === "retry-history"
+                  ? "border-[#1A73E8] text-[#1A73E8]"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+              style={{ fontFamily: 'Outfit, sans-serif' }}
+            >
+              Retry History
+            </button>
           </div>
 
           {/* Tab Content - Scrollable */}
           <div className="flex-1 overflow-y-auto">
-            {activeDrawerTab === "summary" && (
-              <div className="space-y-6 p-6">
-                {/* Summary Card */}
-                <div className="bg-white rounded-lg border shadow-sm" style={{ padding: '20px', borderColor: '#E5E7EB', borderRadius: '8px' }}>
-                  <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Summary</h2>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', rowGap: '20px' }}>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>Client</p>
-                      <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#111827', fontFamily: 'DM Sans, sans-serif' }}>{selectedCall.client}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>Call Time</p>
-                      <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#111827', fontFamily: 'DM Sans, sans-serif' }}>{selectedCall.date}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>Type</p>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedCall.type === "Outbound"
-                        ? "bg-primary/10 text-primary"
-                        : "bg-secondary/10 text-secondary"
-                        }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        {selectedCall.type}
-                      </span>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>Current Stage</p>
-                      <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#111827', fontFamily: 'DM Sans, sans-serif' }}>{selectedCall.currentStage}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>Call Status</p>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedCall.status === "Completed"
-                        ? "bg-success/10 text-success"
-                        : selectedCall.status === "Failed"
-                          ? "bg-destructive/10 text-destructive"
-                          : "bg-warning/10 text-warning"
-                        }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        {selectedCall.status}
-                      </span>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>Duration</p>
-                      <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#111827', fontFamily: 'DM Sans, sans-serif' }}>{selectedCall.duration || "—"}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Recording Player */}
-                {selectedCall.hasRecording && (
-                  <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-                    <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Recording</h2>
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs mr-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Speed:</span>
-                        {[0.5, 0.75, 1, 1.25, 1.5].map((speed) => (
-                          <button
-                            key={speed}
-                            onClick={() => setPlaybackSpeed(speed)}
-                            className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${playbackSpeed === speed
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground hover:bg-muted/80"
-                              }`}
-                          >
-                            {speed}x
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-4 p-4 bg-muted rounded-xl">
-                        <button
-                          onClick={() => setIsPlaying(!isPlaying)}
-                          className="w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center hover:opacity-90 transition-opacity"
-                        >
-                          {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
-                        </button>
-                        <div className="flex-1">
-                          <div className="h-2 bg-border rounded-full overflow-hidden">
-                            <div className="h-full bg-primary w-1/3" />
+            {activeDrawerTab === "overview" && (
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+                  {/* Column 1: Recording, Summary, AI Summary */}
+                  <div className="space-y-5">
+                    {/* Recording Player Card */}
+                    <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-md bg-blue-50 text-[#1A73E8] flex items-center justify-center">
+                            <Headphones className="w-3.5 h-3.5" />
                           </div>
-                          <div className="flex justify-between mt-2 text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                            <span>1:30</span>
-                            <span>{selectedCall.duration || "4:32"}</span>
+                          <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                            Recording
+                          </h3>
+                        </div>
+                        <span className="text-[11px] font-medium text-slate-500 bg-slate-50 border border-slate-200/80 px-2.5 py-1 rounded-lg" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                          {selectedCall.date || "Oct 10, 2026, 07:26 PM"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3 py-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsPlaying(!isPlaying)}
+                          className="w-10 h-10 bg-slate-900 hover:bg-slate-800 text-white rounded-full flex items-center justify-center transition-transform hover:scale-105 flex-shrink-0 cursor-pointer shadow-xs"
+                        >
+                          {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                        </button>
+                        <div className="flex-1 space-y-1">
+                          <div className="relative h-1.5 bg-slate-100 rounded-full overflow-hidden cursor-pointer">
+                            <div className="h-full bg-slate-900 rounded-full transition-all" style={{ width: isPlaying ? '50%' : '15%' }} />
+                          </div>
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                            <span>00:00</span>
+                            <span>{selectedCall.duration || "2:11"}</span>
                           </div>
                         </div>
-                        <Tooltip text="Download Recording">
-                          <Button variant="ghost" size="sm">
+                        <Tooltip text="Download Audio">
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600">
                             <Download className="w-4 h-4" />
                           </Button>
                         </Tooltip>
                       </div>
-                    </div>
-                  </div>
-                )}
 
-                {/* Transcript */}
-                {selectedCall.hasTranscript && (
-                  <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-                    <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Call Transcript</h2>
-
-                    <div className="flex items-center mb-4">
-                      <div className="flex items-center gap-2">
-                        {[1, 1.25, 1.5, 2].map((speed) => (
-                          <button
-                            key={speed}
-                            onClick={() => setPlaybackSpeed(speed)}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${playbackSpeed === speed
-                              ? "bg-muted text-foreground border border-border"
-                              : "bg-white text-muted-foreground hover:bg-muted border border-border"
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                        <div className="flex items-center gap-1.5">
+                          {[1, 1.25, 1.5, 2].map((spd) => (
+                            <button
+                              key={spd}
+                              type="button"
+                              onClick={() => setPlaybackSpeed(spd)}
+                              className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
+                                playbackSpeed === spd
+                                  ? "bg-slate-900 text-white border-slate-900"
+                                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                               }`}
-                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                          >
-                            {speed}x
-                          </button>
-                        ))}
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              {spd}x
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center gap-1 px-2.5 py-1 bg-slate-50 border border-slate-200/80 rounded-lg">
+                          {[1, 2, 3, 4, 5].map((starIdx) => (
+                            <button
+                              key={starIdx}
+                              type="button"
+                              onClick={() => setRating(starIdx)}
+                              onMouseEnter={() => setHoverRating(starIdx)}
+                              onMouseLeave={() => setHoverRating(0)}
+                              className="cursor-pointer focus:outline-hidden"
+                            >
+                              <Star
+                                className={`w-3.5 h-3.5 transition-colors ${
+                                  (hoverRating || rating) >= starIdx
+                                    ? "fill-amber-400 text-amber-400"
+                                    : "text-slate-300 hover:text-slate-400"
+                                }`}
+                              />
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
-                      <div className="flex justify-end">
-                        <div className="max-w-[80%]">
-                          <div className="flex items-center justify-end gap-2 mb-1">
-                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              AI ASSISTANT
-                            </span>
-                          </div>
-                          <div className="flex items-start gap-2">
-                            <div className="bg-[#2F3B4E] text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
-                              <p className="text-sm leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Hi {selectedCall.client}, this is Ria from MantraCare. Quick check-did I catch you at an okay time for thirty seconds?
-                              </p>
-                            </div>
-                            <div className="flex-shrink-0 w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center">
-                              <Headphones className="w-4 h-4 text-white" />
-                            </div>
-                          </div>
+                    {/* Summary Card */}
+                    <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs space-y-3.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-md bg-blue-50 text-[#1A73E8] flex items-center justify-center">
+                          <FileText className="w-3.5 h-3.5" />
                         </div>
+                        <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                          Summary
+                        </h3>
                       </div>
 
-                      <div className="flex justify-start">
-                        <div className="max-w-[80%]">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              CLIENT
-                            </span>
-                          </div>
-                          <div className="flex items-start gap-2">
-                            <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                              <User className="w-4 h-4 text-white" />
-                            </div>
-                            <div className="bg-primary text-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-                              <p className="text-sm leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Hello. Yes, I have a moment.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
+                      <div>
+                        <h4 className="text-xs font-semibold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                          Call Summary MantraCare {selectedCall.process || "Consultation"} ({selectedCall.client})
+                        </h4>
+                        <p className="text-xs text-slate-600 leading-relaxed mt-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                          <strong className="text-slate-800 font-semibold">Reason for Call / Intent:</strong> This was an outbound follow-up call from MantraCare to a prospective customer, {selectedCall.client}, who had recently submitted an enquiry with us. The primary purpose was to understand their needs and offer assistance; the caller's underlying goal was to establish intent and transition the stage ({selectedCall.currentStage}).
+                        </p>
                       </div>
 
-                      <div className="flex justify-end">
-                        <div className="max-w-[80%]">
-                          <div className="flex items-center justify-end gap-2 mb-1">
-                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              AI ASSISTANT
-                            </span>
+                      <div className="pt-2 border-t border-slate-100 grid grid-cols-3 gap-3">
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Client</p>
+                          <p className="text-xs font-bold text-slate-800 truncate mt-0.5">{selectedCall.client}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Call Time</p>
+                          <p className="text-xs font-bold text-slate-800 truncate mt-0.5">{selectedCall.date}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Type</p>
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold mt-0.5 ${
+                            selectedCall.type === "Outbound" ? "bg-blue-50 text-blue-700 border border-blue-200/60" : "bg-purple-50 text-purple-700 border border-purple-200/60"
+                          }`}>
+                            {selectedCall.type}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Stage</p>
+                          <p className="text-xs font-bold text-slate-800 truncate mt-0.5">{selectedCall.currentStage}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Status</p>
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold mt-0.5 ${
+                            selectedCall.status === "Completed"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                              : selectedCall.status === "Failed"
+                                ? "bg-rose-50 text-rose-700 border border-rose-200/60"
+                                : "bg-amber-50 text-amber-700 border border-amber-200/60"
+                          }`}>
+                            {selectedCall.status}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Duration</p>
+                          <p className="text-xs font-bold text-slate-800 mt-0.5">{selectedCall.duration || "2:11"}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* AI Summary Card */}
+                    <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs space-y-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-md bg-blue-50 text-[#1A73E8] flex items-center justify-center">
+                          <Sparkles className="w-3.5 h-3.5" />
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                          AI Summary
+                        </h3>
+                      </div>
+
+                      <div className="space-y-2.5 text-xs text-slate-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                        <p className="leading-relaxed">
+                          This call was processed with AI Speech Engine for <span className="font-semibold text-slate-800">{selectedCall.process || "patient intake"}</span>. The client demonstrated high responsiveness throughout the dialogue.
+                        </p>
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex items-start gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#1A73E8] mt-1.5 flex-shrink-0" />
+                            <span>Contact confirmed with final state: <strong className="text-slate-800">{selectedCall.status}</strong></span>
                           </div>
                           <div className="flex items-start gap-2">
-                            <div className="bg-[#2F3B4E] text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
-                              <p className="text-sm leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Thanks for confirming. I am calling to update you on your stage: {selectedCall.currentStage}.
-                              </p>
-                            </div>
-                            <div className="flex-shrink-0 w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center">
-                              <Headphones className="w-4 h-4 text-white" />
-                            </div>
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#1A73E8] mt-1.5 flex-shrink-0" />
+                            <span>Lead progressed into pipeline stage: <strong className="text-slate-800">{selectedCall.currentStage}</strong></span>
+                          </div>
+                          <div className="flex items-start gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#1A73E8] mt-1.5 flex-shrink-0" />
+                            <span>Action triggered: follow-up communication dispatched and confirmed</span>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                )}
 
-                {/* AI Summary Card */}
-                <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-                  <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>AI Summary</h2>
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                        Call Overview
-                      </h4>
-                      <p className="text-sm leading-relaxed" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
-                        This was a call regarding {selectedCall.process || "patient intake"} with client {selectedCall.client}. The primary stage during the call was {selectedCall.currentStage}.
-                      </p>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                        Key Points
-                      </h4>
-                      <ul className="space-y-2">
-                        <li className="flex items-start gap-2">
-                          <span className="text-primary mt-1">•</span>
-                          <span className="text-sm" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
-                            Contact established with status: {selectedCall.status}
-                          </span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <span className="text-primary mt-1">•</span>
-                          <span className="text-sm" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
-                            Call duration recorded as {selectedCall.duration || "N/A"}
-                          </span>
-                        </li>
-                      </ul>
+                  {/* Column 2: Transcription Card */}
+                  <div className="space-y-5">
+                    <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs flex flex-col h-full min-h-[500px]">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-shrink-0">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-md bg-blue-50 text-[#1A73E8] flex items-center justify-center">
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </div>
+                          <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                            Transcription
+                          </h3>
+                        </div>
+                        <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 rounded-full px-2.5 py-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                          17 Messages
+                        </span>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto space-y-4 pt-4 pr-1 max-h-[580px]">
+                        {messages.map((msg) => {
+                          const isAI = msg.sender === "ai";
+                          return (
+                            <div key={msg.id} className={`flex flex-col ${isAI ? "items-end" : "items-start"}`}>
+                              {/* Label + Avatar Icon */}
+                              <div className="flex items-center gap-1.5 mb-1 px-1">
+                                {!isAI && (
+                                  <div className="w-4 h-4 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center">
+                                    <User className="w-2.5 h-2.5" />
+                                  </div>
+                                )}
+                                <span className="text-[11px] font-medium text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                  {isAI ? "AI Assistant" : "Client"}
+                                </span>
+                                {isAI && (
+                                  <div className="w-4 h-4 rounded-full bg-slate-800 text-white flex items-center justify-center">
+                                    <Bot className="w-2.5 h-2.5" />
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Bubble */}
+                              <div
+                                className={`rounded-2xl p-3.5 text-xs leading-relaxed max-w-[88%] border ${
+                                  isAI
+                                    ? "bg-slate-50 border-slate-200/80 text-slate-800 rounded-tr-xs"
+                                    : "bg-white border-slate-200/80 text-slate-800 rounded-tl-xs shadow-xs"
+                                }`}
+                                style={{ fontFamily: 'Outfit, sans-serif' }}
+                              >
+                                {msg.text}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
 
-                {/* Call Relationship */}
-                {(selectedCall.parentCallId || (selectedCall.childCallIds && selectedCall.childCallIds.length > 0)) && (
-                  <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-                    <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Call Relationship</h2>
-                    <div className="space-y-4">
-                      <div>
-                        <p className="text-sm mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Current Call ID</p>
-                        <p className="font-mono font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>#{selectedCall.id}</p>
-                      </div>
-
-                      {selectedCall.parentCallId && (
-                        <div className="border-t border-border pt-4">
-                          <p className="text-sm mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Created From</p>
-                          <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                            <div className="flex items-center gap-2 mb-2">
-                              {getReasonIcon(selectedCall.relationshipReason)}
-                              <span className="text-xs font-semibold text-primary">
-                                {selectedCall.relationshipReason}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => handleSelectCall(selectedCall.parentCallId!)}
-                              className="font-mono text-sm text-primary hover:underline cursor-pointer"
-                            >
-                              Call ID: #{selectedCall.parentCallId}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {selectedCall.childCallIds && selectedCall.childCallIds.length > 0 && (
-                        <div className="border-t border-border pt-4">
-                          <p className="text-sm mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Generated Calls</p>
-                          <div className="space-y-2">
-                            {selectedCall.childCallIds.map((childId) => (
-                              <div key={childId} className="p-3 bg-success/5 border border-success/20 rounded-lg">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Zap className="w-4 h-4 text-success" />
-                                  <span className="text-xs font-semibold text-success">Call Trigger</span>
-                                </div>
-                                <button
-                                  onClick={() => handleSelectCall(childId)}
-                                  className="font-mono text-sm text-success hover:underline cursor-pointer"
-                                >
-                                  Call ID: #{childId}
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+            {activeDrawerTab === "retry-history" && (
+              <div className="p-4 sm:p-6 bg-white min-h-[420px] space-y-4">
+                <TableComponent
+                  data={retryHistoryData}
+                  columns={retryColumns}
+                  getRowId={(r) => r.id}
+                  enableSelection={false}
+                  enableColumnCustomization={true}
+                  pagination={false}
+                  defaultRowsPerPage={10}
+                  emptyMessage="No retry history records found."
+                />
               </div>
             )}
 
@@ -916,65 +1082,6 @@ export default function CallDetailDrawer({
                   </div>
                 );
               })()
-            )}
-
-            {activeDrawerTab === "review" && (
-              <div className="space-y-6 p-6">
-                <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-                  <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Rating & Feedback</h2>
-
-                  <div
-                    className="flex items-start gap-3 p-4 rounded-xl mb-4"
-                    style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}
-                  >
-                    <Star className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#1A73E8' }} />
-                    <div>
-                      <p className="text-sm font-medium" style={{ color: '#1E3A8A', fontFamily: 'Outfit, sans-serif' }}>
-                        Rate this call
-                      </p>
-                      <p className="text-xs mt-0.5" style={{ color: '#1E40AF', fontFamily: 'Outfit, sans-serif' }}>
-                        Your feedback helps improve future AI-driven conversations and call quality.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-sm mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Rating</p>
-                      <div className="flex items-center gap-3">
-                        <div className="flex gap-1">{renderStars()}</div>
-                        {rating > 0 && (
-                          <span className="text-sm font-medium" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                            {rating} / 5
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-sm mb-2 block" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Feedback</label>
-                      <textarea
-                        value={callFeedback}
-                        onChange={(e) => setCallFeedback(e.target.value)}
-                        placeholder="Add feedback on what should improve and highlight important points from this call..."
-                        className="w-full px-4 py-3 bg-input-background border border-input rounded-xl resize-none text-sm min-h-[120px]"
-                      />
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={handleSaveFeedback}
-                        loading={isSavingFeedback}
-                        disabled={rating === 0 && !callFeedback.trim()}
-                      >
-                        Save Feedback
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
             )}
           </div>
         </div>

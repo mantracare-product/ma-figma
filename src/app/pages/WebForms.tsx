@@ -17,6 +17,9 @@ import { useClientFields } from "../context/ClientFieldsContext";
 import { appendClientSubmission } from "../../data/submissionsStore";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
+import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
+import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -267,15 +270,21 @@ function SubStatusBadge({ status }: { status?: string }) {
 }
 
 // Submissions Tab
-function SubmissionsTab({ submissions, forms, onViewSubmission }: {
+function SubmissionsTab({ submissions, forms, onViewSubmission, mainTab, setMainTab }: {
   submissions: Submission[];
   forms: Form[];
   onViewSubmission: (sub: Submission) => void;
+  mainTab: "submissions" | "forms";
+  setMainTab: (tab: "submissions" | "forms") => void;
 }) {
+  const navigate = useNavigate();
   const [selectedSub, setSelectedSub] = useState<Submission | null>(null);
   const [subSearch, setSubSearch] = useState("");
   const [subFormFilter, setSubFormFilter] = useState("all");
   const [subStatusFilter, setSubStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+
   const formName = (id: number) => forms.find(f => f.id === id)?.name ?? "Unknown";
 
   const filteredSubs = submissions.filter(sub => {
@@ -287,118 +296,207 @@ function SubmissionsTab({ submissions, forms, onViewSubmission }: {
     return matchesSearch && matchesForm && matchesStatus;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredSubs.length / rowsPerPage));
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = Math.min(startIndex + rowsPerPage, filteredSubs.length);
+  const paginatedSubs = filteredSubs.slice(startIndex, endIndex);
+
   return (
     <>
-      {/* Filter bar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search submissions…"
-            value={subSearch}
-            onChange={e => setSubSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          />
-        </div>
-        <div className="shrink-0">
-          <select value={subFormFilter} onChange={e => setSubFormFilter(e.target.value)} className={SELECT_STYLE} style={SELECT_INLINE}>
-            <option value="all">All Forms</option>
-            <optgroup label="Standard">
-              <option value="1">Contact Us</option>
-              <option value="2">Book a Demo</option>
-              <option value="3">Support Request</option>
-              <option value="4">Newsletter Signup</option>
-            </optgroup>
-            <optgroup label="Meta Ads">
-              <option value="10">Healthcare Campaign Form</option>
-              <option value="11">Free Consultation Ad</option>
-            </optgroup>
-          </select>
-        </div>
-        <div className="shrink-0">
-          <select value={subStatusFilter} onChange={e => setSubStatusFilter(e.target.value)} className={SELECT_STYLE} style={SELECT_INLINE}>
-            <option value="all">Filter</option>
-            <option value="completed">Completed</option>
-            <option value="sent">Sent</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
-          </select>
-        </div>
-      </div>
+      {/* Unified Action / Filter Toolbar powered by PageTopBar */}
+      <PageTopBar
+        isBottomPanelAttached={true}
+        modes={[
+          { id: "submissions", label: "Submissions" },
+          { id: "forms", label: "Forms" },
+        ]}
+        activeMode={mainTab}
+        onModeChange={(m) => setMainTab(m as typeof mainTab)}
+        searchQuery={subSearch}
+        onSearchChange={(v) => {
+          setSubSearch(v);
+          setCurrentPage(1);
+        }}
+        searchPlaceholder="Search submissions..."
+        filterPresets={[
+          {
+            id: "all",
+            label: "All Submissions",
+            count: submissions.length,
+            isActive: subStatusFilter === "all" && subFormFilter === "all",
+            onClick: () => {
+              setSubStatusFilter("all");
+              setSubFormFilter("all");
+            },
+          },
+          {
+            id: "completed",
+            label: "Completed",
+            count: submissions.filter((s) => s.status === "completed").length,
+            isActive: subStatusFilter === "completed",
+            onClick: () => setSubStatusFilter("completed"),
+          },
+          {
+            id: "pending",
+            label: "Pending Review",
+            count: submissions.filter((s) => s.status === "pending").length,
+            isActive: subStatusFilter === "pending",
+            onClick: () => setSubStatusFilter("pending"),
+          },
+        ]}
+        filterFields={[
+          {
+            id: "search",
+            label: "Submitter / Email",
+            type: "text",
+            placeholder: "Search name or email...",
+            value: subSearch,
+            onChange: (val) => setSubSearch(val || ""),
+          },
+          {
+            id: "status",
+            label: "Submission Status",
+            type: "select",
+            value: subStatusFilter,
+            onChange: (val) => setSubStatusFilter(val || "all"),
+            options: [
+              { label: "All Statuses", value: "all" },
+              { label: "Completed", value: "completed" },
+              { label: "Sent", value: "sent" },
+              { label: "Pending", value: "pending" },
+              { label: "Failed", value: "failed" },
+            ],
+          },
+        ]}
+        secondaryActions={
+          <div className="flex items-center gap-2">
+            <select
+              value={subFormFilter}
+              onChange={e => {
+                setSubFormFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <option value="all">All Forms</option>
+              <optgroup label="Standard">
+                <option value="1">Contact Us</option>
+                <option value="2">Book a Demo</option>
+                <option value="3">Support Request</option>
+                <option value="4">Newsletter Signup</option>
+              </optgroup>
+              <optgroup label="Meta Ads">
+                <option value="10">Healthcare Campaign Form</option>
+                <option value="11">Free Consultation Ad</option>
+              </optgroup>
+            </select>
 
-      <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-gray-50">
-              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Name</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Email</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Form</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Date submitted</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
-              <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wide"
-                style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredSubs.map((sub, i) => (
-              <tr
-                key={sub.id}
-                className={`transition-colors hover:bg-gray-50/60 ${sub.status === "sent" ? "bg-gray-50/60 grayscale-[30%]" : ""
-                  } ${i < filteredSubs.length - 1 ? "border-b border-border" : ""}`}
-              >
-                <td className="px-5 py-3.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium" style={{ color: sub.status === "sent" ? "#94A3B8" : "#020817" }}>{sub.name}</span>
-                    {!sub.clientId && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-xs font-medium text-amber-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="6" cy="6" r="5" /><path d="M6 4v3M6 8.5v.5" /></svg>
-                        No client linked
-                      </span>
-                    )}
-                  </div>
-                </td>
-
-                <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: sub.status === "sent" ? "#94A3B8" : "#64748B" }}>
-                  {sub.email}
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                      {formName(sub.formId)}
-                    </span>
-                  </div>
-                </td>
-
-                <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-                  {sub.date}
-                </td>
-                <td className="px-5 py-3.5">
-                  <SubStatusBadge status={sub.status} />
-                </td>
-                <td className="px-5 py-3.5 text-right">
-                  <button
-                    onClick={() => onViewSubmission(sub)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-gray-50 transition-colors"
-                    style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
-                  >
-                    View
-                    <ChevronRight className="w-3 h-3" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filteredSubs.length === 0 && (
-          <div className="py-16 text-center">
-            <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>No submissions found.</p>
+            <select
+              value={subStatusFilter}
+              onChange={e => {
+                setSubStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <option value="all">All Statuses</option>
+              <option value="completed">Completed</option>
+              <option value="sent">Sent</option>
+              <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+            </select>
           </div>
-        )}
-      </div>
+        }
+        primaryAction={{
+          label: "New form",
+          icon: <Plus className="w-4 h-4" />,
+          onClick: () => navigate("/web-forms/new"),
+        }}
+      />
+
+      {(() => {
+        const subColumns: TableColumn<Submission>[] = [
+          {
+            id: "name",
+            header: "Name",
+            align: "left",
+            render: (sub) => (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-medium" style={{ color: sub.status === "sent" ? "#94A3B8" : "#020817", fontFamily: "DM Sans, sans-serif" }}>
+                  {sub.name}
+                </span>
+                {!sub.clientId && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-none bg-amber-50 border border-amber-200 text-[10px] font-medium text-amber-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    No client
+                  </span>
+                )}
+              </div>
+            ),
+          },
+          {
+            id: "email",
+            header: "Email",
+            align: "left",
+            render: (sub) => (
+              <span className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                {sub.email}
+              </span>
+            ),
+          },
+          {
+            id: "form",
+            header: "Form",
+            align: "left",
+            render: (sub) => (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-none bg-slate-100 text-[11px] font-medium text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                {formName(sub.formId)}
+              </span>
+            ),
+          },
+          {
+            id: "date",
+            header: "Date submitted",
+            align: "left",
+            render: (sub) => (
+              <span className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                {sub.date}
+              </span>
+            ),
+          },
+          {
+            id: "status",
+            header: "Status",
+            align: "center",
+            render: (sub) => <SubStatusBadge status={sub.status} />,
+          },
+        ];
+
+        const subRowActions: TableRowAction<Submission>[] = [
+          {
+            label: "View Contact Profile",
+            icon: <ChevronRight className="w-3.5 h-3.5" />,
+            onClick: (sub) => onViewSubmission(sub),
+          },
+          {
+            label: "Submission Details",
+            icon: <Eye className="w-3.5 h-3.5" />,
+            onClick: (sub) => setSelectedSub(sub),
+          },
+        ];
+
+        return (
+          <TableComponent
+            data={filteredSubs}
+            columns={subColumns}
+            getRowId={(sub) => sub.id}
+            rowActions={subRowActions}
+            defaultRowsPerPage={20}
+            emptyMessage="No submissions found matching your filters."
+          />
+        );
+      })()}
 
       <SubmissionDrawer
         submission={selectedSub}
@@ -958,6 +1056,7 @@ export default function WebForms() {
     return saved ? JSON.parse(saved) : INITIAL_FLOWS;
   });
   const [flowSearch, setFlowSearch] = useState("");
+  const [selectedFlows, setSelectedFlows] = useState<Set<number>>(new Set());
   const [createFlowOpen, setCreateFlowOpen] = useState(false);
   const [activeFlow, setActiveFlow] = useState<IntakeFlow | null>(null);
   const [expandedFlowId, setExpandedFlowId] = useState<number | null>(null);
@@ -1459,73 +1558,39 @@ export default function WebForms() {
   const isPreviewStepValid = () => true;
 
   return (
-    <div className="h-full overflow-auto">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
-              Web Forms
-            </h1>
-            <p className="text-base" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-              Collect leads from your website and turn every submission into a client automatically
-            </p>
-          </div>
-          <div className="flex items-center gap-3 shrink-0 mt-1">
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
+        {/* Top Header */}
+        <PageHeader
+          title="Web Forms"
+          subtitle="Collect leads from your website and turn every submission into a client automatically"
+        >
+          <div className="flex items-center gap-2 shrink-0">
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Web Forms Works" />
-            <Button
-              variant="primary"
-              onClick={() => navigate("/web-forms/new")}
-              className="flex items-center gap-2 bg-black hover:bg-black/90 text-white px-4 py-2.5 rounded-lg text-sm font-semibold"
-              style={{ fontFamily: "DM Sans, sans-serif" }}
-            >
-              <Plus className="w-4 h-4" />
-              New form
-            </Button>
           </div>
-        </div>
+        </PageHeader>
 
         {/* Stats Cards — thin capsule style */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-white border border-border shadow-sm rounded-2xl px-5 py-2.5 flex items-center gap-4">
-            <span className="text-xs font-semibold uppercase tracking-wide shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>SUBMISSIONS — 7D</span>
-            <span className="text-xl font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.submissions7d}</span>
-            <span className="text-xs shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>vs prior 7d: {stats.submissionsPrior7d}</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>SUBMISSIONS 7D</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.submissions7d}</span>
+            <span className="text-[10px] shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>vs prior: {stats.submissionsPrior7d}</span>
           </div>
-          <div className="bg-white border border-border shadow-sm rounded-2xl px-5 py-2.5 flex items-center gap-4">
-            <span className="text-xs font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>ACTIVE FORMS</span>
-            <span className="text-xl font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.activeForms.total}</span>
-            <span className="text-xs shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.activeForms.live} live · {stats.activeForms.draft} draft</span>
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>ACTIVE FORMS</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.activeForms.total}</span>
+            <span className="text-[10px] shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.activeForms.live} live</span>
           </div>
-          <div className="bg-white border border-border shadow-sm rounded-2xl px-5 py-2.5 flex items-center gap-4">
-            <span className="text-xs font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>TOP PERFORMER</span>
-            <span className="text-sm font-bold flex-1 text-center truncate" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.topPerformer.name}</span>
-            <span className="text-xs shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.topPerformer.total} submissions</span>
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>TOP PERFORMER</span>
+            <span className="text-xs font-bold flex-1 text-center truncate" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.topPerformer.name}</span>
+            <span className="text-[10px] shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.topPerformer.total} subs</span>
           </div>
-          <div className="bg-white border border-border shadow-sm rounded-2xl px-5 py-2.5 flex items-center gap-4">
-            <span className="text-xs font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>USAGE</span>
-            <span className="text-xl font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.submissionUsage.current}<span className="text-base font-normal text-muted-foreground">/{stats.submissionUsage.limit}</span></span>
-            <span className="text-xs shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.submissionUsage.status}</span>
-          </div>
-        </div>
-
-        {/* Top-level Tabs */}
-        <div className="border-b border-border">
-          <div className="flex items-center gap-8">
-            {(["submissions", "forms"] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setMainTab(tab)}
-                className={`pb-3 px-1 text-sm font-medium transition-colors relative capitalize ${mainTab === tab ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {tab}
-                {mainTab === tab && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t" />
-                )}
-              </button>
-            ))}
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>USAGE</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.submissionUsage.current}<span className="text-xs font-normal text-muted-foreground">/{stats.submissionUsage.limit}</span></span>
+            <span className="text-[10px] shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.submissionUsage.status}</span>
           </div>
         </div>
 
@@ -1535,194 +1600,250 @@ export default function WebForms() {
             submissions={submissions}
             forms={forms}
             onViewSubmission={sub => setViewingClient({ clientId: sub.clientId, formId: sub.formId, submissionDate: sub.date })}
+            mainTab={mainTab}
+            setMainTab={setMainTab}
           />
         )}
 
         {mainTab === "forms" && (
           <>
-            {/* Secondary sub-tab row */}
-            <div className="inline-flex border border-border rounded-lg overflow-hidden mb-2">
-              {(["forms", "flows"] as const).map(sub => (
-                <button
-                  key={sub}
-                  onClick={() => setFormsSubTab(sub)}
-                  className={`px-4 py-2 text-xs font-medium transition-colors ${formsSubTab === sub ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
-                    }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  {sub === "forms" ? "All Forms" : "Intake Flows"}
-                </button>
-              ))}
-            </div>
-
             {/* ── Forms sub-tab ── */}
             {formsSubTab === "forms" && (
               <div className="space-y-4">
-
-
-                {/* Filter bar */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="relative flex-1 min-w-[200px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <input
-                      type="text"
-                      placeholder="Search forms…"
-                      value={formSearch}
-                      onChange={e => setFormSearch(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    />
-                  </div>
-                  {/* Type segmented control */}
-                  <div className="inline-flex border border-border rounded-lg overflow-hidden shrink-0">
-                    {(["all", "standard", "intake", "meta-ads"] as const).map(t => (
-                      <button
-                        key={t}
-                        onClick={() => setTypeFilter(t)}
-                        className={`px-3 py-2 text-xs font-medium transition-colors ${typeFilter === t ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
+                {/* Unified Filter bar powered by PageTopBar */}
+                <PageTopBar
+                  isBottomPanelAttached={true}
+                  modes={[
+                    { id: "submissions", label: "Submissions" },
+                    { id: "forms", label: "Forms" },
+                  ]}
+                  activeMode={mainTab}
+                  onModeChange={(m) => setMainTab(m as typeof mainTab)}
+                  searchQuery={formSearch}
+                  onSearchChange={setFormSearch}
+                  searchPlaceholder="Search forms..."
+                  filterPresets={[
+                    {
+                      id: "all",
+                      label: "All Forms",
+                      count: forms.length,
+                      isActive: typeFilter === "all" && !formSearch,
+                      onClick: () => {
+                        setTypeFilter("all");
+                        setFormSearch("");
+                      },
+                    },
+                    {
+                      id: "standard",
+                      label: "Standard Forms",
+                      count: forms.filter((f) => f.formType === "standard").length,
+                      isActive: typeFilter === "standard",
+                      onClick: () => setTypeFilter("standard"),
+                    },
+                    {
+                      id: "intake",
+                      label: "Intake Flows",
+                      count: forms.filter((f) => f.formType === "intake").length,
+                      isActive: typeFilter === "intake",
+                      onClick: () => setTypeFilter("intake"),
+                    },
+                    {
+                      id: "meta-ads",
+                      label: "Meta Ads",
+                      count: forms.filter((f) => f.formType === "meta-ads").length,
+                      isActive: typeFilter === "meta-ads",
+                      onClick: () => setTypeFilter("meta-ads"),
+                    },
+                  ]}
+                  filterFields={[
+                    {
+                      id: "title",
+                      label: "Form Title",
+                      type: "text",
+                      placeholder: "Filter by title...",
+                      value: formSearch,
+                      onChange: (val) => setFormSearch(val || ""),
+                    },
+                    {
+                      id: "type",
+                      label: "Form Type",
+                      type: "select",
+                      value: typeFilter,
+                      onChange: (val) => setTypeFilter(val as any),
+                      options: [
+                        { label: "All Types", value: "all" },
+                        { label: "Standard", value: "standard" },
+                        { label: "Intake", value: "intake" },
+                        { label: "Meta Ads", value: "meta-ads" },
+                      ],
+                    },
+                  ]}
+                  leftElement={
+                    <div className="inline-flex border border-border rounded-lg overflow-hidden shrink-0 ml-1">
+                      {(["forms", "flows"] as const).map(sub => (
+                        <button
+                          key={sub}
+                          onClick={() => setFormsSubTab(sub)}
+                          className={`px-3 py-1 text-xs font-medium transition-colors ${
+                            formsSubTab === sub ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
                           }`}
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        {t === "all" ? "All Types" : t === "standard" ? "Standard" : t === "intake" ? "Intake" : "Meta Ads"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Forms table */}
-                <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/80 shadow-2xs overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                      <tr>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          <button className="flex items-center gap-1 hover:text-blue-300 transition-colors" onClick={() => handleSortCol("name")}>
-                            Title {sortCol === "name" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
-                          </button>
-                        </th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Type</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Status</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          <button className="flex items-center gap-1 hover:text-blue-300 transition-colors" onClick={() => handleSortCol("submissions")}>
-                            Submissions {sortCol === "submissions" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
-                          </button>
-                        </th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Created By</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          <button className="flex items-center gap-1 hover:text-blue-300 transition-colors" onClick={() => handleSortCol("lastUpdated")}>
-                            Last Updated {sortCol === "lastUpdated" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
-                          </button>
-                        </th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Enabled</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide text-right" style={{ fontFamily: "Outfit, sans-serif" }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {displayForms.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="px-4 py-12 text-center text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                            No forms found
-                          </td>
-                        </tr>
-                      ) : displayForms.map((form, i) => (
-                        <tr
-                          key={form.id}
-                          onClick={() => handlePreviewClick(form)}
-                          className={`cursor-pointer transition-colors hover:bg-gray-50/60 ${i < displayForms.length - 1 ? "border-b border-border" : ""}`}
+                          style={{ fontFamily: "Outfit, sans-serif" }}
                         >
-                          {/* Name */}
-                          <td className="px-4 py-3.5">
-                            <span
-                              className="text-sm font-medium cursor-pointer hover:underline"
-                              style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
-                              onClick={e => { e.stopPropagation(); handlePreviewClick(form); }}
-                            >
-                              {form.name}
-                            </span>
-                          </td>
-                          {/* Type */}
-                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
-                            {form.formType === "intake" ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                Intake
-                              </span>
-                            ) : form.formType === "meta-ads" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                <svg viewBox="0 0 12 12" className="w-3 h-3" fill="currentColor">
-                                  <path d="M12 6.073c0-3.315-2.686-6-6-6S0 2.758 0 6.073c0 2.995 2.194 5.477 5.063 5.927V7.77H3.54V6.073h1.523V4.734c0-1.503.896-2.334 2.267-2.334.656 0 1.343.117 1.343.117v1.476h-.756c-.745 0-.977.462-.977.937v1.143h1.664l-.266 1.697H6.94v4.23C9.806 11.55 12 9.068 12 6.073z" />
-                                </svg>
-                                Meta Ads
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                Standard
-                              </span>
-                            )}
-                          </td>
-                          {/* Status */}
-                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
-                            <StatusBadge status={form.status} />
-                          </td>
-                          {/* Submissions */}
-                          <td className="px-4 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
-                            {form.submissions}
-                          </td>
-                          {/* Created By */}
-                          <td className="px-4 py-3.5">
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-gray-200 text-xs flex items-center justify-center font-medium shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                                {getInitials(form.createdBy)}
-                              </div>
-                              <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>{form.createdBy}</span>
-                            </div>
-                          </td>
-                          {/* Last Updated */}
-                          <td className="px-4 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-                            {formatFormDate(form.lastUpdated || form.createdAt)}
-                          </td>
-                          {/* Enabled toggle */}
-                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
-                            <label className="flex items-center cursor-pointer" onClick={e => e.stopPropagation()}>
-                              <div className="relative">
-                                <input type="checkbox" checked={form.enabled} onChange={() => handleToggle(form.id)} className="sr-only peer" />
-                                <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-4 after:transition-all peer-checked:bg-primary" />
-                              </div>
-                            </label>
-                          </td>
-                          {/* Actions */}
-                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
-                            <div className="relative">
-                              <button
-                                onClick={e => { e.stopPropagation(); setOpenDropdownId(openDropdownId === form.id ? null : form.id); }}
-                                className="p-1.5 hover:bg-muted/20 rounded-lg transition-colors"
-                              >
-                                <MoreVertical className="w-4 h-4" style={{ color: "#64748B" }} />
-                              </button>
-                              {openDropdownId === form.id && (
-                                <>
-                                  <div className="fixed inset-0 z-10" onClick={() => setOpenDropdownId(null)} />
-                                  <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-border rounded-lg shadow-lg py-1 z-20">
-                                    <button onClick={() => { setOpenDropdownId(null); handleEdit(form); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
-                                      <Edit2 className="w-4 h-4 text-muted-foreground" />Edit
-                                    </button>
-                                    <button onClick={() => { setOpenDropdownId(null); setShareTarget({ id: form.id, name: form.name, kind: "form", status: form.status }); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
-                                      <Share2 className="w-4 h-4 text-muted-foreground" />Share
-                                    </button>
-                                    <button onClick={() => { setOpenDropdownId(null); navigate(`/web-forms/test/${form.id}`); }} className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#3B82F6" }}>
-                                      <FlaskConical className="w-4 h-4" style={{ color: "#3B82F6" }} />Test
-                                    </button>
-                                    <button onClick={() => handleDelete(form.id)} className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#EF4444" }}>
-                                      <Trash2 className="w-4 h-4" style={{ color: "#EF4444" }} />Delete
-                                    </button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
+                          {sub === "forms" ? "All Forms" : "Intake Flows"}
+                        </button>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </div>
+                  }
+                  secondaryActions={
+                    <select
+                      value={typeFilter}
+                      onChange={(e) => setTypeFilter(e.target.value as any)}
+                      className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="all">All Types</option>
+                      <option value="standard">Standard</option>
+                      <option value="intake">Intake</option>
+                      <option value="meta-ads">Meta Ads</option>
+                    </select>
+                  }
+                  primaryAction={{
+                    label: "New form",
+                    icon: <Plus className="w-4 h-4" />,
+                    onClick: () => navigate("/web-forms/new"),
+                  }}
+                />
+
+                {/* Forms Table View Connected with TableComponent */}
+                {(() => {
+                  const formColumns: TableColumn<Form>[] = [
+                    {
+                      id: "name",
+                      header: "Title",
+                      align: "left",
+                      render: (form) => (
+                        <button
+                          type="button"
+                          className="text-xs font-semibold cursor-pointer hover:underline text-[#020817] text-left"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                          onClick={() => handlePreviewClick(form)}
+                        >
+                          {form.name}
+                        </button>
+                      ),
+                    },
+                    {
+                      id: "type",
+                      header: "Type",
+                      align: "center",
+                      render: (form) => (
+                        form.formType === "intake" ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-none text-[10px] font-medium bg-purple-100 text-purple-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            Intake
+                          </span>
+                        ) : form.formType === "meta-ads" ? (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-none text-[10px] font-medium bg-blue-100 text-blue-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            <svg viewBox="0 0 12 12" className="w-2.5 h-2.5" fill="currentColor">
+                              <path d="M12 6.073c0-3.315-2.686-6-6-6S0 2.758 0 6.073c0 2.995 2.194 5.477 5.063 5.927V7.77H3.54V6.073h1.523V4.734c0-1.503.896-2.334 2.267-2.334.656 0 1.343.117 1.343.117v1.476h-.756c-.745 0-.977.462-.977.937v1.143h1.664l-.266 1.697H6.94v4.23C9.806 11.55 12 9.068 12 6.073z" />
+                            </svg>
+                            Meta Ads
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-none text-[10px] font-medium bg-gray-100 text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            Standard
+                          </span>
+                        )
+                      ),
+                    },
+                    {
+                      id: "status",
+                      header: "Status",
+                      align: "center",
+                      render: (form) => <StatusBadge status={form.status} />,
+                    },
+                    {
+                      id: "submissions",
+                      header: "Submissions",
+                      align: "center",
+                      render: (form) => (
+                        <span className="text-xs font-semibold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {form.submissions}
+                        </span>
+                      ),
+                    },
+                    {
+                      id: "createdBy",
+                      header: "Created By",
+                      align: "center",
+                      render: (form) => (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <div className="w-5 h-5 rounded-full bg-gray-200 text-[10px] flex items-center justify-center font-medium shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                            {getInitials(form.createdBy)}
+                          </div>
+                          <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>{form.createdBy}</span>
+                        </div>
+                      ),
+                    },
+                    {
+                      id: "lastUpdated",
+                      header: "Last Updated",
+                      align: "center",
+                      render: (form) => (
+                        <span className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {formatFormDate(form.lastUpdated || form.createdAt)}
+                        </span>
+                      ),
+                    },
+                    {
+                      id: "enabled",
+                      header: "Enabled",
+                      align: "center",
+                      render: (form) => (
+                        <label className="inline-flex items-center cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                          <div className="relative">
+                            <input type="checkbox" checked={form.enabled} onChange={() => handleToggle(form.id)} className="sr-only peer" />
+                            <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-primary" />
+                          </div>
+                        </label>
+                      ),
+                    },
+                  ];
+
+                  const formRowActions: TableRowAction<Form>[] = [
+                    {
+                      label: "Edit",
+                      icon: <Edit2 className="w-3.5 h-3.5" />,
+                      onClick: (form) => handleEdit(form),
+                    },
+                    {
+                      label: "Share",
+                      icon: <Share2 className="w-3.5 h-3.5" />,
+                      onClick: (form) => setShareTarget({ id: form.id, name: form.name, kind: "form", status: form.status }),
+                    },
+                    {
+                      label: "Test",
+                      icon: <FlaskConical className="w-3.5 h-3.5 text-blue-600" />,
+                      onClick: (form) => navigate(`/web-forms/test/${form.id}`),
+                    },
+                    {
+                      label: "Delete",
+                      icon: <Trash2 className="w-3.5 h-3.5" />,
+                      isDanger: true,
+                      onClick: (form) => handleDelete(form.id),
+                    },
+                  ];
+
+                  return (
+                    <TableComponent
+                      data={displayForms}
+                      columns={formColumns}
+                      getRowId={(form) => form.id}
+                      rowActions={formRowActions}
+                      defaultRowsPerPage={20}
+                      emptyMessage="No forms found matching your filters."
+                    />
+                  );
+                })()}
               </div>
             )}
 
@@ -2147,27 +2268,64 @@ export default function WebForms() {
                 ) : (
                   /* ── Flows list view ── */
                   <div className="space-y-4">
-                    {/* Sub-header */}
-                    <div className="flex items-center gap-3">
-                      <div className="relative flex-1 min-w-[200px]">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <input
-                          type="text"
-                          placeholder="Search intake flows…"
-                          value={flowSearch}
-                          onChange={e => setFlowSearch(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    {/* Unified Filter bar for Intake flows */}
+                    <div className="bg-card rounded-t-xl p-2.5 px-3 border border-border shadow-xs">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        {/* Main Tab Switcher in search bar */}
+                        <div className="inline-flex bg-gray-100 p-0.5 rounded-lg border border-border shrink-0">
+                          {(["submissions", "forms"] as const).map(tab => (
+                            <button
+                              key={tab}
+                              onClick={() => setMainTab(tab)}
+                              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all capitalize ${
+                                mainTab === tab
+                                  ? "bg-[#1E293B] text-white shadow-xs"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              {tab}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Secondary sub-tab row (All Forms / Intake Flows) */}
+                        <div className="inline-flex border border-border rounded-lg overflow-hidden shrink-0">
+                          {(["forms", "flows"] as const).map(sub => (
+                            <button
+                              key={sub}
+                              onClick={() => setFormsSubTab(sub)}
+                              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                                formsSubTab === sub ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
+                              }`}
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              {sub === "forms" ? "All Forms" : "Intake Flows"}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="relative flex-1 min-w-[200px]">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                          <input
+                            type="text"
+                            placeholder="Search intake flows…"
+                            value={flowSearch}
+                            onChange={e => setFlowSearch(e.target.value)}
+                            className="w-full h-[36px] bg-input-background border border-input rounded-lg pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          />
+                        </div>
+
+                        <button
+                          onClick={() => setCreateFlowOpen(true)}
+                          className="flex items-center gap-1.5 bg-[#1E293B] hover:bg-black text-white rounded-lg px-3.5 h-[36px] text-xs font-semibold transition-colors shrink-0"
                           style={{ fontFamily: "Outfit, sans-serif" }}
-                        />
+                        >
+                          <Plus className="w-4 h-4" />
+                          Create intake flow
+                        </button>
                       </div>
-                      <button
-                        onClick={() => setCreateFlowOpen(true)}
-                        className="flex items-center gap-2 bg-black text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-black/90 transition-colors shrink-0"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      >
-                        <Plus className="w-4 h-4" />
-                        Create intake flow
-                      </button>
                     </div>
 
                     {/* Flows table or empty state */}
@@ -2189,167 +2347,153 @@ export default function WebForms() {
                         </button>
                       </div>
                     ) : (
-                      <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="border-b border-border bg-gray-50">
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Name</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Submissions</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Created By</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Last Updated</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Enabled</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide"
-                                style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                                Actions
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {flows
-                              .filter(fl => fl.name.toLowerCase().includes(flowSearch.toLowerCase()))
-                              .map((flow, i, arr) => (
-                                <tr
-                                  key={flow.id}
-                                  onClick={() => setDrawerFlow(flow)}
-                                  className={`cursor-pointer transition-colors hover:bg-gray-50/60 ${i < arr.length - 1 ? "border-b border-border" : ""}`}
-                                >
-                                  {/* Name */}
-                                  <td className="px-5 py-3.5">
-                                    <button
-                                      onClick={e => { e.stopPropagation(); setDrawerFlow(flow); }}
-                                      className="text-sm font-medium hover:underline text-left"
-                                      style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
-                                    >
-                                      {flow.name}
-                                    </button>
-                                  </td>
+                    (() => {
+                      const flowCols: TableColumn<IntakeFlow>[] = [
+                        {
+                          id: "name",
+                          header: "Name",
+                          align: "left",
+                          render: (flow) => (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDrawerFlow(flow);
+                              }}
+                              className="text-xs font-medium hover:underline text-left cursor-pointer"
+                              style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+                            >
+                              {flow.name}
+                            </button>
+                          ),
+                        },
+                        {
+                          id: "status",
+                          header: "Status",
+                          align: "center",
+                          render: () => (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-green-100 text-green-700"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <span className="w-1 h-1 rounded-full bg-green-600" />
+                              Active
+                            </span>
+                          ),
+                        },
+                        {
+                          id: "submissions",
+                          header: "Submissions",
+                          align: "center",
+                          render: (flow) => (
+                            <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                              {flow.steps.reduce((sum, step) => {
+                                const f = forms.find((frm) => frm.id === step.formId);
+                                return sum + (f?.submissions ?? 0);
+                              }, 0)}
+                            </span>
+                          ),
+                        },
+                        {
+                          id: "createdBy",
+                          header: "Created By",
+                          align: "left",
+                          render: (flow) => (
+                            <div className="flex items-center gap-1.5">
+                              <div
+                                className="w-5 h-5 rounded-full bg-gray-200 text-[10px] flex items-center justify-center font-medium shrink-0"
+                                style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+                              >
+                                {getInitials(flow.senderName)}
+                              </div>
+                              <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                                {flow.senderName}
+                              </span>
+                            </div>
+                          ),
+                        },
+                        {
+                          id: "lastUpdated",
+                          header: "Last Updated",
+                          align: "center",
+                          render: (flow) => (
+                            <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                              {flow.createdAt}
+                            </span>
+                          ),
+                        },
+                        {
+                          id: "enabled",
+                          header: "Enabled",
+                          align: "center",
+                          render: (flow) => (
+                            <label className="flex items-center justify-center cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                              <div className="relative">
+                                <input
+                                  type="checkbox"
+                                  checked={flow.enabled ?? true}
+                                  onChange={() => {
+                                    const updated = flows.map((fl) =>
+                                      fl.id === flow.id ? { ...fl, enabled: !(fl.enabled ?? true) } : fl
+                                    );
+                                    setFlows(updated);
+                                    toast.success(`${flow.name} ${(flow.enabled ?? true) ? "disabled" : "enabled"}`);
+                                  }}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-primary" />
+                              </div>
+                            </label>
+                          ),
+                        },
+                      ];
 
-                                  {/* Status — flows don't have live/draft so show "Active" badge always */}
-                                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
-                                    <span
-                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700"
-                                      style={{ fontFamily: "Outfit, sans-serif" }}
-                                    >
-                                      <span className="w-1.5 h-1.5 rounded-full bg-green-600" />
-                                      Active
-                                    </span>
-                                  </td>
+                      const flowActions: TableRowAction<IntakeFlow>[] = [
+                        {
+                          label: "Edit",
+                          icon: <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />,
+                          onClick: (flow) => setActiveFlow(flow),
+                        },
+                        {
+                          label: "Share",
+                          icon: <Share2 className="w-3.5 h-3.5 text-muted-foreground" />,
+                          onClick: (flow) => setShareTarget({ id: flow.id, name: flow.name, kind: "flow" }),
+                        },
+                        {
+                          label: "Duplicate",
+                          icon: <Copy className="w-3.5 h-3.5 text-muted-foreground" />,
+                          onClick: (flow) => {
+                            const dup: IntakeFlow = { ...flow, id: Date.now(), name: flow.name + " (Copy)", createdAt: "Jun 16, 2026" };
+                            setFlows((prev) => [...prev, dup]);
+                            toast.success("Flow duplicated");
+                          },
+                        },
+                        {
+                          label: "Delete",
+                          icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+                          isDanger: true,
+                          onClick: (flow) => {
+                            setFlows(flows.filter((fl) => fl.id !== flow.id));
+                            toast.success("Flow deleted");
+                          },
+                        },
+                      ];
 
-                                  {/* Submissions — sum of all forms in this flow */}
-                                  <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
-                                    onClick={e => e.stopPropagation()}>
-                                    {flow.steps.reduce((sum, step) => {
-                                      const f = forms.find(f => f.id === step.formId);
-                                      return sum + (f?.submissions ?? 0);
-                                    }, 0)}
-                                  </td>
+                      const filteredFlows = flows.filter((fl) => fl.name.toLowerCase().includes(flowSearch.toLowerCase()));
 
-                                  {/* Created By */}
-                                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
-                                    <div className="flex items-center gap-2">
-                                      <div
-                                        className="w-6 h-6 rounded-full bg-gray-200 text-xs flex items-center justify-center font-medium shrink-0"
-                                        style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
-                                      >
-                                        {getInitials(flow.senderName)}
-                                      </div>
-                                      <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                                        {flow.senderName}
-                                      </span>
-                                    </div>
-                                  </td>
-
-                                  {/* Last Updated */}
-                                  <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}
-                                    onClick={e => e.stopPropagation()}>
-                                    {flow.createdAt}
-                                  </td>
-
-                                  {/* Enabled toggle */}
-                                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
-                                    <label className="flex items-center cursor-pointer" onClick={e => e.stopPropagation()}>
-                                      <div className="relative">
-                                        <input
-                                          type="checkbox"
-                                          checked={flow.enabled ?? true}
-                                          onChange={() => {
-                                            const updated = flows.map(fl =>
-                                              fl.id === flow.id ? { ...fl, enabled: !(fl.enabled ?? true) } : fl
-                                            );
-                                            setFlows(updated);
-                                            toast.success(`${flow.name} ${(flow.enabled ?? true) ? "disabled" : "enabled"}`);
-                                          }}
-                                          className="sr-only peer"
-                                        />
-                                        <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-4 after:transition-all peer-checked:bg-primary" />
-                                      </div>
-                                    </label>
-                                  </td>
-
-                                  {/* Actions dropdown */}
-                                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
-                                    <div className="relative flex justify-end">
-                                      <button
-                                        onClick={e => { e.stopPropagation(); setFlowDropdownId(flowDropdownId === flow.id ? null : flow.id); }}
-                                        className="p-1.5 hover:bg-muted/20 rounded-lg transition-colors"
-                                      >
-                                        <MoreVertical className="w-4 h-4" style={{ color: "#64748B" }} />
-                                      </button>
-                                      {flowDropdownId === flow.id && (
-                                        <>
-                                          <div className="fixed inset-0 z-10" onClick={() => setFlowDropdownId(null)} />
-                                          <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-border rounded-lg shadow-lg py-1 z-20">
-                                            <button
-                                              onClick={() => { setFlowDropdownId(null); setActiveFlow(flow); }}
-                                              className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3"
-                                              style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
-                                            >
-                                              <Edit2 className="w-4 h-4 text-muted-foreground" />Edit
-                                            </button>
-                                            <button
-                                              onClick={() => {
-                                                setFlowDropdownId(null);
-                                                setShareTarget({ id: flow.id, name: flow.name, kind: "flow" });
-                                              }}
-                                              className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3"
-                                              style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
-                                            >
-                                              <Share2 className="w-4 h-4 text-muted-foreground" />Share
-                                            </button>
-                                            <button
-                                              onClick={() => {
-                                                const dup: IntakeFlow = { ...flow, id: Date.now(), name: flow.name + " (Copy)", createdAt: "Jun 16, 2026" };
-                                                setFlows(prev => [...prev, dup]);
-                                                setFlowDropdownId(null);
-                                                toast.success("Flow duplicated");
-                                              }}
-                                              className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3"
-                                              style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
-                                            >
-                                              <Copy className="w-4 h-4 text-muted-foreground" />Duplicate
-                                            </button>
-                                            <button
-                                              onClick={() => {
-                                                setFlows(flows.filter(fl => fl.id !== flow.id));
-                                                setFlowDropdownId(null);
-                                                toast.success("Flow deleted");
-                                              }}
-                                              className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3"
-                                              style={{ fontFamily: "Outfit, sans-serif", color: "#EF4444" }}
-                                            >
-                                              <Trash2 className="w-4 h-4" style={{ color: "#EF4444" }} />Delete
-                                            </button>
-                                          </div>
-                                        </>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      return (
+                        <TableComponent
+                          data={filteredFlows}
+                          columns={flowCols}
+                          getRowId={(flow) => flow.id}
+                          rowActions={flowActions}
+                          selectedIds={selectedFlows}
+                          onSelectionChange={(ids) => setSelectedFlows(new Set(Array.from(ids) as number[]))}
+                          onRowClick={(flow) => setDrawerFlow(flow)}
+                          defaultRowsPerPage={20}
+                          emptyMessage="No matching intake flows found."
+                        />
+                      );
+                    })()
                     )}
                   </div>
                 )}

@@ -4,7 +4,8 @@ import { toast } from "sonner";
 import {
   LogIn, ArrowRightCircle, CheckCircle2, Phone, MessageCircle, MessageSquare,
   Mail, Zap, Calendar, Pencil, Globe, PhoneIncoming, PhoneOutgoing, PhoneOff,
-  MoreVertical, X, Clock, CalendarClock, ChevronRight, Send, FileText, Paperclip, Settings
+  MoreVertical, X, Clock, CalendarClock, ChevronRight, Send, FileText, Paperclip, Settings,
+  Receipt, FileCheck, CreditCard
 } from "lucide-react";
 import {
   appendActivity,
@@ -25,6 +26,8 @@ import ScheduleCallDrawer, {
 import ScheduleAppointmentDrawer, {
   BookingFormValues,
 } from "../appointments/ScheduleAppointmentDrawer";
+import { appointmentService } from "../../../lib/appointmentService";
+import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../../lib/invoiceService";
 
 // ─── Legacy ActivityLogEntry (kept for backward compat) ───────────────────────
 
@@ -84,6 +87,7 @@ const ACTIVITY_ICON_BG: Record<string, string> = {
   webhook_trigger: "#1F2937", appointment_booked: "#1F2937", field_update: "#1F2937",
   process_completed: "#1F2937", website_message: "#1F2937", website: "#1F2937",
   form_submitted: "#1F2937", note: "#1F2937",
+  invoice_created: "#1F2937", document_generated: "#1F2937", payment_recorded: "#1F2937",
 };
 
 const HEADING_BY_TYPE: Record<string, string> = {
@@ -92,9 +96,16 @@ const HEADING_BY_TYPE: Record<string, string> = {
   inbound_call: "Inbound Call", failed_call: "Call Failed",
   whatsapp: "WhatsApp Message", sms: "SMS Message", email: "Email",
   webhook_trigger: "Webhook Triggered", field_update: "Field Updated",
-  appointment_booked: "Appointment Booked", process_completed: "Process Completed",
+  appointment_booked: "Appointment Booked",
+  appointment_rescheduled: "Appointment Rescheduled",
+  appointment_completed: "Appointment Completed",
+  appointment_cancelled: "Appointment Cancelled",
+  process_completed: "Process Completed",
   website_message: "Website Message", website: "Website Message",
   form_submitted: "Form Submitted", note: "Note",
+  invoice_created: "Invoice Created",
+  document_generated: "Document Generated",
+  payment_recorded: "Payment Recorded",
 };
 
 // ─── Status pill ──────────────────────────────────────────────────────────────
@@ -153,7 +164,14 @@ function ActivityIcon({ type, direction, status }: { type: string; direction?: s
     case "sms":               return <MessageSquare className={cls} />;
     case "email":             return <Mail className={cls} />;
     case "webhook_trigger":   return <Zap className={cls} />;
-    case "appointment_booked": return <Calendar className={cls} />;
+    case "appointment_booked":
+    case "appointment_rescheduled":
+    case "appointment_completed":
+    case "appointment_cancelled":
+      return <Calendar className={cls} />;
+    case "invoice_created":   return <Receipt className={cls} />;
+    case "document_generated":return <FileCheck className={cls} />;
+    case "payment_recorded":  return <CreditCard className={cls} />;
     case "field_update":      return <Pencil className={cls} />;
     case "form_submitted":    return <FileText className={cls} />;
     case "note":              return <FileText className={cls} />;
@@ -517,6 +535,7 @@ function AppointmentBlock({ entry }: { entry: ActivityLogEntry }) {
   const dateTime = [entry.date, entry.time].filter(Boolean).join(" · ");
   const loc = entry.location || entry.details?.secondary || "";
   const notes = entry.notes || "";
+  const status = entry.status;
   return (
     <div className="mt-2 space-y-1.5">
       {dateTime && (
@@ -525,8 +544,28 @@ function AppointmentBlock({ entry }: { entry: ActivityLogEntry }) {
           {dateTime}
         </div>
       )}
+      {status && (
+        <span
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
+            status === "completed"
+              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              : status === "cancelled"
+              ? "bg-rose-50 text-rose-700 border border-rose-200"
+              : status === "rescheduled"
+              ? "bg-amber-50 text-amber-700 border border-amber-200"
+              : "bg-blue-50 text-blue-700 border border-blue-200"
+          }`}
+        >
+          {status}
+        </span>
+      )}
       {loc && <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>{loc}</p>}
       {notes && <p className="text-[11px] text-gray-400 italic" style={{ fontFamily: "Outfit, sans-serif" }}>{notes}</p>}
+      {entry.details?.primary && (!dateTime || entry.details.primary !== dateTime) && (
+        <p className="text-xs text-gray-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+          {entry.details.primary}
+        </p>
+      )}
     </div>
   );
 }
@@ -813,7 +852,12 @@ function ActivityCard({
       return <WhatsAppSmsBlock entry={entry} onOpenThreadDrawer={onOpenThreadDrawer} />;
     if (t === "email")
       return <EmailBlock entry={entry} onOpenEmailThreadDrawer={onOpenEmailThreadDrawer} />;
-    if (t === "appointment_booked")
+    if (
+      t === "appointment_booked" ||
+      t === "appointment_rescheduled" ||
+      t === "appointment_completed" ||
+      t === "appointment_cancelled"
+    )
       return <AppointmentBlock entry={entry} />;
     if (t === "form_submitted")
       return <FormBlock entry={entry} />;
@@ -1318,6 +1362,32 @@ export default function ActivityTab({
       },
     });
 
+    try {
+      appointmentService.createAppointment({
+        clientName: apptFormValues.client?.name || clientName || "Client",
+        clientEmail: apptFormValues.client?.email || clientEmail || "",
+        clientPhone: apptFormValues.client?.phone || clientPhone || "",
+        employeeId: apptFormValues.provider?.id || 1,
+        serviceId: apptFormValues.serviceId ? Number(apptFormValues.serviceId) : 1,
+        date: apptFormValues.date,
+        time: timeStr,
+        duration: 60,
+        notes: apptFormValues.note || apptFormValues.description || undefined,
+        title: apptFormValues.title.trim() || "Appointment",
+        clientId: normalizedClientId,
+        location: apptFormValues.sessionType === "inPerson" ? "In-Person" : "Video Call",
+        sessionType: apptFormValues.sessionType,
+        processId: apptFormValues.processId,
+        stageId: apptFormValues.stageId,
+        generateInvoice: apptFormValues.generateInvoice ?? hasAppointmentInvoiceAutomation(apptFormValues.processId),
+        lineItems: apptFormValues.lineItems,
+        discountAmount: apptFormValues.discountAmount,
+        source: "screen",
+      });
+    } catch (e) {
+      console.warn("[ActivityTab] Error calling createAppointment:", e);
+    }
+
     if (!created) {
       toast.error("Couldn't save this activity — client context missing");
       setApptIsSaving(false);
@@ -1394,8 +1464,15 @@ export default function ActivityTab({
         !!(entry as any).callId;
     if (activeCategoryTab === "sms") return rawType === "sms" || entry.type === "sms";
     if (activeCategoryTab === "email") return rawType === "email" || entry.type === "email";
-    if (activeCategoryTab === "appointment")
-      return rawType === "appointment_booked" || entry.type === "appointment_booked";
+    if (activeCategoryTab === "appointment") {
+      const typeStr = String(rawType || entry.type || "").toLowerCase();
+      return (
+        typeStr.startsWith("appointment") ||
+        typeStr === "stage_change" ||
+        typeStr === "stage_update" ||
+        !!(entry as any).appointmentId
+      );
+    }
     return false;
   };
 

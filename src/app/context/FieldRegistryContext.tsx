@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import { getStoredProcesses } from "../../lib/useProcessStore";
 
-export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember" | "scribe";
+export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember" | "scribe" | "invoice";
 
 export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
   "client",
@@ -11,7 +11,8 @@ export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
   "service",
   "organization",
   "teamMember",
-  "scribe"
+  "scribe",
+  "invoice"
 ];
 
 export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plural: string }> = {
@@ -23,6 +24,7 @@ export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: strin
   organization: { singular: "organization", plural: "organizations" },
   teamMember: { singular: "team member", plural: "team members" },
   scribe: { singular: "AI Scribe field", plural: "AI Scribe fields" },
+  invoice: { singular: "invoice", plural: "invoices" },
 };
 
 export const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -88,13 +90,109 @@ export type SubFieldInputType =
   | "crm_bind"
   | "file";
 
-export type CrmBindModule = "teamMember" | "client" | "organization" | "service" | "process";
+export type CrmBindModule = "client" | "call" | "process" | "appointment" | "service" | "invoice" | "organization" | "teamMember" | "scribe";
+
+export const CRM_MODULE_COLUMNS: Record<CrmBindModule, { key: string; label: string }[]> = {
+  client: [
+    { key: "name", label: "Client Name" },
+    { key: "email", label: "Email Address" },
+    { key: "phone", label: "Phone Number" },
+    { key: "companyName", label: "Company" },
+    { key: "status", label: "Status" },
+    { key: "stage", label: "Stage" },
+    { key: "location", label: "Location" },
+    { key: "responsible", label: "Responsible Person" },
+    { key: "country", label: "Country" },
+    { key: "jobPosition", label: "Role / Job Position" },
+  ],
+  call: [
+    { key: "client", label: "Client Name" },
+    { key: "caller", label: "Caller" },
+    { key: "duration", label: "Call Duration" },
+    { key: "outcome", label: "Call Outcome" },
+    { key: "process", label: "Process" },
+    { key: "date", label: "Call Date" },
+    { key: "status", label: "Call Status" },
+  ],
+  process: [
+    { key: "name", label: "Process Name" },
+    { key: "stage", label: "Stage" },
+    { key: "stages", label: "Stages (All Pipeline Stages)" },
+    { key: "category", label: "Industry Category" },
+    { key: "status", label: "Status" },
+    { key: "stageCount", label: "Number of Stages" },
+    { key: "dealType", label: "Deal / Workflow Type" },
+    { key: "responsible", label: "Responsible Person" },
+    { key: "description", label: "Process Description" },
+  ],
+  appointment: [
+    { key: "title", label: "Appointment Title" },
+    { key: "date", label: "Date & Time" },
+    { key: "status", label: "Status" },
+    { key: "service", label: "Service Name" },
+    { key: "doctorName", label: "Provider / Doctor" },
+    { key: "clientName", label: "Client Name" },
+  ],
+  service: [
+    { key: "name", label: "Service Name" },
+    { key: "price", label: "Price / Cost" },
+    { key: "duration", label: "Duration (min)" },
+    { key: "category", label: "Category" },
+  ],
+  invoice: [
+    { key: "invoiceNumber", label: "Invoice Number" },
+    { key: "clientName", label: "Client Name" },
+    { key: "amount", label: "Total Amount" },
+    { key: "status", label: "Payment Status" },
+    { key: "dueDate", label: "Due Date" },
+  ],
+  organization: [
+    { key: "name", label: "Organization Name" },
+    { key: "industry", label: "Industry" },
+    { key: "website", label: "Website" },
+    { key: "location", label: "Location" },
+  ],
+  teamMember: [
+    { key: "name", label: "Member Name" },
+    { key: "role", label: "Role / Position" },
+    { key: "email", label: "Email Address" },
+    { key: "department", label: "Department" },
+  ],
+  scribe: [
+    { key: "sessionName", label: "Session Name" },
+    { key: "patientName", label: "Patient / Client" },
+    { key: "chiefComplaint", label: "Chief Complaint" },
+    { key: "diagnosis", label: "Assessment / Diagnosis" },
+    { key: "doctorName", label: "Doctor Name" },
+    { key: "sessionDate", label: "Session Date" },
+  ],
+};
+
+export interface FormulaTerm {
+  fieldKey: string;
+  operator?: "+" | "-" | "*" | "/";
+}
+
+export interface FormulaConfig {
+  mode: "static" | "formula";
+  staticValue?: number;
+  terms: FormulaTerm[];
+}
+
+export interface GroupBindingConfig {
+  enabled: boolean;
+  primarySubFieldId: string;
+  secondarySubFieldId: string;
+  bindingType?: "options_filter" | "derived_value";
+}
 
 export interface CrmBindConfig {
   sourceModule: CrmBindModule;
   displayField: string;             // e.g. "name", "title", "email"
   secondaryDisplayField?: string;   // e.g. "role", "phoneNumber"
   selectionMode: "single" | "multiple";
+  primaryKeyField?: string;         // Primary column based on which values will be fetched/matched
+  isPrimaryLookup?: boolean;        // Whether this column is the primary lookup key
 }
 
 export interface ListBindConfig {
@@ -124,6 +222,8 @@ export interface SubFieldConfig {
   listBindConfig?: ListBindConfig; // for list_select sub-fields
   minEntries?: number; // for composite sub-fields
   maxEntries?: number; // for composite sub-fields
+  formulaConfig?: FormulaConfig;
+  groupBindingConfig?: GroupBindingConfig;
   phoneConfig?: {
     countryCodeDisplay?: "name" | "code";
     showFlags?: boolean;
@@ -229,7 +329,7 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
   else if (rawType.includes("textarea") || rawType.includes("area") || rawType.includes("long")) inputType = "textarea";
   else if (rawType.includes("rating") || rawType.includes("score")) inputType = "rating";
   else if (rawType.includes("yes") || rawType.includes("bool")) inputType = "yes_no";
-  else if (rawType.includes("crm")) inputType = "crm_bind";
+  else if (rawType.includes("crm") || rawType.includes("mantra") || rawType.includes("entit")) inputType = "crm_bind";
   else if (rawType.includes("email")) inputType = "email";
   else if (rawType.includes("tel") || rawType.includes("phone")) inputType = "tel";
   else if (rawType.includes("link") || rawType.includes("url")) inputType = "link";
@@ -252,7 +352,7 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
           { id: 3, label: "Option C", value: "option_c" },
         ]
       : [],
-    crmBindConfig: col.crmBindConfig || (inputType === "crm_bind" ? { sourceModule: "teamMember", displayField: "name", selectionMode: col.selectionMode || "single" } : undefined),
+    crmBindConfig: col.crmBindConfig || (inputType === "crm_bind" ? { sourceModule: "service", displayField: "name", selectionMode: col.selectionMode || "single" } : undefined),
     defaultValue: col.defaultValue,
     currency: col.currency,
     selectionMode: isMulti ? "multiple" : (col.selectionMode || "single"),
@@ -373,6 +473,7 @@ export interface ScopingRule {
   industryCategory?: string;  // Scoped to category e.g. "Healthcare", empty or "All" = global
   industries?: string[];      // Multiple industries e.g. ["Cardiologist", "Dentist"], empty = all in category
   locations?: string[];       // Multiple locations e.g. ["California", "New York"], empty = all
+  entities?: string[];        // Multiple entities e.g. ["client", "process", "appointment", "invoice"]
 }
 
 export interface FieldPermissions {
@@ -456,6 +557,10 @@ export interface FieldDefinition {
     min?: number;
     max?: number;
   };
+  formulaConfig?: FormulaConfig;
+  groupBindingConfig?: GroupBindingConfig;
+  primarySubFieldId?: string; // Primary column/sub-field for composite/group fields
+  primaryColumnId?: string;
   phoneConfig?: {
     showCountryCode?: boolean;
     countryCodeDisplay?: "name" | "code";
@@ -517,7 +622,11 @@ export const LEGACY_SECTION_REGISTRY_EVENT = "SECTION_REGISTRY_CHANGED";
 const SYSTEM_FIELD_KEYS = new Set([
   "name", "email", "phone", "location", "country",
   "company", "role", "status", "processes", "stage",
-  "responsible", "lastContact", "companyName", "jobPosition"
+  "responsible", "lastContact", "companyName", "jobPosition",
+  "invoice_number", "issue_date", "due_date", "payment_mode",
+  "total_amount", "amount_paid", "balance_due", "client_credit",
+  "product_name", "quantity", "unit_price", "tax_rate",
+  "line_items_summary", "subtotal", "tax_amount", "discount_applied", "payment_url"
 ]);
 
 const SYSTEM_SECTION_IDS = new Set([
@@ -526,6 +635,13 @@ const SYSTEM_SECTION_IDS = new Set([
   "sec-company-details",
   "sec-company-role",
   "sec-process-pipeline",
+  "sec-service-info",
+  "sec-service-pricing",
+  "sec-service-assignment",
+  "sec-inv-details",
+  "sec-inv-items",
+  "sec-inv-payment-link",
+  "sec-inv-custom",
 ]);
 
 /**
@@ -1340,33 +1456,350 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
     { key: "responsible", label: "Responsible Person", module: "call", inputType: "select", placeholder: "Unassigned", showAlways: true },
   ],
   service: [
-    { key: "service_name", label: "Service Name", module: "service", inputType: "text", placeholder: "Service name", showAlways: true },
-    { key: "price", label: "Price", module: "service", inputType: "number", placeholder: "Price", showAlways: true },
+    { key: "name", label: "Service Name", module: "service", sectionId: "sec-service-info", inputType: "text", placeholder: "e.g. Initial Consultation", required: true, showAlways: true },
+    {
+      key: "category",
+      label: "Category",
+      module: "service",
+      sectionId: "sec-service-info",
+      inputType: "new_list",
+      placeholder: "Select or add category...",
+      newListConfig: {
+        sourceMode: "basic_list",
+        allowSearch: true,
+        allowCustomOptions: true,
+      },
+      options: [
+        { id: 1, label: "Consultation", value: "Consultation" },
+        { id: 2, label: "Dental", value: "Dental" },
+        { id: 3, label: "Diagnostics", value: "Diagnostics" },
+        { id: 4, label: "Treatment", value: "Treatment" },
+        { id: 5, label: "Surgical", value: "Surgical" },
+        { id: 6, label: "General", value: "General" },
+      ],
+      showAlways: true,
+    },
+    {
+      key: "cptCode",
+      label: "CPT / Service Code",
+      module: "service",
+      sectionId: "sec-service-info",
+      inputType: "new_list",
+      placeholder: "Search or enter CPT code...",
+      newListConfig: {
+        sourceMode: "basic_list",
+        allowSearch: true,
+        allowCustomOptions: true,
+      },
+      options: [
+        { id: 1, label: "99204 - Comprehensive Office Visit", value: "99204" },
+        { id: 2, label: "99213 - Established Patient 15 min", value: "99213" },
+        { id: 3, label: "99214 - Detailed Established Visit", value: "99214" },
+        { id: 4, label: "D1110 - Dental Prophylaxis Adult", value: "D1110" },
+        { id: 5, label: "70450 - CT Head / Brain without contrast", value: "70450" },
+        { id: 6, label: "99203 - Office Outpatient Visit 30 min", value: "99203" },
+      ],
+      showAlways: true,
+    },
+    { key: "description", label: "Description", module: "service", sectionId: "sec-service-info", inputType: "textarea", placeholder: "Brief description of the service...", showAlways: true },
+    { key: "duration", label: "Duration (min)", module: "service", sectionId: "sec-service-pricing", inputType: "number", placeholder: "30", defaultValue: 30, showAlways: true },
+    { key: "price", label: "Pricing & Currency", module: "service", sectionId: "sec-service-pricing", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "tax", label: "Tax (%)", module: "service", sectionId: "sec-service-pricing", inputType: "number", placeholder: "5", defaultValue: 0, showAlways: true },
+    { key: "assignedEmployees", label: "Assigned Employees", module: "service", sectionId: "sec-service-assignment", inputType: "user", placeholder: "Select employees...", showAlways: true },
+    { key: "isActive", label: "Active Service", module: "service", sectionId: "sec-service-assignment", inputType: "yes_no", defaultValue: true, showAlways: true },
   ],
   organization: [
-    { key: "org_name", label: "Organization Name", module: "organization", inputType: "text", placeholder: "Org Name", showAlways: true },
-    { key: "industry", label: "Industry", module: "organization", inputType: "text", placeholder: "Industry", showAlways: true },
+    { key: "org_name", label: "Organization Name", module: "organization", inputType: "text", placeholder: "Organization name", showAlways: true },
+    { key: "industryCategory", label: "Industry Category", module: "organization", inputType: "select", placeholder: "Select category", showAlways: true },
+    { key: "industry", label: "Industry", module: "organization", inputType: "select", placeholder: "Select industry", showAlways: true },
+    { key: "location", label: "Location", module: "organization", inputType: "text", placeholder: "City, State or Country", showAlways: true },
+    { key: "email", label: "Email", module: "organization", inputType: "email", placeholder: "contact@company.com", validation: "email", showAlways: true },
+    { key: "phone", label: "Phone", module: "organization", inputType: "tel", placeholder: "+1 (555) 000-0000", validation: "phone", showAlways: true },
+    { key: "timezone", label: "Timezone", module: "organization", inputType: "select", placeholder: "Select timezone", showAlways: true },
+    { key: "preferredTime", label: "Preferred Working Hours", module: "organization", inputType: "text", placeholder: "9:00 AM - 5:00 PM", showAlways: true },
+    { key: "defaultCallingCountry", label: "Default Calling Country", module: "organization", inputType: "text", placeholder: "e.g. United States", showAlways: true },
+    // Address individual fields
+    { key: "addr_street", label: "Street", module: "organization", inputType: "text", placeholder: "Street address", showAlways: true },
+    { key: "addr_city", label: "City", module: "organization", inputType: "text", placeholder: "City", showAlways: true },
+    { key: "addr_state", label: "State / Province", module: "organization", inputType: "text", placeholder: "State or Province", showAlways: true },
+    { key: "addr_zip", label: "ZIP / Postal Code", module: "organization", inputType: "text", placeholder: "ZIP or Postal Code", showAlways: true },
+    { key: "addr_country", label: "Country", module: "organization", inputType: "text", placeholder: "Country", showAlways: true },
+    // Address group field
+    {
+      key: "address", label: "Address", module: "organization", inputType: "group", showAlways: true,
+      subFields: [
+        { id: "addr_street", name: "Street", inputType: "text", placeholder: "Street address" },
+        { id: "addr_city", name: "City", inputType: "text", placeholder: "City" },
+        { id: "addr_state", name: "State / Province", inputType: "text", placeholder: "State or Province" },
+        { id: "addr_zip", name: "ZIP / Postal Code", inputType: "text", placeholder: "ZIP or Postal Code" },
+        { id: "addr_country", name: "Country", inputType: "text", placeholder: "Country" },
+      ],
+    },
+    // Billing contact fields
+    { key: "billingContactName", label: "Billing Contact Name", module: "organization", inputType: "text", placeholder: "Billing contact person", showAlways: true },
+    { key: "billingContactEmail", label: "Billing Contact Email", module: "organization", inputType: "email", placeholder: "billing@company.com", validation: "email", showAlways: true },
+    // Billing address individual fields
+    { key: "bill_street", label: "Billing Street", module: "organization", inputType: "text", placeholder: "Billing street address", showAlways: true },
+    { key: "bill_city", label: "Billing City", module: "organization", inputType: "text", placeholder: "Billing city", showAlways: true },
+    { key: "bill_state", label: "Billing State / Province", module: "organization", inputType: "text", placeholder: "Billing state or province", showAlways: true },
+    { key: "bill_zip", label: "Billing ZIP / Postal Code", module: "organization", inputType: "text", placeholder: "Billing ZIP or postal code", showAlways: true },
+    { key: "bill_country", label: "Billing Country", module: "organization", inputType: "text", placeholder: "Billing country", showAlways: true },
+    // Billing address group field
+    {
+      key: "billing_address", label: "Billing Address", module: "organization", inputType: "group", showAlways: true,
+      subFields: [
+        { id: "bill_street", name: "Billing Street", inputType: "text", placeholder: "Billing street address" },
+        { id: "bill_city", name: "Billing City", inputType: "text", placeholder: "Billing city" },
+        { id: "bill_state", name: "Billing State / Province", inputType: "text", placeholder: "Billing state or province" },
+        { id: "bill_zip", name: "Billing ZIP / Postal Code", inputType: "text", placeholder: "Billing ZIP or postal code" },
+        { id: "bill_country", name: "Billing Country", inputType: "text", placeholder: "Billing country" },
+      ],
+    },
+    { key: "registrationIdType", label: "Registration ID Type", module: "organization", inputType: "text", placeholder: "e.g. EIN / GST / NPI", showAlways: true },
+    { key: "registrationNumber", label: "Registration Number", module: "organization", inputType: "text", placeholder: "Tax / business ID", showAlways: true },
+    { key: "website", label: "Website", module: "organization", inputType: "link", placeholder: "https://example.com", showAlways: true },
+    { key: "language", label: "Language", module: "organization", inputType: "text", placeholder: "English", showAlways: true },
+    {
+      key: "status", label: "Status", module: "organization", inputType: "select", placeholder: "Active / Inactive", showAlways: true,
+      options: [
+        { id: 1, label: "Active", value: "Active" },
+        { id: 2, label: "Inactive", value: "Inactive" },
+      ]
+    },
   ],
   teamMember: [
-    { key: "name", label: "Name", module: "teamMember", inputType: "text", placeholder: "Full name", showAlways: true },
-    { key: "status", label: "Status", module: "teamMember", inputType: "text", placeholder: "Active / Inactive", showAlways: true },
+    { key: "name", label: "Full Name", module: "teamMember", inputType: "text", placeholder: "Full name", showAlways: true },
     { key: "email", label: "Email", module: "teamMember", inputType: "email", placeholder: "email@example.com", validation: "email", showAlways: true },
     { key: "phone", label: "Phone", module: "teamMember", inputType: "tel", placeholder: "+1 (555) 000-0000", validation: "phone", showAlways: true },
+    {
+      key: "gender", label: "Gender", module: "teamMember", inputType: "select", placeholder: "Select gender", showAlways: true,
+      options: [
+        { id: 1, label: "Male", value: "Male" },
+        { id: 2, label: "Female", value: "Female" },
+        { id: 3, label: "Other", value: "Other" },
+      ]
+    },
+    { key: "date_of_birth", label: "Date of Birth", module: "teamMember", inputType: "date", placeholder: "DOB", showAlways: true },
+    {
+      key: "role", label: "Role", module: "teamMember", inputType: "select", placeholder: "Select role", showAlways: true,
+      options: [
+        { id: 1, label: "Admin", value: "Admin" },
+        { id: 2, label: "Manager", value: "Manager" },
+        { id: 3, label: "Member", value: "Member" },
+        { id: 4, label: "Agent", value: "Agent" },
+      ]
+    },
+    {
+      key: "department", label: "Department", module: "teamMember", inputType: "select", placeholder: "Select department", showAlways: true,
+      options: [
+        { id: 1, label: "Administration", value: "Administration" },
+        { id: 2, label: "Engineering", value: "Engineering" },
+        { id: 3, label: "Sales", value: "Sales" },
+        { id: 4, label: "Support", value: "Support" },
+        { id: 5, label: "Clinical", value: "Clinical" },
+      ]
+    },
+    {
+      key: "language", label: "Language", module: "teamMember", inputType: "select", placeholder: "Select language", showAlways: true,
+      options: [
+        { id: 1, label: "English", value: "English" },
+        { id: 2, label: "Spanish", value: "Spanish" },
+        { id: 3, label: "French", value: "French" },
+        { id: 4, label: "German", value: "German" },
+      ]
+    },
+    {
+      key: "country", label: "Country", module: "teamMember", inputType: "select", placeholder: "Select country", showAlways: true,
+      options: [
+        { id: 1, label: "USA", value: "USA" },
+        { id: 2, label: "Canada", value: "Canada" },
+        { id: 3, label: "UK", value: "UK" },
+        { id: 4, label: "Australia", value: "Australia" },
+        { id: 5, label: "India", value: "India" },
+      ]
+    },
+    {
+      key: "timezone", label: "Timezone", module: "teamMember", inputType: "select", placeholder: "Select timezone", showAlways: true,
+      options: [
+        { id: 1, label: "UTC", value: "UTC" },
+        { id: 2, label: "EST (UTC-5)", value: "EST" },
+        { id: 3, label: "CST (UTC-6)", value: "CST" },
+        { id: 4, label: "PST (UTC-8)", value: "PST" },
+        { id: 5, label: "IST (UTC+5:30)", value: "IST" },
+      ]
+    },
+    {
+      key: "status", label: "Status", module: "teamMember", inputType: "select", placeholder: "Active / Inactive", showAlways: true,
+      options: [
+        { id: 1, label: "Active", value: "Active" },
+        { id: 2, label: "Inactive", value: "Inactive" },
+      ]
+    },
     { key: "location", label: "Location", module: "teamMember", inputType: "text", placeholder: "Location", showAlways: true },
     { key: "company", label: "Company", module: "teamMember", inputType: "text", placeholder: "Company name", showAlways: true },
-    { key: "role", label: "Role", module: "teamMember", inputType: "text", placeholder: "Job title or role", showAlways: true },
     { key: "company_size", label: "Company Size", module: "teamMember", inputType: "text", placeholder: "10-50", showAlways: true },
     { key: "process", label: "Process", module: "teamMember", inputType: "text", placeholder: "Process", showAlways: true },
-    { key: "gender", label: "Gender", module: "teamMember", inputType: "text", placeholder: "Gender", showAlways: true },
-    { key: "date_of_birth", label: "Date of Birth", module: "teamMember", inputType: "date", placeholder: "DOB", showAlways: true },
-    { key: "language", label: "Language", module: "teamMember", inputType: "text", placeholder: "Language", showAlways: true },
-    { key: "country", label: "Country", module: "teamMember", inputType: "text", placeholder: "Country", showAlways: true },
-    { key: "timezone", label: "Timezone", module: "teamMember", inputType: "text", placeholder: "Timezone", showAlways: true },
     { key: "assigned_service", label: "Assigned Service", module: "teamMember", inputType: "text", placeholder: "Assigned service", showAlways: true },
     { key: "next_available_slot", label: "Next Available Slot", module: "teamMember", inputType: "text", placeholder: "Next slot", showAlways: true },
   ],
   scribe: [
     { key: "session_notes", label: "Session Clinical Notes", module: "scribe", inputType: "textarea", placeholder: "Clinical dialogue notes", showAlways: true },
+  ],
+  invoice: [
+    {
+      key: "client_name",
+      label: "Client",
+      module: "invoice",
+      sectionId: "sec-inv-details",
+      inputType: "crm_bind",
+      crmBindConfig: {
+        sourceModule: "client",
+        displayField: "name",
+        secondaryDisplayField: "email",
+        selectionMode: "single",
+      },
+      placeholder: "Select client...",
+      required: true,
+      showAlways: true,
+    },
+    { key: "client_email", label: "Client Email", module: "invoice", sectionId: "sec-inv-details", inputType: "email", placeholder: "client@example.com", showAlways: true },
+    { key: "client_phone", label: "Client Phone", module: "invoice", sectionId: "sec-inv-details", inputType: "tel", placeholder: "+1 (555) 000-0000", showAlways: true },
+    { key: "invoice_number", label: "Invoice Number", module: "invoice", sectionId: "sec-inv-details", inputType: "text", placeholder: "INV-2026-001", required: true, showAlways: true },
+    { key: "issue_date", label: "Issue Date", module: "invoice", sectionId: "sec-inv-details", inputType: "date", required: true, showAlways: true },
+    { key: "due_date", label: "Due Date", module: "invoice", sectionId: "sec-inv-details", inputType: "date", required: true, showAlways: true },
+    {
+      key: "payment_mode",
+      label: "Payment Mode",
+      module: "invoice",
+      sectionId: "sec-inv-details",
+      inputType: "new_list",
+      placeholder: "Select payment method...",
+      newListConfig: {
+        sourceMode: "basic_list",
+        allowSearch: true,
+        allowCustomOptions: true,
+      },
+      options: [
+        { id: 1, label: "Bank Transfer", value: "Bank Transfer" },
+        { id: 2, label: "Credit / Debit Card", value: "Card" },
+        { id: 3, label: "Cash", value: "Cash" },
+        { id: 4, label: "UPI", value: "UPI" },
+        { id: 5, label: "Stripe", value: "Stripe" },
+        { id: 6, label: "PayPal", value: "PayPal" },
+      ],
+      showAlways: true,
+    },
+    { key: "total_amount", label: "Total Amount", module: "invoice", sectionId: "sec-inv-details", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "amount_paid", label: "Amount Paid", module: "invoice", sectionId: "sec-inv-details", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "balance_due", label: "Balance Due", module: "invoice", sectionId: "sec-inv-details", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "client_credit", label: "Client Credit Available", module: "invoice", sectionId: "sec-inv-details", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    {
+      key: "product_name",
+      label: "Product Name",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "crm_bind",
+      crmBindConfig: {
+        sourceModule: "service",
+        displayField: "name",
+        selectionMode: "single",
+      },
+      placeholder: "Select product or service...",
+      required: true,
+      showAlways: true,
+    },
+    {
+      key: "quantity",
+      label: "Quantity",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "number",
+      placeholder: "1",
+      defaultValue: 1,
+      required: true,
+      showAlways: true,
+    },
+    {
+      key: "unit_price",
+      label: "Price",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "money",
+      placeholder: "0.00",
+      currency: "USD",
+      defaultValue: 0,
+      required: true,
+      showAlways: true,
+    },
+    {
+      key: "tax_rate",
+      label: "Tax",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "number",
+      placeholder: "5",
+      defaultValue: 5,
+      showAlways: true,
+    },
+    {
+      key: "line_items_summary",
+      label: "Line Items (Products / Services)",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "group",
+      compositeDisplayMode: "table",
+      subFields: [
+        {
+          id: "product_name",
+          name: "Product Name",
+          inputType: "crm_bind",
+          crmBindConfig: {
+            sourceModule: "service",
+            displayField: "name",
+            selectionMode: "single",
+          },
+          required: true,
+        },
+        {
+          id: "quantity",
+          name: "Quantity",
+          inputType: "number",
+          placeholder: "1",
+          defaultValue: 1,
+          required: true,
+        },
+        {
+          id: "unit_price",
+          name: "Price",
+          inputType: "money",
+          currency: "USD",
+          placeholder: "0.00",
+          defaultValue: 0,
+          required: true,
+        },
+        {
+          id: "tax_rate",
+          name: "Tax (%)",
+          inputType: "number",
+          placeholder: "5",
+          defaultValue: 5,
+        },
+      ],
+      defaultValue: [
+        {
+          id: "row_1",
+          product_name: "Initial Comprehensive Consultation",
+          quantity: 1,
+          unit_price: 150,
+          tax_rate: 5,
+        },
+      ],
+      showAlways: true,
+    },
+    { key: "subtotal", label: "Subtotal", module: "invoice", sectionId: "sec-inv-items", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "tax_amount", label: "Tax Amount", module: "invoice", sectionId: "sec-inv-items", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "discount_applied", label: "Discount Applied", module: "invoice", sectionId: "sec-inv-items", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "payment_url", label: "Payment Link URL", module: "invoice", sectionId: "sec-inv-payment-link", inputType: "link", placeholder: "https://pay.example.com/...", showAlways: true },
   ],
 };
 
@@ -1427,7 +1860,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Basic client identity and contact information",
       module: "client",
       source: "system",
-      iconName: "user",
       fieldKeys: ["name", "email", "phone", "location", "country"],
       createdAt: 0,
     },
@@ -1437,7 +1869,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Organization details and job position",
       module: "client",
       source: "system",
-      iconName: "briefcase",
       fieldKeys: ["company", "role"],
       createdAt: 0,
     },
@@ -1447,7 +1878,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Assigned processes and workflow state",
       module: "client",
       source: "system",
-      iconName: "workflow",
       fieldKeys: ["status", "processes"],
       createdAt: 0,
     },
@@ -1457,7 +1887,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "User-defined custom client properties",
       module: "client",
       source: "system",
-      iconName: "file-text",
       fieldKeys: [],
       createdAt: 0,
     },
@@ -1469,7 +1898,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Core workflow metadata and priority",
       module: "process",
       source: "system",
-      iconName: "workflow",
       fieldKeys: ["title", "type", "priority", "responsible"],
       createdAt: 0,
     },
@@ -1479,7 +1907,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Creation dates and deadline tracking",
       module: "process",
       source: "system",
-      iconName: "calendar",
       fieldKeys: ["createdDate", "deadline"],
       createdAt: 0,
     },
@@ -1489,7 +1916,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Custom parameters and step attributes",
       module: "process",
       source: "system",
-      iconName: "layers",
       fieldKeys: [],
       createdAt: 0,
     },
@@ -1501,7 +1927,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Date, time, duration, and assigned provider",
       module: "appointment",
       source: "system",
-      iconName: "calendar",
       fieldKeys: ["appointmentDate", "appointmentTime", "service", "provider"],
       createdAt: 0,
     },
@@ -1511,7 +1936,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Client contact details and notes",
       module: "appointment",
       source: "system",
-      iconName: "user",
       fieldKeys: ["clientName", "email", "phone"],
       createdAt: 0,
     },
@@ -1521,7 +1945,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Additional appointment custom attributes",
       module: "appointment",
       source: "system",
-      iconName: "file-text",
       fieldKeys: [],
       createdAt: 0,
     },
@@ -1533,7 +1956,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Caller number, duration, direction, and agent",
       module: "call",
       source: "system",
-      iconName: "phone",
       fieldKeys: ["callerName", "phoneNumber", "duration", "status"],
       createdAt: 0,
     },
@@ -1543,7 +1965,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Call sentiment, recording, and summary",
       module: "call",
       source: "system",
-      iconName: "sparkles",
       fieldKeys: ["sentiment", "recording", "notes"],
       createdAt: 0,
     },
@@ -1553,7 +1974,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Additional call custom properties",
       module: "call",
       source: "system",
-      iconName: "layers",
       fieldKeys: [],
       createdAt: 0,
     },
@@ -1562,74 +1982,85 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
     {
       id: "sec-service-info",
       title: "Service Details",
-      description: "Service name, category, and description",
+      description: "Service name, category, CPT code, and description",
       module: "service",
       source: "system",
-      iconName: "tag",
-      fieldKeys: ["name", "category", "price", "duration"],
+      fieldKeys: ["name", "category", "cptCode", "description"],
       createdAt: 0,
     },
     {
-      id: "sec-service-custom",
-      title: "Custom Fields",
-      description: "Additional service attributes",
+      id: "sec-service-pricing",
+      title: "Pricing & Duration",
+      description: "Duration, pricing, currency, and taxes",
       module: "service",
       source: "system",
-      iconName: "layers",
-      fieldKeys: [],
+      fieldKeys: ["duration", "price", "tax"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-service-assignment",
+      title: "Staff & Availability",
+      description: "Responsible team members and booking availability",
+      module: "service",
+      source: "system",
+      fieldKeys: ["assignedEmployees", "isActive"],
       createdAt: 0,
     },
   ],
   organization: [
     {
-      id: "sec-org-info",
-      title: "Organization Info",
-      description: "Company name, industry, and address",
+      id: "sec-org-basic",
+      title: "Basic Info",
+      description: "Organization identity, industry category, industry, and main location",
       module: "organization",
       source: "system",
-      iconName: "briefcase",
-      fieldKeys: ["name", "industry", "email", "phone"],
+      fieldKeys: ["org_name", "industryCategory", "industry", "location"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-org-locations",
+      title: "Organization Locations",
+      description: "Physical and virtual branch locations, operational addresses, and scheduling",
+      module: "organization",
+      source: "system",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+    {
+      id: "sec-org-contact-billing",
+      title: "Contact & Billing",
+      description: "Official contact numbers, emails, addresses, and registration details",
+      module: "organization",
+      source: "system",
+      fieldKeys: ["email", "phone", "timezone", "address", "billing_address", "billingContactName", "billingContactEmail", "registrationNumber", "website"],
       createdAt: 0,
     },
     {
       id: "sec-org-custom",
       title: "Custom Fields",
-      description: "Custom organization properties",
+      description: "User-defined custom organization parameters",
       module: "organization",
       source: "system",
-      iconName: "layers",
       fieldKeys: [],
       createdAt: 0,
     },
   ],
   teamMember: [
     {
-      id: "sec-team-info",
-      title: "Member Profile",
-      description: "Full name, email, role, and department",
+      id: "sec-team-basic",
+      title: "Basic Info",
+      description: "Member personal info, contact info, role, department, country, and timezone",
       module: "teamMember",
       source: "system",
-      iconName: "user",
-      fieldKeys: ["fullName", "email", "phone", "role"],
-      createdAt: 0,
-    },
-    {
-      id: "sec-team-avail",
-      title: "Availability & Settings",
-      description: "Work hours, timezone, and calendar",
-      module: "teamMember",
-      source: "system",
-      iconName: "settings",
-      fieldKeys: ["timezone", "status"],
+      fieldKeys: ["name", "email", "phone", "gender", "date_of_birth", "role", "department", "language", "country", "timezone", "status"],
       createdAt: 0,
     },
     {
       id: "sec-team-custom",
       title: "Custom Fields",
-      description: "Additional team custom attributes",
+      description: "User-defined custom team member properties",
       module: "teamMember",
       source: "system",
-      iconName: "layers",
       fieldKeys: [],
       createdAt: 0,
     },
@@ -1641,7 +2072,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Demographics, age, sex, and visit date",
       module: "scribe",
       source: "system",
-      iconName: "user",
       fieldKeys: ["patient_name", "patient_age_sex", "consultation_date", "patient_id"],
       createdAt: 0,
     },
@@ -1651,7 +2081,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Presenting symptoms and symptom duration",
       module: "scribe",
       source: "system",
-      iconName: "file-text",
       fieldKeys: ["symptoms", "complaint_duration"],
       createdAt: 0,
     },
@@ -1661,7 +2090,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Primary diagnosis, ICD-10 code, and examination notes",
       module: "scribe",
       source: "system",
-      iconName: "shield",
       fieldKeys: ["primary_diagnosis", "icd_code", "diagnosis_type", "clinical_findings"],
       createdAt: 0,
     },
@@ -1671,7 +2099,6 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Prescribed drugs, dosage, frequency, and duration table",
       module: "scribe",
       source: "system",
-      iconName: "table",
       fieldKeys: ["med_name", "med_strength", "med_form", "med_dosage", "med_frequency", "med_duration", "med_route"],
       createdAt: 0,
     },
@@ -1681,8 +2108,46 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       description: "Care advice, warnings, prognosis, and return review",
       module: "scribe",
       source: "system",
-      iconName: "workflow",
       fieldKeys: ["patient_instructions", "patient_precautions", "prognosis_status", "expected_course", "complication_risk", "follow_up_review", "follow_up_criteria"],
+      createdAt: 0,
+    },
+  ],
+  invoice: [
+    {
+      id: "sec-inv-details",
+      title: "Client Detail",
+      description: "Client contact coordinates and invoice terms",
+      module: "invoice",
+      source: "system",
+      fieldKeys: [
+        "client_name",
+        "client_email",
+        "client_phone",
+        "invoice_number",
+        "issue_date",
+        "due_date",
+        "payment_mode",
+      ],
+      createdAt: 0,
+    },
+    {
+      id: "sec-inv-items",
+      title: "Product",
+      description: "Itemized services, consultation rates, discounts, and totals",
+      module: "invoice",
+      source: "system",
+      fieldKeys: [
+        "line_items_summary",
+      ],
+      createdAt: 0,
+    },
+    {
+      id: "sec-inv-custom",
+      title: "Custom Fields",
+      description: "Additional user-defined invoice custom properties",
+      module: "invoice",
+      source: "system",
+      fieldKeys: [],
       createdAt: 0,
     },
   ],
@@ -1726,6 +2191,7 @@ function normalizeModuleKey(raw: any): Exclude<FieldModule, "deal"> {
   if (lower === "organization" || lower === "organizations" || lower === "organisation") return "organization";
   if (lower === "teammember" || lower === "team_member" || lower === "team member" || lower === "team members") return "teamMember";
   if (lower === "scribe" || lower === "ai scribe" || lower === "ai_scribe") return "scribe";
+  if (lower === "invoice" || lower === "invoices") return "invoice";
   return "client";
 }
 
@@ -1840,6 +2306,12 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     phoneConfig: f.phoneConfig ?? undefined,
     mediaConfig: f.mediaConfig ?? undefined,
     numberConfig: f.numberConfig ?? undefined,
+    formulaConfig: f.formulaConfig ? {
+      mode: f.formulaConfig.mode,
+      staticValue: f.formulaConfig.staticValue,
+      terms: Array.isArray(f.formulaConfig.terms) ? f.formulaConfig.terms.map((t: any) => ({ ...t })) : [],
+    } : undefined,
+    groupBindingConfig: f.groupBindingConfig ? { ...f.groupBindingConfig } : undefined,
     compositeDisplayMode: f.compositeDisplayMode ?? undefined,
     minEntries: typeof f.minEntries === "number" ? f.minEntries : undefined,
     maxEntries: typeof f.maxEntries === "number" ? f.maxEntries : undefined,
@@ -1883,6 +2355,25 @@ function ensureScribeSeeds(registry: Record<Exclude<FieldModule, "deal">, FieldD
   });
 }
 
+function ensureServiceSeeds(registry: Record<Exclude<FieldModule, "deal">, FieldDefinition[]>) {
+  if (!Array.isArray(registry.service)) {
+    registry.service = [];
+  }
+  const serviceSeeds = SYSTEM_SEEDS.service || [];
+  const existingServiceKeys = new Set(registry.service.map((f) => f.key));
+  serviceSeeds.forEach((seed, idx) => {
+    if (!existingServiceKeys.has(seed.key)) {
+      registry.service.push({
+        ...seed,
+        id: -(idx + 1),
+        source: "system",
+        createdAt: 0,
+      } as FieldDefinition);
+      existingServiceKeys.add(seed.key);
+    }
+  });
+}
+
 function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, FieldDefinition[]> {
   const defaultRegistry: Record<Exclude<FieldModule, "deal">, FieldDefinition[]> = {
     client: [],
@@ -1893,6 +2384,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
     organization: [],
     teamMember: [],
     scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
+    invoice: [],
   };
 
   if (typeof window === "undefined") {
@@ -1913,6 +2405,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
         organization: [],
         teamMember: [],
         scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
+        invoice: [],
       };
 
       if (Array.isArray(parsed)) {
@@ -1937,6 +2430,15 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
       }
 
       ensureScribeSeeds(registry);
+      ensureServiceSeeds(registry);
+
+      // Clean up any duplicate system seeds or removed fields from invoice custom fields
+      if (Array.isArray(registry.invoice)) {
+        const invoiceSysKeys = new Set((SYSTEM_SEEDS.invoice || []).map((s) => s.key));
+        registry.invoice = registry.invoice.filter(
+          (f) => f.source !== "system" && !invoiceSysKeys.has(f.key) && f.key !== "stage" && f.key !== "status"
+        );
+      }
 
       // Save the sanitized canonical object to localStorage
       try {
@@ -1958,6 +2460,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
     organization: [],
     teamMember: [],
     scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
+    invoice: [],
   };
 
   // Check legacy sessionStorage keys
@@ -2012,6 +2515,14 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
   }
 
   ensureScribeSeeds(registry);
+  ensureServiceSeeds(registry);
+
+  if (Array.isArray(registry.invoice)) {
+    const invoiceSysKeys = new Set((SYSTEM_SEEDS.invoice || []).map((s) => s.key));
+    registry.invoice = registry.invoice.filter(
+      (f) => f.source !== "system" && !invoiceSysKeys.has(f.key) && f.key !== "stage" && f.key !== "status"
+    );
+  }
 
   // Write the canonical module-keyed object to localStorage
   try {
@@ -2038,7 +2549,7 @@ function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, 
       ? "custom"
       : "template",
     createdIn: s.createdIn || (s.source === "custom" && s.createdIn === "client" ? "client" : "admin"),
-    iconName: s.iconName || "layers",
+    iconName: undefined,
     fieldKeys: Array.isArray(s.fieldKeys)
       ? s.fieldKeys
       : Array.isArray(s.fieldIds)
@@ -2083,6 +2594,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
     organization: [],
     teamMember: [],
     scribe: [],
+    invoice: [],
   };
 
   if (typeof window === "undefined") {
@@ -2103,6 +2615,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
         organization: [],
         teamMember: [],
         scribe: [],
+        invoice: [],
       };
 
       if (Array.isArray(parsed)) {
@@ -2138,6 +2651,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
     organization: [],
     teamMember: [],
     scribe: [],
+    invoice: [],
   };
 
   const legacyRaw = sessionStorage.getItem("sectionRegistry_v1");
@@ -2261,7 +2775,10 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
 
   const getCustomFields = (module: FieldModule): FieldDefinition[] => {
     const norm = normalizeModule(module);
-    const directFields = customFields[norm] || [];
+    const systemKeys = new Set((SYSTEM_SEEDS[norm] || []).map((s) => s.key));
+    const directFields = (customFields[norm] || []).filter(
+      (f) => f.source !== "system" && !systemKeys.has(f.key)
+    );
     // Also include fields marked as reusable across modules
     const reusableFields: FieldDefinition[] = [];
     (Object.keys(customFields) as (keyof typeof customFields)[]).forEach((mod) => {
@@ -2269,7 +2786,7 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
         (customFields[mod] || []).forEach((f) => {
           if (f.isReusable) {
             const matchesModule = !f.reusableModules || f.reusableModules.length === 0 || f.reusableModules.includes(norm);
-            if (matchesModule && !directFields.some((df) => df.key === f.key) && !reusableFields.some((rf) => rf.key === f.key)) {
+            if (matchesModule && !directFields.some((df) => df.key === f.key) && !reusableFields.some((rf) => rf.key === f.key) && !systemKeys.has(f.key)) {
               reusableFields.push({ ...f, module: norm });
             }
           }
@@ -2280,7 +2797,17 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
   };
 
   const getAllFields = (module: FieldModule): FieldDefinition[] => {
-    return [...getSystemFields(module), ...getCustomFields(module)];
+    const sys = getSystemFields(module);
+    const cust = getCustomFields(module);
+    const seen = new Set<string>();
+    const result: FieldDefinition[] = [];
+    for (const f of [...sys, ...cust]) {
+      if (!seen.has(f.key)) {
+        seen.add(f.key);
+        result.push(f);
+      }
+    }
+    return result;
   };
 
   const addCustomField = (
@@ -2446,7 +2973,10 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
   };
 
   const getAllSections = (module: FieldModule): SectionDefinition[] => {
-    return [...getSystemSections(module), ...getCustomSections(module)];
+    const sys = getSystemSections(module);
+    const sysIds = new Set(sys.map((s) => s.id));
+    const custom = getCustomSections(module).filter((c) => !sysIds.has(c.id));
+    return [...sys, ...custom];
   };
 
   const getFieldsForOrg = (module: FieldModule, org?: OrgScopeFilter | null, processId?: string): FieldDefinition[] => {

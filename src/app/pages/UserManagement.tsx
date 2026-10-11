@@ -7,6 +7,8 @@ import { Tooltip } from "../components/ui/Tooltip";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
+import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 
 type PermissionLevel = "none" | "read" | "write" | "full";
 
@@ -85,6 +87,7 @@ export default function UserManagement() {
   const [newUser, setNewUser] = useState({ name: "", email: "", role: "Agent" });
   const [creditAmount, setCreditAmount] = useState("");
 
+  const [searchQuery, setSearchQuery] = useState("");
   // Plan limits (in a real app, this would come from a context or API)
   const planUserLimit = 3; // Professional plan supports 3 users
 
@@ -240,120 +243,157 @@ export default function UserManagement() {
     toast.success("Credit limit increased successfully");
   };
 
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<any>>(new Set());
+
+  const filteredUsers = users.filter(
+    (u) =>
+      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.role.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const userColumns: TableColumn<User>[] = [
+    {
+      id: "name",
+      header: "User",
+      align: "left",
+      render: (user) => (
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-xs text-foreground">{user.name}</span>
+          <span className="text-[11px] text-muted-foreground">({user.email})</span>
+        </div>
+      ),
+    },
+    {
+      id: "role",
+      header: "Role",
+      align: "center",
+      render: (user) => (
+        <span className="text-xs font-semibold px-2 py-0.5 rounded-none bg-slate-100 text-slate-700">
+          {user.role}
+        </span>
+      ),
+    },
+    {
+      id: "credits",
+      header: "Credits (Used / Total)",
+      align: "center",
+      render: (user) => (
+        <div className="flex items-baseline gap-1 text-xs">
+          <span className="font-semibold text-foreground">{user.credits}</span>
+          <span className="text-muted-foreground">/</span>
+          <span className="font-medium text-muted-foreground">{user.maxCredits}</span>
+        </div>
+      ),
+    },
+    {
+      id: "usage",
+      header: "Usage",
+      align: "center",
+      render: (user) => (
+        <div className="w-28 flex items-center gap-2">
+          <div className="flex-1 h-1.5 bg-border rounded-none overflow-hidden">
+            <div
+              className="h-full bg-primary"
+              style={{ width: `${(user.credits / user.maxCredits) * 100}%` }}
+            />
+          </div>
+          <span className="text-[10px] text-muted-foreground shrink-0">
+            {Math.round((user.credits / user.maxCredits) * 100)}%
+          </span>
+        </div>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      align: "center",
+      render: (user) => (
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={user.status === "Active"}
+              onChange={() => handleToggleStatus(user)}
+            />
+            <div className="w-8 h-4 bg-[#E5E7EB] peer-focus:ring-1 peer-focus:ring-primary rounded-none peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border after:rounded-none after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-primary"></div>
+          </label>
+          <span className={`text-xs font-medium ${
+            user.status === "Active" ? "text-success" : "text-muted-foreground"
+          }`}>
+            {user.status}
+          </span>
+        </div>
+      ),
+    },
+  ];
+
+  const userRowActions: TableRowAction<User>[] = [
+    {
+      label: "Edit User",
+      icon: <Edit className="w-3.5 h-3.5" />,
+      onClick: (user) => {
+        setEditingUser(user);
+        setShowEditUserModal(true);
+      },
+    },
+    {
+      label: "Permissions",
+      icon: <Shield className="w-3.5 h-3.5" />,
+      onClick: (user) => {
+        setEditingPermissionsUser(user);
+        setShowPermissionsModal(true);
+      },
+    },
+    {
+      label: "Manage Credits",
+      icon: <CreditCard className="w-3.5 h-3.5" />,
+      onClick: (user) => {
+        setSelectedUser(user);
+        setShowCreditModal(true);
+      },
+    },
+    {
+      label: "Delete User",
+      icon: <Trash2 className="w-3.5 h-3.5" />,
+      isDanger: true,
+      onClick: (user) => {
+        setUserToDelete(user);
+        setShowDeleteModal(true);
+      },
+    },
+  ];
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-2.5">
       <PageHeader
         title="User Management"
         subtitle="Manage users and their credits"
-      >
-        <Button variant="primary" onClick={() => setShowAddModal(true)}>
-          <Plus className="w-4 h-4" />
-          Add User
-        </Button>
-      </PageHeader>
+      />
 
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-muted border-b border-border">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold">User</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Credits (Used / Total)</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Usage</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Status</th>
-                <th className="px-6 py-4 text-right text-sm font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {users.map((user) => (
-                <tr key={user.id} className="hover:bg-muted transition-colors">
-                  <td className="px-6 py-4">
-                    <div>
-                      <p className="font-medium">{user.name}</p>
-                      <p className="text-sm text-muted-foreground">{user.email}</p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-baseline gap-1">
-                      <span className="font-semibold text-foreground">{user.credits}</span>
-                      <span className="text-muted-foreground">/</span>
-                      <span className="font-medium text-muted-foreground">{user.maxCredits}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="w-full">
-                      <div className="h-2 bg-border rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary"
-                          style={{ width: `${(user.credits / user.maxCredits) * 100}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {Math.round((user.credits / user.maxCredits) * 100)}% used
-                      </p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="sr-only peer"
-                          checked={user.status === "Active"}
-                          onChange={() => handleToggleStatus(user)}
-                        />
-                        <div className="w-11 h-6 bg-[#E5E7EB] peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                      </label>
-                      <span className={`text-sm font-medium ${
-                        user.status === "Active" ? "text-success" : "text-muted-foreground"
-                      }`}>
-                        {user.status}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-3">
-                      <Tooltip text="Manage Permissions">
-                        <button
-                          onClick={() => {
-                            setEditingPermissionsUser(user);
-                            setShowPermissionsModal(true);
-                          }}
-                          className="p-2 hover:bg-primary/10 rounded-lg transition-colors text-[#6B7280] hover:text-primary"
-                        >
-                          <Shield className="w-[18px] h-[18px]" />
-                        </button>
-                      </Tooltip>
-                      <Tooltip text="Manage Credits">
-                        <button
-                          onClick={() => {
-                            setSelectedUser(user);
-                            setShowCreditModal(true);
-                          }}
-                          className="p-2 hover:bg-primary/10 rounded-lg transition-colors text-[#6B7280] hover:text-primary"
-                        >
-                          <CreditCard className="w-[18px] h-[18px]" />
-                        </button>
-                      </Tooltip>
-                      <Tooltip text="Delete User">
-                        <button
-                          onClick={() => {
-                            setUserToDelete(user);
-                            setShowDeleteModal(true);
-                          }}
-                          className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-[#6B7280] hover:text-[#DC2626]"
-                        >
-                          <Trash2 className="w-[18px] h-[18px]" />
-                        </button>
-                      </Tooltip>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <PageTopBar
+        isBottomPanelAttached={true}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search users by name, email, or role..."
+        primaryAction={{
+          label: "Add User",
+          icon: <Plus className="w-4 h-4" />,
+          onClick: () => setShowAddModal(true),
+        }}
+      />
+
+      <TableComponent
+        data={filteredUsers}
+        columns={userColumns}
+        getRowId={(u) => u.id}
+        rowActions={userRowActions}
+        selectedIds={selectedUserIds}
+        onSelectionChange={setSelectedUserIds}
+        defaultRowsPerPage={20}
+        emptyMessage="No users found matching your search."
+      />
 
       <Modal
         isOpen={showAddModal}

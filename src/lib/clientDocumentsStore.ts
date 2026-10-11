@@ -1,6 +1,9 @@
 export interface StoredClientDocument {
   id: string;
   clientId: string;
+  invoiceId?: string;
+  entityId?: string;
+  entityType?: "client" | "process" | "appointment" | "invoice";
   name: string;
   category: string;
   valueBy?: string;
@@ -12,6 +15,8 @@ export interface StoredClientDocument {
   notes?: string;
   templateId?: string;
   generatedContent?: string;
+  fieldValues?: Record<string, string>;
+  rawDocxBase64?: string;
   pdfBase64?: string;
   pdfBlobUrl?: string;
 }

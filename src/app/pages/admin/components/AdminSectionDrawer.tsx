@@ -123,7 +123,7 @@ function defaultSectionForm(module: Exclude<FieldModule, "deal">): SectionFormSt
   return {
     title: "",
     description: "",
-    iconName: "layers",
+    iconName: undefined,
     module,
     selectedModules: [module],
     fieldKeys: [],
@@ -161,7 +161,7 @@ function sectionToForm(s: SectionDefinition): SectionFormState {
   return {
     title: s.title,
     description: s.description ?? "",
-    iconName: s.iconName ?? "layers",
+    iconName: s.iconName,
     module: primaryMod,
     selectedModules,
     fieldKeys: s.fieldKeys ?? [],
@@ -543,7 +543,7 @@ export function AdminSectionDrawer({
     const payload: Omit<SectionDefinition, "id" | "createdAt"> & { source: "system" | "custom" | "template"; createdIn?: "admin" | "client" } = {
       title: form.title.trim(),
       description: form.description.trim(),
-      iconName: form.iconName || "layers",
+      iconName: undefined,
       module: primaryModule,
       source: isEdit && section ? section.source : targetSource,
       createdIn: isEdit && section ? section.createdIn : targetCreatedIn,
@@ -579,7 +579,7 @@ export function AdminSectionDrawer({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
-            <h2 className="text-base font-bold text-[#111827]">{isEdit ? "Edit Section" : "New Custom Section"}</h2>
+            <h2 className="text-base font-bold text-[#111827]">{isEdit ? "Edit Section" : "New Section"}</h2>
             <p className="text-xs text-gray-400 mt-0.5">Sections group fields in record overview profiles</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors cursor-pointer text-gray-500" aria-label="Close">

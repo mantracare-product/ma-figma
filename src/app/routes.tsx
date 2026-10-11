@@ -2,6 +2,7 @@ import { createBrowserRouter } from "react-router";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import MainLayout from "./components/layout/MainLayout";
 import AdminLayout from "./components/layout/AdminLayout";
+import SettingsGuard from "./components/auth/SettingsGuard";
 import Overview from "./pages/Overview";
 import Clients from "./pages/Clients";
 import ClientProfile from "./pages/ClientProfile";
@@ -9,6 +10,7 @@ import CallLogs from "./pages/CallLogs";
 import CallDetails from "./pages/CallDetails";
 import Deals from "./pages/Deals";
 import Process from "./pages/Process";
+import Automation from "./pages/Automation";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import WebForms from "./pages/WebForms";
 import NewFormTemplate from "./pages/NewFormTemplate";
@@ -37,6 +39,8 @@ import AdminCustomFields from "./pages/admin/AdminCustomFields";
 import AdminIndustries from "./pages/admin/AdminIndustries";
 import AdminProcessTemplates from "./pages/admin/AdminProcessTemplates";
 import { AvatarReceptionView } from "../reception/avatar/AvatarReceptionView";
+import AdminAutomations from "./pages/admin/AdminAutomations";
+import AdminDocumentTemplates from "./pages/admin/AdminDocumentTemplates";
 
 export const router = createBrowserRouter([
   {
@@ -111,6 +115,7 @@ export const router = createBrowserRouter([
           { path: "call-logs/:id", Component: CallDetails },
           { path: "deals", Component: Deals },
           { path: "process", Component: Process },
+          { path: "automation", Component: Automation },
           { path: "knowledge-base", Component: KnowledgeBase },
           { path: "web-forms", Component: WebForms },
           { path: "web-forms/new", Component: NewFormTemplate },
@@ -124,8 +129,15 @@ export const router = createBrowserRouter([
           { path: "claims", Component: Claims },
           { path: "reports", Component: Reports },
           { path: "transactions", Component: Transactions },
-          { path: "settings", Component: Settings },
-          { path: "settings/team/:id", Component: ManageTeamMember },
+          {
+            Component: SettingsGuard,
+            children: [
+              { path: "settings", Component: Settings },
+              { path: "settings/:tab", Component: Settings },
+              { path: "settings/billing/:subtab", Component: Settings },
+              { path: "settings/team/:id", Component: ManageTeamMember },
+            ],
+          },
           { path: "services", Component: Services },
           { path: "appointments", Component: Appointments },
           { path: "chats", Component: Chats },
@@ -144,8 +156,14 @@ export const router = createBrowserRouter([
           { path: "industries", Component: AdminIndustries },
           { path: "industry", Component: AdminIndustries },
           { path: "industry-category", Component: AdminIndustries },
+          { path: "workflows", Component: AdminProcessTemplates },
+          { path: "workflow", Component: AdminProcessTemplates },
           { path: "process-templates", Component: AdminProcessTemplates },
           { path: "process-template", Component: AdminProcessTemplates },
+          { path: "automations", Component: AdminAutomations },
+          { path: "automation", Component: AdminAutomations },
+          { path: "document-templates", Component: AdminDocumentTemplates },
+          { path: "document-template", Component: AdminDocumentTemplates },
           { path: "users", Component: UserManagement },
           { path: "organizations", Component: Organizations },
           { path: "forms", Component: WebForms },

@@ -3,14 +3,18 @@ import { createPortal } from "react-dom";
 
 interface TooltipProps {
   children: ReactNode;
-  text: string;
+  text?: string;
+  content?: string;
   placement?: "top" | "right" | "bottom" | "left";
+  position?: "top" | "right" | "bottom" | "left";
 }
 
-export function Tooltip({ children, text, placement = "top" }: TooltipProps) {
+export function Tooltip({ children, text, content, placement = "top", position: propPosition }: TooltipProps) {
+  const tooltipText = text || content || "";
+  const initialPlacement = propPosition || placement;
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
-  const [actualPlacement, setActualPlacement] = useState(placement);
+  const [actualPlacement, setActualPlacement] = useState(initialPlacement);
   const triggerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -25,7 +29,7 @@ export function Tooltip({ children, text, placement = "top" }: TooltipProps) {
 
     let top = 0;
     let left = 0;
-    let finalPlacement = placement;
+    let finalPlacement = initialPlacement;
 
     // Calculate position based on placement
     const positions = {
@@ -162,10 +166,10 @@ export function Tooltip({ children, text, placement = "top" }: TooltipProps) {
               left: `${position.left}px`,
               opacity: position.top === 0 && position.left === 0 ? 0 : 1,
               zIndex: 999999,
-              whiteSpace: text.length > 50 ? "normal" : "nowrap",
+              whiteSpace: tooltipText.length > 50 ? "normal" : "nowrap",
             }}
           >
-            {text}
+            {tooltipText}
             <div
               className={`absolute w-0 h-0 border-[6px] ${arrowStyles[actualPlacement]}`}
             />

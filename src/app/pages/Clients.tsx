@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate, Outlet } from "react-router";
-import { Search, Filter, Plus, Upload, Download, MoreVertical, Eye, Phone, Trash2, Settings as SettingsIcon, FileText, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail, MapPin, Clock, MessageSquare, Edit, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, User, CalendarClock, ArrowRight, List, Play, ChevronDown, GripVertical, X, Building, Briefcase, Users, GitBranch, Globe, Copy, Shield, Info, AlertCircle, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
+import { useNavigate, useLocation, Outlet } from "react-router";
+import { Search, Filter, Plus, Upload, Download, MoreVertical, Eye, Phone, Trash2, Settings as SettingsIcon, FileText, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail, MapPin, Clock, MessageSquare, Edit, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, User, CalendarClock, ArrowRight, List, Play, ChevronDown, ChevronUp, GripVertical, X, Building, Briefcase, Users, GitBranch, Globe, Copy, Shield, Info, AlertCircle, AlertTriangle, CheckCircle2, RefreshCw, FileSpreadsheet, Webhook } from "lucide-react";
 import { useDrag, useDrop } from "react-dnd";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -15,6 +15,7 @@ import {
 } from "../components/ui/dropdown-menu";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
@@ -28,6 +29,7 @@ export type { Client } from "../../lib/clientsStore";
 export { initialClients } from "../../data/canonicalClients";
 import { type Client, useClients, saveStoredClients, addOrUpdateClient, CLIENTS_STORE_EVENT } from "../../lib/clientsStore";
 import { useTeamMembers } from "../../lib/teamStore";
+import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 
 interface DraggableColumnHeaderProps {
   columnKey: string;
@@ -133,16 +135,50 @@ export default function Clients() {
   const [importMethod, setImportMethod] = useState<"csv" | "webhook">("csv");
   const [showWebhookInfo, setShowWebhookInfo] = useState(false);
 
+  const [webhookSearchQuery, setWebhookSearchQuery] = useState("");
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"xlsx" | "csv">("xlsx");
+  const [exportFieldsMode, setExportFieldsMode] = useState<"all" | "selected">("all");
+  const allExportableFields = [
+    "Name",
+    "Email",
+    "Phone",
+    "Status",
+    "Processes",
+    "Stage",
+    "Responsible",
+    "Last Contact",
+    "Created On",
+    "Location",
+    "Company",
+    "Job Position",
+  ];
+  const [exportSelectedFields, setExportSelectedFields] = useState<string[]>([
+    "Name",
+    "Email",
+    "Phone",
+    "Status",
+    "Processes",
+    "Stage",
+    "Responsible",
+    "Last Contact",
+    "Created On",
+    "Location",
+  ]);
+
   interface WebhookConfig {
     id: string;
     title: string;
     webhookLabel: string;
+    selectedProcess?: string;
+    selectedStage?: string;
     selectedFields: string[];
     fieldSearchQuery: string;
     fieldDropdownOpen: boolean;
     apiKey: { id: string; label: string; value: string } | null;
     apiKeyLabelInput: string;
     generated: boolean;
+    requestMethod: "POST" | "GET";
     isExpanded: boolean;
   }
 
@@ -151,12 +187,15 @@ export default function Clients() {
       id: crypto.randomUUID(),
       title: "Webhook 1",
       webhookLabel: "",
-      selectedFields: [],
+      selectedProcess: "",
+      selectedStage: "",
+      selectedFields: ["name", "phone"],
       fieldSearchQuery: "",
       fieldDropdownOpen: false,
-      apiKey: null,
+      apiKey: { id: "default-key", label: "Production Key", value: "wh_a8833bf4_live_sec_9934" },
       apiKeyLabelInput: "",
-      generated: false,
+      generated: true,
+      requestMethod: "GET",
       isExpanded: true,
     },
   ]);
@@ -388,7 +427,7 @@ export default function Clients() {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const totalRecords = 5380; // Mock total for demonstration
 
   // Selection state
@@ -630,19 +669,19 @@ export default function Clients() {
     switch (columnKey) {
       case 'name':
         return (
-          <td key="name" className="px-4 py-2.5 whitespace-nowrap">
+          <td key="name" className="px-3 py-1 whitespace-nowrap">
             {isBulkEditMode && selectedRows.has(client.id) ? (
               <input
                 type="text"
                 value={editedClients[client.id]?.name ?? client.name}
                 onChange={(e) => handleEditClient(client.id, 'name', e.target.value)}
-                className="w-full px-3 py-1.5 bg-input-background border-2 border-primary/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full px-2.5 py-1 bg-input-background border-2 border-primary/50 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary"
                 style={{ fontFamily: 'DM Sans, sans-serif' }}
               />
             ) : (
               <button
-                onClick={() => navigate(`/clients/${client.id}`)}
-                className="font-medium text-sm hover:underline cursor-pointer text-left"
+                onClick={() => { const targetId = client.id && client.id !== "new" ? client.id : `CL-${Date.now()}`; navigate(`/clients/${targetId}`); }}
+                className="font-medium text-xs hover:underline cursor-pointer text-left"
                 style={{
                   fontFamily: 'DM Sans, sans-serif',
                   color: '#4F8EF7',
@@ -656,13 +695,13 @@ export default function Clients() {
         );
       case 'email':
         return (
-          <td key="email" className="px-4 py-2.5 whitespace-nowrap">
+          <td key="email" className="px-3 py-1 whitespace-nowrap">
             {isBulkEditMode && selectedRows.has(client.id) ? (
               <input
                 type="email"
                 value={editedClients[client.id]?.email ?? client.email}
                 onChange={(e) => handleEditClient(client.id, 'email', e.target.value)}
-                className="w-full px-3 py-1.5 bg-input-background border-2 border-primary/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full px-2.5 py-1 bg-input-background border-2 border-primary/50 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary"
                 style={{ fontFamily: 'Outfit, sans-serif' }}
               />
             ) : (
@@ -672,13 +711,13 @@ export default function Clients() {
         );
       case 'phone':
         return (
-          <td key="phone" className="px-4 py-2.5 whitespace-nowrap">
+          <td key="phone" className="px-3 py-1 whitespace-nowrap">
             {isBulkEditMode && selectedRows.has(client.id) ? (
               <input
                 type="tel"
                 value={editedClients[client.id]?.phone ?? client.phone}
                 onChange={(e) => handleEditClient(client.id, 'phone', e.target.value)}
-                className="w-full px-3 py-1.5 bg-input-background border-2 border-primary/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full px-2.5 py-1 bg-input-background border-2 border-primary/50 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary/20 focus:border-primary"
                 style={{ fontFamily: 'Outfit, sans-serif' }}
               />
             ) : (
@@ -688,7 +727,7 @@ export default function Clients() {
         );
       case 'responsible':
         return (
-          <td key="responsible" className="px-4 py-2.5 text-xs whitespace-nowrap" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+          <td key="responsible" className="px-3 py-1 text-xs whitespace-nowrap" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
             {isBulkEditMode && selectedRows.has(client.id) ? (
               <select
                 value={client.responsible}
@@ -697,7 +736,7 @@ export default function Clients() {
                     c.id === client.id ? { ...c, responsible: e.target.value } : c
                   ));
                 }}
-                className="text-xs px-2 py-1 border border-input rounded-lg bg-input-background"
+                className="text-xs px-2 py-0.5 border border-input rounded-lg bg-input-background"
                 style={{ fontFamily: 'Outfit, sans-serif', minWidth: '140px' }}
               >
                 <option value="John Smith">John Smith</option>
@@ -716,7 +755,7 @@ export default function Clients() {
         );
       case 'lastContact':
         return (
-          <td key="lastContact" className="px-4 py-2.5 text-xs whitespace-nowrap" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+          <td key="lastContact" className="px-3 py-1 text-xs whitespace-nowrap" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
             {isBulkEditMode && selectedRows.has(client.id) ? (
               <input
                 type="date"
@@ -726,7 +765,7 @@ export default function Clients() {
                     c.id === client.id ? { ...c, lastContact: e.target.value } : c
                   ));
                 }}
-                className="text-xs px-2 py-1 border border-input rounded-lg bg-input-background"
+                className="text-xs px-2 py-0.5 border border-input rounded-lg bg-input-background"
                 style={{ fontFamily: 'Outfit, sans-serif', minWidth: '130px' }}
               />
             ) : (
@@ -736,7 +775,7 @@ export default function Clients() {
         );
       case 'status':
         return (
-          <td key="status" className="px-4 py-2.5 whitespace-nowrap">
+          <td key="status" className="px-3 py-1 whitespace-nowrap">
             {isBulkEditMode && selectedRows.has(client.id) ? (
               <select
                 value={client.status}
@@ -745,7 +784,7 @@ export default function Clients() {
                     c.id === client.id ? { ...c, status: e.target.value } : c
                   ));
                 }}
-                className="text-xs px-2 py-1 border border-input rounded-lg bg-input-background"
+                className="text-xs px-2 py-0.5 border border-input rounded-lg bg-input-background"
                 style={{ fontFamily: 'Outfit, sans-serif', minWidth: '100px' }}
               >
                 <option value="Active">Active</option>
@@ -753,7 +792,7 @@ export default function Clients() {
               </select>
             ) : (
               <span
-                className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${client.status === "Active"
+                className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${client.status === "Active"
                   ? "bg-success-bg text-success"
                   : client.status === "Pending"
                     ? "bg-warning-bg text-warning"
@@ -816,7 +855,7 @@ export default function Clients() {
     // Automatically create process log entries for each assigned process & stage so it appears in /deals
     newClient.stage.forEach((selectedStage, idx) => {
       const parts = selectedStage.split(":");
-      const pName = parts[0]?.trim() || "Patient Intake";
+      const pName = parts[0]?.trim() || "Client Intake";
       const sName = parts[1]?.trim() || parts[0]?.trim() || "Initial Contact";
 
       addProcessCallLog({
@@ -1397,7 +1436,7 @@ export default function Clients() {
   const totalPages = Math.ceil(totalRecords / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
   const endIndex = Math.min(startIndex + rowsPerPage, totalRecords);
-  const paginatedClients = filteredClients.slice(0, rowsPerPage); // Show only first page of filtered results
+  const paginatedClients = filteredClients.slice(startIndex, endIndex);
 
   // Check if all rows on current page are selected
   const currentPageClientIds = paginatedClients.map((c) => c.id);
@@ -1407,12 +1446,12 @@ export default function Clients() {
   return (
     <>
       <div className="min-h-screen bg-[#fafafa]">
-        <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+        <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
           <PageHeader
             title="Clients"
             subtitle="Manage your medical intelligence and client interactions with precision"
             badge={
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
                 Directory
               </span>
             }
@@ -1420,121 +1459,44 @@ export default function Clients() {
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Clients Works" />
           </PageHeader>
 
-          {/* Action Bar */}
-          <div className="bg-card rounded-t-xl p-4 border border-border shadow-sm" style={{ borderBottomLeftRadius: showFilterPanel ? 0 : '0.75rem', borderBottomRightRadius: showFilterPanel ? 0 : '0.75rem' }}>
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Smart Search Bar with Filter Tags */}
-              <div className="flex-1 min-w-64">
-                <div className="relative search-bar-container">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none z-10" />
-                  <div
-                    className="w-full h-[44px] bg-input-background border border-input rounded-xl flex items-center cursor-text overflow-hidden"
-                    onClick={() => {
-                      setShowSearchModal(true);
-                      setShowColumnToggle(false);
-                    }}
-                  >
-                    {/* Scrollable Tags Area */}
-                    <div className="flex items-center gap-2 pl-10 pr-2 flex-1 overflow-x-auto overflow-y-hidden h-full" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                      <style>{`
-                    .flex.items-center.gap-2.pl-10.pr-2.flex-1.overflow-x-auto::-webkit-scrollbar {
-                      display: none;
-                    }
-                  `}</style>
-                      {/* Filter Tags */}
-                      {activeFilters.map((filter, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium whitespace-nowrap flex-shrink-0"
-                          style={{
-                            backgroundColor: '#E8F0FE',
-                            borderColor: '#4F8EF7',
-                            color: '#4F8EF7',
-                            fontFamily: 'Outfit, sans-serif',
-                            fontSize: '13px'
-                          }}
-                        >
-                          {filter.label}: {filter.values.join(', ')}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const newFilters = activeFilters.filter((_, i) => i !== index);
-                              setActiveFilters(newFilters);
-                              // Reset the specific filter
-                              if (filter.field === 'name') setSelectedName([]);
-                              if (filter.field === 'status') setSelectedStatus([]);
-                              if (filter.field === 'process') setSelectedProcess([]);
-                              if (filter.field === 'responsible') setSelectedResponsible([]);
-                            }}
-                            className="hover:opacity-70"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      ))}
-
-                      {/* Search Input */}
-                      <input
-                        type="text"
-                        placeholder={activeFilters.length > 0 ? "" : "Search clients..."}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        onFocus={() => { setShowSearchModal(true); setShowColumnToggle(false); }}
-                        onKeyDown={(e) => { if (e.key === 'Escape') { setShowSearchModal(false); setFilterDropdowns({}); setShowAddFieldPopup(false); } }}
-                        className="flex-1 bg-transparent border-none outline-none min-w-[120px] h-full"
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      />
-                    </div>
-
-                    {/* Clear All button - Pinned Right */}
-                    {activeFilters.length > 0 && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveFilters([]);
-                          setSelectedName([]);
-                          setNameSearch("");
-                          setSelectedStatus([]);
-                          setSelectedProcess([]);
-                          setSelectedResponsible([]);
-                          setSelectedLastContact("Any date");
-                          setSelectedCreatedOn("Any date");
-                        }}
-                        className="text-xs text-muted-foreground hover:text-foreground px-3 flex-shrink-0"
-                        style={{ fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
-                      >
-                        ✕ Clear all
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Advanced Search Modal */}
-                  {showSearchModal && (
-                    <>
-                      {/* Backdrop to close modal */}
-                      <div
-                        className="fixed inset-0 z-40"
-                        onClick={() => {
-                          setShowSearchModal(false);
-                          setFilterDropdowns({});
-                          setShowAddFieldPopup(false);
-                        }}
-                      />
-
-                      {/* Modal Panel */}
-                      <div
-                        className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-2xl border border-border z-50 overflow-hidden"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Escape') {
-                            setShowSearchModal(false);
-                            setFilterDropdowns({});
-                            setShowAddFieldPopup(false);
-                          }
-                        }}
-                        style={{ minWidth: '720px', width: '720px' }}
-                      >
-                        <div className="flex" style={{ maxHeight: '580px' }}>
+          {/* Action Bar powered by PageTopBar */}
+          <PageTopBar
+            isBottomPanelAttached={showFilterPanel}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchPlaceholder="Search clients..."
+            activeFilters={activeFilters}
+            onRemoveFilter={(index) => {
+              const filter = activeFilters[index];
+              const newFilters = activeFilters.filter((_, i) => i !== index);
+              setActiveFilters(newFilters);
+              if (filter.field === 'name') setSelectedName([]);
+              if (filter.field === 'status') setSelectedStatus([]);
+              if (filter.field === 'process') setSelectedProcess([]);
+              if (filter.field === 'responsible') setSelectedResponsible([]);
+            }}
+            onClearAllFilters={() => {
+              setActiveFilters([]);
+              setSelectedName([]);
+              setNameSearch("");
+              setSelectedStatus([]);
+              setSelectedProcess([]);
+              setSelectedResponsible([]);
+              setSelectedLastContact("Any date");
+              setSelectedCreatedOn("Any date");
+            }}
+            resultsCount={filteredClients.length}
+            showSearchModal={showSearchModal}
+            onSearchModalToggle={setShowSearchModal}
+            onImport={() => setShowImportModal(true)}
+            onExport={() => setShowExportModal(true)}
+            isExporting={isExporting}
+            primaryAction={{
+              label: "Add Client",
+              onClick: () => navigate("/clients/new"),
+            }}
+            customFilterModalContent={
+              <div className="flex" style={{ maxHeight: '580px' }}>
                           {/* Left Sidebar - Preset Filters */}
                           <div className="w-56 border-r border-border p-5 overflow-y-auto bg-muted/20 flex-shrink-0">
                             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-3 mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>Presets</p>
@@ -2083,40 +2045,10 @@ export default function Clients() {
                                 <span>+</span> Save filter
                               </button>
                             </div>
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
                 </div>
-
-                {/* Results count when filters active */}
-                {activeFilters.length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-1 ml-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                    {filteredClients.length} results found
-                  </p>
-                )}
               </div>
-
-              <Tooltip text="Add Client">
-                <Button variant="primary" onClick={() => setShowAddModal(true)}>
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </Tooltip>
-
-              <Tooltip text="Import">
-                <Button variant="outline" onClick={() => setShowImportModal(true)}>
-                  <Upload className="w-4 h-4" />
-                </Button>
-              </Tooltip>
-
-              <Tooltip text="Export">
-                <Button variant="outline" onClick={handleExport} loading={isExporting}>
-                  <Download className="w-4 h-4" />
-                </Button>
-              </Tooltip>
-            </div>
-          </div>
+            }
+          />
 
 
           {/* Filter Panel */}
@@ -2820,414 +2752,118 @@ export default function Clients() {
             </div>
           )}
 
-          {/* Bulk Action Bar */}
-          {selectedRows.size > 0 && (
-            <div className="bg-card rounded-xl border border-border shadow-sm">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                    {selectedRows.size} selected
-                  </span>
+          {/* Clients Table with TableComponent */}
+          {(() => {
+            const clientColumns: TableColumn<Client>[] = [
+              {
+                id: "name",
+                header: "Name",
+                render: (client) => (
                   <button
-                    onClick={handleClearSelection}
-                    className="text-xs hover:text-foreground transition-colors"
-                    style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}
+                    onClick={() => { const targetId = client.id && client.id !== "new" ? client.id : `CL-${Date.now()}`; navigate(`/clients/${targetId}`); }}
+                    className="font-medium text-xs hover:underline cursor-pointer"
+                    style={{
+                      fontFamily: "DM Sans, sans-serif",
+                      color: "#4F8EF7",
+                      fontWeight: 500,
+                    }}
                   >
-                    Clear selection
+                    {client.name}
                   </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  {!isBulkEditMode ? (
-                    <>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => setShowTriggerCallsModal(true)}
-                      >
-                        <Phone className="w-3.5 h-3.5" />
-                        Trigger Calls
-                      </Button>
+                ),
+              },
+              {
+                id: "email",
+                header: "Email",
+                render: (client) => <span className="text-xs text-muted-foreground">{client.email}</span>,
+              },
+              {
+                id: "phone",
+                header: "Phone",
+                render: (client) => <span className="text-xs text-muted-foreground">{client.countryCode} {client.phone}</span>,
+              },
+              {
+                id: "responsible",
+                header: "Responsible",
+                render: (client) => <span className="text-xs text-foreground">{client.responsible || "—"}</span>,
+              },
+              {
+                id: "lastContact",
+                header: "Last Contact",
+                render: (client) => <span className="text-xs text-muted-foreground">{client.lastContact || "—"}</span>,
+              },
+              {
+                id: "status",
+                header: "Status",
+                render: (client) => (
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-none text-[11px] font-medium ${
+                      client.status === "Active"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                        : client.status === "Pending"
+                        ? "bg-amber-50 text-amber-700 border border-amber-200/60"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {client.status}
+                  </span>
+                ),
+              },
+            ];
 
-                      <Tooltip text="Delete selected clients">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (confirm(`Are you sure you want to delete ${selectedRows.size} client(s)?`)) {
-                              setClients(prev => prev.filter(client => !selectedRows.has(client.id)));
-                              setSelectedRows(new Set());
-                              toast.success(`${selectedRows.size} client(s) deleted successfully`);
-                            }
-                          }}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </Tooltip>
+            const clientRowActions: TableRowAction<Client>[] = [
+              {
+                label: "View Profile",
+                icon: <Eye className="w-3.5 h-3.5" />,
+                onClick: (client) => { const targetId = client.id && client.id !== "new" ? client.id : `CL-${Date.now()}`; navigate(`/clients/${targetId}`); },
+              },
+              {
+                label: "Call",
+                icon: <Phone className="w-3.5 h-3.5" />,
+                onClick: (client) => handleOpenScheduleModal(client),
+              },
+              {
+                label: "Delete",
+                icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+                isDanger: true,
+                onClick: (client) => handleDeleteClient(client.id),
+              },
+            ];
 
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleEnterBulkEdit}
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                          Edit
-                        </Button>
-                        <InfoTooltip text="Edit name, email, or phone for every selected client at once." />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCancelBulkEdit}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={handleSaveBulkEdit}
-                      >
-                        Save
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Table */}
-          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
-            <div
-              ref={tableScrollRef}
-              className="overflow-x-auto scrollbar-hide"
-              style={{ scrollBehavior: 'auto' }}
-              onScroll={() => {
-                if (tableScrollRef.current) {
-                  const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
-                  const canScrollRight = scrollWidth > clientWidth && scrollLeft < (scrollWidth - clientWidth - 10);
-                  const canScrollLeft = scrollLeft > 10;
-                  setShowScrollIndicator(canScrollRight);
-                  setShowScrollLeftIndicator(canScrollLeft);
-                }
-              }}
-            >
-              <table className="w-full min-w-[1200px]">
-                <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                  <tr>
-                    {/* Checkbox column */}
-                    <th className="px-4 py-2.5 w-10">
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = someSelected;
-                        }}
-                        onChange={handleSelectAll}
-                        className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                      />
-                    </th>
-                    {/* Settings icon above hamburger menu column */}
-                    <th className="px-2 py-2.5 text-center relative" style={{ width: '32px' }}>
-                      <div className="relative inline-block">
-                        <button
-                          onClick={() => {
-                            setShowColumnToggle(!showColumnToggle);
-                            setShowFilterPanel(false);
-                          }}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
-                          aria-label="Customize Columns"
-                        >
-                          <SettingsIcon className="w-4 h-4 text-[#E5E7EB] hover:text-white transition-colors" />
-                        </button>
-                        {showColumnToggle && (
-                          <div className="absolute left-0 top-full mt-2 w-56 bg-card border border-border rounded-xl shadow-lg p-4 z-50">
-                            <h3 className="font-semibold mb-3" style={{ color: '#1F2937', fontFamily: 'DM Sans, sans-serif' }}>Visible Columns</h3>
-                            <div className="space-y-2">
-                              {Object.keys(visibleColumns).map((col) => (
-                                <label key={col} className="flex items-center gap-2 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns[col as keyof typeof visibleColumns]}
-                                    onChange={(e) =>
-                                      setVisibleColumns({
-                                        ...visibleColumns,
-                                        [col]: e.target.checked,
-                                      })
-                                    }
-                                    className="w-4 h-4"
-                                  />
-                                  <span className="text-sm capitalize" style={{ fontFamily: 'Outfit, sans-serif' }}>{col}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </th>
-                    {columnOrder.map((columnKey, index) => {
-                      const columnLabels: { [key: string]: string } = {
-                        name: 'Name',
-                        email: 'Email',
-                        phone: 'Phone',
-                        responsible: 'Responsible',
-                        lastContact: 'Last Contact',
-                        status: 'Status',
-                      };
-
-                      return visibleColumns[columnKey as keyof typeof visibleColumns] ? (
-                        <DraggableColumnHeader
-                          key={columnKey}
-                          columnKey={columnKey}
-                          index={index}
-                          label={columnLabels[columnKey]}
-                          moveColumn={moveColumn}
-                        />
-                      ) : null;
-                    })}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {paginatedClients.map((client) => (
-                    <tr
-                      key={client.id}
-                      className={`transition-colors ${selectedRows.has(client.id)
-                        ? "bg-[#E8F0FE]"
-                        : "hover:bg-[#F1F5F9]"
-                        }`}
-                    >
-                      {/* Checkbox column */}
-                      <td className="px-4 py-2.5">
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.has(client.id)}
-                          onChange={() => handleSelectRow(client.id)}
-                          className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                        />
-                      </td>
-                      {/* Hamburger menu column */}
-                      <td className="px-2 py-2.5 relative">
-                        <div className="hamburger-menu-container">
-                          <button
-                            onClick={() => setOpenMenuClientId(openMenuClientId === client.id ? null : client.id)}
-                            className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center"
-                            style={{ width: '24px', height: '24px' }}
-                          >
-                            <MoreVertical className="w-4 h-4" style={{ color: '#9CA3AF' }} />
-                          </button>
-
-                          {/* Hamburger menu popup */}
-                          {openMenuClientId === client.id && (
-                            <div
-                              className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-50"
-                              style={{
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                                minWidth: '160px',
-                                padding: '4px'
-                              }}
-                            >
-                              <button
-                                onClick={() => {
-                                  setOpenMenuClientId(null);
-                                  navigate(`/clients/${client.id}`);
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                                style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                              >
-                                <Eye className="w-4 h-4" />
-                                <span>View Profile</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  handleOpenScheduleModal(client);
-                                  setOpenMenuClientId(null);
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                                style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                              >
-                                <Phone className="w-4 h-4" />
-                                <span>Call</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  handleDeleteClient(client.id);
-                                  setOpenMenuClientId(null);
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                                style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                                <span>Delete</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      {columnOrder.map((columnKey) =>
-                        visibleColumns[columnKey as keyof typeof visibleColumns] ? renderCell(columnKey, client) : null
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Scroll Right Indicator */}
-            {/* Scroll Right Button - Semicircle (2 rows height, centered) */}
-            <button
-              className="absolute right-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-              style={{
-                top: '50%',
-                transform: 'translateY(-50%)',
-                height: '112px', // Approximately 2 table rows (56px each)
-                width: '40px',
-                backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                borderTopLeftRadius: '9999px',
-                borderBottomLeftRadius: '9999px',
-                borderTopRightRadius: '0',
-                borderBottomRightRadius: '0',
-                opacity: showScrollIndicator ? 1 : 0.2,
-                pointerEvents: showScrollIndicator ? 'auto' : 'none'
-              }}
-              onMouseEnter={(e) => {
-                if (showScrollIndicator) {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) {
-                    (icon as SVGElement).style.transform = 'scale(1.1)';
+            const clientBulkActions: TableBulkAction[] = [
+              {
+                label: "Trigger Calls",
+                icon: <Phone className="w-3.5 h-3.5" />,
+                onClick: () => setShowTriggerCallsModal(true),
+              },
+              {
+                label: "Delete Selected",
+                icon: <Trash2 className="w-3.5 h-3.5" />,
+                variant: "danger",
+                onClick: () => {
+                  if (confirm(`Are you sure you want to delete ${selectedRows.size} client(s)?`)) {
+                    setClients((prev) => prev.filter((c) => !selectedRows.has(c.id)));
+                    setSelectedRows(new Set());
+                    toast.success("Clients deleted successfully");
                   }
-                  handleScrollRightMouseEnter();
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-                e.currentTarget.style.boxShadow = '';
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) {
-                  (icon as SVGElement).style.transform = 'scale(1)';
-                }
-                handleScrollMouseLeave();
-              }}
-            >
-              <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1F2937', opacity: 1 }} />
-            </button>
+                },
+              },
+            ];
 
-            {/* Scroll Left Button - Semicircle (2 rows height, centered) */}
-            <button
-              className="absolute left-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-              style={{
-                top: '50%',
-                transform: 'translateY(-50%)',
-                height: '112px', // Approximately 2 table rows (56px each)
-                width: '40px',
-                backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                borderTopRightRadius: '9999px',
-                borderBottomRightRadius: '9999px',
-                borderTopLeftRadius: '0',
-                borderBottomLeftRadius: '0',
-                opacity: showScrollLeftIndicator ? 1 : 0.2,
-                pointerEvents: showScrollLeftIndicator ? 'auto' : 'none'
-              }}
-              onMouseEnter={(e) => {
-                if (showScrollLeftIndicator) {
-                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                  const icon = e.currentTarget.querySelector('svg');
-                  if (icon) {
-                    (icon as SVGElement).style.transform = 'scale(1.1)';
-                  }
-                  handleScrollLeftMouseEnter();
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-                e.currentTarget.style.boxShadow = '';
-                const icon = e.currentTarget.querySelector('svg');
-                if (icon) {
-                  (icon as SVGElement).style.transform = 'scale(1)';
-                }
-                handleScrollMouseLeave();
-              }}
-            >
-              <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1F2937', opacity: 1 }} />
-            </button>
-
-            {/* Pagination Controls */}
-            <div className="border-t border-border px-4 py-3">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>Rows per page:</span>
-                    <select
-                      value={rowsPerPage}
-                      onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
-                      className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
-                    >
-                      <option value={15}>15</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                    </select>
-                  </div>
-                  <span className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                    Showing {startIndex + 1}–{endIndex} of {totalRecords.toLocaleString()}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <Tooltip text="First Page">
-                    <button
-                      onClick={() => setCurrentPage(1)}
-                      disabled={currentPage === 1}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronsLeft className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                  <Tooltip text="Previous Page">
-                    <button
-                      onClick={() => setCurrentPage(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                  <span className="text-xs px-2 hidden sm:inline" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <span className="text-xs px-2 sm:hidden" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                    {currentPage}/{totalPages}
-                  </span>
-                  <Tooltip text="Next Page">
-                    <button
-                      onClick={() => setCurrentPage(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                  <Tooltip text="Last Page">
-                    <button
-                      onClick={() => setCurrentPage(totalPages)}
-                      disabled={currentPage === totalPages}
-                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronsRight className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                </div>
-              </div>
-            </div>
-          </div>
+            return (
+              <TableComponent
+                data={filteredClients}
+                columns={clientColumns}
+                getRowId={(c) => c.id}
+                rowActions={clientRowActions}
+                selectedIds={selectedRows}
+                onSelectionChange={setSelectedRows}
+                bulkActions={clientBulkActions}
+                defaultRowsPerPage={20}
+                emptyMessage="No clients found matching your filters."
+              />
+            );
+          })()}
 
           {/* Add Client Modal */}
           <Modal
@@ -3607,109 +3243,96 @@ export default function Clients() {
                   setShowImportModal(false);
                   setSelectedFile(null);
                   setImportMethod("csv");
-                  setWebhookConfigs([
-                    {
-                      id: crypto.randomUUID(),
-                      title: "Webhook 1",
-                      webhookLabel: "",
-                      selectedFields: [],
-                      fieldSearchQuery: "",
-                      fieldDropdownOpen: false,
-                      apiKey: null,
-                      apiKeyLabelInput: "",
-                      generated: false,
-                      isExpanded: true,
-                    }
-                  ]);
                 }}
               />
 
               {/* Drawer Container */}
-              <div className="fixed right-0 top-0 h-full w-[500px] bg-white z-50 shadow-xl flex flex-col animate-slide-in-right">
+              <div className="fixed right-0 top-0 h-full w-[540px] bg-white z-50 shadow-2xl flex flex-col animate-slide-in-right">
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-200">
-                  <div className="flex items-center gap-2">
-                    <Upload className="w-4 h-4 text-gray-700" />
-                    <h2 className="text-base font-bold text-gray-900">Import Clients</h2>
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                      <Upload className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-bold text-gray-900 leading-tight">Import Clients</h2>
+                      <p className="text-xs text-gray-500 mt-0.5">Bulk CSV onboarding or real-time webhook endpoints</p>
+                    </div>
                   </div>
                   <button
                     onClick={() => {
                       setShowImportModal(false);
                       setSelectedFile(null);
                       setImportMethod("csv");
-                      setWebhookConfigs([
-                        {
-                          id: crypto.randomUUID(),
-                          title: "Webhook 1",
-                          webhookLabel: "",
-                          selectedFields: [],
-                          fieldSearchQuery: "",
-                          fieldDropdownOpen: false,
-                          apiKey: null,
-                          apiKeyLabelInput: "",
-                          generated: false,
-                          isExpanded: true,
-                        }
-                      ]);
                     }}
-                    className="w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors"
+                    className="w-7 h-7 rounded-full bg-[#EF4444] hover:bg-[#DC2626] flex items-center justify-center text-white transition-colors shadow-xs"
+                    title="Close"
                   >
-                    <X className="w-4 h-4 text-white" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
 
                 {/* Scrollable Body */}
-                <div className="flex-1 overflow-y-auto p-5 space-y-6">
-                  <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg w-fit">
-                    {(["csv", "webhook"] as const).map((method) => {
-                      const tooltipText = method === "csv"
-                        ? "Import clients by uploading a standard CSV file."
-                        : "Get a URL you can call from an external system to create clients automatically.";
-                      return (
-                        <div key={method} className="flex items-center gap-0.5 px-1">
-                          <button
-                            onClick={() => setImportMethod(method)}
-                            className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${importMethod === method ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
-                              }`}
-                          >
-                            {method === "csv" ? "CSV" : "Webhook"}
-                          </button>
-                          <InfoTooltip text={tooltipText} />
-                        </div>
-                      );
-                    })}
+                <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                  {/* CSV / Webhook Pill Switcher */}
+                  <div className="inline-flex items-center p-1 bg-slate-100 rounded-full">
+                    <button
+                      type="button"
+                      onClick={() => setImportMethod("csv")}
+                      className={`rounded-full px-4 py-1.5 text-xs flex items-center gap-2 transition-all ${
+                        importMethod === "csv"
+                          ? "bg-white text-slate-800 shadow-xs border border-slate-200/60 font-semibold"
+                          : "text-slate-500 hover:text-slate-800 font-medium"
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      CSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImportMethod("webhook")}
+                      className={`rounded-full px-4 py-1.5 text-xs flex items-center gap-2 transition-all ${
+                        importMethod === "webhook"
+                          ? "bg-white text-slate-800 shadow-xs border border-slate-200/60 font-semibold"
+                          : "text-slate-500 hover:text-slate-800 font-medium"
+                      }`}
+                    >
+                      <Webhook className="w-3.5 h-3.5" />
+                      Webhook
+                    </button>
                   </div>
 
+                  {/* CSV Content */}
                   {importMethod === "csv" && (
                     <div className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs text-slate-500 leading-relaxed">
                         Upload a CSV file to import {entityLabel}. Make sure your file follows the correct format.
                       </p>
 
                       {/* Template Download Box */}
-                      <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">Need a template?</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">Download our sample CSV file</p>
-                          </div>
-                          <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
-                            <Download className="w-4 h-4" />
-                          </Button>
+                      <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">Need a template?</p>
+                          <p className="text-xs text-slate-500 mt-0.5">Download our sample CSV file</p>
                         </div>
+                        <Button variant="outline" size="sm" onClick={handleDownloadTemplate} className="gap-1.5 bg-white shadow-xs">
+                          <Download className="w-3.5 h-3.5" />
+                          Template
+                        </Button>
                       </div>
 
                       {/* File Upload - Drag and Drop */}
                       <div>
-                        <label className="block text-sm font-medium mb-2">Upload CSV File</label>
+                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Upload CSV File</label>
                         <div
                           onDragOver={handleDragOver}
                           onDragLeave={handleDragLeave}
                           onDrop={handleDrop}
-                          className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging
-                            ? "border-primary bg-primary/5"
-                            : "border-border bg-input-background"
-                            }`}
+                          className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
+                            isDragging
+                              ? "border-blue-500 bg-blue-50/20"
+                              : "border-slate-200 bg-slate-50/50 hover:bg-slate-50"
+                          }`}
                         >
                           <input
                             type="file"
@@ -3719,27 +3342,30 @@ export default function Clients() {
                             id="file-upload"
                           />
                           <div className="flex flex-col items-center gap-2">
-                            <Upload className="w-8 h-8 text-muted-foreground" />
+                            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                              <Upload className="w-5 h-5" />
+                            </div>
                             <div>
-                              <p className="text-sm font-medium">
-                                <label htmlFor="file-upload" className="text-primary cursor-pointer hover:underline">
+                              <p className="text-sm font-medium text-slate-700">
+                                <label htmlFor="file-upload" className="text-blue-600 font-semibold cursor-pointer hover:underline">
                                   Click to upload
                                 </label>
                                 {" "}or drag and drop
                               </p>
-                              <p className="text-xs text-muted-foreground mt-1">CSV files only</p>
+                              <p className="text-xs text-slate-400 mt-1">CSV files only</p>
                             </div>
                           </div>
                         </div>
                         {selectedFile && (
-                          <div className="mt-3 p-3 bg-muted rounded-xl flex items-center justify-between">
+                          <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-primary" />
-                              <span className="text-sm font-medium">{selectedFile.name}</span>
+                              <FileText className="w-4 h-4 text-blue-600" />
+                              <span className="text-xs font-medium text-slate-800">{selectedFile.name}</span>
                             </div>
                             <button
                               onClick={() => setSelectedFile(null)}
-                              className="text-muted-foreground hover:text-destructive transition-colors"
+                              className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                              title="Remove file"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -3749,353 +3375,444 @@ export default function Clients() {
                     </div>
                   )}
 
+                  {/* Webhook Content */}
+                  {importMethod === "webhook" && (
+                    <div className="space-y-4">
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Use a webhook URL to automatically create single clients whenever an external system sends data to it.
+                      </p>
 
-              {importMethod === "webhook" && (
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Use a webhook URL to automatically create single {entityLabel} whenever an external system sends data to it.
-                  </p>
-
-                  {/* Webhook config cards */}
-                  <div className="space-y-3">
-                    {webhookConfigs.map((config, idx) => {
-                      const mergedClientFields = getMergedClientFields();
-                      const filtered = mergedClientFields.filter(f =>
-                        f.label.toLowerCase().includes(config.fieldSearchQuery.toLowerCase()) ||
-                        f.key.toLowerCase().includes(config.fieldSearchQuery.toLowerCase())
-                      );
-                      const systemFields = filtered.filter(f => f.source === "system");
-                      const customFields = filtered.filter(f => f.source === "custom");
-
-                      const handleSelectAll = () => {
-                        const keysToAdd = filtered.map(f => f.key);
-                        updateConfig(config.id, { selectedFields: Array.from(new Set([...config.selectedFields, ...keysToAdd])) });
-                      };
-                      const handleClearAll = () => {
-                        const keysToRemove = new Set(filtered.map(f => f.key));
-                        updateConfig(config.id, { selectedFields: config.selectedFields.filter(k => !keysToRemove.has(k)) });
-                      };
-
-                      const renderFieldRow = (f: typeof mergedClientFields[0]) => {
-                        const isChecked = config.selectedFields.includes(f.key);
-                        return (
-                          <label
-                            key={f.key}
-                            className="flex items-center justify-between gap-4 px-3 py-2.5 hover:bg-muted/30 cursor-pointer transition-colors"
+                      {/* Search Bar */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search webhooks..."
+                          value={webhookSearchQuery}
+                          onChange={(e) => setWebhookSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                        />
+                        {webhookSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setWebhookSearchQuery("")}
+                            className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
                           >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    updateConfig(config.id, { selectedFields: [...config.selectedFields, f.key] });
-                                  } else {
-                                    updateConfig(config.id, { selectedFields: config.selectedFields.filter(k => k !== f.key) });
-                                  }
-                                }}
-                                className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary flex-shrink-0"
-                              />
-                              <span className="font-medium text-foreground truncate">{f.label}</span>
-                            </div>
-                            <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
-                              {f.key}
-                            </span>
-                          </label>
-                        );
-                      };
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
 
-                      const handleGenerateKey = () => {
-                        const newKey = `sk_live_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
-                        const finalLabel = config.apiKeyLabelInput.trim() || `Key ${idx + 1}`;
-                        updateConfig(config.id, {
-                          apiKey: { id: crypto.randomUUID(), label: finalLabel, value: newKey },
-                          apiKeyLabelInput: "",
-                        });
-                      };
+                      {/* Webhook Cards */}
+                      <div className="space-y-3">
+                        {webhookConfigs
+                          .filter((config) => {
+                            if (!webhookSearchQuery.trim()) return true;
+                            const q = webhookSearchQuery.toLowerCase();
+                            return (
+                              config.title.toLowerCase().includes(q) ||
+                              config.webhookLabel.toLowerCase().includes(q)
+                            );
+                          })
+                          .map((config) => {
+                            const mergedClientFields = getMergedClientFields();
+                            const filtered = mergedClientFields.filter(f =>
+                              f.label.toLowerCase().includes(config.fieldSearchQuery.toLowerCase()) ||
+                              f.key.toLowerCase().includes(config.fieldSearchQuery.toLowerCase())
+                            );
 
-                      const handleRegenerateKey = () => {
-                        const newKey = `sk_live_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
-                        const currentLabel = config.apiKey?.label || `Key ${idx + 1}`;
-                        updateConfig(config.id, {
-                          apiKey: { id: crypto.randomUUID(), label: currentLabel, value: newKey },
-                        });
-                      };
+                            const handleSelectAll = () => {
+                              const keysToAdd = filtered.map(f => f.key);
+                              updateConfig(config.id, { selectedFields: Array.from(new Set([...config.selectedFields, ...keysToAdd])) });
+                            };
+                            const handleClearAll = () => {
+                              const keysToRemove = new Set(filtered.map(f => f.key));
+                              updateConfig(config.id, { selectedFields: config.selectedFields.filter(k => !keysToRemove.has(k)) });
+                            };
 
-                      const webhookUrl = getWebhookManualUrl(config.apiKey?.value ?? "", config.selectedFields);
+                            const availableStages = config.selectedProcess ? getStagesForProcess(config.selectedProcess) : [];
 
-                      return (
-                        <div
-                          key={config.id}
-                          className="border border-border rounded-xl overflow-hidden shadow-sm bg-white"
-                        >
-                          {/* Card Header */}
-                          <div className="flex items-center justify-between px-4 py-2.5 bg-muted/20 border-b border-border">
-                            <span className="font-medium text-sm">
-                              {config.webhookLabel.trim() ? config.webhookLabel : config.title}
-                            </span>
-                            <div className="flex items-center gap-1">
-                              {webhookConfigs.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setWebhookConfigs(prev => prev.filter(c => c.id !== config.id))}
-                                  title="Remove webhook"
-                                  className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => updateConfig(config.id, { isExpanded: !config.isExpanded })}
-                                className="p-1 rounded hover:bg-muted text-muted-foreground transition-colors"
+                            return (
+                              <div
+                                key={config.id}
+                                className="border border-slate-200 rounded-2xl bg-white shadow-xs overflow-hidden"
                               >
-                                <ChevronDown className={`w-4 h-4 transition-transform ${config.isExpanded ? "rotate-180" : ""}`} />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Card Body */}
-                          {config.isExpanded && (
-                            <div className="p-4 space-y-4">
-                              {/* Webhook Label Input */}
-                              <div className="space-y-1.5">
-                                <div className="flex items-center gap-1">
-                                  <label className="text-xs font-semibold text-foreground">Webhook Label</label>
-                                  <InfoTooltip text="A short internal name to identify this webhook." />
-                                </div>
-                                <input
-                                  type="text"
-                                  value={config.webhookLabel}
-                                  onChange={(e) => updateConfig(config.id, { webhookLabel: e.target.value })}
-                                  placeholder="e.g. CRM Sync, Zapier Import"
-                                  className="w-full px-3 py-2 bg-input-background border border-input rounded-lg text-sm"
-                                />
-                              </div>
-
-                              {/* Select Fields */}
-                              <div className="space-y-1.5">
-                                <div className="flex items-center gap-1">
-                                  <label className="text-xs font-semibold text-foreground">Select fields</label>
-                                  <InfoTooltip text="Select the fields that will be sent in the webhook payload." />
-                                </div>
-                                <div className={`relative field-dropdown-${config.id}`}>
-                                  <button
-                                    type="button"
-                                    onClick={() => updateConfig(config.id, { fieldDropdownOpen: !config.fieldDropdownOpen })}
-                                    className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
-                                    style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
-                                  >
-                                    {config.selectedFields.length > 0 ? (
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-semibold flex items-center gap-1">
-                                          {config.selectedFields.length} selected
-                                          <span
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              updateConfig(config.id, { selectedFields: [] });
-                                            }}
-                                            className="hover:bg-primary/20 rounded-full p-0.5 cursor-pointer flex items-center justify-center"
-                                            title="Clear selection"
-                                          >
-                                            <X className="w-2.5 h-2.5" />
-                                          </span>
-                                        </span>
-                                      </div>
-                                    ) : (
-                                      <span className="text-muted-foreground">Select fields...</span>
-                                    )}
-                                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${config.fieldDropdownOpen ? "rotate-180" : ""}`} />
-                                  </button>
-
-                                  {config.fieldDropdownOpen && (
-                                    <div className="absolute top-full left-0 mt-1 w-full bg-white border border-border rounded-lg shadow-lg z-50 flex flex-col overflow-hidden max-h-[280px]">
-                                      {/* Search box */}
-                                      <div className="p-2 border-b border-border bg-muted/10 flex items-center gap-2">
-                                        <Search className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                                        <input
-                                          type="text"
-                                          placeholder="Search fields..."
-                                          value={config.fieldSearchQuery}
-                                          onChange={(e) => updateConfig(config.id, { fieldSearchQuery: e.target.value })}
-                                          className="bg-transparent text-xs w-full focus:outline-none border-none p-0"
-                                        />
-                                        {config.fieldSearchQuery && (
-                                          <button
-                                            type="button"
-                                            onClick={() => updateConfig(config.id, { fieldSearchQuery: "" })}
-                                            className="text-muted-foreground hover:text-foreground"
-                                          >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        )}
-                                      </div>
-
-                                      {/* Select All / Clear All */}
-                                      <div className="px-3 py-1.5 border-b border-border bg-muted/5 flex items-center justify-between text-xs flex-shrink-0">
-                                        <span className="text-muted-foreground text-[11px] font-medium">
-                                          {filtered.length} field{filtered.length !== 1 ? 's' : ''} found
-                                        </span>
-                                        <div className="flex items-center gap-2">
-                                          <button type="button" onClick={handleSelectAll} className="text-primary hover:underline text-[11px] font-semibold">Select all</button>
-                                          <span className="text-muted-foreground/30">|</span>
-                                          <button type="button" onClick={handleClearAll} className="text-primary hover:underline text-[11px] font-semibold">Clear all</button>
-                                        </div>
-                                      </div>
-
-                                      {/* Field list */}
-                                      <div className="overflow-y-auto divide-y divide-border text-xs flex-1">
-                                        {systemFields.length > 0 && (
-                                          <div>
-                                            <div className="divide-y divide-border">{systemFields.map(renderFieldRow)}</div>
-                                          </div>
-                                        )}
-                                        {customFields.length > 0 && (
-                                          <div>
-                                            <div className="divide-y divide-border">{customFields.map(renderFieldRow)}</div>
-                                          </div>
-                                        )}
-                                        {filtered.length === 0 && (
-                                          <div className="p-4 text-center text-muted-foreground">No fields match your search</div>
-                                        )}
-                                      </div>
+                                {/* Accordion Header */}
+                                <div
+                                  onClick={() => updateConfig(config.id, { isExpanded: !config.isExpanded })}
+                                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50/50 transition-colors"
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0">
+                                      <Plus className="w-4 h-4 stroke-[2.5]" />
                                     </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* API Key Section */}
-                              <div className="space-y-1.5">
-                                <div className="flex items-center gap-1">
-                                  <label className="text-xs font-semibold text-foreground">API Key</label>
-                                  <InfoTooltip text="The secret key used to authenticate requests to this webhook URL." />
-                                </div>
-                                {config.apiKey ? (
-                                  <div className="flex flex-col gap-2 p-3 border border-primary/30 bg-primary/5 rounded-lg">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-xs font-bold text-foreground">{config.apiKey.label}</span>
-                                      <div className="flex items-center gap-1">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            navigator.clipboard.writeText(config.apiKey!.value);
-                                            toast.success("API key copied");
-                                          }}
-                                          title="Copy key"
-                                          className="p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
-                                        >
-                                          <Copy className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={handleRegenerateKey}
-                                          title="Regenerate key"
-                                          className="p-1 hover:bg-amber-50 text-muted-foreground hover:text-amber-600 rounded transition-colors"
-                                        >
-                                          <RefreshCw className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
+                                    <div className="min-w-0">
+                                      <h3 className="text-sm font-bold text-slate-800 truncate leading-tight">
+                                        {config.webhookLabel.trim() || config.title || "Add another webhook"}
+                                      </h3>
+                                      <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+                                        CONFIGURE ENDPOINT
+                                      </span>
                                     </div>
-                                    <code className="font-mono text-[10px] text-muted-foreground bg-white border border-border px-2 py-1 rounded select-all break-all">
-                                      {config.apiKey.value}
-                                    </code>
                                   </div>
-                                ) : (
-                                  <div className="flex gap-2">
-                                    <input
-                                      type="text"
-                                      placeholder="e.g. Production, Zapier, Staging"
-                                      value={config.apiKeyLabelInput}
-                                      onChange={(e) => updateConfig(config.id, { apiKeyLabelInput: e.target.value })}
-                                      className="flex-1 h-9 px-2.5 bg-input-background border border-input rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                  <div className="flex items-center gap-2">
+                                    {webhookConfigs.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setWebhookConfigs(prev => prev.filter(c => c.id !== config.id));
+                                        }}
+                                        className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                        title="Delete webhook"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    <ChevronDown
+                                      className={`w-4 h-4 text-slate-400 transition-transform ${
+                                        config.isExpanded ? "rotate-180" : ""
+                                      }`}
                                     />
+                                  </div>
+                                </div>
+
+                                {/* Accordion Body */}
+                                {config.isExpanded && (
+                                  <div className="p-5 pt-1 border-t border-slate-100 space-y-4">
+                                    {/* Webhook Label */}
+                                    <div className="space-y-1.5">
+                                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                                        WEBHOOK LABEL <span className="text-red-500">*</span>
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={config.webhookLabel}
+                                        onChange={(e) => updateConfig(config.id, { webhookLabel: e.target.value })}
+                                        placeholder="e.g. CRM Sync, Zapier Import"
+                                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                                      />
+                                    </div>
+
+                                    {/* Process and Stage Dropdowns */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div className="space-y-1.5">
+                                        <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                                          PROCESS <span className="text-[10px] font-normal text-slate-400 lowercase">(optional)</span>
+                                        </label>
+                                        <select
+                                          value={config.selectedProcess || ""}
+                                          onChange={(e) => updateConfig(config.id, { selectedProcess: e.target.value, selectedStage: "" })}
+                                          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                                        >
+                                          <option value="">Select a process (optional)</option>
+                                          {availableProcesses.map((proc) => (
+                                            <option key={proc} value={proc}>{proc}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+
+                                      <div className="space-y-1.5">
+                                        <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                                          STAGE <span className="text-[10px] font-normal text-slate-400 lowercase">(optional)</span>
+                                        </label>
+                                        <select
+                                          value={config.selectedStage || ""}
+                                          onChange={(e) => updateConfig(config.id, { selectedStage: e.target.value })}
+                                          disabled={!config.selectedProcess}
+                                          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs disabled:bg-slate-50 disabled:text-slate-400"
+                                        >
+                                          {!config.selectedProcess ? (
+                                            <option value="">Select a process first</option>
+                                          ) : (
+                                            <>
+                                              <option value="">Select a stage (optional)</option>
+                                              {availableStages.map((stage) => (
+                                                <option key={stage.id} value={stage.label}>{stage.label}</option>
+                                              ))}
+                                            </>
+                                          )}
+                                        </select>
+                                      </div>
+                                    </div>
+
+                                    {/* Select Accepted Fields Multi-select */}
+                                    <div className="space-y-1.5">
+                                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                                        SELECT ACCEPTED FIELDS <span className="text-red-500">*</span>
+                                      </label>
+                                      <div className={`relative field-dropdown-${config.id}`}>
+                                        <div
+                                          onClick={() => updateConfig(config.id, { fieldDropdownOpen: !config.fieldDropdownOpen })}
+                                          className="min-h-[42px] px-2.5 py-1.5 bg-white border border-blue-400 rounded-xl flex items-center justify-between gap-2 cursor-pointer shadow-2xs"
+                                        >
+                                          <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+                                            {config.selectedFields.length > 0 ? (
+                                              config.selectedFields.map((fKey) => {
+                                                const fieldDef = mergedClientFields.find(f => f.key === fKey);
+                                                const label = fieldDef?.label || fKey;
+                                                return (
+                                                  <span
+                                                    key={fKey}
+                                                    className="bg-blue-50 text-blue-600 border border-blue-200 rounded-lg px-2.5 py-0.5 text-xs font-semibold flex items-center gap-1.5 shadow-2xs"
+                                                  >
+                                                    {label}
+                                                    <button
+                                                      type="button"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        updateConfig(config.id, {
+                                                          selectedFields: config.selectedFields.filter(k => k !== fKey),
+                                                        });
+                                                      }}
+                                                      className="hover:bg-blue-100 rounded p-0.5 text-blue-500 hover:text-blue-700"
+                                                    >
+                                                      <X className="w-3 h-3" />
+                                                    </button>
+                                                  </span>
+                                                );
+                                              })
+                                            ) : (
+                                              <span className="text-slate-400 text-xs">Select fields...</span>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center text-slate-400 shrink-0">
+                                            <ChevronDown className={`w-4 h-4 transition-transform ${config.fieldDropdownOpen ? "rotate-180" : ""}`} />
+                                          </div>
+                                        </div>
+
+                                        {/* Dropdown Menu */}
+                                        {config.fieldDropdownOpen && (
+                                          <div className="absolute top-full left-0 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col max-h-60">
+                                            <div className="p-2 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+                                              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                              <input
+                                                type="text"
+                                                placeholder="Search fields..."
+                                                value={config.fieldSearchQuery}
+                                                onChange={(e) => updateConfig(config.id, { fieldSearchQuery: e.target.value })}
+                                                className="bg-transparent text-xs w-full focus:outline-none"
+                                              />
+                                              {config.fieldSearchQuery && (
+                                                <button type="button" onClick={() => updateConfig(config.id, { fieldSearchQuery: "" })}>
+                                                  <X className="w-3 h-3 text-slate-400" />
+                                                </button>
+                                              )}
+                                            </div>
+                                            <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between text-xs">
+                                              <span className="text-[11px] text-slate-500 font-medium">
+                                                {filtered.length} fields
+                                              </span>
+                                              <div className="flex items-center gap-2">
+                                                <button
+                                                  type="button"
+                                                  onClick={handleSelectAll}
+                                                  className="text-blue-600 hover:underline text-[11px] font-semibold"
+                                                >
+                                                  Select all
+                                                </button>
+                                                <span className="text-slate-300">|</span>
+                                                <button
+                                                  type="button"
+                                                  onClick={handleClearAll}
+                                                  className="text-blue-600 hover:underline text-[11px] font-semibold"
+                                                >
+                                                  Clear all
+                                                </button>
+                                              </div>
+                                            </div>
+                                            <div className="overflow-y-auto divide-y divide-slate-100 flex-1">
+                                              {filtered.map(f => {
+                                                const isChecked = config.selectedFields.includes(f.key);
+                                                return (
+                                                  <label
+                                                    key={f.key}
+                                                    className="flex items-center justify-between px-3 py-2 hover:bg-slate-50 cursor-pointer text-xs"
+                                                  >
+                                                    <div className="flex items-center gap-2">
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={isChecked}
+                                                        onChange={(e) => {
+                                                          if (e.target.checked) {
+                                                            updateConfig(config.id, { selectedFields: [...config.selectedFields, f.key] });
+                                                          } else {
+                                                            updateConfig(config.id, { selectedFields: config.selectedFields.filter(k => k !== f.key) });
+                                                          }
+                                                        }}
+                                                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                                                      />
+                                                      <span className="font-medium text-slate-800">{f.label}</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                      {f.key}
+                                                    </span>
+                                                  </label>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Generate Webhook Button */}
                                     <button
                                       type="button"
-                                      onClick={handleGenerateKey}
-                                      className="h-9 px-3 bg-primary text-white text-xs font-semibold rounded-md hover:bg-primary/90 transition-colors flex items-center gap-1 flex-shrink-0"
+                                      onClick={() => {
+                                        updateConfig(config.id, {
+                                          generated: true,
+                                          apiKey: config.apiKey || {
+                                            id: crypto.randomUUID(),
+                                            label: "Production Key",
+                                            value: `wh_a8833bf4_${Math.random().toString(36).slice(2, 10)}`,
+                                          },
+                                        });
+                                        toast.success("Webhook endpoint generated!");
+                                      }}
+                                      className="w-full py-3 bg-[#5F6B7A] hover:bg-[#4D5866] text-white font-medium text-sm rounded-xl transition-all shadow-xs flex items-center justify-center gap-2"
                                     >
-                                      <Plus className="w-3.5 h-3.5" /> Generate
+                                      Generate Webhook
                                     </button>
+
+                                    {/* Generated Request Box (POST / GET Toggle + Preview + Copy) */}
+                                    {config.generated && (
+                                      <div className="space-y-2 pt-2 animate-fade-in">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-xs font-bold tracking-wider text-slate-700 uppercase">
+                                            SAMPLE {config.requestMethod || "GET"} REQUEST
+                                          </span>
+                                          <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-lg border border-slate-200">
+                                            <button
+                                              type="button"
+                                              onClick={() => updateConfig(config.id, { requestMethod: "POST" })}
+                                              className={`px-3 py-1 text-[11px] rounded-md transition-colors ${
+                                                config.requestMethod === "POST"
+                                                  ? "bg-white text-slate-900 shadow-xs border border-slate-200 font-bold"
+                                                  : "text-slate-500 hover:text-slate-800 font-semibold"
+                                              }`}
+                                            >
+                                              POST
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => updateConfig(config.id, { requestMethod: "GET" })}
+                                              className={`px-3 py-1 text-[11px] rounded-md transition-colors ${
+                                                config.requestMethod === "GET"
+                                                  ? "bg-white text-slate-900 shadow-xs border border-slate-200 font-bold"
+                                                  : "text-slate-500 hover:text-slate-800 font-semibold"
+                                              }`}
+                                            >
+                                              GET
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {/* Code preview & copy */}
+                                        <div className="bg-[#F8FAFC] border border-slate-200 rounded-2xl p-4 flex items-start justify-between gap-3 font-mono text-xs text-slate-700 break-all shadow-2xs">
+                                          <div className="flex-1 whitespace-pre-wrap leading-relaxed select-all">
+                                            {config.requestMethod === "POST" ? (
+                                              JSON.stringify(
+                                                {
+                                                  url: "https://api.mantraassist.com/v1/webhooks/org-webhook/incoming",
+                                                  method: "POST",
+                                                  headers: {
+                                                    "Content-Type": "application/json",
+                                                    "x-api-key": config.apiKey?.value || "wh_a8833bf4_<YOUR_SECRET>",
+                                                  },
+                                                  body: {
+                                                    event: "CLIENT_IMPORT",
+                                                    ...(config.selectedProcess ? { process: config.selectedProcess } : {}),
+                                                    ...(config.selectedStage ? { stage: config.selectedStage } : {}),
+                                                    ...Object.fromEntries(
+                                                      (config.selectedFields.length > 0 ? config.selectedFields : ["name", "phone"]).map(f => [f, "value"])
+                                                    ),
+                                                  },
+                                                },
+                                                null,
+                                                2
+                                              )
+                                            ) : (
+                                              `https://api.mantraassist.com/v1/webhooks/org-webhook/incoming?apiKey=${config.apiKey?.value || "wh_a8833bf4_<YOUR_SECRET>"}&event=CLIENT_IMPORT${config.selectedProcess ? `&process=${encodeURIComponent(config.selectedProcess)}` : ""}${config.selectedStage ? `&stage=${encodeURIComponent(config.selectedStage)}` : ""}${(config.selectedFields.length > 0 ? config.selectedFields : ["name", "phone"]).map(f => `&${f}=value`).join("")}`
+                                            )}
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const textToCopy = config.requestMethod === "POST"
+                                                ? JSON.stringify(
+                                                    {
+                                                      url: "https://api.mantraassist.com/v1/webhooks/org-webhook/incoming",
+                                                      method: "POST",
+                                                      headers: {
+                                                        "Content-Type": "application/json",
+                                                        "x-api-key": config.apiKey?.value || "wh_a8833bf4_<YOUR_SECRET>",
+                                                      },
+                                                      body: {
+                                                        event: "CLIENT_IMPORT",
+                                                        ...(config.selectedProcess ? { process: config.selectedProcess } : {}),
+                                                        ...(config.selectedStage ? { stage: config.selectedStage } : {}),
+                                                        ...Object.fromEntries(
+                                                          (config.selectedFields.length > 0 ? config.selectedFields : ["name", "phone"]).map(f => [f, "value"])
+                                                        ),
+                                                      },
+                                                    },
+                                                    null,
+                                                    2
+                                                  )
+                                                : `https://api.mantraassist.com/v1/webhooks/org-webhook/incoming?apiKey=${config.apiKey?.value || "wh_a8833bf4_<YOUR_SECRET>"}&event=CLIENT_IMPORT${config.selectedProcess ? `&process=${encodeURIComponent(config.selectedProcess)}` : ""}${config.selectedStage ? `&stage=${encodeURIComponent(config.selectedStage)}` : ""}${(config.selectedFields.length > 0 ? config.selectedFields : ["name", "phone"]).map(f => `&${f}=value`).join("")}`;
+                                              navigator.clipboard.writeText(textToCopy);
+                                              toast.success("Copied to clipboard");
+                                            }}
+                                            className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-700 shadow-xs shrink-0 transition-colors"
+                                            title="Copy sample request"
+                                          >
+                                            <Copy className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
+                            );
+                          })}
+                      </div>
 
-                              {/* Generate Webhook Button */}
-                              <div>
-                                <Button
-                                  variant="primary"
-                                  className="w-full"
-                                  onClick={() => updateConfig(config.id, { generated: true })}
-                                >
-                                  Generate Webhook
-                                </Button>
-                              </div>
-
-                              {/* Generated URL */}
-                              {config.generated && (
-                                <div className="space-y-2 pt-1 border-t border-border animate-fade-in">
-                                  <p className="text-sm font-semibold">Webhook URL</p>
-                                  <p className="text-[11px] text-muted-foreground">Send a GET request to this URL to create a {entityLabel} record.</p>
-                                  <div className="relative bg-white border border-border rounded-lg pl-3 pr-10 py-2">
-                                    <code className="text-xs text-foreground break-all font-mono">{webhookUrl}</code>
-                                    <button
-                                      onClick={() => {
-                                        navigator.clipboard.writeText(webhookUrl);
-                                        toast.success("Webhook URL copied");
-                                      }}
-                                      className="absolute top-1.5 right-1.5 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
-                                      title="Copy"
-                                      aria-label="Copy Webhook URL"
-                                    >
-                                      <Copy className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                  {!config.apiKey && (
-                                    <p className="text-[11px] text-amber-600 flex items-center gap-1">
-                                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                                      Generate an API key above to replace the placeholder in the URL.
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Add Webhook Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWebhookConfigs(prev => [
-                        ...prev.map(c => ({ ...c, isExpanded: false })),
-                        {
-                          id: crypto.randomUUID(),
-                          title: `Webhook ${prev.length + 1}`,
-                          webhookLabel: "",
-                          selectedFields: [],
-                          fieldSearchQuery: "",
-                          fieldDropdownOpen: false,
-                          apiKey: null,
-                          apiKeyLabelInput: "",
-                          generated: false,
-                          isExpanded: true,
-                        },
-                      ]);
-                    }}
-                    className="w-full py-2 border border-dashed border-border rounded-xl text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add another webhook
-                  </button>
-                </div>
-              )}
+                      {/* Add Another Webhook Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWebhookConfigs(prev => [
+                            ...prev.map(c => ({ ...c, isExpanded: false })),
+                            {
+                              id: crypto.randomUUID(),
+                              title: `Webhook ${prev.length + 1}`,
+                              webhookLabel: "",
+                              selectedProcess: "",
+                              selectedStage: "",
+                              selectedFields: ["name", "phone"],
+                              fieldSearchQuery: "",
+                              fieldDropdownOpen: false,
+                              apiKey: { id: crypto.randomUUID(), label: `Key ${prev.length + 1}`, value: `wh_a8833bf4_${Math.random().toString(36).slice(2, 10)}` },
+                              apiKeyLabelInput: "",
+                              generated: false,
+                              requestMethod: "GET",
+                              isExpanded: true,
+                            },
+                          ]);
+                        }}
+                        className="w-full py-2.5 border border-dashed border-slate-300 rounded-xl text-xs font-semibold text-slate-600 hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center gap-1.5 bg-slate-50/50"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add another webhook
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                <div className="border-t border-gray-200 px-5 py-4 bg-gray-50 flex items-center justify-end gap-3">
+                {/* Footer */}
+                <div className="border-t border-gray-100 px-6 py-4 bg-slate-50/50 flex items-center justify-end gap-3">
                   {importMethod === "webhook" ? (
                     <Button
                       variant="outline"
@@ -4103,20 +3820,6 @@ export default function Clients() {
                         setShowImportModal(false);
                         setSelectedFile(null);
                         setImportMethod("csv");
-                        setWebhookConfigs([
-                          {
-                            id: crypto.randomUUID(),
-                            title: "Webhook 1",
-                            webhookLabel: "",
-                            selectedFields: [],
-                            fieldSearchQuery: "",
-                            fieldDropdownOpen: false,
-                            apiKey: null,
-                            apiKeyLabelInput: "",
-                            generated: false,
-                            isExpanded: true,
-                          }
-                        ]);
                       }}
                     >
                       Close
@@ -4129,20 +3832,6 @@ export default function Clients() {
                           setShowImportModal(false);
                           setSelectedFile(null);
                           setImportMethod("csv");
-                          setWebhookConfigs([
-                            {
-                              id: crypto.randomUUID(),
-                              title: "Webhook 1",
-                              webhookLabel: "",
-                              selectedFields: [],
-                              fieldSearchQuery: "",
-                              fieldDropdownOpen: false,
-                              apiKey: null,
-                              apiKeyLabelInput: "",
-                              generated: false,
-                              isExpanded: true,
-                            }
-                          ]);
                         }}
                       >
                         Cancel
@@ -4157,6 +3846,222 @@ export default function Clients() {
             </>
           )}
 
+          {/* Export Clients Modal (matching Screenshot 2) */}
+          {showExportModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-fade-in"
+                onClick={() => setShowExportModal(false)}
+              />
+
+              {/* Modal Box */}
+              <div className="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 space-y-6 z-10 animate-scale-up">
+                {/* Header */}
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 leading-tight">Export Clients</h2>
+                    <p className="text-xs text-slate-500 mt-1">Choose your preferred export format:</p>
+                  </div>
+                  <button
+                    onClick={() => setShowExportModal(false)}
+                    className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Format selection cards */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Excel (.xlsx) Card */}
+                  <div
+                    onClick={() => setExportFormat("xlsx")}
+                    className={`p-4 rounded-2xl cursor-pointer transition-all ${
+                      exportFormat === "xlsx"
+                        ? "border-2 border-blue-500 bg-blue-50/20 shadow-xs"
+                        : "border border-slate-200 bg-white hover:border-slate-300 shadow-2xs"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileSpreadsheet className="w-5 h-5 text-blue-600 shrink-0" />
+                      <span className="font-bold text-sm text-slate-900">Excel (.xlsx)</span>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Batch export with live progress, ETA, and pause controls.
+                    </p>
+                  </div>
+
+                  {/* CSV (.csv) Card */}
+                  <div
+                    onClick={() => setExportFormat("csv")}
+                    className={`p-4 rounded-2xl cursor-pointer transition-all ${
+                      exportFormat === "csv"
+                        ? "border-2 border-blue-500 bg-blue-50/20 shadow-xs"
+                        : "border border-slate-200 bg-white hover:border-slate-300 shadow-2xs"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="w-5 h-5 text-slate-600 shrink-0" />
+                      <span className="font-bold text-sm text-slate-900">CSV (.csv)</span>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Download entire dataset in one single file.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Export Fields Selection */}
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Export Data Fields
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="exportFieldsMode"
+                          checked={exportFieldsMode === "all"}
+                          onChange={() => setExportFieldsMode("all")}
+                          className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="font-medium">All Fields</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="exportFieldsMode"
+                          checked={exportFieldsMode === "selected"}
+                          onChange={() => setExportFieldsMode("selected")}
+                          className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="font-medium">Select Specific Fields</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* If specific fields selected */}
+                  {exportFieldsMode === "selected" && (
+                    <div className="p-3 bg-slate-50/70 border border-slate-200 rounded-xl space-y-2 max-h-48 overflow-y-auto animate-fade-in">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 text-xs">
+                        <span className="text-slate-500 font-medium">
+                          {exportSelectedFields.length} of {allExportableFields.length} selected
+                        </span>
+                        <div className="flex items-center gap-2 text-xs">
+                          <button
+                            type="button"
+                            onClick={() => setExportSelectedFields([...allExportableFields])}
+                            className="text-blue-600 hover:underline font-semibold text-[11px]"
+                          >
+                            Select All
+                          </button>
+                          <span className="text-slate-300">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setExportSelectedFields([])}
+                            className="text-blue-600 hover:underline font-semibold text-[11px]"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {allExportableFields.map((field) => {
+                          const isChecked = exportSelectedFields.includes(field);
+                          return (
+                            <label
+                              key={field}
+                              className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-white cursor-pointer transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setExportSelectedFields([...exportSelectedFields, field]);
+                                  } else {
+                                    setExportSelectedFields(exportSelectedFields.filter(f => f !== field));
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-slate-700 font-medium">{field}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowExportModal(false)}
+                    className="rounded-xl px-5 py-2.5 text-xs font-semibold"
+                  >
+                    Cancel
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fieldsToExport = exportFieldsMode === "all" ? allExportableFields : exportSelectedFields;
+                      if (fieldsToExport.length === 0) {
+                        toast.error("Please select at least one field to export");
+                        return;
+                      }
+
+                      // Create CSV or format download
+                      const headers = fieldsToExport.join(",");
+                      const rows = clients.map(c => {
+                        return fieldsToExport.map(field => {
+                          let val = "";
+                          switch (field) {
+                            case "Name": val = c.name; break;
+                            case "Email": val = c.email; break;
+                            case "Phone": val = c.phone; break;
+                            case "Status": val = c.status; break;
+                            case "Processes": val = (c.processes || []).join("; "); break;
+                            case "Stage": val = c.stage; break;
+                            case "Responsible": val = c.responsible; break;
+                            case "Last Contact": val = c.lastContact; break;
+                            case "Created On": val = "2024-04-01"; break;
+                            case "Location": val = c.location || ""; break;
+                            case "Company": val = c.companyName || ""; break;
+                            case "Job Position": val = c.jobPosition || ""; break;
+                            default: val = "";
+                          }
+                          return `"${(val || "").replace(/"/g, '""')}"`;
+                        }).join(",");
+                      });
+
+                      const csvContent = [headers, ...rows].join("\n");
+                      const blob = new Blob([csvContent], {
+                        type: exportFormat === "xlsx"
+                          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                          : "text/csv;charset=utf-8;",
+                      });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement("a");
+                      link.setAttribute("href", url);
+                      link.setAttribute("download", `clients_export_${new Date().toISOString().split("T")[0]}.${exportFormat}`);
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+
+                      toast.success(`Clients exported successfully as ${exportFormat.toUpperCase()}`);
+                      setShowExportModal(false);
+                    }}
+                    className="bg-[#1E293B] hover:bg-[#0F172A] text-white px-6 py-2.5 rounded-xl font-semibold text-xs transition-colors shadow-sm"
+                  >
+                    Start Export
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Schedule Call Drawer */}
           {showScheduleCallModal && (

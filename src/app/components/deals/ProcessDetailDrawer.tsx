@@ -46,6 +46,7 @@ import {
   PhoneOutgoing,
   AlertCircle,
   AlertTriangle,
+  Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
@@ -64,6 +65,8 @@ import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { getStagesForProcess } from "../ui/ProcessStageSelect";
 import DocumentsTab from "../profile/DocumentsTab";
+import { TableComponent } from "../ui/TableComponent";
+import { ChevronStageRibbon, ChevronStage, CHEVRON_PALETTE } from "../common/ChevronStageRibbon";
 import { getStoredClientDocuments } from "../../../lib/clientDocumentsStore";
 import {
   appendActivity,
@@ -71,8 +74,9 @@ import {
   subscribeToActivity,
   formatTimestamp,
 } from "../../../lib/activityEngine";
+import { logStageMove } from "../../../lib/useAutomationStore";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../../lib/processFieldValidation";
-import { updateProcessCallLogFields, getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../../lib/processLogsStore";
+import { updateProcessCallLogFields, updateProcessCallLogStage, getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../../lib/processLogsStore";
 import RequiredFieldsModal from "./RequiredFieldsModal";
 
 export interface ProcessDocument {
@@ -225,6 +229,8 @@ export interface ProcessDetailDrawerProps {
 
   /** Bubbled from parent — opens ScheduleAppointmentDrawer */
   onOpenScheduleAppointment?: () => void;
+  /** Admin workflow detail preview mode — cleans out mock client data, fake activities, and shows disclaimers for respective tab data */
+  isAdminPreview?: boolean;
 }
 
 export default function ProcessDetailDrawer({
@@ -257,6 +263,7 @@ export default function ProcessDetailDrawer({
   historyFilters,
   onHistoryFiltersChange,
   onOpenScheduleAppointment,
+  isAdminPreview = false,
 }: ProcessDetailDrawerProps) {
   const navigate = useNavigate();
   const [draftText, setDraftText] = useState("");
@@ -275,13 +282,11 @@ export default function ProcessDetailDrawer({
     {
       id: "sec-client-details",
       title: "Client Details",
-      iconName: "user",
       fieldKeys: ["client_name", "phone", "email", "source"],
     },
     {
       id: "sec-process-info",
       title: "Process Information",
-      iconName: "layers",
       fieldKeys: ["responsible", "created_at"],
     },
   ];
@@ -533,6 +538,28 @@ export default function ProcessDetailDrawer({
   };
 
   const processFieldValues = React.useMemo(() => {
+    if (isAdminPreview) {
+      const vals: Record<string, any> = {
+        ...(log as any),
+        client_name: "Client Data",
+        phone: "Client Data",
+        email: "Client Data",
+        source: "Client Data",
+        responsible: client?.responsible || (log as any)?.responsible || "Responsible Person",
+        created_at: "Client Data",
+      };
+      if (fields && Array.isArray(fields)) {
+        fields.forEach((f) => {
+          if (f.key === "responsible") {
+            vals[f.key] = client?.responsible || "Responsible Person";
+          } else {
+            vals[f.key] = "Client Data";
+          }
+        });
+      }
+      return vals;
+    }
+
     const vals: Record<string, any> = {
       ...(log as any),
       client_name: clientName,
@@ -571,7 +598,7 @@ export default function ProcessDetailDrawer({
       });
     }
     return vals;
-  }, [client, log, clientName, fields, editedValues, localEditedValues]);
+  }, [isAdminPreview, client, log, clientName, fields, editedValues, localEditedValues]);
 
   // Compute active stages
   const [storedProcesses, setStoredProcesses] = useState<Process[]>(getStoredProcesses);
@@ -611,11 +638,80 @@ export default function ProcessDetailDrawer({
     return log?.currentStage ? [log.currentStage] : dealStageLabels;
   }, [log?.process, log?.currentStage, matchedProc]);
 
+  const drawerStages: ChevronStage[] = useMemo(() => {
+    if (matchedProc?.stages && matchedProc.stages.length > 0) {
+      return matchedProc.stages.map((s, idx) => ({
+        id: s.id,
+        name: s.name,
+        color: s.color || CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
+        isFinalStage: Boolean(s.isFinalStage || s.isFinal),
+        isFinal: Boolean(s.isFinalStage || s.isFinal),
+        systemCategory: s.systemCategory,
+      }));
+    }
+    return activeStageList.map((label, idx) => ({
+      id: `stage-${idx}`,
+      name: label,
+      color: CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
+      isFinalStage: idx === activeStageList.length - 1,
+    }));
+  }, [matchedProc, activeStageList]);
+
   const matchedIdx = log?.currentStage ? activeStageList.findIndex(
     (s) => s.toLowerCase() === log.currentStage.toLowerCase()
   ) : -1;
   const effectiveStageIdx = matchedIdx >= 0 ? matchedIdx + 1 : stageIdx;
   const currentStageName = log?.currentStage || activeStageList[effectiveStageIdx - 1] || "";
+
+  const currentStageObj = useMemo(() => {
+    if (!matchedProc || !matchedProc.stages) return null;
+    return (
+      matchedProc.stages.find(
+        (s) => s.name.toLowerCase() === currentStageName.toLowerCase() || s.id === currentStageName
+      ) || matchedProc.stages[effectiveStageIdx - 1] || null
+    );
+  }, [matchedProc, currentStageName, effectiveStageIdx]);
+
+  const isCurrentStageFinal = Boolean(
+    currentStageObj?.isFinalStage ||
+    currentStageObj?.isFinal ||
+    (matchedProc && matchedProc.stages && effectiveStageIdx === matchedProc.stages.length)
+  );
+
+  const currentStageTransitions = useMemo(() => {
+    if (!currentStageObj) return [];
+    return currentStageObj.nextProcessTransitions || [];
+  }, [currentStageObj]);
+
+  const allProcessTransitions = useMemo(() => {
+    if (!matchedProc || !matchedProc.stages) return [];
+    return matchedProc.stages.flatMap((s) =>
+      (s.nextProcessTransitions || []).map((t) => ({
+        ...t,
+        sourceStageName: s.name,
+      }))
+    );
+  }, [matchedProc]);
+
+  const handleExecuteHandoff = (targetProcessName: string, targetStageName: string) => {
+    if (!log || !clientId) return;
+    updateProcessCallLogStage(clientId, targetProcessName, targetStageName);
+
+    appendActivity({
+      clientId,
+      processId: targetProcessName,
+      processName: targetProcessName,
+      type: "process_entry",
+      createdBy: "system",
+      details: {
+        primary: `Transferred across partition to ${targetProcessName}`,
+        secondary: `Stage: ${targetStageName} · Handed off from ${log.process} (${currentStageName})`,
+      },
+    } as any);
+
+    toast.success(`Contact transferred to "${targetProcessName}: ${targetStageName}" ✓`);
+    onClose();
+  };
 
   const allRegistrySections = useMemo(() => {
     return getSectionsForOrg("process", activeOrganization, currentProcessId);
@@ -653,6 +749,51 @@ export default function ProcessDetailDrawer({
     missingFields: [],
   });
 
+  const runStageAutomation = (targetStageName: string) => {
+    if (!log) return;
+    const procObj = storedProcesses.find(
+      (p) => p.name.trim().toLowerCase() === (log.process || "").trim().toLowerCase() || p.id === log.process
+    );
+    const fromStageObj = procObj?.stages?.find(
+      (s) => s.name.toLowerCase() === (currentStageName || "").toLowerCase() || s.id === currentStageName
+    );
+    const toStageObj = procObj?.stages?.find(
+      (s) => s.name.toLowerCase() === targetStageName.toLowerCase() || s.id === targetStageName
+    );
+
+    const orgIdStr = typeof activeOrganization === "string" ? activeOrganization : (activeOrganization as any)?.id || "default";
+
+    logStageMove({
+      orgId: orgIdStr,
+      recordType: (procObj?.entityType as any) || "client",
+      recordId: clientId || log.id,
+      fromStageId: fromStageObj?.id,
+      fromStageName: fromStageObj?.name || currentStageName,
+      toStageId: toStageObj?.id || targetStageName,
+      toStageName: toStageObj?.name || targetStageName,
+      processId: procObj?.id || log.process,
+      processName: procObj?.name || log.process,
+      cause: {
+        type: "manual",
+        ruleName: `Stage changed to ${targetStageName} in Process View`,
+      },
+    });
+
+    appendActivity({
+      clientId: clientId || log.id,
+      processId: procObj?.id || log.process,
+      processName: procObj?.name || log.process,
+      type: "stage_change",
+      fromStage: currentStageName || "Initial",
+      toStage: targetStageName,
+      createdBy: "user",
+      details: {
+        primary: `Stage moved to ${targetStageName}`,
+        secondary: `From ${currentStageName || "Initial"} → ${targetStageName}`,
+      },
+    } as any);
+  };
+
   const handleStageClick = (newStageIdx: number) => {
     const targetStageName = activeStageList[newStageIdx - 1] || "";
     const missingForTarget = getMissingRequiredProcessFields({
@@ -673,6 +814,10 @@ export default function ProcessDetailDrawer({
       return;
     }
 
+    if (clientId && log?.process) {
+      updateProcessCallLogStage(clientId, log.process, targetStageName);
+    }
+    runStageAutomation(targetStageName);
     onStageChange(newStageIdx);
   };
 
@@ -902,19 +1047,20 @@ export default function ProcessDetailDrawer({
             <div className="flex items-center justify-between bg-slate-50/70 border border-slate-200/80 rounded-xl px-4 py-2.5">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-xs shadow-xs">
-                  {clientName.charAt(0).toUpperCase()}
+                  {isAdminPreview ? <User className="w-4 h-4 text-white" /> : clientName.charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <span
                       onClick={() => {
+                        if (isAdminPreview) return;
                         onClose();
                         navigate(`/clients/${clientId}`);
                       }}
-                      className="text-base font-bold text-slate-900 hover:text-blue-600 cursor-pointer transition-colors"
+                      className={`text-base font-bold text-slate-900 transition-colors ${isAdminPreview ? "cursor-default" : "hover:text-blue-600 cursor-pointer"}`}
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      {clientName}
+                      {isAdminPreview ? "Client Data" : clientName}
                     </span>
                     <span className="text-slate-400 font-normal">—</span>
                     <span className="text-sm font-semibold text-slate-700">{log.currentStage}</span>
@@ -923,46 +1069,33 @@ export default function ProcessDetailDrawer({
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    onClose();
-                    navigate(`/clients/${clientId}`);
-                  }}
-                  className="px-2.5 py-1 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex items-center gap-1 transition-colors"
-                >
-                  <User className="w-3 h-3 text-slate-400" /> View Profile
-                </button>
+                {isAdminPreview ? (
+                  <span className="px-2.5 py-1 text-xs font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded-lg">
+                    Client Data Preview
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      navigate(`/clients/${clientId}`);
+                    }}
+                    className="px-2.5 py-1 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex items-center gap-1 transition-colors"
+                  >
+                    <User className="w-3 h-3 text-slate-400" /> View Profile
+                  </button>
+                )}
               </div>
             </div>
           </div>
 
-          {/* 3. Stage Pipeline - Stepper Ribbon */}
+          {/* 3. Stage Pipeline - Chevron Stage Ribbon (identical to Process Tab) */}
           <div className="flex-shrink-0 px-7 py-2.5 bg-white border-b border-slate-200">
-            <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-thin">
-              {activeStageList.map((label, i) => {
-                const idx = i + 1;
-                const isCompleted = idx < effectiveStageIdx;
-                const isActive = idx === effectiveStageIdx;
-
-                return (
-                  <button
-                    key={label}
-                    onClick={() => handleStageClick(idx)}
-                    className={`flex-1 min-w-[130px] max-w-[200px] h-9 px-3 flex items-center justify-center text-center gap-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer shadow-2xs ${isActive
-                        ? "bg-blue-600 text-white shadow-blue-500/20"
-                        : isCompleted
-                          ? "bg-slate-900 text-slate-100 hover:bg-slate-800"
-                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300"
-                      }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                    title={`Stage ${idx}: ${label}`}
-                  >
-                    {isCompleted && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
-                    <span className="truncate">{label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <ChevronStageRibbon
+              stages={drawerStages}
+              activeStageName={currentStageName}
+              onStageClick={(_stg, origIdx) => handleStageClick(origIdx + 1)}
+              showAddButton={true}
+            />
           </div>
 
           {/* 4. Tabs Bar (Overview, History, Documents) */}
@@ -1036,24 +1169,38 @@ export default function ProcessDetailDrawer({
                     />
                   </div>
 
-                  {/* RIGHT COLUMN: Full-Featured Activity Tab */}
+                  {/* RIGHT COLUMN: Activity Tab or Admin Disclaimer */}
                   <div className="lg:col-span-7">
-                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-                      <ActivityTab
-                        activity={activity}
-                        onOpenActivity={onOpenActivity}
-                        onOpenCallDetail={(callId, entry) => {
-                          if (onOpenActivity && entry) onOpenActivity(entry);
-                        }}
-                        clientId={clientId}
-                        clientName={clientName}
-                        clientEmail={client?.email}
-                        clientPhone={client?.phone}
-                        onCloseParentDrawer={onClose}
-                        emptyMessage="No activity yet for this process"
-                        onOpenScheduleAppointment={onOpenScheduleAppointment}
-                      />
-                    </div>
+                    {isAdminPreview ? (
+                      <div className="bg-white rounded-xl border border-dashed border-slate-300 p-10 text-center shadow-xs">
+                        <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3 shadow-2xs">
+                          <Activity className="w-6 h-6" />
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Client Activity & Timeline
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+                          Respective activity and timeline data of the client will be shown here.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+                        <ActivityTab
+                          activity={activity}
+                          onOpenActivity={onOpenActivity}
+                          onOpenCallDetail={(callId, entry) => {
+                            if (onOpenActivity && entry) onOpenActivity(entry);
+                          }}
+                          clientId={clientId}
+                          clientName={clientName}
+                          clientEmail={client?.email}
+                          clientPhone={client?.phone}
+                          onCloseParentDrawer={onClose}
+                          emptyMessage="No activity yet for this process"
+                          onOpenScheduleAppointment={onOpenScheduleAppointment}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1099,86 +1246,117 @@ export default function ProcessDetailDrawer({
                 TAB 3: HISTORY
                ───────────────────────────────────────────────────────────── */}
             {activeTab === "history" && (
-              <div className="p-6 space-y-4">
-                {/* Search and Filters Toolbar */}
-                <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-xs flex items-center gap-3">
-                  <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Search audit trail & history logs..."
-                      className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-blue-500"
+              <div className="p-6">
+                {isAdminPreview ? (
+                  <div className="bg-white rounded-xl border border-dashed border-slate-300 p-10 text-center shadow-xs">
+                    <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center mx-auto mb-3 shadow-2xs">
+                      <Clock className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      History & Audit Log
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+                      Respective history and audit trail data of the client will be shown here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Search and Filters Toolbar */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-xs flex items-center gap-3">
+                      <div className="flex-1 relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search audit trail & history logs..."
+                          className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-blue-500"
+                        />
+                      </div>
+
+                      <button
+                        onClick={() =>
+                          onHistoryFiltersChange({ showPopup: !historyFilters.showPopup })
+                        }
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${historyFilters.filtersActive
+                            ? "bg-blue-50 border-blue-200 text-blue-700"
+                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                          }`}
+                      >
+                        <Filter className="w-3.5 h-3.5" />
+                        <span>Filter</span>
+                        {historyFilters.filtersActive && (
+                          <span className="w-2 h-2 rounded-full bg-blue-600" />
+                        )}
+                      </button>
+                    </div>
+
+                    {/* History Table */}
+                    <TableComponent
+                      columns={[
+                        {
+                          id: "date",
+                          key: "date",
+                          header: "Date & Time",
+                          accessorKey: "date",
+                          render: (h) => (
+                            <span className="font-medium text-slate-500 whitespace-nowrap text-xs">
+                              {h.date}
+                            </span>
+                          ),
+                        },
+                        {
+                          id: "createdBy",
+                          key: "createdBy",
+                          header: "User / Actor",
+                          accessorKey: "createdBy",
+                          render: (h) => (
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px]">
+                                {h.createdBy.charAt(0)}
+                              </div>
+                              <span className="font-semibold text-slate-800 text-xs">{h.createdBy}</span>
+                            </div>
+                          ),
+                        },
+                        {
+                          id: "eventType",
+                          key: "eventType",
+                          header: "Event Type",
+                          accessorKey: "eventType",
+                          render: (h) => (
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                h.eventType === "Stage changed"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : h.eventType === "Activity created"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {h.eventType}
+                            </span>
+                          ),
+                        },
+                        {
+                          id: "description",
+                          key: "description",
+                          header: "Description",
+                          accessorKey: "description",
+                          render: (h) => (
+                            <span className="font-medium text-slate-800 text-xs">{h.description}</span>
+                          ),
+                        },
+                      ]}
+                      data={filteredHistory}
+                      getRowId={(h, idx) => `${h.date}-${idx}`}
+                      emptyMessage="No history records found"
+                      pagination={true}
+                      defaultRowsPerPage={10}
+                      enableSelection={false}
+                      enableColumnCustomization={true}
+                      tableId="deal-process-history"
                     />
                   </div>
-
-                  <button
-                    onClick={() =>
-                      onHistoryFiltersChange({ showPopup: !historyFilters.showPopup })
-                    }
-                    className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${historyFilters.filtersActive
-                        ? "bg-blue-50 border-blue-200 text-blue-700"
-                        : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                      }`}
-                  >
-                    <Filter className="w-3.5 h-3.5" />
-                    <span>Filter</span>
-                    {historyFilters.filtersActive && (
-                      <span className="w-2 h-2 rounded-full bg-blue-600" />
-                    )}
-                  </button>
-                </div>
-
-                {/* History Table */}
-                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-slate-900 text-white text-[11px] font-semibold uppercase tracking-wider">
-                        <th className="px-4 py-3">Date & Time</th>
-                        <th className="px-4 py-3">User / Actor</th>
-                        <th className="px-4 py-3">Event Type</th>
-                        <th className="px-4 py-3">Description</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                      {filteredHistory.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="text-center py-10 text-slate-400 italic">
-                            No history records found
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredHistory.map((h, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="px-4 py-3 font-medium text-slate-500 whitespace-nowrap">
-                              {h.date}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px]">
-                                  {h.createdBy.charAt(0)}
-                                </div>
-                                <span className="font-semibold text-slate-800">{h.createdBy}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${h.eventType === "Stage changed"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : h.eventType === "Activity created"
-                                      ? "bg-emerald-100 text-emerald-700"
-                                      : "bg-slate-100 text-slate-600"
-                                  }`}
-                              >
-                                {h.eventType}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 font-medium text-slate-800">{h.description}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                )}
               </div>
             )}
 
@@ -1187,22 +1365,36 @@ export default function ProcessDetailDrawer({
                ───────────────────────────────────────────────────────────── */}
             {activeTab === "documents" && (
               <div className="p-6">
-                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-                  <DocumentsTab
-                    client={{
-                      id: clientId,
-                      name: clientName,
-                      email: client?.email || "client@email.com",
-                      phone: client?.phone || "—",
-                      companyName: client?.companyName,
-                      jobPosition: client?.jobPosition,
-                      location: client?.location,
-                      responsible: client?.responsible || (log as any)?.responsible,
-                      status: client?.status || log?.status,
-                    }}
-                    processName={log?.process}
-                  />
-                </div>
+                {isAdminPreview ? (
+                  <div className="bg-white rounded-xl border border-dashed border-slate-300 p-10 text-center shadow-xs">
+                    <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3 shadow-2xs">
+                      <FileCheck className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Client Documents
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+                      Respective document data of the client will be shown here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+                    <DocumentsTab
+                      client={{
+                        id: clientId,
+                        name: clientName,
+                        email: client?.email || "client@email.com",
+                        phone: client?.phone || "—",
+                        companyName: client?.companyName,
+                        jobPosition: client?.jobPosition,
+                        location: client?.location,
+                        responsible: client?.responsible || (log as any)?.responsible,
+                        status: client?.status || log?.status,
+                      }}
+                      processName={log?.process}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1223,6 +1415,7 @@ export default function ProcessDetailDrawer({
           setLocalEditedValues((prev) => ({ ...prev, ...filledValues }));
           if (clientId && log?.process) {
             updateProcessCallLogFields(clientId, log.process, filledValues);
+            updateProcessCallLogStage(clientId, log.process, requiredFieldsModalState.targetStageName);
           }
           Object.entries(filledValues).forEach(([k, v]) => {
             onFieldSave?.(k, v);
@@ -1230,6 +1423,7 @@ export default function ProcessDetailDrawer({
           try {
             window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
           } catch {}
+          runStageAutomation(requiredFieldsModalState.targetStageName);
           onStageChange(requiredFieldsModalState.targetStageIdx);
           setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
           toast.success(`Stage moved to ${requiredFieldsModalState.targetStageName} with required fields saved ✓`);

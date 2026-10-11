@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   UploadCloud, FileText, CheckCircle2, Settings, AlertCircle, Loader2,
   LayoutTemplate, Layers, ChevronDown, ChevronRight, Check, Users, Hash, X, Search, Plus,
-  Sparkles, RotateCcw, Code, Eye, Folder, Tag, Info, HelpCircle
+  Sparkles, RotateCcw, Code, Eye, Folder, Tag, Info, HelpCircle,
+  User, Zap, Calendar, Receipt, SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import mammoth from "mammoth";
@@ -14,7 +15,12 @@ import {
   getStoredTemplateCategories,
   saveTemplateCategory,
   DOCUMENT_CATEGORIES_EVENT,
+  TemplateEntity,
+  ScopingRule,
 } from "../../../lib/documentTemplatesStore";
+import { AdminScopingRulesEditor } from "../../pages/admin/components/AdminScopingRulesEditor";
+import { AdminControlAccordion } from "../../pages/admin/components/AdminControlAccordion";
+import { isFieldMatchingOrg } from "../../context/FieldRegistryContext";
 import { CreateFieldModal } from "../help/FieldManager";
 import {
   useFieldRegistry,
@@ -28,6 +34,8 @@ interface AddDocumentTemplateDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onTemplateCreated?: (template: DocumentTemplate) => void;
+  initialTemplate?: DocumentTemplate | null;
+  isAdminMode?: boolean;
 }
 
 const SYSTEM_FIELDS_BY_MODULE = [
@@ -35,6 +43,10 @@ const SYSTEM_FIELDS_BY_MODULE = [
     module: "CLIENTS",
     fields: [
       { key: "name", label: "Client Full Name" },
+      { key: "id", label: "Client ID / Patient ID" },
+      { key: "age", label: "Age" },
+      { key: "gender", label: "Gender" },
+      { key: "document_number", label: "Voucher / Document Number" },
       { key: "status", label: "Client Status" },
       { key: "email", label: "Email Address" },
       { key: "phone", label: "Phone Number" },
@@ -90,6 +102,18 @@ const SYSTEM_FIELDS_BY_MODULE = [
       { key: "org_name", label: "Organization Name" },
       { key: "tax_id", label: "Tax ID / Registration" },
       { key: "payment_terms", label: "Payment Terms" },
+    ],
+  },
+  {
+    module: "INVOICES & BILLING",
+    fields: [
+      { key: "invoice_number", label: "Invoice Number" },
+      { key: "due_date", label: "Invoice Due Date" },
+      { key: "total_amount", label: "Invoice Total Amount" },
+      { key: "subtotal", label: "Subtotal" },
+      { key: "tax_amount", label: "Tax Amount" },
+      { key: "payment_status", label: "Payment Status" },
+      { key: "items", label: "Itemized Charges & Services" },
     ],
   },
   {
@@ -201,11 +225,14 @@ const TEMPLATE_MODE_OPTIONS = [
 function MappedFieldSelector({
   value,
   onChange,
+  availableGroups,
 }: {
   value: string;
   onChange: (newKey: string) => void;
+  availableGroups?: typeof SYSTEM_FIELDS_BY_MODULE;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const groupsToDisplay = availableGroups || SYSTEM_FIELDS_BY_MODULE;
 
   // Find currently selected option definition
   const selectedOpt = SYSTEM_FIELDS_OPTIONS.find((o) => o.key === value) || {
@@ -251,7 +278,7 @@ function MappedFieldSelector({
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
             <div className="space-y-1">
-              {SYSTEM_FIELDS_BY_MODULE.map((group) => {
+              {groupsToDisplay.map((group) => {
                 const isExpanded = expandedCategory === group.module;
                 const hasSelected = group.fields.some((f) => f.key === value);
 
@@ -362,6 +389,8 @@ export default function AddDocumentTemplateDrawer({
   isOpen,
   onClose,
   onTemplateCreated,
+  initialTemplate,
+  isAdminMode = false,
 }: AddDocumentTemplateDrawerProps) {
   // Mode Selection: "device" | "webforms" | "canvas"
   const [templateMode, setTemplateMode] = useState<"device" | "webforms" | "canvas">("device");
@@ -370,9 +399,27 @@ export default function AddDocumentTemplateDrawer({
   const [templateName, setTemplateName] = useState("");
   const [templateText, setTemplateText] = useState("");
   const [fileName, setFileName] = useState("");
+  const [rawDocxBase64, setRawDocxBase64] = useState<string | undefined>(undefined);
   const [fieldMappings, setFieldMappings] = useState<DocumentTemplateFieldMapping[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+
+  // Admin Scoping Rules (Entity availability is configured per scope rule)
+  const [scopingRules, setScopingRules] = useState<ScopingRule[]>([]);
+
+  // Derived selected entities across active scope rules
+  const selectedEntities: TemplateEntity[] = useMemo(() => {
+    if (!scopingRules || scopingRules.length === 0) {
+      return ["client", "process", "appointment", "invoice"];
+    }
+    const allEnts = scopingRules.flatMap((r) =>
+      r.entities && r.entities.length > 0
+        ? (r.entities as TemplateEntity[])
+        : (["client", "process", "appointment", "invoice"] as TemplateEntity[])
+    );
+    const unique = Array.from(new Set(allEnts));
+    return unique.length > 0 ? unique : ["client", "process", "appointment", "invoice"];
+  }, [scopingRules]);
 
   // Category state
   const [categories, setCategories] = useState<string[]>(getStoredTemplateCategories);
@@ -385,6 +432,33 @@ export default function AddDocumentTemplateDrawer({
     window.addEventListener(DOCUMENT_CATEGORIES_EVENT, handleCatUpdate);
     return () => window.removeEventListener(DOCUMENT_CATEGORIES_EVENT, handleCatUpdate);
   }, []);
+
+  // Initialize or reset when opened
+  useEffect(() => {
+    if (isOpen) {
+      if (initialTemplate) {
+        setTemplateName(initialTemplate.name || "");
+        setCategory(initialTemplate.category || "General");
+        setTemplateText(initialTemplate.templateText || "");
+        setFileName(initialTemplate.fileName || "");
+        setRawDocxBase64(initialTemplate.rawDocxBase64);
+        setFieldMappings(initialTemplate.fieldMappings || []);
+        const rules = (initialTemplate.scopingRules || []).map((r) => ({
+          ...r,
+          entities: r.entities || initialTemplate.entities || ["client", "process", "appointment", "invoice"],
+        }));
+        setScopingRules(rules);
+      } else {
+        setTemplateName("");
+        setCategory("Prescription");
+        setTemplateText("");
+        setFileName("");
+        setRawDocxBase64(undefined);
+        setFieldMappings([]);
+        setScopingRules([]);
+      }
+    }
+  }, [isOpen, initialTemplate]);
 
   // Webform selection state
   const [selectedWebFormId, setSelectedWebFormId] = useState<string>("");
@@ -399,19 +473,57 @@ export default function AddDocumentTemplateDrawer({
 
   const { getAllFields } = useFieldRegistry();
 
-  // Compile fields grouped by module
-  const targetModules: Exclude<FieldModule, "deal">[] = ALL_MODULES;
-  const groupedFieldsList = targetModules.map((module) => {
-    const fields = getAllFields(module).filter((f) =>
-      f.label.toLowerCase().includes(fieldSearchQuery.toLowerCase()) ||
-      f.key.toLowerCase().includes(fieldSearchQuery.toLowerCase())
+  // Compile fields grouped by module based on selected entities & scope rule
+  const targetModules: Exclude<FieldModule, "deal">[] = useMemo(() => {
+    const modules: Exclude<FieldModule, "deal">[] = [];
+    if (selectedEntities.includes("client")) modules.push("client");
+    if (selectedEntities.includes("process")) modules.push("process");
+    if (selectedEntities.includes("appointment")) modules.push("appointment");
+    if (selectedEntities.includes("invoice")) {
+      modules.push("service");
+    }
+    // If none selected, default to ALL_MODULES
+    if (modules.length === 0) return ALL_MODULES;
+    return modules;
+  }, [selectedEntities]);
+
+  const groupedFieldsList = useMemo(() => {
+    return targetModules.map((module) => {
+      let fields = getAllFields(module);
+      // Filter custom fields by active scope rules if configured
+      if (scopingRules && scopingRules.length > 0) {
+        const firstRule = scopingRules[0];
+        const scopeOrg = {
+          industryCategory: firstRule.industryCategory,
+          industry: firstRule.industries?.[0],
+          location: firstRule.locations?.[0],
+        };
+        fields = fields.filter((f) => f.source !== "custom" || isFieldMatchingOrg(f, scopeOrg));
+      }
+      const filtered = fields.filter((f) =>
+        f.label.toLowerCase().includes(fieldSearchQuery.toLowerCase()) ||
+        f.key.toLowerCase().includes(fieldSearchQuery.toLowerCase())
+      );
+      return {
+        module,
+        label: MODULE_NOUN[module]?.plural.toUpperCase() || module.toUpperCase(),
+        fields: filtered,
+      };
+    }).filter((g) => g.fields.length > 0);
+  }, [targetModules, getAllFields, scopingRules, fieldSearchQuery]);
+
+  const filteredSystemFieldsOptions = useMemo(() => {
+    return SYSTEM_FIELDS_BY_MODULE.filter((group) => {
+      if (group.module === "SYSTEM METADATA") return true;
+      if (selectedEntities.includes("client") && group.module === "CLIENTS") return true;
+      if (selectedEntities.includes("process") && group.module === "PROCESSES & DEALS") return true;
+      if (selectedEntities.includes("appointment") && group.module === "APPOINTMENTS") return true;
+      if (selectedEntities.includes("invoice") && (group.module === "INVOICES & BILLING" || group.module === "SERVICES & PRODUCTS")) return true;
+      return false;
+    }).flatMap((group) =>
+      group.fields.map((f) => ({ key: f.key, label: f.label, module: group.module }))
     );
-    return {
-      module,
-      label: MODULE_NOUN[module]?.plural.toUpperCase() || module.toUpperCase(),
-      fields,
-    };
-  }).filter((g) => g.fields.length > 0);
+  }, [selectedEntities]);
 
   const totalFilteredCount = groupedFieldsList.reduce((acc, curr) => acc + curr.fields.length, 0);
 
@@ -533,26 +645,34 @@ export default function AddDocumentTemplateDrawer({
         const existing = prev.find((p) => p.templateField === field);
         if (existing) return existing;
 
-        const lower = field.toLowerCase();
+        const lower = field.toLowerCase().replace(/[^a-z0-9]/g, "");
         let defaultKey = "name";
         let defaultLabel = "Client Full Name";
 
-        if (lower.includes("email")) {
+        if (lower.includes("email") || lower.includes("mail")) {
           defaultKey = "email"; defaultLabel = "Email Address";
-        } else if (lower.includes("phone") || lower.includes("mobile")) {
+        } else if (lower.includes("phone") || lower.includes("mobile") || lower.includes("contact")) {
           defaultKey = "phone"; defaultLabel = "Phone Number";
         } else if (lower.includes("company") || lower.includes("org")) {
           defaultKey = "companyName"; defaultLabel = "Company Name";
         } else if (lower.includes("title") || lower.includes("position") || lower.includes("role")) {
           defaultKey = "jobPosition"; defaultLabel = "Job Position / Title";
-        } else if (lower.includes("address") || lower.includes("location") || lower.includes("city")) {
+        } else if (lower.includes("address") || lower.includes("location") || lower.includes("city") || lower.includes("delivery") || lower === "companyrequisitedeliveryaddresstext") {
           defaultKey = "location"; defaultLabel = "Location / Address";
-        } else if (lower.includes("responsible") || lower.includes("agent") || lower.includes("officer")) {
+        } else if (lower.includes("responsible") || lower.includes("agent") || lower.includes("officer") || lower.includes("doctor") || lower.includes("provider") || lower.includes("physician")) {
           defaultKey = "responsible"; defaultLabel = "Responsible Staff Member";
         } else if (lower.includes("status")) {
           defaultKey = "status"; defaultLabel = "Client Status";
-        } else if (lower.includes("date") || lower.includes("time")) {
+        } else if (lower.includes("date") || lower.includes("time") || lower.includes("bill")) {
           defaultKey = "date"; defaultLabel = "Current Date";
+        } else if (lower.includes("voucher") || lower.includes("docnum") || lower.includes("documentnumber") || lower.includes("invoicenum") || lower.includes("number")) {
+          defaultKey = "document_number"; defaultLabel = "Voucher / Document Number";
+        } else if (lower.includes("age")) {
+          defaultKey = "age"; defaultLabel = "Age";
+        } else if (lower.includes("gender") || lower.includes("sex")) {
+          defaultKey = "gender"; defaultLabel = "Gender";
+        } else if (lower.includes("id") || lower.includes("patientid") || lower.includes("companyid") || lower === "pcompanyid") {
+          defaultKey = "id"; defaultLabel = "Client ID / Patient ID";
         }
 
         return {
@@ -581,29 +701,49 @@ export default function AddDocumentTemplateDrawer({
 
     if (isDocx) {
       setIsExtracting(true);
-      const reader = new FileReader();
-      reader.onload = async (evt) => {
+
+      // 1. Read as Data URL to store 100% authentic base64 of the original Word file
+      const dataUrlReader = new FileReader();
+      dataUrlReader.onload = (evt) => {
+        const dataUrl = evt.target?.result as string;
+        if (dataUrl) {
+          setRawDocxBase64(dataUrl);
+        }
+      };
+      dataUrlReader.readAsDataURL(file);
+
+      // 2. Read as ArrayBuffer for Mammoth HTML and field extraction
+      const arrayBufferReader = new FileReader();
+      arrayBufferReader.onload = async (evt) => {
         try {
           const arrayBuffer = evt.target?.result as ArrayBuffer;
-          const result = await mammoth.extractRawText({ arrayBuffer });
-          const extractedText = result.value;
 
-          if (!extractedText || !extractedText.trim()) {
-            setFileError("Word document contains no extractable plain text.");
-            toast.error("Word document contains no text.");
+          // Extract rich HTML to preserve tables, grid layouts, bold text, headings, and lists
+          const htmlResult = await mammoth.convertToHtml({ arrayBuffer });
+          let extractedContent = htmlResult.value;
+
+          // Fallback to raw text if HTML is empty
+          if (!extractedContent || !extractedContent.trim()) {
+            const rawResult = await mammoth.extractRawText({ arrayBuffer });
+            extractedContent = rawResult.value;
+          }
+
+          if (!extractedContent || !extractedContent.trim()) {
+            setFileError("Word document contains no extractable content.");
+            toast.error("Word document contains no content.");
           } else {
-            setTemplateText(extractedText);
-            toast.success(`Extracted text from "${file.name}"!`);
+            setTemplateText(extractedContent);
+            toast.success(`Imported document layout from "${file.name}"!`);
           }
         } catch (err) {
           console.error("Mammoth extraction error:", err);
-          setFileError("Failed to extract text from Word document.");
+          setFileError("Failed to extract content from Word document.");
           toast.error("Failed to parse Word document.");
         } finally {
           setIsExtracting(false);
         }
       };
-      reader.readAsArrayBuffer(file);
+      arrayBufferReader.readAsArrayBuffer(file);
     } else {
       const reader = new FileReader();
       reader.onload = (evt) => {
@@ -661,15 +801,18 @@ export default function AddDocumentTemplateDrawer({
 
     const extracted = extractTemplateFields(templateText);
     const newTemplate: DocumentTemplate = {
-      id: `tpl-${Date.now()}`,
+      id: initialTemplate?.id || `tpl-${Date.now()}`,
       name: templateName.trim(),
       category: category.trim() || "General",
       fileName: fileName || `${templateName.trim().toLowerCase().replace(/\s+/g, "_")}.docx`,
       templateText: templateText.trim(),
       extractedFields: extracted,
       fieldMappings,
-      createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-      createdBy: "Admin User",
+      rawDocxBase64,
+      createdAt: initialTemplate?.createdAt || new Date().toISOString().replace("T", " ").substring(0, 16),
+      createdBy: initialTemplate?.createdBy || "Admin User",
+      entities: selectedEntities.length > 0 ? selectedEntities : ["client"],
+      scopingRules,
     };
 
     saveDocumentTemplate(newTemplate);
@@ -728,6 +871,18 @@ export default function AddDocumentTemplateDrawer({
               style={{ fontFamily: "DM Sans, sans-serif" }}
             />
           </div>
+
+          {/* Admin Control (Scope Rules & Permissions) */}
+          <AdminControlAccordion
+            scopingRules={scopingRules}
+            onScopingRulesChange={setScopingRules}
+            allowEntities={true}
+            defaultAdminControlOpen={true}
+            defaultScopeOpen={true}
+            defaultPermissionsOpen={false}
+            scopeTooltip="Define entity availability and restrict visibility by tenant industry category, industries, and locations."
+            permissionsTooltip="Configure what tenant users are permitted to do with this document template."
+          />
 
           {/* Assign Category Section */}
           <div>
@@ -1355,6 +1510,14 @@ export default function AddDocumentTemplateDrawer({
                             <MappedFieldSelector
                               value={m.mappedFieldKey}
                               onChange={(newKey) => handleMappingChange(m.templateField, newKey)}
+                              availableGroups={SYSTEM_FIELDS_BY_MODULE.filter((group) => {
+                                if (group.module === "SYSTEM METADATA") return true;
+                                if (selectedEntities.includes("client") && group.module === "CLIENTS") return true;
+                                if (selectedEntities.includes("process") && group.module === "PROCESSES & DEALS") return true;
+                                if (selectedEntities.includes("appointment") && group.module === "APPOINTMENTS") return true;
+                                if (selectedEntities.includes("invoice") && (group.module === "INVOICES & BILLING" || group.module === "SERVICES & PRODUCTS")) return true;
+                                return false;
+                              })}
                             />
                           </td>
                         </tr>

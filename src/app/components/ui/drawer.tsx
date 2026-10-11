@@ -15,6 +15,7 @@ interface CustomDrawerProps {
   children?: React.ReactNode;
   maxWidth?: string;
   zIndex?: number; // add this
+  headerClassName?: string;
 }
 
 type DrawerProps = CustomDrawerProps & React.ComponentProps<typeof DrawerPrimitive.Root>;
@@ -27,6 +28,7 @@ function CustomSideDrawer({
   children,
   maxWidth = "sm:max-w-xl",
   zIndex = 9999, // add this
+  headerClassName,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -35,6 +37,7 @@ function CustomSideDrawer({
   children?: React.ReactNode;
   maxWidth?: string;
   zIndex?: number; // add this
+  headerClassName?: string;
 }) {
   const [shouldRender, setShouldRender] = React.useState(isOpen);
   const [animate, setAnimate] = React.useState(false);
@@ -103,7 +106,7 @@ function CustomSideDrawer({
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
+        <div className={cn("flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0", headerClassName)}>
           <div className="flex-1 min-w-0">
             {typeof title === "string" ? (
               <h2 className="text-xl font-bold text-gray-900 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -146,6 +149,7 @@ function Drawer({
   children,
   maxWidth,
   zIndex, // add this
+  headerClassName,
   ...props
 }: DrawerProps) {
   if (isOpen !== undefined) {
@@ -157,6 +161,7 @@ function Drawer({
         footer={footer}
         maxWidth={maxWidth}
         zIndex={zIndex} // add this
+        headerClassName={headerClassName}
       >
         {children}
       </CustomSideDrawer>

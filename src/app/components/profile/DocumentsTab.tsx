@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   FileText, FileSpreadsheet, FileImage, Plus, Search, Eye, Download,
   Trash2, MoreVertical, ChevronDown, ChevronRight, Upload, PlusCircle, Sparkles,
@@ -22,6 +22,7 @@ import {
 import GenerateDocumentDrawer from "./GenerateDocumentDrawer";
 import DocumentPreviewDrawer from "./DocumentPreviewDrawer";
 import AddDocumentTemplateDrawer from "./AddDocumentTemplateDrawer";
+import { TableComponent, TableColumn } from "../ui/TableComponent";
 
 export interface DocumentsTabProps {
   client: {
@@ -36,6 +37,11 @@ export interface DocumentsTabProps {
     status?: string;
   };
   processName?: string;
+  title?: string;
+  entityType?: "client" | "process" | "appointment" | "invoice";
+  entityId?: string;
+  invoiceData?: any;
+  hideClientDefaultDocs?: boolean;
 }
 
 function TabFieldTooltip({ text }: { text: string }) {
@@ -49,7 +55,15 @@ function TabFieldTooltip({ text }: { text: string }) {
   );
 }
 
-export default function DocumentsTab({ client, processName }: DocumentsTabProps) {
+export default function DocumentsTab({
+  client,
+  processName,
+  title,
+  entityType,
+  entityId,
+  invoiceData,
+  hideClientDefaultDocs,
+}: DocumentsTabProps) {
   const [documents, setDocuments] = useState<StoredClientDocument[]>([]);
   const [docSearchQuery, setDocSearchQuery] = useState("");
   const [selectedDocStatus, setSelectedDocStatus] = useState<string>("All");
@@ -57,6 +71,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
   const [showGenerateDocDrawer, setShowGenerateDocDrawer] = useState(false);
   const [activeMenuDoc, setActiveMenuDoc] = useState<StoredClientDocument | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<any>>(new Set());
 
   // Upload & Template Dropdown State
   const [showActionDropdown, setShowActionDropdown] = useState(false);
@@ -64,6 +79,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
   const [categories, setCategories] = useState<string[]>(getStoredTemplateCategories);
   const [templateSearchQuery, setTemplateSearchQuery] = useState("");
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    Invoices: true,
     Prescription: true,
     "Session Notes": true,
     "Consent forms": true,
@@ -122,6 +138,26 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
     if (!client?.id) return;
 
     const refreshDocs = () => {
+      // 1. If scoped to an invoice, ONLY show documents for this invoice (NO client-level KYC/intake docs)
+      if (entityType === "invoice" && entityId) {
+        const allStored = getStoredClientDocuments();
+        const invoiceDocs = allStored.filter(
+          (d) =>
+            d.invoiceId === entityId ||
+            (d.entityType === "invoice" && d.entityId === entityId)
+        );
+        setDocuments(invoiceDocs);
+        return;
+      }
+
+      // 2. If hideClientDefaultDocs is requested, only show actual saved docs
+      if (hideClientDefaultDocs) {
+        const stored = getStoredClientDocuments(client.id);
+        setDocuments(stored);
+        return;
+      }
+
+      // 3. Otherwise standard client documents
       const cName = client.name || "Client";
       const initialDocs: StoredClientDocument[] = [
         {
@@ -188,7 +224,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
     refreshDocs();
     window.addEventListener(CLIENT_DOCUMENTS_EVENT, refreshDocs);
     return () => window.removeEventListener(CLIENT_DOCUMENTS_EVENT, refreshDocs);
-  }, [client?.id, client?.name, client?.responsible, processName]);
+  }, [client?.id, client?.name, client?.responsible, processName, entityType, entityId, hideClientDefaultDocs]);
 
   const handleToggleDocStatus = (docId: string) => {
     setDocuments((prev) =>
@@ -244,6 +280,31 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
   const handleGenerateFromTemplate = (template: DocumentTemplate) => {
     const dateStr = new Date().toISOString().replace("T", " ").substring(0, 16);
     let generatedText = template.templateText || "";
+
+    // If invoice data is provided, replace invoice-specific placeholders
+    if (invoiceData) {
+      const itemsList = (invoiceData.lineItems || [])
+        .map(
+          (li: any, i: number) =>
+            `${i + 1}. ${li.description || li.product_name || "Item"} - Qty: ${li.quantity || 1} x $${Number(
+              li.unit_price || li.rate || 0
+            ).toFixed(2)} = $${Number(
+              li.total || (li.quantity || 1) * (li.unit_price || li.rate || 0)
+            ).toFixed(2)}`
+        )
+        .join("\n") || "1. Consultation / Service - $80.00";
+
+      generatedText = generatedText
+        .replace(/\{invoice_number\}/g, invoiceData.id || "")
+        .replace(/\{due_date\}/g, invoiceData.dueDate || "")
+        .replace(/\{subtotal\}/g, `$${Number(invoiceData.subtotal ?? (invoiceData.total ? invoiceData.total * 0.9 : 0)).toFixed(2)}`)
+        .replace(/\{tax_amount\}/g, `$${Number(invoiceData.tax ?? (invoiceData.total ? invoiceData.total * 0.1 : 0)).toFixed(2)}`)
+        .replace(/\{total_amount\}/g, `$${Number(invoiceData.total ?? 0).toFixed(2)}`)
+        .replace(/\{payment_status\}/g, String(invoiceData.status || "DRAFT").toUpperCase())
+        .replace(/\{line_items_summary\}/g, itemsList)
+        .replace(/\{items\}/g, itemsList);
+    }
+
     generatedText = generatedText
       .replace(/\{client_name\}/g, client.name || "Client")
       .replace(/\{email\}/g, client.email || "")
@@ -254,12 +315,20 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       .replace(/\{responsible\}/g, client.responsible || "Admin")
       .replace(/\{current_date\}/g, dateStr);
 
+    const docName =
+      entityType === "invoice" && entityId
+        ? `${entityId}_${template.name.replace(/\s+/g, "_")}.pdf`
+        : `${(client.name || "Client").replace(/\s+/g, "_")}_${template.name.replace(/\s+/g, "_")}.pdf`;
+
     const newDoc: StoredClientDocument = {
       id: `doc-gen-${Date.now()}`,
       clientId: client.id,
-      name: `${(client.name || "Client").replace(/\s+/g, "_")}_${template.name.replace(/\s+/g, "_")}.pdf`,
-      category: template.category || "General",
-      valueBy: "Client Profile Data",
+      invoiceId: entityType === "invoice" ? entityId : undefined,
+      entityId,
+      entityType,
+      name: docName,
+      category: template.category || (entityType === "invoice" ? "Invoices" : "General"),
+      valueBy: entityType === "invoice" ? "Invoice Record Data" : "Client Profile Data",
       fileType: "pdf",
       fileSize: "1.6 MB",
       uploadedDate: dateStr,
@@ -270,7 +339,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       generatedContent: generatedText,
     };
     saveClientDocument(newDoc);
-    toast.success(`Generated "${template.name}" for ${client.name}!`);
+    toast.success(`Generated "${template.name}"!`);
   };
 
   // Upload custom document file
@@ -286,8 +355,11 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
     const newDoc: StoredClientDocument = {
       id: `doc-upload-${Date.now()}`,
       clientId: client.id,
+      invoiceId: entityType === "invoice" ? entityId : undefined,
+      entityId,
+      entityType,
       name: file.name,
-      category: "General",
+      category: entityType === "invoice" ? "Invoices" : "General",
       valueBy: "Manual File Upload",
       fileType,
       fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
@@ -297,7 +369,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       notes: `Uploaded file (${file.name})`,
     };
     saveClientDocument(newDoc);
-    toast.success(`Uploaded "${file.name}" for ${client.name}!`);
+    toast.success(`Uploaded "${file.name}"!`);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -318,20 +390,64 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
     return matchesSearch && matchesStatus;
   });
 
-  // Group templates by categories (Strictly 5 standard categories + custom ones, excluding legacy)
+  // Filter available templates based on entityType scope:
+  // - in client documents: do not show invoice templates or process document templates
+  // - in invoice documents: do not show client templates or process templates (only invoices)
+  // - in process documents: only show process document templates
+  const scopedTemplates = useMemo(() => {
+    const effectiveType = entityType || "client";
+
+    if (effectiveType === "invoice") {
+      return availableTemplates.filter((t) => {
+        const cat = (t.category || "").toLowerCase();
+        return cat === "invoices" || cat === "invoice" || t.entities?.includes("invoice");
+      });
+    }
+
+    if (effectiveType === "process") {
+      return availableTemplates.filter((t) => {
+        const cat = (t.category || "").toLowerCase();
+        if (cat === "invoices" || cat === "invoice") return false;
+        return t.entities?.includes("process") ?? false;
+      });
+    }
+
+    if (effectiveType === "client") {
+      return availableTemplates.filter((t) => {
+        const cat = (t.category || "").toLowerCase();
+        if (cat === "invoices" || cat === "invoice") return false;
+        // If entities are configured, must include "client" and not be process-only
+        if (t.entities && t.entities.length > 0) {
+          return t.entities.includes("client");
+        }
+        return true;
+      });
+    }
+
+    if (effectiveType === "appointment") {
+      return availableTemplates.filter((t) => {
+        const cat = (t.category || "").toLowerCase();
+        if (cat === "invoices" || cat === "invoice") return false;
+        return t.entities?.includes("appointment") ?? true;
+      });
+    }
+
+    return availableTemplates;
+  }, [availableTemplates, entityType]);
+
+  // Group templates by categories derived exclusively from scoped templates
   const legacyToExclude = new Set(["identification", "contract", "financial"]);
-  const allCategoryNames = Array.from(
-    new Set([
-      ...categories,
-      ...availableTemplates.map((t) => t.category || "General"),
-    ])
-  ).filter((cat) => Boolean(cat) && !legacyToExclude.has(cat.toLowerCase()));
+  const allCategoryNames = useMemo(() => {
+    return Array.from(
+      new Set(scopedTemplates.map((t) => t.category || "General"))
+    ).filter((cat) => Boolean(cat) && !legacyToExclude.has(cat.toLowerCase()));
+  }, [scopedTemplates]);
 
   const filteredCategoriesList = allCategoryNames.filter((catName) => {
     if (!templateSearchQuery.trim()) return true;
     const q = templateSearchQuery.toLowerCase();
     const catMatches = catName.toLowerCase().includes(q);
-    const templatesInCat = availableTemplates.filter((t) => (t.category || "General").toLowerCase() === catName.toLowerCase());
+    const templatesInCat = scopedTemplates.filter((t) => (t.category || "General").toLowerCase() === catName.toLowerCase());
     const templateMatches = templatesInCat.some((t) => t.name.toLowerCase().includes(q));
     return catMatches || templateMatches;
   });
@@ -351,7 +467,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       <div className="flex items-center justify-between p-4 border border-gray-200 rounded-xl bg-white shadow-xs gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           <h3 className="font-bold text-sm text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
-            {processName ? `${processName} Documents` : "Client Documents"}
+            {title || (entityType === "invoice" ? "Invoice Documents" : processName ? `${processName} Documents` : "Client Documents")}
           </h3>
           <span
             className="text-xs text-gray-500 font-medium px-2 py-0.5 bg-gray-100 rounded-full"
@@ -417,7 +533,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
                    {/* Grouped Category Dropdown Accordions */}
                   <div className="max-h-64 overflow-y-auto">
                     {filteredCategoriesList.map((catName) => {
-                      const templatesInCat = availableTemplates.filter(
+                      const templatesInCat = scopedTemplates.filter(
                         (t) => (t.category || "General").toLowerCase() === catName.toLowerCase()
                       );
                       const isExpanded = expandedCategories[catName] ?? (templatesInCat.length > 0);
@@ -527,192 +643,124 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       </div>
 
       {/* Available Documents Table */}
-      <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-xs">
-        <table className="w-full table-fixed">
-          <thead>
-            <tr style={{ backgroundColor: "#1F2937", height: "44px" }}>
-              <th style={{ width: "48px" }} className="px-3 text-center align-middle">
-                <input type="checkbox" className="w-4 h-4 rounded border-gray-300" />
-              </th>
-              <th style={{ width: "26%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                <div className="flex items-center gap-1">
-                  <span>Document Name</span>
-                  <TabFieldTooltip text="Official file title and document format" />
-                </div>
-              </th>
-              <th style={{ width: "16%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                <div className="flex items-center gap-1">
-                  <span>Category</span>
-                  <TabFieldTooltip text="Functional category classification assigned to this document" />
-                </div>
-              </th>
-              <th style={{ width: "18%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                <div className="flex items-center gap-1">
-                  <span>Value By</span>
-                  <TabFieldTooltip text="The source from which field values and placeholders were filled" />
-                </div>
-              </th>
-              <th style={{ width: "15%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                <div className="flex items-center gap-1">
-                  <span>Uploaded By</span>
-                  <TabFieldTooltip text="Staff member, client, or system service that generated this file" />
-                </div>
-              </th>
-              <th style={{ width: "13%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                <div className="flex items-center gap-1">
-                  <span>Date</span>
-                  <TabFieldTooltip text="Creation and upload timestamp" />
-                </div>
-              </th>
-              <th style={{ width: "8%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                <div className="flex items-center gap-1">
-                  <span>Size</span>
-                  <TabFieldTooltip text="Document file size on storage" />
-                </div>
-              </th>
-              <th style={{ width: "48px" }} className="px-3 text-center text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredDocuments.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="text-center py-12 text-gray-400 italic text-sm">
-                  No documents found for this client.
-                </td>
-              </tr>
-            ) : (
-              filteredDocuments.map((doc, i) => {
-                return (
-                  <tr
-                    key={doc.id}
-                    style={{
-                      height: "52px",
-                      backgroundColor: i % 2 === 0 ? "#fff" : "#FAFAFA",
-                      borderBottom: "1px solid #EEEEEE",
-                    }}
-                    className="hover:bg-[#F5F8FF] transition-colors"
-                  >
-                    <td style={{ width: "48px" }} className="px-3 text-center align-middle">
-                      <input type="checkbox" className="w-4 h-4 rounded border-gray-300" />
-                    </td>
-                    <td style={{ width: "26%" }} className="px-3 align-middle">
-                      <button
-                        onClick={() => setPreviewDoc(doc)}
-                        className="text-left font-medium text-sm text-gray-900 hover:text-blue-600 transition-colors truncate cursor-pointer w-full block"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                        title={doc.name}
-                      >
-                        {doc.name}
-                      </button>
-                    </td>
+      <TableComponent
+        columns={[
+          {
+            id: "name",
+            key: "name",
+            header: "Document Name",
+            accessorKey: "name",
+            render: (doc) => (
+              <button
+                onClick={() => setPreviewDoc(doc)}
+                className="text-left font-medium text-sm text-gray-900 hover:text-blue-600 transition-colors truncate cursor-pointer w-full block"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+                title={doc.name}
+              >
+                {doc.name}
+              </button>
+            ),
+          },
+          {
+            id: "category",
+            key: "category",
+            header: "Category",
+            accessorKey: "category",
+            render: (doc) => (
+              <span className="text-xs truncate text-slate-800 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                {doc.category || "General"}
+              </span>
+            ),
+          },
+          {
+            id: "valueBy",
+            key: "valueBy",
+            header: "Value By",
+            render: (doc) => (
+              <span className="text-xs truncate text-slate-700 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                {doc.valueBy || (doc.templateId ? "Client Profile Data" : doc.uploadedBy.includes("WebForm") ? "WebForm Submission" : "Manual Upload")}
+              </span>
+            ),
+          },
+          {
+            id: "uploadedBy",
+            key: "uploadedBy",
+            header: "Uploaded By",
+            accessorKey: "uploadedBy",
+            render: (doc) => (
+              <span className="text-xs truncate" style={{ fontFamily: "DM Sans, sans-serif", color: "#424242" }}>
+                {doc.uploadedBy}
+              </span>
+            ),
+          },
+          {
+            id: "uploadedDate",
+            key: "uploadedDate",
+            header: "Date",
+            accessorKey: "uploadedDate",
+            render: (doc) => (
+              <span className="text-xs text-gray-500 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+                {doc.uploadedDate}
+              </span>
+            ),
+          },
+          {
+            id: "fileSize",
+            key: "fileSize",
+            header: "Size",
+            accessorKey: "fileSize",
+            render: (doc) => (
+              <span className="text-xs text-gray-500 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+                {doc.fileSize}
+              </span>
+            ),
+          },
+        ]}
+        data={filteredDocuments}
+        getRowId={(doc) => doc.id}
+        enableSelection={true}
+        selectedIds={selectedDocIds}
+        onSelectionChange={setSelectedDocIds}
+        enableColumnCustomization={true}
+        tableId="client-profile-documents"
+        emptyMessage={
+          entityType === "invoice"
+            ? "No documents attached to this invoice yet. Upload or generate a document to get started."
+            : "No documents found for this client."
+        }
+        rowActions={[
+          {
+            label: "Preview",
+            icon: <Eye className="w-3.5 h-3.5 text-slate-500" />,
+            onClick: (doc) => setPreviewDoc(doc),
+          },
+          {
+            label: "Download",
+            icon: <Download className="w-3.5 h-3.5 text-slate-500" />,
+            onClick: (doc) => handleDownloadDoc(doc),
+          },
+          {
+            label: "Delete",
+            icon: <Trash2 className="w-3.5 h-3.5 text-rose-500" />,
+            onClick: (doc) => handleDeleteDoc(doc.id, doc.name),
+            isDanger: true,
+          },
+        ]}
+        pagination={true}
+        defaultRowsPerPage={10}
+      />
 
-                    {/* Category Column */}
-                    <td style={{ width: "16%", fontFamily: "DM Sans, sans-serif" }} className="px-3 text-xs truncate text-slate-800 font-medium align-middle">
-                      {doc.category || "General"}
-                    </td>
-
-                    {/* Value By Column */}
-                    <td style={{ width: "18%", fontFamily: "DM Sans, sans-serif" }} className="px-3 text-xs truncate text-slate-700 font-medium align-middle">
-                      {doc.valueBy || (doc.templateId ? "Client Profile Data" : doc.uploadedBy.includes("WebForm") ? "WebForm Submission" : "Manual Upload")}
-                    </td>
-
-                    <td style={{ width: "15%", fontFamily: "DM Sans, sans-serif", color: "#424242" }} className="px-3 text-xs truncate align-middle">
-                      {doc.uploadedBy}
-                    </td>
-                    <td style={{ width: "13%", fontFamily: "Outfit, sans-serif" }} className="px-3 text-xs text-gray-500 whitespace-nowrap align-middle">
-                      {doc.uploadedDate}
-                    </td>
-                    <td style={{ width: "8%", fontFamily: "Outfit, sans-serif" }} className="px-3 text-xs text-gray-500 whitespace-nowrap align-middle">
-                      {doc.fileSize}
-                    </td>
-                    <td style={{ width: "48px" }} className="px-3 text-center align-middle">
-                      <div className="flex items-center justify-center">
-                        <button
-                          onClick={(e) => handleOpenDocMenu(e, doc)}
-                          className={`w-7 h-7 flex items-center justify-center rounded transition-colors cursor-pointer ${
-                            activeMenuDoc?.id === doc.id ? "bg-slate-200 text-slate-900" : "hover:bg-gray-200 text-gray-500"
-                          }`}
-                          title="Actions"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Fixed Positioning Action Dropdown (Z-Index Relative to Whole Screen & Drawer) */}
-      {activeMenuDoc && menuPos && (
-        <>
-          <div
-            className="fixed inset-0 z-[9998]"
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveMenuDoc(null);
-              setMenuPos(null);
-            }}
-          />
-          <div
-            className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-2xl py-1 min-w-[150px] animate-in fade-in-50 zoom-in-95 duration-100"
-            style={{
-              top: `${menuPos.top}px`,
-              right: `${menuPos.right}px`,
-              fontFamily: "Outfit, sans-serif",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => {
-                setPreviewDoc(activeMenuDoc);
-                setActiveMenuDoc(null);
-                setMenuPos(null);
-              }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer text-left"
-            >
-              <Eye className="w-3.5 h-3.5 text-slate-500" />
-              <span>Preview</span>
-            </button>
-            <button
-              onClick={() => {
-                handleDownloadDoc(activeMenuDoc);
-                setActiveMenuDoc(null);
-                setMenuPos(null);
-              }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer text-left"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
-              <span>Download</span>
-            </button>
-            <div className="border-t border-slate-100 my-1" />
-            <button
-              onClick={() => {
-                handleDeleteDoc(activeMenuDoc.id, activeMenuDoc.name);
-                setActiveMenuDoc(null);
-                setMenuPos(null);
-              }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer text-left font-medium"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-              <span>Delete</span>
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* Document Preview Drawer (Right-side drawer) */}
+      {/* Document Preview Drawer (Opens same template view in non-editable read-only form) */}
       {previewDoc && (
-        <DocumentPreviewDrawer
+        <GenerateDocumentDrawer
           isOpen={Boolean(previewDoc)}
           onClose={() => setPreviewDoc(null)}
-          document={previewDoc}
-          clientName={client.name}
+          client={client}
+          previewDoc={previewDoc}
+          isReadOnly={true}
+          entityType={entityType}
+          entityId={entityId}
+          invoiceData={invoiceData}
           onToggleStatus={handleToggleDocStatus}
         />
       )}
@@ -727,6 +775,12 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
           }}
           client={client}
           initialTemplate={drawerInitialTemplate}
+          entityType={entityType}
+          entityId={entityId}
+          invoiceData={invoiceData}
+          onDocumentGenerated={(doc) => {
+            setDocuments((prev) => [doc, ...prev.filter((d) => d.id !== doc.id)]);
+          }}
         />
       )}
 

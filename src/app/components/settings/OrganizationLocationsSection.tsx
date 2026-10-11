@@ -54,11 +54,13 @@ const FIXED_ORG_COUNTRY = "United States";
 
 interface OrganizationLocationsSectionProps {
   isEditing?: boolean;
+  organizationId?: string;
 }
 
-export default function OrganizationLocationsSection({ isEditing = false }: OrganizationLocationsSectionProps) {
-  const { activeOrganization, updateOrganization } = useOrganization();
-  const storageKey = `mantra_org_locations_${activeOrganization.id}`;
+export default function OrganizationLocationsSection({ isEditing = false, organizationId }: OrganizationLocationsSectionProps) {
+  const { activeOrganization, updateOrganization, organizations } = useOrganization();
+  const currentOrg = organizationId ? (organizations.find(o => o.id === organizationId) || activeOrganization) : activeOrganization;
+  const storageKey = `mantra_org_locations_${currentOrg.id}`;
 
   const [locations, setLocations] = useState<OrganizationLocationItem[]>(() => {
     try {
@@ -499,38 +501,21 @@ export default function OrganizationLocationsSection({ isEditing = false }: Orga
               <label className="text-xs font-semibold text-slate-700 mb-1.5 block">
                 Location Type
               </label>
-              <div className="grid grid-cols-2 gap-2.5 max-w-md">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewLocationType("physical");
-                    if (newLocationName === "Online") setNewLocationName("");
+              <div className="relative max-w-md">
+                <select
+                  value={newLocationType}
+                  onChange={(e) => {
+                    const val = e.target.value as "physical" | "online";
+                    setNewLocationType(val);
+                    if (val === "online" && !newLocationName) setNewLocationName("Online");
+                    if (val === "physical" && newLocationName === "Online") setNewLocationName("");
                   }}
-                  className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition-all cursor-pointer text-left ${
-                    newLocationType === "physical"
-                      ? "border-slate-900 bg-slate-900 text-white shadow-xs"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
+                  className="w-full text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 appearance-none cursor-pointer pr-9 shadow-2xs"
                 >
-                  <Building2 className={`w-4 h-4 shrink-0 ${newLocationType === "physical" ? "text-white" : "text-slate-500"}`} />
-                  <span className="text-xs font-semibold">Physical Clinic</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewLocationType("online");
-                    if (!newLocationName) setNewLocationName("Online");
-                  }}
-                  className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition-all cursor-pointer text-left ${
-                    newLocationType === "online"
-                      ? "border-blue-600 bg-blue-600 text-white shadow-xs"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  <Video className={`w-4 h-4 shrink-0 ${newLocationType === "online" ? "text-white" : "text-blue-500"}`} />
-                  <span className="text-xs font-semibold">Online / Virtual</span>
-                </button>
+                  <option value="physical">Physical Clinic</option>
+                  <option value="online">Online / Virtual</option>
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
             </div>
 
@@ -604,122 +589,139 @@ export default function OrganizationLocationsSection({ isEditing = false }: Orga
               </div>
             )}
 
-            {/* Available Time & Days Off for New Location */}
+            {/* SECTION 1: WORKING HOURS (Separate, not toggle) */}
             <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-              {/* Header / Sub-tabs */}
-              <div className="flex items-center justify-between p-3 border-b border-slate-100 bg-white">
+              <div className="flex items-center justify-between p-3 border-b border-slate-100 bg-[#fbfcfd]">
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center p-0.5 bg-slate-100 rounded-lg">
-                    <button
-                      type="button"
-                      onClick={() => setNewLocationTab("hours")}
-                      className={`px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                        newLocationTab === "hours" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500 hover:text-slate-800"
-                      }`}
-                    >
-                      Working Hours
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewLocationTab("days-off")}
-                      className={`px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                        newLocationTab === "days-off" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500 hover:text-slate-800"
-                      }`}
-                    >
-                      Days Off ({newLocationDaysOff.length})
-                    </button>
-                  </div>
+                  <Clock className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Working Hours
+                  </span>
                 </div>
 
-                {newLocationTab === "hours" && (
-                  <button
-                    type="button"
-                    onClick={handleNewLocApplyWeekdayHours}
-                    className="text-[11px] text-primary hover:underline font-semibold cursor-pointer hidden sm:inline"
-                  >
-                    Set Mon–Fri (9 AM – 5 PM)
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleNewLocApplyWeekdayHours}
+                  className="text-[11px] text-primary hover:underline font-semibold cursor-pointer"
+                >
+                  Set Mon–Fri (9 AM – 5 PM)
+                </button>
               </div>
 
-              {/* Working Hours Content */}
-              {newLocationTab === "hours" && (
-                <div className="p-3 bg-[#fbfcfd] space-y-1.5">
-                  {DAYS_OF_WEEK.map(({ key, label }) => {
-                    const sched = newLocationWorkingHours[key];
-                    return (
-                      <div
-                        key={key}
-                        className={`p-2 rounded-lg border flex items-center justify-between gap-2 text-xs transition-all ${
-                          sched.enabled
-                            ? "bg-white border-slate-200"
-                            : "bg-slate-50 border-slate-200/50 opacity-60"
-                        }`}
-                      >
-                        <label className="flex items-center gap-2 min-w-[100px] cursor-pointer">
+              <div className="p-3 bg-white space-y-1.5">
+                {DAYS_OF_WEEK.map(({ key, label }) => {
+                  const sched = newLocationWorkingHours[key];
+                  return (
+                    <div
+                      key={key}
+                      className={`p-2 rounded-lg border flex items-center justify-between gap-2 text-xs transition-all ${
+                        sched.enabled
+                          ? "bg-white border-slate-200"
+                          : "bg-slate-50 border-slate-200/50 opacity-60"
+                      }`}
+                    >
+                      <label className="flex items-center gap-2 min-w-[100px] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={sched.enabled}
+                          onChange={(e) => handleNewLocToggleDay(key, e.target.checked)}
+                          className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20 cursor-pointer"
+                        />
+                        <span className={`font-semibold ${sched.enabled ? "text-slate-900" : "text-slate-500"}`}>
+                          {label}
+                        </span>
+                      </label>
+
+                      {sched.enabled ? (
+                        <div className="flex items-center gap-1.5">
                           <input
-                            type="checkbox"
-                            checked={sched.enabled}
-                            onChange={(e) => handleNewLocToggleDay(key, e.target.checked)}
-                            className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20 cursor-pointer"
+                            type="time"
+                            value={sched.start}
+                            onChange={(e) => handleNewLocTimeChange(key, "start", e.target.value)}
+                            className="px-1.5 py-0.5 text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary font-medium text-slate-900"
                           />
-                          <span className={`font-semibold ${sched.enabled ? "text-slate-900" : "text-slate-500"}`}>
-                            {label}
-                          </span>
-                        </label>
-
-                        {sched.enabled ? (
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="time"
-                              value={sched.start}
-                              onChange={(e) => handleNewLocTimeChange(key, "start", e.target.value)}
-                              className="px-1.5 py-0.5 text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary font-medium text-slate-900"
-                            />
-                            <span className="text-slate-400 text-[11px]">to</span>
-                            <input
-                              type="time"
-                              value={sched.end}
-                              onChange={(e) => handleNewLocTimeChange(key, "end", e.target.value)}
-                              className="px-1.5 py-0.5 text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary font-medium text-slate-900"
-                            />
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic">Closed</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Days Off Content */}
-              {newLocationTab === "days-off" && (
-                <div className="p-3 bg-[#fbfcfd] space-y-2">
-                  <div className="space-y-1.5">
-                    {newLocationDaysOff.length === 0 ? (
-                      <div className="text-xs text-slate-400 py-2 text-center">No days off configured for this location</div>
-                    ) : (
-                      newLocationDaysOff.map((d) => (
-                        <div key={d.id} className="p-2 rounded-lg border border-slate-200 bg-white flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-3.5 h-3.5 text-rose-500" />
-                            <span className="font-semibold text-slate-900">{d.date}</span>
-                            {d.label && <span className="text-slate-500">• {d.label}</span>}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setNewLocationDaysOff((prev) => prev.filter((x) => x.id !== d.id))}
-                            className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <span className="text-slate-400 text-[11px]">to</span>
+                          <input
+                            type="time"
+                            value={sched.end}
+                            onChange={(e) => handleNewLocTimeChange(key, "end", e.target.value)}
+                            className="px-1.5 py-0.5 text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary font-medium text-slate-900"
+                          />
                         </div>
-                      ))
-                    )}
-                  </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 italic">Closed</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* SECTION 2: DAYS OFF (Separate, not toggle) */}
+            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+              <div className="flex items-center justify-between p-3 border-b border-slate-100 bg-[#fbfcfd]">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5 text-rose-500" />
+                  <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Days Off ({newLocationDaysOff.length})
+                  </span>
                 </div>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const today = new Date().toISOString().split("T")[0];
+                    setNewLocationDaysOff((prev) => [
+                      ...prev,
+                      { id: `do-${Date.now()}`, date: today, label: "Day Off" },
+                    ]);
+                  }}
+                  className="flex items-center gap-1 text-[11px] text-primary hover:underline font-semibold cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Day Off
+                </button>
+              </div>
+
+              <div className="p-3 bg-white space-y-2">
+                {newLocationDaysOff.length === 0 ? (
+                  <div className="text-xs text-slate-400 py-2 text-center">No days off configured for this location</div>
+                ) : (
+                  newLocationDaysOff.map((d) => (
+                    <div key={d.id} className="p-2 rounded-lg border border-slate-200 bg-slate-50/50 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 flex-1 mr-2">
+                        <Calendar className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                        <input
+                          type="date"
+                          value={d.date}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setNewLocationDaysOff((prev) => prev.map((x) => (x.id === d.id ? { ...x, date: val } : x)));
+                          }}
+                          className="px-2 py-0.5 bg-white border border-slate-200 rounded text-xs font-medium"
+                        />
+                        <input
+                          type="text"
+                          placeholder="e.g. Holiday / Maintenance"
+                          value={d.label || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setNewLocationDaysOff((prev) => prev.map((x) => (x.id === d.id ? { ...x, label: val } : x)));
+                          }}
+                          className="flex-1 px-2 py-0.5 bg-white border border-slate-200 rounded text-xs font-medium"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setNewLocationDaysOff((prev) => prev.filter((x) => x.id !== d.id))}
+                        className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Bottom Actions */}
@@ -763,7 +765,6 @@ export default function OrganizationLocationsSection({ isEditing = false }: Orga
         {locations.map((loc) => {
           const isExpanded = expandedLocationId === loc.id;
           const isLocOnline = loc.type === "online" || loc.name.toLowerCase() === "online";
-          const subTab = activeLocSubTab[loc.id] || "hours";
           const locDaysOff = loc.daysOff || [];
 
           return (
@@ -863,25 +864,16 @@ export default function OrganizationLocationsSection({ isEditing = false }: Orga
                       <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
                         Location Type
                       </label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateLocationField(loc.id, "type", "physical")}
-                          className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                            !isLocOnline ? "bg-slate-900 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                          }`}
+                      <div className="relative">
+                        <select
+                          value={loc.type || "physical"}
+                          onChange={(e) => handleUpdateLocationField(loc.id, "type", e.target.value)}
+                          className="w-full text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-blue-500 appearance-none cursor-pointer pr-8 shadow-2xs"
                         >
-                          <Building2 className="w-3.5 h-3.5" /> Physical Clinic
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateLocationField(loc.id, "type", "online")}
-                          className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                            isLocOnline ? "bg-blue-600 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                          }`}
-                        >
-                          <Video className="w-3.5 h-3.5" /> Online
-                        </button>
+                          <option value="physical">Physical Clinic</option>
+                          <option value="online">Online / Virtual</option>
+                        </select>
+                        <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                       </div>
                     </div>
                   </div>
@@ -947,191 +939,179 @@ export default function OrganizationLocationsSection({ isEditing = false }: Orga
                     </div>
                   )}
 
-                  {/* Available Time & Days Off for Existing Location */}
+                  {/* SECTION 1: WORKING HOURS (Separate, not toggle) */}
                   <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                    <div className="flex items-center justify-between p-3 border-b border-slate-100 bg-white">
+                    <div className="flex items-center justify-between p-3 border-b border-slate-100 bg-[#fbfcfd]">
                       <div className="flex items-center gap-2">
-                        <div className="flex items-center p-0.5 bg-slate-100 rounded-lg">
-                          <button
-                            type="button"
-                            onClick={() => setActiveLocSubTab((prev) => ({ ...prev, [loc.id]: "hours" }))}
-                            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                              subTab === "hours" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500 hover:text-slate-800"
-                            }`}
-                          >
-                            Working Hours
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveLocSubTab((prev) => ({ ...prev, [loc.id]: "days-off" }))}
-                            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                              subTab === "days-off" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500 hover:text-slate-800"
-                            }`}
-                          >
-                            Days Off ({locDaysOff.length})
-                          </button>
-                        </div>
+                        <Clock className="w-3.5 h-3.5 text-blue-600" />
+                        <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          Working Hours
+                        </span>
                       </div>
 
-                      {subTab === "hours" ? (
-                        <button
-                          type="button"
-                          onClick={() => handleApplyWeekdayHours(loc.id)}
-                          className="text-[11px] text-primary hover:underline font-semibold cursor-pointer"
-                        >
-                          Set Mon–Fri (9 AM – 5 PM)
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAddingDayOffForLoc(loc.id);
-                            setNewDayOffDate(new Date().toISOString().split("T")[0]);
-                            setNewDayOffLabel("");
-                          }}
-                          className="flex items-center gap-1 text-[11px] text-primary hover:underline font-semibold cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Add Day Off
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleApplyWeekdayHours(loc.id)}
+                        className="text-[11px] text-primary hover:underline font-semibold cursor-pointer"
+                      >
+                        Set Mon–Fri (9 AM – 5 PM)
+                      </button>
                     </div>
 
-                    {/* Sub-tab 1: Working Hours */}
-                    {subTab === "hours" && (
-                      <div className="p-3 bg-[#fbfcfd] space-y-1.5">
-                        {DAYS_OF_WEEK.map(({ key, label }) => {
-                          const sched = loc.workingHours[key];
-                          return (
-                            <div
-                              key={key}
-                              className={`p-2 rounded-lg border flex items-center justify-between gap-2 text-xs transition-all ${
-                                sched.enabled
-                                  ? "bg-white border-slate-200"
-                                  : "bg-slate-50 border-slate-200/50 opacity-60"
-                              }`}
-                            >
-                              <label className="flex items-center gap-2 min-w-[100px] cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={sched.enabled}
-                                  onChange={(e) => handleToggleDay(loc.id, key, e.target.checked)}
-                                  className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20 cursor-pointer"
-                                />
-                                <span className={`font-semibold ${sched.enabled ? "text-slate-900" : "text-slate-500"}`}>
-                                  {label}
-                                </span>
-                              </label>
+                    <div className="p-3 bg-white space-y-1.5">
+                      {DAYS_OF_WEEK.map(({ key, label }) => {
+                        const sched = loc.workingHours[key];
+                        return (
+                          <div
+                            key={key}
+                            className={`p-2 rounded-lg border flex items-center justify-between gap-2 text-xs transition-all ${
+                              sched.enabled
+                                ? "bg-white border-slate-200"
+                                : "bg-slate-50 border-slate-200/50 opacity-60"
+                            }`}
+                          >
+                            <label className="flex items-center gap-2 min-w-[100px] cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={sched.enabled}
+                                onChange={(e) => handleToggleDay(loc.id, key, e.target.checked)}
+                                className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary/20 cursor-pointer"
+                              />
+                              <span className={`font-semibold ${sched.enabled ? "text-slate-900" : "text-slate-500"}`}>
+                                {label}
+                              </span>
+                            </label>
 
-                              {sched.enabled ? (
-                                <div className="flex items-center gap-1.5">
-                                  <input
-                                    type="time"
-                                    value={sched.start}
-                                    onChange={(e) => handleTimeChange(loc.id, key, "start", e.target.value)}
-                                    className="px-1.5 py-0.5 text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary font-medium text-slate-900"
-                                  />
-                                  <span className="text-slate-400 text-[11px]">to</span>
-                                  <input
-                                    type="time"
-                                    value={sched.end}
-                                    onChange={(e) => handleTimeChange(loc.id, key, "end", e.target.value)}
-                                    className="px-1.5 py-0.5 text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary font-medium text-slate-900"
-                                  />
-                                </div>
-                              ) : (
-                                <span className="text-[11px] text-slate-400 italic">Closed</span>
-                              )}
-                            </div>
-                          );
-                        })}
+                            {sched.enabled ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="time"
+                                  value={sched.start}
+                                  onChange={(e) => handleTimeChange(loc.id, key, "start", e.target.value)}
+                                  className="px-1.5 py-0.5 text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary font-medium text-slate-900"
+                                />
+                                <span className="text-slate-400 text-[11px]">to</span>
+                                <input
+                                  type="time"
+                                  value={sched.end}
+                                  onChange={(e) => handleTimeChange(loc.id, key, "end", e.target.value)}
+                                  className="px-1.5 py-0.5 text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary font-medium text-slate-900"
+                                />
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 italic">Closed</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* SECTION 2: DAYS OFF (Separate, not toggle) */}
+                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                    <div className="flex items-center justify-between p-3 border-b border-slate-100 bg-[#fbfcfd]">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-3.5 h-3.5 text-rose-500" />
+                        <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          Days Off ({locDaysOff.length})
+                        </span>
                       </div>
-                    )}
 
-                    {/* Sub-tab 2: Days Off */}
-                    {subTab === "days-off" && (
-                      <div className="p-3 bg-[#fbfcfd] space-y-2.5">
-                        {/* Inline Add Day Off Form */}
-                        {addingDayOffForLoc === loc.id && (
-                          <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/30 space-y-2">
-                            <div className="text-xs font-bold text-slate-800">Add Location Day Off</div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <div>
-                                <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">Date *</label>
-                                <input
-                                  type="date"
-                                  value={newDayOffDate}
-                                  onChange={(e) => setNewDayOffDate(e.target.value)}
-                                  className="w-full px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">Reason / Holiday Name</label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. Christmas Day, Renovation"
-                                  value={newDayOffLabel}
-                                  onChange={(e) => setNewDayOffLabel(e.target.value)}
-                                  className="w-full px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
-                                />
-                              </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddingDayOffForLoc(loc.id);
+                          setNewDayOffDate(new Date().toISOString().split("T")[0]);
+                          setNewDayOffLabel("");
+                        }}
+                        className="flex items-center gap-1 text-[11px] text-primary hover:underline font-semibold cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Day Off
+                      </button>
+                    </div>
+
+                    <div className="p-3 bg-white space-y-2">
+                      {/* Inline Add Day Off Form */}
+                      {addingDayOffForLoc === loc.id && (
+                        <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/30 space-y-2 mb-2">
+                          <div className="text-xs font-bold text-slate-800">Add Location Day Off</div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">Date *</label>
+                              <input
+                                type="date"
+                                value={newDayOffDate}
+                                onChange={(e) => setNewDayOffDate(e.target.value)}
+                                className="w-full px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                              />
                             </div>
-                            <div className="flex items-center justify-end gap-2 pt-1">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setAddingDayOffForLoc(null)}
-                                className="h-7 px-2.5 text-xs"
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="primary"
-                                onClick={() => handleAddDayOff(loc.id)}
-                                className="h-7 px-2.5 text-xs"
-                              >
-                                Add Day Off
-                              </Button>
+                            <div>
+                              <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">Reason / Holiday Name</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Christmas Day, Renovation"
+                                value={newDayOffLabel}
+                                onChange={(e) => setNewDayOffLabel(e.target.value)}
+                                className="w-full px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                              />
                             </div>
                           </div>
-                        )}
-
-                        {/* List of Days Off */}
-                        <div className="space-y-1.5">
-                          {locDaysOff.length === 0 ? (
-                            <div className="text-xs text-slate-400 py-3 text-center">
-                              No days off scheduled for {loc.name}. Click &quot;Add Day Off&quot; above to block dates.
-                            </div>
-                          ) : (
-                            locDaysOff.map((d) => (
-                              <div
-                                key={d.id}
-                                className="p-2.5 rounded-xl border border-slate-200 bg-white flex items-center justify-between text-xs hover:bg-slate-50 transition-colors shadow-2xs"
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className="w-6 h-6 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500 shrink-0">
-                                    <Calendar className="w-3.5 h-3.5" />
-                                  </div>
-                                  <div className="truncate">
-                                    <span className="font-bold text-slate-900 mr-2">{d.date}</span>
-                                    <span className="text-slate-500 font-medium">{d.label || "Closed"}</span>
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveDayOff(loc.id, d.id)}
-                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0 ml-2"
-                                  title="Remove Day Off"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ))
-                          )}
+                          <div className="flex items-center justify-end gap-2 pt-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setAddingDayOffForLoc(null)}
+                              className="h-7 px-2.5 text-xs"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={() => handleAddDayOff(loc.id)}
+                              className="h-7 px-2.5 text-xs"
+                            >
+                              Add Day Off
+                            </Button>
+                          </div>
                         </div>
+                      )}
+
+                      {/* List of Days Off */}
+                      <div className="space-y-1.5">
+                        {locDaysOff.length === 0 ? (
+                          <div className="text-xs text-slate-400 py-3 text-center">
+                            No days off scheduled for {loc.name}. Click &quot;Add Day Off&quot; above to block dates.
+                          </div>
+                        ) : (
+                          locDaysOff.map((d) => (
+                            <div
+                              key={d.id}
+                              className="p-2.5 rounded-xl border border-slate-200 bg-white flex items-center justify-between text-xs hover:bg-slate-50 transition-colors shadow-2xs"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-6 h-6 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500 shrink-0">
+                                  <Calendar className="w-3.5 h-3.5" />
+                                </div>
+                                <div className="truncate">
+                                  <span className="font-bold text-slate-900 mr-2">{d.date}</span>
+                                  <span className="text-slate-500 font-medium">{d.label || "Closed"}</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDayOff(loc.id, d.id)}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0 ml-2"
+                                title="Remove Day Off"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   {/* Primary Location Toggle */}

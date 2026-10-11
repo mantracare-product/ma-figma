@@ -78,7 +78,7 @@ export interface OverviewSection {
 }
 
 export interface DraggableOverviewSectionsProps {
-  mode: "client" | "process" | "scribe";
+  mode: "client" | "process" | "scribe" | "service" | "appointment" | "invoice";
   client?: any;
   log?: any;
   sections: OverviewSection[];
@@ -94,19 +94,9 @@ export interface DraggableOverviewSectionsProps {
   onNavigateToClient?: (clientId: string) => void;
   customFieldsModule?: FieldModule;
   highlightRequiredKeys?: string[];
+  renderCustomSection?: (section: OverviewSection) => React.ReactNode;
 }
 
-const SECTION_ICONS: Record<string, React.ReactNode> = {
-  user: <User className="w-3.5 h-3.5 text-blue-600" />,
-  briefcase: <Briefcase className="w-3.5 h-3.5 text-blue-600" />,
-  workflow: <Workflow className="w-3.5 h-3.5 text-blue-600" />,
-  layers: <Layers className="w-3.5 h-3.5 text-blue-600" />,
-  "file-text": <FileText className="w-3.5 h-3.5 text-blue-600" />,
-  settings: <SettingsIcon className="w-3.5 h-3.5 text-blue-600" />,
-  sparkles: <Sparkles className="w-3.5 h-3.5 text-amber-500" />,
-  shield: <Shield className="w-3.5 h-3.5 text-emerald-600" />,
-  tag: <Tag className="w-3.5 h-3.5 text-purple-600" />,
-};
 
 const SignatureDrawingPad: React.FC<{
   value?: string;
@@ -276,6 +266,7 @@ export default function DraggableOverviewSections({
   onNavigateToClient,
   customFieldsModule = "client",
   highlightRequiredKeys = [],
+  renderCustomSection,
 }: DraggableOverviewSectionsProps) {
   const { getAllFields, getAllSections, addCustomSection, updateCustomSection, deleteCustomSection, updateCustomField } = useFieldRegistry();
   const { activeOrganization } = useOrganization();
@@ -332,7 +323,8 @@ export default function DraggableOverviewSections({
   const SYSTEM_FIELD_KEYS = useMemo(() => new Set([
     "name", "email", "phone", "location", "country",
     "company", "role", "status", "processes", "stage",
-    "responsible", "lastContact", "companyName", "jobPosition"
+    "responsible", "lastContact", "companyName", "jobPosition",
+    "category", "cptCode", "description", "duration", "price", "tax", "assignedEmployees", "isActive"
   ]), []);
 
   const SYSTEM_SEC_IDS = useMemo(() => new Set([
@@ -341,6 +333,9 @@ export default function DraggableOverviewSections({
     "sec-company-details",
     "sec-company-role",
     "sec-process-pipeline",
+    "sec-service-info",
+    "sec-service-pricing",
+    "sec-service-assignment",
   ]), []);
 
   // All custom field definitions filtered by organization scope and process context
@@ -388,7 +383,71 @@ export default function DraggableOverviewSections({
   // User explicitly added field keys in this record view
   const [userAddedFieldKeys, setUserAddedFieldKeys] = useState<Set<string>>(new Set());
 
-  // Sections and their fields filtered strictly according to activeOrganization scope and showAlways settings
+  // ── Auto-Calculate Formula Fields ─────────────────────────────────────────
+  useEffect(() => {
+    if (!fieldValues || !allRegistryFields) return;
+
+    const getNumericVal = (fKey: string): number | null => {
+      if (!fKey) return null;
+      if (fieldValues[fKey] !== undefined && fieldValues[fKey] !== "" && fieldValues[fKey] !== null) {
+        const num = Number(fieldValues[fKey]);
+        return isNaN(num) ? null : num;
+      }
+      for (const [k, v] of Object.entries(fieldValues)) {
+        if ((k === fKey || k.endsWith(`_${fKey}`)) && v !== undefined && v !== "" && v !== null) {
+          const num = Number(v);
+          if (!isNaN(num)) return num;
+        }
+      }
+      return null;
+    };
+
+    allRegistryFields.forEach((field) => {
+      if (
+        (field.inputType === "number" || field.inputType === "money") &&
+        field.formulaConfig?.mode === "formula" &&
+        Array.isArray(field.formulaConfig.terms) &&
+        field.formulaConfig.terms.length >= 2
+      ) {
+        const terms = field.formulaConfig.terms;
+        const firstVal = getNumericVal(terms[0].fieldKey);
+        if (firstVal === null) return;
+
+        let result = firstVal;
+        let valid = true;
+
+        for (let i = 1; i < terms.length; i++) {
+          const prevOp = terms[i - 1].operator || "+";
+          const nextVal = getNumericVal(terms[i].fieldKey);
+          if (nextVal === null) {
+            valid = false;
+            break;
+          }
+          if (prevOp === "+") result += nextVal;
+          else if (prevOp === "-") result -= nextVal;
+          else if (prevOp === "*") result *= nextVal;
+          else if (prevOp === "/") result = nextVal !== 0 ? result / nextVal : 0;
+        }
+
+        if (valid) {
+          const cleanResult = Math.round(result * 10000) / 10000;
+          const currentVal = getNumericVal(field.key);
+          if (currentVal !== cleanResult) {
+            let targetKey = field.key;
+            for (const k of Object.keys(fieldValues)) {
+              if (k.endsWith(`_${field.key}`)) {
+                targetKey = k;
+                break;
+              }
+            }
+            onFieldValueChange(targetKey, cleanResult);
+          }
+        }
+      }
+    });
+  }, [fieldValues, allRegistryFields, onFieldValueChange]);
+
+  // Sections and their fields filtered strictly according to activeOrganization scope
   const visibleSections = useMemo(() => {
     const procId = activeProcessId || activeProcessName;
     return sections
@@ -401,23 +460,11 @@ export default function DraggableOverviewSections({
         ...sec,
         fieldKeys: (sec.fieldKeys || []).filter((k) => {
           if (SYSTEM_FIELD_KEYS.has(k)) return true;
-          if (!allowedFieldKeys.has(k) && !userAddedFieldKeys.has(k)) return false;
-
-          // If showAlways is false (turned off), do NOT show in section unless it has a value on this record or was added via + Add Field popup
-          const regField = allRegistryFields.find((f) => f.key === k);
-          if (regField && regField.showAlways === false) {
-            const scopedKey = `${sec.id}_${k}`;
-            const val = fieldValues[scopedKey] !== undefined ? fieldValues[scopedKey] : fieldValues[k];
-            const hasVal = val !== undefined && val !== null && val !== "" && (!Array.isArray(val) || val.length > 0);
-            if (!hasVal && !userAddedFieldKeys.has(k)) {
-              return false;
-            }
-          }
-
+          // Retain fields assigned to this section so newly added fields never vanish on drawer reopening
           return true;
         }),
       }));
-  }, [sections, matchingCustomSecIds, allowedFieldKeys, activeOrganization, SYSTEM_SEC_IDS, SYSTEM_FIELD_KEYS, activeProcessId, activeProcessName, allRegistryFields, fieldValues, userAddedFieldKeys]);
+  }, [sections, matchingCustomSecIds, activeOrganization, SYSTEM_SEC_IDS, SYSTEM_FIELD_KEYS, activeProcessId, activeProcessName]);
 
   // User custom option additions per field
   const [newOptionInputs, setNewOptionInputs] = useState<Record<string, string>>({});
@@ -467,7 +514,6 @@ export default function DraggableOverviewSections({
   const [addSectionModalOpen, setAddSectionModalOpen] = useState(false);
   const [newSectionTitle, setNewSectionTitle] = useState("");
   const [newSectionDescription, setNewSectionDescription] = useState("");
-  const [newSectionIcon, setNewSectionIcon] = useState<OverviewSection["iconName"]>("layers");
   const [selectedInitialFields, setSelectedInitialFields] = useState<string[]>([]);
 
   // Responsible dropdown open state per section
@@ -654,7 +700,6 @@ export default function DraggableOverviewSections({
       title: newSectionTitle.trim(),
       description: newSectionDescription.trim() || undefined,
       module: customFieldsModule,
-      iconName: newSectionIcon || "layers",
       fieldKeys: selectedInitialFields || [],
       processIds: (customFieldsModule === "process" && (activeProcessObj?.id || activeProcessName)) ? [activeProcessObj?.id || activeProcessName] : undefined,
       source: "custom",
@@ -665,7 +710,6 @@ export default function DraggableOverviewSections({
       id: registered.id,
       title: registered.title,
       description: registered.description,
-      iconName: (registered.iconName as any) || "layers",
       isCustom: true,
       fieldKeys: selectedInitialFields || [],
       processIds: registered.processIds,
@@ -754,6 +798,11 @@ export default function DraggableOverviewSections({
             </span>
             <label className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider truncate flex items-center gap-1">
               <span>{label}</span>
+              {regField?.formulaConfig?.mode === "formula" && (
+                <span className="text-[9px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1 py-0.2 rounded shadow-2xs tracking-normal lowercase font-mono" title="Calculated via formula">
+                  fx
+                </span>
+              )}
               {regField?.tooltip && (
                 <InfoTooltip text={regField.tooltip} size="sm" />
               )}
@@ -791,17 +840,24 @@ export default function DraggableOverviewSections({
         </div>
 
         {/* Input Rendering by Key / Type */}
-        {key === "name" || key === "client_name" ? (
+        {regField && (regField.inputType === "new_list" || regField.inputType === "money" || regField.inputType === "user" || regField.inputType === "yes_no" || regField.inputType === "table" || regField.inputType === "group" || regField.inputType === "multiselect" || regField.inputType === "crm_bind") ? (
+          <FieldInputRenderer
+            field={regField}
+            value={effectiveVal !== undefined ? effectiveVal : regField.defaultValue}
+            onChange={(val) => setVal(val)}
+            mode="runtime"
+          />
+        ) : key === "name" || key === "client_name" ? (
           <div className="flex items-center gap-2">
             <input
               type="text"
               value={rawVal || ""}
               onChange={(e) => setVal(e.target.value)}
-              placeholder="Enter full name"
+              placeholder={mode === "service" ? (regField?.placeholder || "e.g. Initial Consultation") : "Enter full name"}
               className="w-full px-3 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
               style={{ fontFamily: "Outfit, sans-serif" }}
             />
-            {onNavigateToClient && client?.id && (
+            {mode !== "service" && onNavigateToClient && client?.id && (
               <button
                 type="button"
                 onClick={() => onNavigateToClient(client.id)}
@@ -1580,11 +1636,6 @@ export default function DraggableOverviewSections({
                   ) : (
                     <div className="flex flex-col min-w-0">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        {section.iconName && (
-                          <span className="shrink-0">
-                            {SECTION_ICONS[section.iconName] || <Layers className="w-3.5 h-3.5 text-blue-600" />}
-                          </span>
-                        )}
                         <h3
                           className="text-xs font-bold text-slate-700 uppercase tracking-wider truncate"
                           style={{ fontFamily: "Outfit, sans-serif" }}
@@ -1645,7 +1696,9 @@ export default function DraggableOverviewSections({
                   }
                 }}
               >
-                {section.fieldKeys.length === 0 ? (
+                {renderCustomSection && renderCustomSection(section) ? (
+                  renderCustomSection(section)
+                ) : section.fieldKeys.length === 0 ? (
                   <div className="py-5 px-3 flex items-center justify-between border border-dashed border-slate-200 rounded-lg bg-slate-50/50">
                     <p className="text-xs text-slate-400 font-medium">
                       No fields in this section yet
@@ -1654,7 +1707,7 @@ export default function DraggableOverviewSections({
                       <button
                         type="button"
                         onClick={() => handleOpenSelectFieldForSection(section.id)}
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer"
+                        className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer"
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       >
                         <Plus className="w-3 h-3" /> Add Field
@@ -1669,10 +1722,10 @@ export default function DraggableOverviewSections({
                         <button
                           type="button"
                           onClick={() => handleOpenSelectFieldForSection(section.id)}
-                          className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer bg-transparent p-0"
+                          className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer bg-transparent p-0"
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-3.5 h-3.5" />
                           <span>Add Field</span>
                         </button>
                       </div>
@@ -1690,7 +1743,7 @@ export default function DraggableOverviewSections({
         <button
           type="button"
           onClick={() => setAddSectionModalOpen(true)}
-          className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer bg-transparent p-0"
+          className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline flex items-center gap-1 transition-colors cursor-pointer bg-transparent p-0"
           style={{ fontFamily: "Outfit, sans-serif" }}
         >
           <Plus className="w-3.5 h-3.5" />

@@ -1,5 +1,7 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
+import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import { useInvoices } from "../context/InvoiceContext";
 import { ClientInvoice, InvoiceStatus } from "../types/invoiceTypes";
 import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
@@ -10,11 +12,13 @@ import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { toast } from "sonner";
+import { getClientList } from "../../lib/getClientList";
 import {
   Search,
   Settings as SettingsIcon,
   Plus,
   CreditCard,
+  Wallet,
   List,
   LayoutGrid,
   MoreVertical,
@@ -26,10 +30,43 @@ import {
   ChevronRight,
   ChevronsRight,
   FileText,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
+import { useNavigate, Link } from "react-router";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
+import { invoiceService, hasInvoiceAutomation } from "../../lib/invoiceService";
 
 export default function Invoices() {
+  const navigate = useNavigate();
   const { invoices, updateInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, voidInvoice } = useInvoices();
+  const allClients = getClientList();
+
+  const [storedProcesses, setStoredProcesses] = useState<Process[]>(getStoredProcesses);
+
+  useEffect(() => {
+    const handleProcessesUpdate = () => {
+      setStoredProcesses(getStoredProcesses());
+    };
+    window.addEventListener(PROCESS_STORE_EVENT, handleProcessesUpdate);
+    window.addEventListener("storage", handleProcessesUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, handleProcessesUpdate);
+      window.removeEventListener("storage", handleProcessesUpdate);
+    };
+  }, []);
+
+  // Metrics calculations
+  const totalInvoiced = invoices.reduce((sum, i) => sum + i.total, 0);
+  const outstandingAmount = invoices
+    .filter((i) => ["sent", "viewed", "partial", "overdue"].includes(i.status))
+    .reduce((sum, i) => sum + (i.total - (i.amountPaid || 0)), 0);
+  const paidThisMonth = invoices
+    .filter((i) => i.status === "paid" || (i.amountPaid && i.amountPaid > 0))
+    .reduce((sum, i) => sum + (i.amountPaid || (i.status === "paid" ? i.total : 0)), 0);
+  const overdueCount = invoices.filter((i) => i.status === "overdue").length;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [clientFilter, setClientFilter] = useState<string>("all");
@@ -43,12 +80,12 @@ export default function Invoices() {
   // Column visibility state (including explicit Amount & Due Date columns)
   const [showColumnToggle, setShowColumnToggle] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState({
+    invoiceId: true,
     client: true,
     type: true,
     amount: true,
     balance: true,
     stage: true,
-    status: true,
     dueDate: true,
     created: true,
     lastActivity: true,
@@ -94,7 +131,7 @@ export default function Invoices() {
 
   // Pagination state (matching Deals.tsx)
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
 
 
   // Filter invoices
@@ -106,7 +143,7 @@ export default function Invoices() {
       inv.clientName.toLowerCase().includes(query) ||
       (inv.appointmentTitle && inv.appointmentTitle.toLowerCase().includes(query));
 
-    const matchesStatus = statusFilter === "all" || inv.status === statusFilter;
+    const matchesStatus = statusFilter === "all" || inv.currentStageId === statusFilter || inv.status === statusFilter;
     const matchesClient = clientFilter === "all" || inv.clientId === clientFilter;
 
     return matchesSearch && matchesStatus && matchesClient;
@@ -155,6 +192,11 @@ export default function Invoices() {
   };
 
   const handleCreateInvoice = () => {
+    if (!hasInvoiceAutomation()) {
+      toast.error("Please build an automation first before creating invoices. Navigate to Automation to configure workflow rules.");
+      navigate("/automation");
+      return;
+    }
     setEditingInvoice(null);
     setIsCreateDrawerOpen(true);
   };
@@ -182,491 +224,397 @@ export default function Invoices() {
     setOpenCardMenuId(null);
   };
 
-  const getStatusBadge = (status: InvoiceStatus) => {
-    switch (status) {
-      case "paid":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Paid</span>;
-      case "partial":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 font-bold whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Partial</span>;
-      case "sent":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Sent</span>;
-      case "viewed":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Viewed</span>;
-      case "overdue":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 font-bold whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Overdue</span>;
-      case "void":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 line-through whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Void</span>;
-      default:
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Draft</span>;
+  const invoiceProcess = React.useMemo(() => {
+    return storedProcesses.find((p) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
+  }, [storedProcesses]);
+
+  const handleUpdateInvoiceStatus = (invoiceId: string, newStatusOrStageId: InvoiceStatus | string) => {
+    const stage = invoiceProcess.stages.find((s) => s.id === newStatusOrStageId || s.systemCategory === newStatusOrStageId);
+    if (stage) {
+      invoiceService.moveToStage(invoiceId, stage.id, { type: "manual", ruleName: `Stage changed to ${stage.name}` });
+      toast.success(`Invoice moved to ${stage.name} ✓`);
+    } else {
+      updateInvoiceStatus(invoiceId, newStatusOrStageId as InvoiceStatus);
     }
   };
 
-  const kanbanColumns: { id: InvoiceStatus; title: string; headerBg: string; badgeColor: string }[] = [
-    { id: "draft", title: "Draft", headerBg: "#181e25", badgeColor: "bg-slate-100 text-slate-800" },
-    { id: "sent", title: "Sent", headerBg: "#181e25", badgeColor: "bg-blue-50 text-[#1456f0]" },
-    { id: "viewed", title: "Viewed", headerBg: "#181e25", badgeColor: "bg-purple-50 text-purple-700" },
-    { id: "partial", title: "Partial", headerBg: "#f59e0b", badgeColor: "bg-amber-50 text-amber-800" },
-    { id: "paid", title: "Paid", headerBg: "#10b981", badgeColor: "bg-emerald-50 text-emerald-800" },
-    { id: "overdue", title: "Overdue", headerBg: "#ef4444", badgeColor: "bg-rose-50 text-rose-800" },
-    { id: "void", title: "Void", headerBg: "#64748b", badgeColor: "bg-slate-100 text-slate-600" },
-  ];
+  const getStatusBadge = (invOrStatus: ClientInvoice | InvoiceStatus) => {
+    const isObj = typeof invOrStatus === "object" && invOrStatus !== null;
+    const invoice = isObj ? (invOrStatus as ClientInvoice) : undefined;
+    const stageId = invoice ? invoice.currentStageId : undefined;
+    const statusVal = invoice ? invoice.status : (invOrStatus as InvoiceStatus);
+    const stage = invoiceProcess.stages.find((s) => s.id === stageId || s.systemCategory === statusVal);
+    const label: string = (invoice && invoice.statusLabel) ? invoice.statusLabel : (stage?.name || (typeof statusVal === "string" ? statusVal : "Draft"));
+    const color = stage?.color || "#64748B";
 
+    return (
+      <span
+        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
+        style={{
+          fontFamily: "Outfit, sans-serif",
+          backgroundColor: `${color}15`,
+          color: color,
+          border: `1px solid ${color}35`,
+        }}
+      >
+        {label}
+      </span>
+    );
+  };
+
+  const kanbanColumns = useMemo(() => {
+    return invoiceProcess.stages.map((stg) => ({
+      id: stg.id,
+      category: stg.systemCategory || "draft",
+      title: stg.name,
+      headerBg: stg.color || "#181e25",
+      badgeColor: "bg-slate-100 text-slate-800",
+    }));
+  }, [invoiceProcess]);
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
           title="Invoices"
           subtitle="Manage client billing, view automated call-flow invoices, and collect payments"
-          badge={
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
-              Billing Hub
-            </span>
-          }
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Invoices Works" />
-            <button
-              onClick={() => {
-                setPaymentModalInvoice(null);
-                setIsRecordPaymentOpen(true);
-              }}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <CreditCard className="w-3.5 h-3.5" /> + Record Payment
-            </button>
-            <button
-              onClick={handleCreateInvoice}
-              className="px-4 py-2 bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] text-white rounded-full font-semibold text-xs transition-all flex items-center gap-2 shadow-sm cursor-pointer"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <Plus className="w-3.5 h-3.5 text-blue-400" /> Create Invoice
-            </button>
           </div>
         </PageHeader>
 
-
-        {/* View Mode Toggle & Filter Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            {/* View Mode Tabs: List | Kanban */}
-            <div className="inline-flex items-center p-1 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
-              <button
-                onClick={() => setViewMode("list")}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  viewMode === "list"
-                    ? "bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white shadow-2xs"
-                    : "text-[#45515e] hover:text-[#222222]"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <List className="w-3.5 h-3.5" /> List
-              </button>
-              <button
-                onClick={() => setViewMode("kanban")}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  viewMode === "kanban"
-                    ? "bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white shadow-2xs"
-                    : "text-[#45515e] hover:text-[#222222]"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" /> Kanban
-              </button>
-            </div>
+        {/* Stats Cards — thin capsule style matching WebForms */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>TOTAL INVOICED</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>${totalInvoiced.toFixed(2)}</span>
+            <span className="text-[10px] shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{invoices.length} inv</span>
           </div>
-
-          <div className="flex items-center gap-3">
-            {/* Search Bar */}
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search invoices..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* Status Filter Dropdown */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white focus:outline-none"
-            >
-              <option value="all">All Statuses (Draft, Sent, Viewed, Partial, Paid, Overdue, Void)</option>
-              <option value="draft">Draft</option>
-              <option value="sent">Sent</option>
-              <option value="viewed">Viewed</option>
-              <option value="partial">Partial</option>
-              <option value="paid">Paid</option>
-              <option value="overdue">Overdue</option>
-              <option value="void">Void</option>
-
-            </select>
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>OUTSTANDING</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>${outstandingAmount.toFixed(2)}</span>
+            <span className="text-[10px] shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{invoices.filter(i => ["sent", "viewed", "partial", "overdue"].includes(i.status)).length} due</span>
+          </div>
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>PAID THIS MONTH</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>${paidThisMonth.toFixed(2)}</span>
+            <span className="text-[10px] shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{invoices.filter(i => i.status === "paid").length} paid</span>
+          </div>
+          <div className="bg-white border border-border shadow-xs rounded-xl px-3 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>OVERDUE COUNT</span>
+            <span className="text-base font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: overdueCount > 0 ? "#E11D48" : "#020817" }}>{overdueCount}</span>
+            <span className="text-[10px] shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{overdueCount > 0 ? "Needs action" : "All clear"}</span>
           </div>
         </div>
-
-        {/* View Mode: List View (Matching Deals.tsx Table Layout 100%) */}
-        {viewMode === "list" && (
-          <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/80 shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                  <tr>
-                    {/* Checkbox Header */}
-                    <th className="px-4 py-2.5 w-10">
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = someSelected;
-                        }}
-                        onChange={handleSelectAll}
-                        className="w-4 h-4 cursor-pointer"
-                      />
-                    </th>
-
-                    {/* Column Toggle Gear Icon Header */}
-                    <th className="px-2 py-2.5 text-center relative" style={{ width: "32px" }}>
-                      <div className="relative inline-block">
-                        <button
-                          onClick={() => setShowColumnToggle(!showColumnToggle)}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
-                          aria-label="Customize Columns"
-                        >
-                          <SettingsIcon className="w-4 h-4 text-[#E5E7EB] hover:text-white transition-colors" />
-                        </button>
-                        {showColumnToggle && (
-                          <div className="absolute left-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg p-4 z-50 text-left">
-                            <h3 className="font-semibold mb-3 text-xs uppercase tracking-wider text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>Visible Columns</h3>
-                            <div className="space-y-2">
-                              {Object.keys(visibleColumns).map((col) => (
-                                <label key={col} className="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleColumns[col as keyof typeof visibleColumns]}
-                                    onChange={(e) =>
-                                      setVisibleColumns({
-                                        ...visibleColumns,
-                                        [col]: e.target.checked,
-                                      })
-                                    }
-                                    className="w-4 h-4 text-blue-600 rounded"
-                                  />
-                                  <span className="capitalize">
-                                    {col === "dueDate" ? "Due Date" : col === "lastActivity" ? "Last Activity" : col}
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </th>
-
-                    {visibleColumns.client && (
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                        CLIENT
-                      </th>
-                    )}
-                    {visibleColumns.amount && (
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                        AMOUNT
-                      </th>
-                    )}
-                    {visibleColumns.balance && (
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                        BALANCE
-                      </th>
-                    )}
-                    {visibleColumns.stage && (
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                        <div className="flex items-center justify-center gap-1">
-                          STAGE
-                          <InfoTooltip text="Each block is one stage (Draft → Sent → Viewed → Paid → Overdue → Void). Click a block to set status." />
-                        </div>
-                      </th>
-                    )}
-                    {visibleColumns.status && (
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                        STATUS
-                      </th>
-                    )}
-                    {visibleColumns.dueDate && (
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                        DUE DATE
-                      </th>
-                    )}
-                    {visibleColumns.created && (
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                        CREATED
-                      </th>
-                    )}
-                    {visibleColumns.lastActivity && (
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                        LAST ACTIVITY
-                      </th>
-                    )}
-                    {visibleColumns.responsible && (
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
-                        RESPONSIBLE
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {paginatedInvoices.map((inv) => {
-                    const isAutomated = inv.createdBy === "system";
-                    const isMenuOpen = openRowMenuId === inv.id;
-                    const isEditDisabled = inv.status === "paid" || inv.status === "void";
-
-                    return (
-                      <tr
-                        key={inv.id}
-                        className={`transition-colors ${
-                          selectedRows.has(inv.id) ? "bg-[#E8F0FE]" : "hover:bg-[#F1F5F9]"
-                        }`}
-                      >
-                        {/* Checkbox Cell */}
-                        <td className="px-4 py-2.5">
-                          <input
-                            type="checkbox"
-                            checked={selectedRows.has(inv.id)}
-                            onChange={() => handleSelectRow(inv.id)}
-                            className="w-4 h-4 cursor-pointer"
-                          />
-                        </td>
-
-                        {/* Three-dot Kebab Menu Cell (Matching Deals.tsx line 2134) */}
-                        <td className="px-2 py-2.5 relative" style={{ width: "32px" }}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenRowMenuId(isMenuOpen ? null : inv.id);
-                            }}
-                            className="inline-flex items-center justify-center w-7 h-7 rounded transition-colors hover:bg-gray-100"
-                            style={{ color: "#94A3B8" }}
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
-
-                          {isMenuOpen && (
-                            <>
-                              <div className="fixed inset-0 z-40" onClick={() => setOpenRowMenuId(null)} />
-                              <div
-                                className="absolute left-8 top-0 z-50 bg-white rounded-lg overflow-hidden border border-slate-200"
-                                style={{ width: "155px", boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}
-                              >
-                                {inv.status !== "paid" && inv.status !== "void" && (
-                                  <button
-                                    onClick={() => {
-                                      setOpenRowMenuId(null);
-                                      setPaymentModalInvoice(inv);
-                                      setIsRecordPaymentOpen(true);
-                                    }}
-                                    className="w-full flex items-center gap-2.5 px-3 text-sm text-emerald-700 font-bold transition-colors hover:bg-emerald-50 border-b border-slate-100"
-                                    style={{ height: "36px", fontSize: "13px" }}
-                                  >
-                                    <CreditCard className="w-4 h-4 text-emerald-600" /> Add Payment
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleOpenDocument(inv)}
-                                  className="w-full flex items-center gap-2.5 px-3 text-sm text-gray-700 transition-colors hover:bg-[#F0F4FF]"
-                                  style={{ height: "36px", fontSize: "14px" }}
-                                >
-                                  <Eye className="w-4 h-4" /> View
-                                </button>
-
-                                {isEditDisabled ? (
-                                  <div
-                                    className="w-full flex items-center gap-2.5 px-3 text-sm text-slate-300 cursor-not-allowed bg-slate-50"
-                                    style={{ height: "36px", fontSize: "14px" }}
-                                    title="Paid or Void invoices can't be edited"
-                                  >
-                                    <Pencil className="w-4 h-4 text-slate-300" /> Edit
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={() => handleEditInvoice(inv)}
-                                    className="w-full flex items-center gap-2.5 px-3 text-sm text-gray-700 transition-colors hover:bg-[#F0F4FF]"
-                                    style={{ height: "36px", fontSize: "14px" }}
-                                  >
-                                    <Pencil className="w-4 h-4" /> Edit
-                                  </button>
-                                )}
-
-                                <button
-                                  onClick={() => handleDeleteInvoice(inv)}
-                                  className="w-full flex items-center gap-2.5 px-3 transition-colors hover:bg-[#F0F4FF]"
-                                  style={{ height: "36px", fontSize: "14px", color: "#D32F2F" }}
-                                >
-                                  <Trash2 className="w-4 h-4" /> Delete
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </td>
-
-                        {/* CLIENT Column */}
-                        {visibleColumns.client && (
-                          <td className="px-4 py-2.5 font-medium text-sm" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                            <button
-                              onClick={() => handleOpenDetail(inv)}
-                              className="text-left font-bold hover:underline block"
-                              style={{ color: "#1A73E8" }}
-                            >
-                              {inv.clientName}
-                            </button>
-                            <span className="text-xs text-slate-400 font-mono block">{inv.id}</span>
-                          </td>
-                        )}
-
-                        {/* AMOUNT Column */}
-                        {visibleColumns.amount && (
-                          <td className="px-4 py-2.5 text-right font-bold text-sm text-slate-900 font-mono">
-                            ${inv.total.toFixed(2)}
-                          </td>
-                        )}
-
-                        {/* BALANCE Column */}
-                        {visibleColumns.balance && (
-                          <td className="px-4 py-2.5 text-right font-bold text-xs text-slate-700 font-mono">
-                            ${(inv.status === "paid" || inv.status === "void" ? 0 : Math.max(0, inv.total - (inv.amountPaid || 0))).toFixed(2)}
-                          </td>
-                        )}
-
-                        {/* STAGE Column */}
-                        {visibleColumns.stage && (
-                          <td className="px-4 py-2.5 text-center">
-                            <InvoiceProgressBar
-                              status={inv.status}
-                              onStatusChange={(newSt) => updateInvoiceStatus(inv.id, newSt)}
-                              interactive={true}
-                              logId={inv.id}
-                            />
-                          </td>
-                        )}
-
-                        {/* STATUS Column */}
-                        {visibleColumns.status && (
-                          <td className="px-4 py-2.5 text-center">
-                            {getStatusBadge(inv.status)}
-                          </td>
-                        )}
-
-                        {/* DUE DATE Column */}
-                        {visibleColumns.dueDate && (
-                          <td className="px-4 py-2.5 text-xs font-semibold" style={{ color: inv.status === "overdue" ? "#DC2626" : "#475569", fontFamily: "Outfit, sans-serif" }}>
-                            {inv.dueDate}
-                          </td>
-                        )}
-
-                        {/* CREATED Column */}
-                        {visibleColumns.created && (
-                          <td className="px-4 py-2.5 text-xs" style={{ color: "#64748B", fontFamily: "Outfit, sans-serif" }}>
-                            {inv.createdAt.replace("T", " ").substring(0, 16)}
-                          </td>
-                        )}
-
-                        {/* LAST ACTIVITY Column */}
-                        {visibleColumns.lastActivity && (
-                          <td className="px-4 py-2.5 text-xs font-medium" style={{ color: inv.status === "overdue" ? "#DC2626" : "#475569", fontFamily: "Outfit, sans-serif" }}>
-                            {getInvoiceActivityText(inv)}
-                          </td>
-                        )}
-
-                        {/* RESPONSIBLE Column */}
-                        {visibleColumns.responsible && (
-                          <td className="px-4 py-2.5">
-                            <span className="text-xs font-medium" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                              {inv.createdBy === "system" ? "Automated Flow" : inv.createdBy}
-                            </span>
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {filteredInvoices.length === 0 && (
-                <div className="text-center py-16">
-                  <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm font-semibold text-slate-700">No invoices found</p>
-                  <p className="text-xs text-slate-400 mt-1">Try selecting a different status or client filter</p>
-                </div>
-              )}
-            </div>
-
-            {/* Pagination Controls (Matching Deals.tsx lines 2280-2346) */}
-            <div className="border-t border-border px-4 py-3">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>Rows per page:</span>
-                    <select
-                      value={rowsPerPage}
-                      onChange={(e) => {
-                        setRowsPerPage(Number(e.target.value));
-                        setCurrentPage(1);
-                      }}
-                      className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs"
-                    >
-                      <option value={15}>15</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                    </select>
-                  </div>
-                  <span className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Showing {startIndex + 1}–{endIndex} of {totalRecords}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setCurrentPage(1)}
-                    disabled={currentPage === 1}
-                    className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="First Page"
-                  >
-                    <ChevronsLeft className="w-3.5 h-3.5 text-slate-600" />
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Previous Page"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5 text-slate-600" />
-                  </button>
-                  <span className="text-xs px-2 text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <button
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Next Page"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={currentPage === totalPages}
-                    className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Last Page"
-                  >
-                    <ChevronsRight className="w-3.5 h-3.5 text-slate-600" />
-                  </button>
-                </div>
-              </div>
-            </div>
+        {!hasInvoiceAutomation() && (
+          <div className="flex items-center justify-between px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 shadow-2xs">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              Automated Invoicing is locked — please build the automation first in Automation to enable creating invoices and stage workflows.
+            </span>
+            <Link to="/automation" className="text-blue-600 hover:underline font-semibold text-xs ml-2">
+              Build automation &rarr;
+            </Link>
           </div>
         )}
+
+        {/* View Mode Toggle & Filter Bar powered by PageTopBar */}
+        <PageTopBar
+          isBottomPanelAttached={viewMode === "list"}
+          modes={[
+            { id: "list", label: "List", icon: <List className="w-3.5 h-3.5" /> },
+            { id: "kanban", label: "Kanban", icon: <LayoutGrid className="w-3.5 h-3.5" /> },
+          ]}
+          activeMode={viewMode}
+          onModeChange={(m) => setViewMode(m as typeof viewMode)}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search invoices..."
+          filterPresets={[
+            {
+              id: "all",
+              label: "All Invoices",
+              count: invoices.length,
+              isActive: statusFilter === "all" && !searchQuery,
+              onClick: () => {
+                setStatusFilter("all");
+                setSearchQuery("");
+              },
+            },
+            {
+              id: "paid",
+              label: "Paid Invoices",
+              count: invoices.filter(i => i.status === "paid").length,
+              isActive: statusFilter === "paid",
+              onClick: () => setStatusFilter("paid"),
+            },
+            {
+              id: "overdue",
+              label: "Overdue Invoices",
+              count: invoices.filter(i => i.status === "overdue").length,
+              isActive: statusFilter === "overdue",
+              onClick: () => setStatusFilter("overdue"),
+            },
+            {
+              id: "draft",
+              label: "Draft Invoices",
+              count: invoices.filter(i => i.status === "draft").length,
+              isActive: statusFilter === "draft",
+              onClick: () => setStatusFilter("draft"),
+            },
+          ]}
+          filterFields={[
+            {
+              id: "query",
+              label: "Invoice ID / Client Name",
+              type: "text",
+              placeholder: "Filter by ID or client...",
+              value: searchQuery,
+              onChange: (val) => setSearchQuery(val || ""),
+            },
+          ]}
+          secondaryActions={
+            <div className="flex items-center gap-2">
+              {/* Record Payment Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentModalInvoice(null);
+                  setIsRecordPaymentOpen(true);
+                }}
+                className="px-3.5 h-[36px] bg-white hover:bg-gray-50 text-slate-700 border border-border rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-2xs shrink-0 cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+                title="Record Payment"
+              >
+                <Wallet className="w-3.5 h-3.5 text-slate-600" />
+                <span>Record Payment</span>
+              </button>
+            </div>
+          }
+          primaryAction={{
+            label: "Create Invoice",
+            icon: <Plus className="w-3.5 h-3.5" />,
+            onClick: handleCreateInvoice,
+          }}
+          afterPrimaryAction={
+            <button
+              type="button"
+              onClick={() => {
+                navigate("/process?entity=invoice&processId=process-invoice-default", {
+                  state: { processId: "process-invoice-default", processName: invoiceProcess.name },
+                });
+              }}
+              className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+              title="Configure Invoice Workflow"
+            >
+              <SettingsIcon className="w-4 h-4" />
+            </button>
+          }
+        />
+
+        {/* View Mode: List View (Connected seamlessly to Toolbar) */}
+        {viewMode === "list" && (() => {
+          const invoiceColumns: TableColumn<ClientInvoice>[] = [
+              {
+                id: "invoiceId",
+                header: "Invoice ID",
+                align: "left",
+                render: (inv) => (
+                  <button
+                    onClick={() => handleOpenDetail(inv)}
+                    className="hover:underline hover:text-blue-600 transition-colors text-left font-mono font-bold text-xs text-slate-700"
+                  >
+                    {inv.id}
+                  </button>
+                ),
+              },
+              {
+                id: "processId",
+                header: "Process ID",
+                align: "left",
+                render: (inv) => {
+                  const procId = inv.processId || invoiceProcess.id || "PROC-INV-01";
+                  return (
+                    <span
+                      className="font-mono text-xs font-semibold text-slate-600 bg-slate-100/80 px-2 py-0.5 rounded border border-slate-200/60"
+                      style={{ fontFamily: "JetBrains Mono, monospace" }}
+                    >
+                      {procId}
+                    </span>
+                  );
+                },
+              },
+              {
+                id: "client",
+                header: "Client",
+                align: "left",
+                render: (inv) => (
+                  <button
+                    onClick={() => handleOpenDetail(inv)}
+                    className="text-left font-bold hover:underline text-xs text-[#1A73E8]"
+                    style={{ fontFamily: 'DM Sans, sans-serif' }}
+                  >
+                    {inv.clientName}
+                  </button>
+                ),
+              },
+              {
+                id: "amount",
+                header: "Amount",
+                align: "center",
+                render: (inv) => (
+                  <span className="font-bold text-xs text-slate-900 font-mono">
+                    ${inv.total.toFixed(2)}
+                  </span>
+                ),
+              },
+              {
+                id: "balance",
+                header: "Balance",
+                align: "center",
+                render: (inv) => (
+                  <span className="font-bold text-xs text-slate-700 font-mono">
+                    ${(inv.status === "paid" || inv.status === "void" ? 0 : Math.max(0, inv.total - (inv.amountPaid || 0))).toFixed(2)}
+                  </span>
+                ),
+              },
+              {
+                id: "stage",
+                header: "Stage",
+                align: "center",
+                render: (inv) => {
+                  const stages = invoiceProcess.stages;
+                  const stageKey = (inv.currentStageId || "").trim();
+                  const matchedStage = stageKey
+                    ? stages.find(
+                        (s) =>
+                          s.id.toLowerCase() === stageKey.toLowerCase() ||
+                          s.name.toLowerCase() === stageKey.toLowerCase() ||
+                          (inv.statusLabel && s.name.toLowerCase() === inv.statusLabel.toLowerCase())
+                      )
+                    : undefined;
+
+                  if (!matchedStage) {
+                    return (
+                      <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/80 tracking-tight whitespace-nowrap"
+                          title="No stage marked — please build the automation first"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          Please build the automation first
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="flex items-center justify-center">
+                      <InvoiceProgressBar
+                        status={inv.status}
+                        currentStageId={inv.currentStageId}
+                        stages={invoiceProcess.stages}
+                        onStatusChange={(newSt) => handleUpdateInvoiceStatus(inv.id, newSt)}
+                        interactive={true}
+                        logId={inv.id}
+                      />
+                    </div>
+                  );
+                },
+              },
+              {
+                id: "dueDate",
+                header: "Due Date",
+                align: "left",
+                render: (inv) => (
+                  <span
+                    className="text-xs font-semibold"
+                    style={{ color: inv.status === "overdue" ? "#DC2626" : "#475569", fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {inv.dueDate}
+                  </span>
+                ),
+              },
+              {
+                id: "created",
+                header: "Created",
+                align: "left",
+                render: (inv) => (
+                  <span className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {inv.createdAt.replace("T", " ").substring(0, 16)}
+                  </span>
+                ),
+              },
+              {
+                id: "lastActivity",
+                header: "Last Activity",
+                align: "left",
+                render: (inv) => (
+                  <span
+                    className="text-xs font-medium"
+                    style={{ color: inv.status === "overdue" ? "#DC2626" : "#475569", fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {getInvoiceActivityText(inv)}
+                  </span>
+                ),
+              },
+              {
+                id: "responsible",
+                header: "Responsible",
+                align: "left",
+                render: (inv) => (
+                  <span className="text-xs font-medium text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {inv.createdBy === "system" ? "Automated Flow" : inv.createdBy}
+                  </span>
+                ),
+              },
+            ];
+
+            const invoiceRowActions: TableRowAction<ClientInvoice>[] = [
+              {
+                label: "Add Payment",
+                icon: <CreditCard className="w-3.5 h-3.5 text-emerald-600" />,
+                onClick: (inv) => {
+                  if (inv.status !== "paid" && inv.status !== "void") {
+                    setPaymentModalInvoice(inv);
+                    setIsRecordPaymentOpen(true);
+                  } else {
+                    toast.error("Invoice is already paid or void");
+                  }
+                },
+              },
+              {
+                label: "View Document",
+                icon: <Eye className="w-3.5 h-3.5" />,
+                onClick: (inv) => handleOpenDocument(inv),
+              },
+              {
+                label: "Edit",
+                icon: <Pencil className="w-3.5 h-3.5" />,
+                onClick: (inv) => handleEditInvoice(inv),
+              },
+              {
+                label: "Delete / Void",
+                icon: <Trash2 className="w-3.5 h-3.5" />,
+                isDanger: true,
+                onClick: (inv) => handleDeleteInvoice(inv),
+              },
+            ];
+
+            return (
+              <TableComponent
+                data={filteredInvoices}
+                columns={invoiceColumns}
+                getRowId={(inv) => inv.id}
+                rowActions={invoiceRowActions}
+                selectedIds={selectedRows}
+                onSelectionChange={(ids) => setSelectedRows(new Set(Array.from(ids) as string[]))}
+                defaultRowsPerPage={20}
+                emptyMessage="No invoices found matching your filters."
+              />
+            );
+          })()}
 
         {/* View Mode: Kanban Board View (Matching Deals.tsx lines 2565-2715 100%) */}
         {viewMode === "kanban" && (
@@ -710,7 +658,7 @@ export default function Invoices() {
               }}
             >
               {kanbanColumns.map((col) => {
-                const columnInvoices = filteredInvoices.filter((inv) => inv.status === col.id);
+                const columnInvoices = filteredInvoices.filter((inv) => inv.currentStageId === col.id || inv.status === col.category);
                 const columnTotal = columnInvoices.reduce((sum, i) => sum + i.total, 0);
 
                 return (
@@ -736,36 +684,26 @@ export default function Invoices() {
                       const targetInv = invoices.find((i) => i.id === draggedInvoiceId);
                       if (!targetInv) return;
 
-                      if (col.id === "overdue") {
+                      if (col.category === "overdue") {
                         toast.error("Overdue status is system-derived from due date and cannot be set manually.");
                         setDraggedInvoiceId(null);
                         return;
                       }
 
-                      if (col.id === "sent") {
+                      if (col.category === "sent") {
                         sendInvoice(targetInv.id, "whatsapp");
                         toast.success(`Invoice ${targetInv.id} sent via WhatsApp`);
-                      } else if (col.id === "paid") {
+                      } else if (col.category === "paid") {
                         const remaining = Math.max(0, targetInv.total - (targetInv.amountPaid || 0));
-                        recordPayment([
-                          {
-                            invoiceId: targetInv.id,
-                            clientId: targetInv.clientId,
-                            amount: remaining,
-                            method: "cash",
-                            paymentType: "self_pay",
-                            paymentDate: new Date().toISOString().split("T")[0],
-                            note: "Settled via Kanban drag-to-Paid",
-                          },
-                        ]);
-                        toast.success(`Invoice ${targetInv.id} remaining balance ($${remaining.toFixed(2)}) paid`);
-                      } else if (col.id === "partial") {
+                        invoiceService.recordPayment(targetInv.id, remaining, "cash", "Settled via Kanban drag-to-Paid");
+                        toast.success(`Invoice ${targetInv.id} balance ($${remaining.toFixed(2)}) paid`);
+                      } else if (col.category === "partially_paid") {
                         setPaymentModalInvoice(targetInv);
-                      } else if (col.id === "void") {
+                      } else if (col.category === "void") {
                         voidInvoice(targetInv.id);
                         toast.success(`Invoice ${targetInv.id} voided`);
                       } else {
-                        updateInvoiceStatus(targetInv.id, col.id);
+                        invoiceService.moveToStage(targetInv.id, col.id, { type: "manual", ruleName: `Kanban drag to ${col.title}` });
                         toast.success(`Invoice moved to ${col.title}`);
                       }
 
@@ -914,7 +852,9 @@ export default function Invoices() {
                                 <span style={{ fontSize: "11px", color: "#94A3B8", fontFamily: "Outfit, sans-serif" }}>Stage</span>
                                 <InvoiceProgressBar
                                   status={inv.status}
-                                  onStatusChange={(newSt) => updateInvoiceStatus(inv.id, newSt)}
+                                  currentStageId={inv.currentStageId}
+                                  stages={invoiceProcess.stages}
+                                  onStatusChange={(newSt) => handleUpdateInvoiceStatus(inv.id, newSt)}
                                   interactive={true}
                                   logId={inv.id}
                                 />
@@ -953,7 +893,11 @@ export default function Invoices() {
       <InvoiceDetailDrawer
         isOpen={isDetailDrawerOpen}
         onClose={() => setIsDetailDrawerOpen(false)}
-        invoice={selectedInvoice}
+        invoice={
+          selectedInvoice
+            ? invoices.find((i) => i.id === selectedInvoice.id) || selectedInvoice
+            : null
+        }
         onOpenDocument={(inv) => {
           setIsDetailDrawerOpen(false);
           handleOpenDocument(inv);
@@ -999,6 +943,7 @@ export default function Invoices() {
           preSelectedInvoiceId={paymentModalInvoice?.id || null}
         />
       )}
+
     </div>
   );
 }

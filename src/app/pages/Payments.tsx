@@ -6,6 +6,7 @@ import { Modal } from "../components/ui/Modal";
 import { toast } from "sonner";
 import { useNavigate, useSearchParams } from "react-router";
 import PageHeader from "../components/layout/PageHeader";
+import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 
 interface PaymentMethod {
   id: string;
@@ -42,6 +43,7 @@ export default function Payments() {
   const [creditAmount, setCreditAmount] = useState(10000);
   const [seats, setSeats] = useState(2);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
 
   // Plan selection state
   const currentPlan = "professional";
@@ -797,64 +799,89 @@ export default function Payments() {
   const renderTransactionsPage = () => (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Invoices Section */}
-      <div className="bg-card rounded-xl p-6 border border-border">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-card rounded-xl p-3 border border-border shadow-2xs">
+        <div className="flex items-center justify-between mb-2">
           <div>
-            <h3 className="text-lg font-semibold">Transaction History</h3>
-            <p className="text-sm text-muted-foreground mt-1">View all invoices and payment records</p>
+            <h3 className="text-sm font-semibold">Transaction History</h3>
+            <p className="text-xs text-muted-foreground">View all invoices and payment records</p>
           </div>
-          <Button variant="outline" size="sm">
-            <Download className="w-4 h-4" />
+          <Button variant="outline" size="sm" className="h-7 text-xs">
+            <Download className="w-3.5 h-3.5" />
             Export All
           </Button>
         </div>
-        <div className="overflow-hidden rounded-xl border border-border">
-          <table className="w-full">
-            <thead className="bg-muted/30 border-b border-border">
-              <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Date</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Invoice ID</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Description</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-muted-foreground">Status</th>
-                <th className="text-right px-4 py-3 text-sm font-medium text-muted-foreground">Amount</th>
-                <th className="text-right px-4 py-3 text-sm font-medium text-muted-foreground">Download</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((invoice) => (
-                <tr key={invoice.id} className="border-b border-border hover:bg-muted/10">
-                  <td className="px-4 py-3 text-sm">{invoice.date}</td>
-                  <td className="px-4 py-3 text-sm font-medium">{invoice.id}</td>
-                  <td className="px-4 py-3 text-sm">Professional Plan - Annual</td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-secondary/10 text-secondary">
-                      {invoice.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right font-medium">${invoice.amount}</td>
-                  <td className="px-4 py-3 text-right">
-                    <button className="text-primary hover:text-primary/80">
-                      <Download className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {(() => {
+          const columns: TableColumn<Invoice>[] = [
+            {
+              id: "date",
+              header: "Date",
+              align: "left",
+              render: (inv) => inv.date,
+            },
+            {
+              id: "id",
+              header: "Invoice ID",
+              align: "left",
+              render: (inv) => <span className="font-medium">{inv.id}</span>,
+            },
+            {
+              id: "description",
+              header: "Description",
+              align: "left",
+              render: () => "Professional Plan - Annual",
+            },
+            {
+              id: "status",
+              header: "Status",
+              align: "center",
+              render: (inv) => (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary/10 text-secondary leading-tight capitalize">
+                  {inv.status}
+                </span>
+              ),
+            },
+            {
+              id: "amount",
+              header: "Amount",
+              align: "right",
+              render: (inv) => <span className="font-medium">${inv.amount}</span>,
+            },
+          ];
+
+          const rowActions: TableRowAction<Invoice>[] = [
+            {
+              label: "Download Invoice",
+              icon: <Download className="w-3.5 h-3.5 text-primary" />,
+              onClick: (inv) => toast.success(`Downloading invoice ${inv.id}`),
+            },
+          ];
+
+          return (
+            <TableComponent
+              data={invoices}
+              columns={columns}
+              getRowId={(inv) => inv.id}
+              rowActions={rowActions}
+              selectedIds={selectedInvoices}
+              onSelectionChange={(ids) => setSelectedInvoices(new Set(Array.from(ids) as string[]))}
+              defaultRowsPerPage={20}
+              emptyMessage="No invoices found."
+            />
+          );
+        })()}
       </div>
     </div>
   );
 
   return (
-    <div className="p-6">
+    <div className="p-3 sm:p-4 space-y-2.5">
       {/* Header with Back Button */}
-      <div className="mb-6">
+      <div className="mb-2">
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-1.5"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-3.5 h-3.5" />
           Back
         </button>
         <PageHeader
@@ -864,7 +891,7 @@ export default function Payments() {
       </div>
 
       {/* Main Layout with Sidebar */}
-      <div className="flex gap-6">
+      <div className="flex gap-4">
         {/* Sidebar Navigation */}
         <div className="w-56 flex-shrink-0">
           <div className="bg-card rounded-xl border border-border p-2 sticky top-6">

@@ -82,40 +82,47 @@ graph TD
 
 ## 4. Application Routes & Navigation Sitemap
 
-| Route Path | Page Component | Functional Purpose |
-|---|---|---|
-| `/login` | `Login.tsx` | Authentication portal (Sign In) |
-| `/signup` | `Signup.tsx` | New practice / provider registration |
-| `/` | `Overview.tsx` | Executive clinical & operational KPI dashboard |
-| `/scribe` | `AIScribeConsole.tsx` | Ambient AI clinical transcription & SOAP note generation |
-| `/clients` | `Clients.tsx` | Client directory, filtering, quick preview drawers |
-| `/clients/:id` | `ClientProfile.tsx` | Detailed patient record (Draggable overview, timeline, documents) |
-| `/appointments` | `Appointments.tsx` | Calendar view, slot booking, rescheduling, patient check-in |
-| `/claims` | `Claims.tsx` | Revenue Cycle Management, CMS-1500 generator, EDI tracking |
-| `/invoices` | `Invoices.tsx` | Medical billing, itemized invoices, balance dues |
-| `/payments` | `Payments.tsx` | Collected payments, merchant transactions, receipts |
-| `/transactions` | `Transactions.tsx` | Ledger of financial movements & adjustments |
-| `/services` | `Services.tsx` | Clinical fee schedule, procedures, duration & tax pricing |
-| `/call-logs` | `CallLogs.tsx` | Telephonic receptionist logs, inbound/outbound calls |
-| `/call-logs/:id` | `CallDetails.tsx` | Call audio playback, transcription, sentiment & summary |
-| `/chats` | `Chats.tsx` | Multi-channel inbox (SMS, WhatsApp, Web Widget) |
-| `/deals` | `Deals.tsx` | Patient acquisition & pipeline Kanban board |
-| `/process` | `Process.tsx` | Automated workflow pipeline builder & trigger engine |
-| `/web-forms` | `WebForms.tsx` | Patient intake forms, surveys, consent agreements |
-| `/web-forms/new` | `NewFormTemplate.tsx` | Template picker for new clinical intake questionnaires |
-| `/web-forms/builder` | `FormBuilder.tsx` | Visual drag-and-drop form creator |
-| `/web-forms/test` | `WebFormsTest.tsx` | Live preview & interactive form submission tester |
-| `/knowledge-base` | `KnowledgeBase.tsx` | Practice SOPs, clinical protocols, internal documentation |
-| `/guide` | `GuidePageRoute.tsx` | Interactive platform help center & step-by-step guides |
-| `/organizations` | `Organizations.tsx` | Multi-clinic entity switcher & practice branch manager |
-| `/users` | `UserManagement.tsx` | Team member directory, clinical privileges & roles |
-| `/admin/custom-fields` | `AdminCustomFields.tsx` | Global custom fields manager & field drawer |
-| `/admin/industries` | `AdminIndustries.tsx` | Industry verticals, default templates & field scoping |
-| `/settings` | `Settings.tsx` | Telephony numbers, AI model keys, custom fields, notifications |
-| `/settings/team/:id`| `ManageTeamMember.tsx` | Granular provider schedule, credentials & access control |
-| `/profile` | `Profile.tsx` | Logged-in provider account preferences |
-| `/refer-and-earn` | `ReferAndEarn.tsx` | Practice referral program & rewards tracker |
-| `*` | `NotFound.tsx` | 404 Fallback error page |
+| Route Path | Page Component | Functional Purpose | Sidebar Category |
+|---|---|---|---|
+| `/login` | `Login.tsx` | Authentication portal (Sign In) | *Auth* |
+| `/signup` | `Signup.tsx` | New practice / provider registration | *Auth* |
+| `/` | `Overview.tsx` | Executive clinical & operational KPI dashboard | `WORKSPACE` |
+| `/clients` | `Clients.tsx` | Client directory, filtering, quick preview drawers | `WORKSPACE` |
+| `/clients/:id` | `ClientProfile.tsx` | Detailed patient record (Draggable overview, timeline, documents) | `WORKSPACE` |
+| `/call-logs` | `CallLogs.tsx` | Telephonic receptionist logs, inbound/outbound calls | `WORKSPACE` |
+| `/call-logs/:id` | `CallDetails.tsx` | Call audio playback, transcription, sentiment & summary | `WORKSPACE` |
+| `/chats` | `Chats.tsx` | Multi-channel inbox (SMS, WhatsApp, Web Widget) | `WORKSPACE` |
+| `/deals` | `Deals.tsx` | Process Kanban execution board (Deals / Pipelines) | `WORKSPACE` |
+| `/scribe` | `AIScribeConsole.tsx` | Ambient AI clinical transcription & SOAP note generation | `WORKSPACE` |
+| `/appointments` | `Appointments.tsx` | Calendar view, slot booking, rescheduling, patient check-in | `WORKSPACE` |
+| `/process` | `Process.tsx` | **Workflow** (Workflow Architect & Process automation engine) | `CUSTOMIZATIONS` |
+| `/knowledge-base` | `KnowledgeBase.tsx` | Practice SOPs, clinical protocols, internal documentation | `CUSTOMIZATIONS` |
+| `/web-forms` | `WebForms.tsx` | Patient intake forms, surveys, consent agreements | `CUSTOMIZATIONS` |
+| `/web-forms/new` | `NewFormTemplate.tsx` | Template picker for new clinical intake questionnaires | `CUSTOMIZATIONS` |
+| `/web-forms/builder` | `FormBuilder.tsx` | Visual drag-and-drop form creator | `CUSTOMIZATIONS` |
+| `/web-forms/test` | `WebFormsTest.tsx` | Live preview & interactive form submission tester | `CUSTOMIZATIONS` |
+| `/services` | `Services.tsx` | Clinical fee schedule, procedures, duration & tax pricing | `REVENUE & INSIGHTS` |
+| `/invoices` | `Invoices.tsx` | Medical billing, itemized invoices, balance dues | `REVENUE & INSIGHTS` |
+| `/claims` | `Claims.tsx` | Revenue Cycle Management, CMS-1500 generator, EDI tracking | `REVENUE & INSIGHTS` |
+| `/reports` | `Reports.tsx` | Practice performance analytics & revenue reports | `REVENUE & INSIGHTS` |
+| `/payments` | `Payments.tsx` | Collected payments, merchant transactions, receipts | `REVENUE & INSIGHTS` |
+| `/transactions` | `Transactions.tsx` | Ledger of financial movements & adjustments | `REVENUE & INSIGHTS` |
+| `/settings` | `Settings.tsx` | Practice configuration & integrations hub | `SETTINGS` |
+| `/settings/organization` | `Settings.tsx` | Clinic profile, locations, legal entities | `SETTINGS` |
+| `/settings/team` | `Settings.tsx` | Staff directory, clinical privileges & roles | `SETTINGS` |
+| `/settings/team/:id`| `ManageTeamMember.tsx` | Granular provider schedule, credentials & access control | `SETTINGS` |
+| `/settings/billing` | `Settings.tsx` | Subscription plan, credits & payment methods | `SETTINGS` |
+| `/settings/voices` | `Settings.tsx` | AI Models & Voice Library management | `SETTINGS` |
+| `/settings/sections-fields` | `Settings.tsx` | Dynamic sections & custom fields configuration | `SETTINGS` |
+| `/settings/integrations` | `Settings.tsx` | Telephony, EMR, Cal.com, Webhooks & APIs | `SETTINGS` |
+| `/settings/audit-logs` | `Settings.tsx` | System security audit trail | `SETTINGS` |
+| `/settings/security` | `Settings.tsx` | Password policies, 2FA, session management | `SETTINGS` |
+| `/admin/process-templates` | `AdminProcessTemplates.tsx` | Super Admin workflow templates & industry scoping | *Admin* |
+| `/admin/custom-fields` | `AdminCustomFields.tsx` | Global custom fields manager & field drawer | *Admin* |
+| `/admin/industries` | `AdminIndustries.tsx` | Industry verticals, default templates & field scoping | *Admin* |
+| `/profile` | `Profile.tsx` | Logged-in provider account preferences | *User* |
+| `/refer-and-earn` | `ReferAndEarn.tsx` | Practice referral program & rewards tracker | *Marketing* |
+| `*` | `NotFound.tsx` | 404 Fallback error page | *Utility* |
 
 ---
 
@@ -164,9 +171,36 @@ graph TD
 - **AI Voice Agents**: Multi-agent speech synthesis with ElevenLabs and Deepgram for handling incoming clinic calls 24/7.
 - **Omnichannel Inbox**: Unified conversational thread consolidating SMS, WhatsApp, and patient portal messages.
 
-### 5.7 Workflow Pipelines & Visual Form Builder
-- **`Process.tsx` & `chatbotFlowEngine.ts`**: Visual node-based workflow builder for clinical automation (appointment reminders, post-op check-ins, lab result notifications).
-- **`FormBuilder.tsx` & `WebForms.tsx`**: Drag-and-drop clinical intake form creator supporting text, signatures, file uploads, and conditional logic.
+### 5.7 Workflow Engine, Automations & Flow Builder (`src/app/pages/Process.tsx`, `src/app/components/process/`)
+The Workflow system (under `CUSTOMIZATIONS > Workflows` at route `/process`) is the conversational and operational intelligence backbone of MantraCare. It orchestrates patient lifecycle stages, AI conversational agents, multi-channel automations, scheduling, and billing into a synchronized state machine.
+
+- **Primary Interface (`Process.tsx`)**:
+  - **Process Management**: Create, duplicate, reorder, and configure multi-stage clinical processes.
+  - **Stage Configuration**: Each process consists of sequential or branching stages (e.g., `New Lead`, `Booking In Progress`, `Appointment Confirmed`, `Post-Care Follow-up`).
+  - **Stage Tabs**:
+    1. **General Tab**: Stage naming, stage status, responsible staff member, inbound number routing (`assignNumberToStage`), multi-channel ingress (calls, SMS, WhatsApp, website), objective, and business information cards.
+    2. **AI Agent Tab**: Voice model selection (OpenAI, Anthropic, DeepSeek, etc. via `aiModelsStore`), speech speed slider, voice engine persona selection (ElevenLabs / Deepgram via `useVoiceStore`), tone, style, and caller pitch prompts with dynamic CRM field tags.
+    3. **Automation Tab**: Tri-lane execution triggers:
+       - *On Stage Entry*: Immediate or delayed actions upon contact entering the stage.
+       - *In Call (Live)*: Real-time mid-conversation actions (intent recognition, call transfers, availability lookups, idle messages).
+       - *Post Call*: Follow-up triggers after call termination (WhatsApp follow-ups, stage progression, SMS confirmation).
+    4. **Flow Builder Tab (`FlowBuilderTab.tsx`)**: Drag-and-drop visual flowchart canvas mapping nodes, execution delays, conditions, and branches with 2-way real-time synchronization with the Automation tab.
+- **Cross-Domain Deep Integrations**:
+  - **Appointment Scheduling Integration**:
+    - AI automated booking (`scheduleappointment`, `managecalendar`) directly querying provider availability calendars (Google, Outlook, Cal.com).
+    - Configurable booking methods: *Text Booking Link*, *Collect Booking Request*, or *Schedule Over Phone*.
+  - **Medical Invoicing & Payments Integration**:
+    - **Auto-Generate Invoice on Booking**: Toggle to automatically generate a draft/unpaid invoice in `InvoiceContext` when the AI books an appointment.
+    - **Service & Fee Selection**: Binds to practice catalog (`servicesStore.ts` / `MOCK_SERVICES`) with custom flat fee overrides.
+    - **Send Invoice Automation Step (`send-invoice`)**: Dispatches itemized invoice summaries and payment checkout links via WhatsApp, SMS, or Email using variable placeholders (`{{contact_name}}`, `{{invoice_number}}`, `{{invoice_amount}}`, `{{due_date}}`, `{{payment_link}}`).
+  - **Deals & Patient Pipeline Sync (`Deals.tsx`)**:
+    - Deals Kanban columns map 1:1 with stages in active processes.
+    - Dragging a deal card instantly transitions the contact's stage and triggers all entry automations.
+  - **Super Admin Governance (`AdminProcessTemplates.tsx`)**:
+    - Master workflow templates scoped to industry categories (Healthcare, Dental, Behavioral Health, MedSpa, etc.) and geographic jurisdictions.
+    - Granular tenant permission flags (`canEdit`, `canAdd`, `canHide`, `canDelete`) restricting or enabling practice-level customizations.
+
+> 📘 **Full Architecture Blueprint**: For an in-depth component-level breakdown, data dictionary, step parameter specifications, and runtime sequence diagrams, refer to [`WORKFLOW_AND_AUTOMATION_CONTEXT.md`](./WORKFLOW_AND_AUTOMATION_CONTEXT.md).
 
 ### 5.8 Universal Custom Fields & Dynamic Schema Engine (`src/app/context/FieldRegistryContext.tsx`, `src/app/components/fields/`, `src/app/pages/admin/`)
 The platform features an enterprise-grade schema engine allowing administrators and clinicians to configure custom metadata fields across modules (`client`, `service`, `process`, `appointment`, `organization`).

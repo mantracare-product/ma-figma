@@ -21,6 +21,12 @@ import { useOrganization } from "../../context/OrganizationContext";
 import { CustomSideDrawer } from "../ui/drawer";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
 import { InfoTooltip } from "../help/InfoTooltip";
+import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../../lib/invoiceService";
+import { hasAppointmentAutomation } from "../../../lib/appointmentService";
+import { AUTOMATION_STORE_EVENT } from "../../../lib/useAutomationStore";
+import { PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
+import { Link } from "react-router";
+import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -393,24 +399,44 @@ export default function ScheduleAppointmentDrawer({
   const { teamMembers, bookableMembers } = useTeamMembers();
 
   const [locVersion, setLocVersion] = useState(0);
+  const [automationVersion, setAutomationVersion] = useState(0);
   useEffect(() => {
-    const handleUpdate = () => setLocVersion((v) => v + 1);
+    const handleUpdate = () => {
+      setLocVersion((v) => v + 1);
+      setAutomationVersion((v) => v + 1);
+    };
     window.addEventListener("storage", handleUpdate);
     window.addEventListener("mantra_locations_changed", handleUpdate);
     window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
+    window.addEventListener(AUTOMATION_STORE_EVENT, handleUpdate);
+    window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
     return () => {
       window.removeEventListener("storage", handleUpdate);
       window.removeEventListener("mantra_locations_changed", handleUpdate);
       window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
+      window.removeEventListener(AUTOMATION_STORE_EVENT, handleUpdate);
+      window.removeEventListener(PROCESS_STORE_EVENT, handleUpdate);
     };
   }, []);
 
   useEffect(() => {
     if (isOpen) {
       setLocVersion((v) => v + 1);
+      setAutomationVersion((v) => v + 1);
       setStoredServicesState(getStoredServices());
     }
   }, [isOpen]);
+
+  const appointmentAutomationConfigured = hasAppointmentAutomation(values.processId);
+  const invoiceAutomationConfigured = hasInvoiceAutomation(values.processId);
+  const appointmentInvoiceAutomationConfigured = hasAppointmentInvoiceAutomation(values.processId);
+
+  // Auto-enable generateInvoice ONLY if appointment-to-invoice automation is specifically configured
+  useEffect(() => {
+    if (isOpen && appointmentInvoiceAutomationConfigured && values.generateInvoice === undefined) {
+      onChange({ generateInvoice: true });
+    }
+  }, [isOpen, appointmentInvoiceAutomationConfigured, values.generateInvoice, onChange]);
 
   // Combine employees prop with teamMembers store
   const allEmployeesList: Employee[] = useMemo(() => {
@@ -725,7 +751,8 @@ export default function ScheduleAppointmentDrawer({
       onChange({
         serviceId: String(srv.id), serviceName: srv.name,
         title: patientName ? `${srv.name} — ${patientName}` : `${srv.name} Appointment`,
-        generateInvoice: values.generateInvoice ?? true, lineItems: [li],
+        generateInvoice: values.generateInvoice !== undefined ? values.generateInvoice : hasAppointmentInvoiceAutomation(values.processId),
+        lineItems: [li],
         provider: nextProvider,
       });
     } else {
@@ -885,14 +912,15 @@ export default function ScheduleAppointmentDrawer({
             <button
               type="button"
               onClick={onSave}
-              disabled={!isFormComplete || isSaving}
+              disabled={!isFormComplete || isSaving || (mode !== "reschedule" && !appointmentAutomationConfigured)}
               className="flex-1 py-2.5 rounded-lg font-semibold text-sm transition-all"
               style={{
                 fontFamily: "Outfit, sans-serif",
-                backgroundColor: isFormComplete && !isSaving ? "#181e25" : "#e2e8f0",
-                color: isFormComplete && !isSaving ? "#ffffff" : "#94a3b8",
-                cursor: isFormComplete && !isSaving ? "pointer" : "not-allowed",
+                backgroundColor: isFormComplete && !isSaving && (mode === "reschedule" || appointmentAutomationConfigured) ? "#181e25" : "#e2e8f0",
+                color: isFormComplete && !isSaving && (mode === "reschedule" || appointmentAutomationConfigured) ? "#ffffff" : "#94a3b8",
+                cursor: isFormComplete && !isSaving && (mode === "reschedule" || appointmentAutomationConfigured) ? "pointer" : "not-allowed",
               }}
+              title={mode !== "reschedule" && !appointmentAutomationConfigured ? "Please build the automation first" : undefined}
             >
               {isSaving ? "Saving..." : mode === "reschedule" ? "Save Changes" : "Book Appointment"}
             </button>
@@ -901,6 +929,17 @@ export default function ScheduleAppointmentDrawer({
       }
     >
       <div className="space-y-3 pb-4">
+        {mode !== "reschedule" && !appointmentAutomationConfigured && (
+          <div className="px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              Appointment booking is locked — please build the automation first in the Automation page.
+            </span>
+            <Link to="/automation" className="text-blue-600 hover:underline font-semibold text-xs ml-2">
+              Build automation &rarr;
+            </Link>
+          </div>
+        )}
 
         {/* ================================================================ */}
         {/* SECTION 1 — SERVICE                                              */}
@@ -1190,12 +1229,29 @@ export default function ScheduleAppointmentDrawer({
                 {invoiceSectionExpanded && (
                   <div className="mt-2 space-y-3 px-2">
                     <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50 border border-slate-200">
-                      <p className="text-xs text-slate-700" style={{ fontFamily: "DM Sans, sans-serif" }}>Generate invoice on booking</p>
+                      <div className="flex flex-col">
+                        <p className="text-xs text-slate-700 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          Generate invoice on booking
+                        </p>
+                        {!invoiceAutomationConfigured && (
+                          <span className="text-[11px] text-amber-700 flex items-center gap-1 mt-0.5 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Locked — please build the automation first
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="checkbox"
-                        checked={values.generateInvoice ?? true}
-                        onChange={(e) => onChange({ generateInvoice: e.target.checked })}
-                        className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-slate-700"
+                        disabled={!invoiceAutomationConfigured}
+                        checked={invoiceAutomationConfigured ? Boolean(values.generateInvoice) : false}
+                        onChange={(e) => {
+                          if (!invoiceAutomationConfigured) {
+                            toast.error("Please build the invoice automation first in Automation.");
+                            return;
+                          }
+                          onChange({ generateInvoice: e.target.checked });
+                        }}
+                        className={`w-3.5 h-3.5 rounded border-slate-300 ${!invoiceAutomationConfigured ? "opacity-40 cursor-not-allowed" : "cursor-pointer accent-slate-700"}`}
                       />
                     </div>
 

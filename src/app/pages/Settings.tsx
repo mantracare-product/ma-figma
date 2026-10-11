@@ -7,28 +7,37 @@ import { Modal } from "../components/ui/Modal";
 import { Drawer } from "../components/ui/drawer";
 import { Tooltip } from "../components/ui/Tooltip";
 import { toast } from "sonner";
-import { useNavigate, useLocation } from "react-router";
+import { useNavigate, useLocation, useParams, useSearchParams } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
 import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg } from "../context/FieldRegistryContext";
 import { TelephonyIntegrationPanel } from "../components/telephony/TelephonyIntegrationPanel";
 import { getStoredWhatsAppNumbers, saveStoredWhatsAppNumbers, WHATSAPP_NUMBERS_EVENT, WhatsAppNumberEntry } from "../../lib/useWhatsAppNumbers";
 import { SelectFieldsModal } from "../components/help/FieldManager";
+import PageTopBar from "../components/layout/PageTopBar";
 import { AdminFieldDrawer } from "./admin/components/AdminFieldDrawer";
 import { AdminSectionDrawer } from "./admin/components/AdminSectionDrawer";
+import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import OrganizationLocationsSection from "../components/settings/OrganizationLocationsSection";
 import MemberLocationScheduleTab from "../components/settings/MemberLocationScheduleTab";
 import ReceptionSettingsTab from "../components/reception/ReceptionSettingsTab";
 import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
 import { getStoredServices, updateService, onServicesChanged, Service } from "../../lib/servicesStore";
+import { getStoredVoices, saveStoredVoices, VoiceConfigItem, VOICE_STORE_EVENT } from "../../lib/useVoiceStore";
+import { getStoredAIModels, toggleAIModelActive, AI_MODELS_STORE_EVENT, AIModelConfig } from "../../lib/aiModelsStore";
 import {
   Save,
+  Square,
+  Cpu,
   Plus,
   Edit,
   Trash2,
   Info,
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   Phone,
   Mail,
   Globe,
@@ -134,6 +143,8 @@ import BusinessProfileModal from "../components/settings/BusinessProfileModal";
 import VerifyNumberModal from "../components/settings/VerifyNumberModal";
 import { SettingsMemberProfileDrawer } from "../components/settings/SettingsMemberProfileDrawer";
 import { RolesPermissionsDrawer, DEFAULT_ROLES } from "../components/settings/RolesPermissionsDrawer";
+import OrganizationDetailDrawer, { OrganizationDetail } from "../components/settings/OrganizationDetailDrawer";
+import AddTeamMemberDrawer from "../components/team/AddTeamMemberDrawer";
 import type { ActionScope, Action, ModulePermissions, ItemPermissions, Role } from "../../types/permissions";
 
 import { useDrag, useDrop } from "react-dnd";
@@ -662,11 +673,13 @@ function ProcessCheckboxDropdown({
 }
 
 export default function Settings() {
-  const { activeOrganization, updateOrganization, setActiveOrganization } = useOrganization();
+  const { activeOrganization, updateOrganization, setActiveOrganization, organizations, addOrganization } = useOrganization();
   const navigate = useNavigate();
   const location = useLocation();
-  const { setCollapsed } = useSidebar();
+  const { tab: urlTab, subtab: urlSubtab } = useParams<{ tab?: string; subtab?: string }>();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("organization");
+  const [billingSubTab, setBillingSubTab] = useState<"plans" | "payments" | "credit-usage">("plans");
   const [billingExpanded, setBillingExpanded] = useState(true);
   const [selectedLanguage, setSelectedLanguage] = useState("English");
 
@@ -721,8 +734,43 @@ export default function Settings() {
   const [editBillingAddress, setEditBillingAddress] = useState(billingAddress);
 
   useEffect(() => {
-    setCollapsed(true);
-  }, [setCollapsed]);
+    const queryTab = searchParams.get("tab");
+    const rawTab = urlTab || queryTab || "organization";
+
+    if (rawTab === "organization") {
+      setActiveTab("organization");
+    } else if (rawTab === "team" || rawTab === "users") {
+      setActiveTab("users");
+    } else if (rawTab === "billing" || rawTab === "plans" || rawTab === "payments" || rawTab === "credit-usage") {
+      setActiveTab("billing");
+      if (rawTab === "plans" || rawTab === "payments" || rawTab === "credit-usage") {
+        setBillingSubTab(rawTab);
+      } else if (urlSubtab === "payments" || urlSubtab === "credit-usage" || urlSubtab === "plans") {
+        setBillingSubTab(urlSubtab);
+      }
+    } else if (rawTab === "voices" || rawTab === "voice-config") {
+      setActiveTab("voice-config");
+      const sub = searchParams.get("sub") || urlSubtab;
+      if (sub === "voices" || rawTab === "voices") {
+        setVoiceConfigSubTab("voices");
+      } else if (sub === "models") {
+        setVoiceConfigSubTab("models");
+      }
+    } else if (rawTab === "numbers") {
+      setActiveTab("integrations");
+      setIntegrationTab("telephony");
+    } else if (rawTab === "sections-fields" || rawTab === "custom-fields" || rawTab === "layout") {
+      setActiveTab("custom-fields");
+    } else if (rawTab === "integrations") {
+      setActiveTab("integrations");
+    } else if (rawTab === "audit-logs" || rawTab === "audit") {
+      setActiveTab("audit-logs");
+    } else if (rawTab === "security") {
+      setActiveTab("security");
+    } else {
+      setActiveTab(rawTab);
+    }
+  }, [urlTab, urlSubtab, searchParams]);
 
   useEffect(() => {
     try {
@@ -790,7 +838,7 @@ export default function Settings() {
 
   // Team Level Credits State
   const [teamMemberFilter, setTeamMemberFilter] = useState<"active" | "pending">("active");
-  const [teamSearchQuery, setTeamSearchQuery] = useState("");
+  const [creditsTeamSearchQuery, setCreditsTeamSearchQuery] = useState("");
   const [teamMembers, setTeamMembers] = useState([
     {
       id: 1,
@@ -890,6 +938,7 @@ export default function Settings() {
     },
   ]);
   const [auditLogPage, setAuditLogPage] = useState(1);
+  const [auditLogSearchQuery, setAuditLogSearchQuery] = useState("");
   const [showRequestBodyModal, setShowRequestBodyModal] = useState(false);
   const [selectedAuditLog, setSelectedAuditLog] = useState<any>(null);
 
@@ -909,6 +958,90 @@ export default function Settings() {
   ]);
   const [botBlockPhrasesEnabled, setBotBlockPhrasesEnabled] = useState(true);
   const [botBlockPhrasesExpanded, setBotBlockPhrasesExpanded] = useState(false);
+
+  // Organization Table & Drawer State (Synchronized with OrganizationContext & Sidebar)
+  const orgList: OrganizationDetail[] = useMemo(() => {
+    return organizations.map((org) => ({
+      id: org.id,
+      name: org.name,
+      flag: org.locations?.includes("India") || org.name.includes("Mantra") || org.name.includes("DENTAL") || org.name.includes("DERMA") || org.name.includes("Eye") ? "🇮🇳" : "🇺🇸",
+      email: org.email || "contact@mantraassist.com",
+      phone: org.phone || "+1 (555) 123-4567",
+      industryCategory: org.industryCategory || "Healthcare",
+      industry: org.industry || "General Physician",
+      location: org.location || (org.locations && org.locations[0]) || "California",
+      locations: org.locations || [org.location || "California"],
+      preferredTime: "2:00 PM · IST",
+      status: org.status || "Active",
+      users: 1,
+      createdDate: "Oct 01, 26, 04:16 PM",
+    }));
+  }, [organizations]);
+
+  const [selectedOrgForDrawer, setSelectedOrgForDrawer] = useState<OrganizationDetail | null>(null);
+  const [showOrgDrawer, setShowOrgDrawer] = useState(false);
+  const [orgSearchQuery, setOrgSearchQuery] = useState("");
+  const [orgCategoryFilter, setOrgCategoryFilter] = useState("All");
+  const [selectedOrgRows, setSelectedOrgRows] = useState<Set<string>>(new Set());
+  const [orgCurrentPage, setOrgCurrentPage] = useState(1);
+  const [orgRowsPerPage, setOrgRowsPerPage] = useState(15);
+  const [showCreateOrgModal, setShowCreateOrgModal] = useState(false);
+  const [newOrgFormData, setNewOrgFormData] = useState({
+    name: "",
+    email: "",
+    industryCategory: "Healthcare",
+    industry: "Ophthalmology",
+    location: "California",
+    flag: "🇮🇳",
+    preferredTime: "2:00 PM · IST",
+  });
+
+  const handleOpenOrgDrawer = (org: OrganizationDetail) => {
+    setSelectedOrgForDrawer(org);
+    setShowOrgDrawer(true);
+  };
+
+  const handleSaveOrgFromDrawer = (updated: OrganizationDetail) => {
+    updateOrganization(updated.id, {
+      name: updated.name,
+      email: updated.email,
+      phone: updated.phone,
+      industryCategory: updated.industryCategory,
+      industry: updated.industry,
+      location: updated.location,
+      locations: updated.locations,
+      status: updated.status,
+    });
+    setSelectedOrgForDrawer(updated);
+  };
+
+  const handleCreateOrg = () => {
+    if (!newOrgFormData.name.trim() || !newOrgFormData.email.trim()) {
+      toast.error("Please fill in required fields");
+      return;
+    }
+    addOrganization({
+      name: newOrgFormData.name.trim(),
+      email: newOrgFormData.email.trim(),
+      phone: "+1 (555) 000-0000",
+      industryCategory: newOrgFormData.industryCategory,
+      industry: newOrgFormData.industry,
+      location: newOrgFormData.location,
+      locations: [newOrgFormData.location],
+      status: "Active",
+    });
+    setNewOrgFormData({
+      name: "",
+      email: "",
+      industryCategory: "Healthcare",
+      industry: "Ophthalmology",
+      location: "California",
+      flag: "🇮🇳",
+      preferredTime: "2:00 PM · IST",
+    });
+    setShowCreateOrgModal(false);
+    toast.success("Organization created successfully");
+  };
 
   // Edit Organization Modal State
   const [showEditOrgModal, setShowEditOrgModal] = useState(false);
@@ -955,89 +1088,21 @@ export default function Settings() {
       if (stored && stored.length > 0) return stored as any;
     } catch {}
     return [
-      // Healthcare Org (ID: "1")
-    {
-      id: 1,
-      name: "John Smith",
-      email: "john.smith@healthcare.com",
-      status: true,
-      organizationId: "1",
-      role: "Admin",
-      permissions: DEFAULT_ROLES[0].permissions,
-      calendarConnected: true,
-      connectedCalendar: "google",
-      availability: createDefaultAvailability(),
-      daysOff: ["2026-05-15", "2026-05-16", "2026-06-01"],
-      assignedServices: [1, 2, 4],
-    },
-    {
-      id: 2,
-      name: "Sarah Johnson",
-      email: "sarah.j@healthcare.com",
-      status: true,
-      organizationId: "1",
-      role: "Manager",
-      permissions: DEFAULT_ROLES[1].permissions,
-      calendarConnected: true,
-      connectedCalendar: "outlook",
-      availability: {
-        monday: { enabled: true, start: "08:00", end: "16:00" },
-        tuesday: { enabled: true, start: "08:00", end: "16:00" },
-        wednesday: { enabled: true, start: "08:00", end: "16:00" },
-        thursday: { enabled: true, start: "08:00", end: "16:00" },
-        friday: { enabled: true, start: "08:00", end: "16:00" },
-        saturday: { enabled: false, start: "09:00", end: "17:00" },
-        sunday: { enabled: false, start: "09:00", end: "17:00" },
+      {
+        id: 1,
+        name: "Admin User",
+        email: "admin@mantra.care",
+        status: true,
+        organizationId: "1",
+        role: "Admin",
+        permissions: DEFAULT_ROLES[0]?.permissions,
+        calendarConnected: true,
+        connectedCalendar: "google",
+        availability: createDefaultAvailability(),
+        daysOff: [],
+        assignedServices: [1, 2],
       },
-      assignedServices: [1, 2],
-    },
-    {
-      id: 3,
-      name: "Michael Chen",
-      email: "michael.c@healthcare.com",
-      status: false,
-      organizationId: "1",
-      role: "Sales",
-      permissions: DEFAULT_ROLES[3].permissions,
-    },
-    {
-      id: 4,
-      name: "Emily Davis",
-      email: "emily.d@healthcare.com",
-      status: true,
-      organizationId: "1",
-      role: "Reception",
-      permissions: DEFAULT_ROLES[2].permissions,
-    },
-    // Dental Care Org (ID: "2")
-    {
-      id: 5,
-      name: "Dr. Robert Martinez",
-      email: "robert.m@dentalcare.com",
-      status: true,
-      organizationId: "2",
-      role: "Admin",
-      permissions: DEFAULT_ROLES[0].permissions,
-    },
-    {
-      id: 6,
-      name: "Lisa Anderson",
-      email: "lisa.a@dentalcare.com",
-      status: true,
-      organizationId: "2",
-      role: "Manager",
-      permissions: DEFAULT_ROLES[1].permissions,
-    },
-    {
-      id: 7,
-      name: "James Wilson",
-      email: "james.w@dentalcare.com",
-      status: true,
-      organizationId: "2",
-      role: "Reception",
-      permissions: createDefaultPermissions(),
-    },
-  ];
+    ];
   });
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
@@ -1057,6 +1122,12 @@ export default function Settings() {
     canBookAppointments: false,
     permissions: createDefaultPermissions(),
   });
+
+  // Team Tab Toolbar & Filter State (Matching Image 3)
+  const [teamSubTab, setTeamSubTab] = useState<"users" | "roles" | "departments">("users");
+  const [teamSearchQuery, setTeamSearchQuery] = useState("");
+  const [teamRoleFilter, setTeamRoleFilter] = useState("All");
+  const [selectedTeamRows, setSelectedTeamRows] = useState<Set<string>>(new Set());
 
   const [settingsLocVersion, setSettingsLocVersion] = useState(0);
   useEffect(() => {
@@ -1340,14 +1411,17 @@ export default function Settings() {
     deleteCustomSection,
   } = useFieldRegistry();
 
-  const tabToModule: Record<"clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe", FieldModule> = {
+  const tabToModule: Record<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe" | "services" | "invoices", FieldModule> = {
+    "organization": "organization",
     "clients": "client",
     "call-logs": "call",
     "processes": "process",
     "appointments": "appointment",
     "forms": "appointment",
-    "team": "organization",
+    "team": "teamMember",
     "scribe": "scribe",
+    "services": "service",
+    "invoices": "invoice",
   };
 
   const FIELD_TYPE_MAP: Record<string, any> = {
@@ -1372,35 +1446,100 @@ export default function Settings() {
   };
 
   const FIELD_TYPE_REVERSE_MAP: Record<string, string> = {
-    "text": "String / Text",
-    "table": "Table",
-    "signature": "Drawing / Signature",
-    "drawing": "Drawing / Signature",
-    "select": "List (Dropdown)",
-    "new_list": "List",
-    "multiselect": "Multi-Select",
-    "date": "Date",
-    "date_time": "Date & Time",
-    "number": "Number",
-    "money": "Money / Currency",
-    "textarea": "Address / Text Area",
-    "richtext": "Rich Text",
-    "link": "Link",
-    "whatsapp_link": "WhatsApp Link",
-    "yes_no": "Yes / No",
-    "file": "File / Attachment",
-    "rating": "Rating / Score",
-    "user": "User / Member",
+    text: "Text",
+    table: "Group Field (Table)",
+    signature: "Digital Signature",
+    drawing: "Digital Signature",
+    select: "List",
+    list_select: "List",
+    new_list: "List",
+    list_open: "List (Open · Tags)",
+    multiselect: "List (Multi)",
+    group: "Group Field (Group)",
+    group_repeatable: "Group Field (Group)",
+    crm_bind: "Link to Mantra Entities",
+    date: "Date",
+    date_time: "Date & Time",
+    number: "Number",
+    money: "Money / Currency",
+    textarea: "Text (Paragraph)",
+    richtext: "Text (Rich Text)",
+    link: "Link",
+    whatsapp_link: "WhatsApp Link",
+    yes_no: "Yes / No",
+    file: "Media Attach",
+    rating: "Rating / Score",
+    user: "User / Member",
   };
 
-  // Layout View Tabs: Custom Fields vs Custom Sections
+  // Layout View Tabs: Fields vs Sections
   const [layoutViewTab, setLayoutViewTab] = useState<"fields" | "sections">("fields");
   const [layoutSearchQuery, setLayoutSearchQuery] = useState("");
+  const [layoutRowsPerPage, setLayoutRowsPerPage] = useState<number>(20);
+  const [layoutCurrentPage, setLayoutCurrentPage] = useState<number>(1);
+
+  // Fields Column Customization & Selection
+  const DEFAULT_FIELDS_COLUMN_ORDER = ["label", "key", "type", "fieldType", "required"];
+  const [fieldsColumnOrder, setFieldsColumnOrder] = useState<string[]>(DEFAULT_FIELDS_COLUMN_ORDER);
+  const [fieldsVisibleColumns, setFieldsVisibleColumns] = useState<Record<string, boolean>>({
+    label: true,
+    key: true,
+    type: true,
+    fieldType: true,
+    required: true,
+  });
+  const [showFieldsColumnMenu, setShowFieldsColumnMenu] = useState(false);
+  const [selectedFieldIds, setSelectedFieldIds] = useState<Set<number | string>>(new Set());
+  const [openFieldMenuId, setOpenFieldMenuId] = useState<number | string | null>(null);
+
+  // Sections Column Customization & Selection
+  const DEFAULT_SECTIONS_COLUMN_ORDER = ["title", "type", "fields", "description"];
+  const [sectionsColumnOrder, setSectionsColumnOrder] = useState<string[]>(DEFAULT_SECTIONS_COLUMN_ORDER);
+  const [sectionsVisibleColumns, setSectionsVisibleColumns] = useState<Record<string, boolean>>({
+    title: true,
+    type: true,
+    fields: true,
+    description: true,
+  });
+  const [showSectionsColumnMenu, setShowSectionsColumnMenu] = useState(false);
+  const [selectedSectionIds, setSelectedSectionIds] = useState<Set<string>>(new Set());
+  const [openSectionMenuId, setOpenSectionMenuId] = useState<string | null>(null);
+
+  const moveFieldsColumn = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= fieldsColumnOrder.length) return;
+    setFieldsColumnOrder((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, item);
+      return next;
+    });
+  };
+
+  const moveSectionsColumn = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= sectionsColumnOrder.length) return;
+    setSectionsColumnOrder((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, item);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setOpenFieldMenuId(null);
+      setOpenSectionMenuId(null);
+      setShowFieldsColumnMenu(false);
+      setShowSectionsColumnMenu(false);
+    };
+    window.addEventListener("click", handleGlobalClick);
+    return () => window.removeEventListener("click", handleGlobalClick);
+  }, []);
   // Table field preview rows
   const [tablePreviewRows, setTablePreviewRows] = useState<Record<string, string>[]>([{}]);
 
   // Module filter tab
-  const [customFieldsTab, setCustomFieldsTab] = useState<"clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe">("clients");
+  const [customFieldsTab, setCustomFieldsTab] = useState<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe" | "services" | "invoices">("clients");
 
   const currentModule = tabToModule[customFieldsTab || "clients"];
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
@@ -1465,23 +1604,19 @@ export default function Settings() {
   const [newSectionData, setNewSectionData] = useState<{
     title: string;
     description: string;
-    iconName: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
     fieldKeys: string[];
   }>({
     title: "",
     description: "",
-    iconName: "layers",
     fieldKeys: [],
   });
   const [editingSectionData, setEditingSectionData] = useState<{
     title: string;
     description: string;
-    iconName: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
     fieldKeys: string[];
   }>({
     title: "",
     description: "",
-    iconName: "layers",
     fieldKeys: [],
   });
 
@@ -2936,12 +3071,6 @@ export default function Settings() {
     setShowHowItWorksModal(true);
   };
 
-  // AI Models State
-  const [aiModels, setAIModels] = useState<AIModel[]>([
-    { id: "1", provider: "OpenAI", modelName: "GPT-4", status: true },
-    { id: "2", provider: "Gemini", modelName: "Gemini Pro", status: true },
-    { id: "3", provider: "Claude", modelName: "Claude 3", status: false },
-  ]);
 
   // Voice Library State
   const [showVoiceLibraryModal, setShowVoiceLibraryModal] = useState(false);
@@ -2979,9 +3108,6 @@ export default function Settings() {
     voiceName: true,
     gender: true,
     country: true,
-    tone: true,
-    age: true,
-    process: true,
     preview: true,
     status: true,
   });
@@ -2989,9 +3115,6 @@ export default function Settings() {
     'voiceName',
     'gender',
     'country',
-    'tone',
-    'age',
-    'process',
     'preview',
     'status',
   ]);
@@ -3006,12 +3129,221 @@ export default function Settings() {
     status: boolean;
   } | null>(null);
 
-  // Voice Table Data - processes is an array to support multiple process assignments
-  const [voiceTableData, setVoiceTableData] = useState([
-    { id: 1, name: "Nova", gender: "Female", country: "USA", tone: "Professional", age: "Young", processes: ["Insurance Verification"], status: true },
-    { id: 2, name: "Atlas", gender: "Male", country: "UK", tone: "Formal", age: "Adult", processes: ["Follow-up"], status: true },
-    { id: 3, name: "Luna", gender: "Female", country: "Australia", tone: "Friendly", age: "Young", processes: ["Appointment Scheduling"], status: false },
-  ]);
+  // AI Models Data - synced with localStorage and Process.tsx
+  const [aiModels, setAiModels] = useState<AIModelConfig[]>(getStoredAIModels);
+  const [playingVoiceId, setPlayingVoiceId] = useState<number | null>(null);
+  const [voiceConfigSubTab, setVoiceConfigSubTab] = useState<"models" | "voices">("models");
+  const [modelProviderFilter, setModelProviderFilter] = useState<string>("All Providers");
+  const [modelStatusFilter, setModelStatusFilter] = useState<string>("All Status");
+
+  const VOICE_ROLES: Record<string, string> = {
+    Nova: "Clinical Receptionist",
+    Atlas: "Care Coordinator",
+    Luna: "Intake Specialist",
+    Alloy: "Practice Navigator",
+    Shimmer: "Patient Concierge",
+    Echo: "Triage Assistant",
+    Fable: "Wellness Coordinator",
+    Onyx: "Executive Advisor",
+    Bella: "Patient Intake Coordinator",
+    Charlie: "Appointment Specialist",
+    Daniel: "Practice Manager",
+    Emily: "Patient Experience Guide",
+    Finn: "Care Navigation Specialist",
+    Grace: "Clinical Operations Assistant",
+    Asteria: "Scheduling Concierge",
+    Stella: "Patient Support Liaison",
+    Athena: "Senior Healthcare Advisor",
+    Hera: "Billing & Insurance Specialist",
+    Orion: "Follow-up Coordinator",
+    Perseus: "Outpatient Services Guide",
+  };
+
+  const getNationality = (country: string) => {
+    if (country === "USA") return "American";
+    if (country === "UK") return "British";
+    if (country === "Australia") return "Australian";
+    if (country === "Canada") return "Canadian";
+    if (country === "Ireland") return "Irish";
+    return country;
+  };
+
+  const renderProviderLogo = (provider: string) => {
+    switch (provider) {
+      case "Google":
+        return (
+          <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center shrink-0 shadow-2xs">
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+            </svg>
+          </div>
+        );
+      case "OpenAI":
+        return (
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-100 flex items-center justify-center shrink-0 shadow-2xs">
+            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+              <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1683a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4947zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1683a.0757.0757 0 0 1-.071 0l-4.8303-2.7866A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.6669zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1635a.0804.0804 0 0 1-.038-.0567V6.0748a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.4598a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.6069 1.4997-2.602-1.4997z" />
+            </svg>
+          </div>
+        );
+      case "Anthropic":
+        return (
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-[#cc785c] border border-amber-100 flex items-center justify-center shrink-0 shadow-2xs">
+            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+              <path d="M17.472 4.25h-3.414L21.6 20.25h3.414L17.472 4.25zm-10.944 0L0 20.25h3.486l1.378-3.232h6.586l1.378 3.232h3.486L9.77 4.25H6.528zm-.33 9.773L8.148 9.17l1.95 4.853H6.198z" />
+            </svg>
+          </div>
+        );
+      case "DeepSeek":
+        return (
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0 shadow-2xs">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9.5" fill="#1D4ED8" />
+              <path d="M7 14.5C8.5 12 11 11 13 11C15 11 16.5 12 17.5 13.5C18 12.5 18 11.5 17.5 10.5C16.5 8.5 14 7.5 11.5 8C9 8.5 7.5 10.5 7 12.5V14.5Z" fill="white" />
+              <circle cx="10" cy="11.5" r="1" fill="#1D4ED8" />
+            </svg>
+          </div>
+        );
+      case "Meta":
+        return (
+          <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center shrink-0 shadow-2xs">
+            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+              <path d="M16.924 3.013c-2.483 0-4.664 1.472-5.717 3.633-1.054-2.161-3.234-3.633-5.717-3.633C2.457 3.013 0 5.485 0 8.528c0 3.327 2.051 6.574 5.378 9.387 2.071 1.752 4.417 3.072 5.829 3.072.167 0 .333-.018.494-.055.67-.156 1.401-.527 2.166-1.077 1.258-.905 2.502-2.115 3.524-3.488 2.302-3.097 3.609-6.31 3.609-7.839 0-3.043-2.457-5.515-5.076-5.515zm-11.434 2c1.968 0 3.692 1.344 4.195 3.267-.798 1.109-1.688 2.336-2.607 3.593-1.636 2.235-3.153 3.967-4.148 4.793C1.656 15.602 1 14.17 1 12.515c0-2.49 2.001-4.502 4.49-4.502zm11.434 11.974c-1.353 0-3.236-1.503-5.093-3.665.918-1.257 1.808-2.484 2.607-3.593.8-1.11 1.639-2.039 2.486-2.716 1.968 0 3.566 1.598 3.566 3.566 0 1.968-1.598 3.566-3.566 3.566z" />
+            </svg>
+          </div>
+        );
+      default:
+        return (
+          <div className="w-10 h-10 rounded-xl bg-gray-50 text-gray-700 border border-gray-200 flex items-center justify-center shrink-0 shadow-2xs font-bold text-sm">
+            {provider.charAt(0)}
+          </div>
+        );
+    }
+  };
+
+  const handleToggleVoice = (voiceId: number, voiceName: string) => {
+    updateVoiceTableData((prev) =>
+      prev.map((v) => (v.id === voiceId ? { ...v, status: !v.status } : v))
+    );
+    const target = voiceTableData.find((v) => v.id === voiceId);
+    if (!target?.status) {
+      toast.success(`${voiceName} voice activated`);
+    } else {
+      toast.info(`${voiceName} voice deactivated`);
+    }
+  };
+
+  useEffect(() => {
+    const handleModelUpdate = () => {
+      setAiModels(getStoredAIModels());
+    };
+    window.addEventListener(AI_MODELS_STORE_EVENT, handleModelUpdate);
+    window.addEventListener("storage", handleModelUpdate);
+    return () => {
+      window.removeEventListener(AI_MODELS_STORE_EVENT, handleModelUpdate);
+      window.removeEventListener("storage", handleModelUpdate);
+    };
+  }, []);
+
+  const handleToggleModel = (id: string, name: string) => {
+    const updated = toggleAIModelActive(id);
+    setAiModels(updated);
+    const target = updated.find((m) => m.id === id);
+    if (target?.isActive) {
+      toast.success(`${name} activated (now visible in Process AI Agent settings)`);
+    } else {
+      toast.info(`${name} deactivated (hidden from Process AI Agent settings)`);
+    }
+  };
+
+  const handlePlayVoice = (voice: VoiceConfigItem) => {
+    if (playingVoiceId === voice.id) {
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+      setPlayingVoiceId(null);
+      return;
+    }
+
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const phrases = [
+        `Hello! I'm ${voice.name}. I'm ready to assist your callers with scheduling, follow-ups, and inquiries.`,
+        `Hi there! This is ${voice.name}, your automated medical receptionist. How may I direct your call today?`,
+        `Greetings! I'm ${voice.name}, providing real-time AI conversational support for your practice.`,
+      ];
+      const text = phrases[voice.id % phrases.length];
+      const utterance = new SpeechSynthesisUtterance(text);
+      if (voice.gender === "Female") {
+        utterance.pitch = 1.15;
+      } else {
+        utterance.pitch = 0.88;
+      }
+      utterance.rate = 1.0;
+      utterance.onend = () => setPlayingVoiceId(null);
+      utterance.onerror = () => setPlayingVoiceId(null);
+      setPlayingVoiceId(voice.id);
+      window.speechSynthesis.speak(utterance);
+    } else {
+      toast.info(`Auditioning voice: ${voice.name}`);
+    }
+  };
+
+  // Voice Table Data - synced with localStorage and other pages
+  const [voiceTableData, setVoiceTableData] = useState<VoiceConfigItem[]>(getStoredVoices);
+
+  useEffect(() => {
+    const handleVoiceUpdate = () => {
+      setVoiceTableData(getStoredVoices());
+    };
+    window.addEventListener(VOICE_STORE_EVENT, handleVoiceUpdate);
+    window.addEventListener("storage", handleVoiceUpdate);
+    return () => {
+      window.removeEventListener(VOICE_STORE_EVENT, handleVoiceUpdate);
+      window.removeEventListener("storage", handleVoiceUpdate);
+    };
+  }, []);
+
+  const updateVoiceTableData = (updater: VoiceConfigItem[] | ((prev: VoiceConfigItem[]) => VoiceConfigItem[])) => {
+    setVoiceTableData((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      saveStoredVoices(next);
+      return next;
+    });
+  };
+
+  const filteredAIModels = useMemo(() => {
+    return aiModels.filter((m) => {
+      const q = voiceSearchQuery.trim().toLowerCase();
+      const matchesSearch = !q || m.name.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q);
+      const matchesProvider = modelProviderFilter === "All Providers" || m.provider.toLowerCase() === modelProviderFilter.toLowerCase();
+      const matchesStatus = modelStatusFilter === "All Status" || (modelStatusFilter === "Active" ? m.isActive : !m.isActive);
+      return matchesSearch && matchesProvider && matchesStatus;
+    });
+  }, [aiModels, voiceSearchQuery, modelProviderFilter, modelStatusFilter]);
+
+  const filteredVoiceTableData = useMemo(() => {
+    return voiceTableData.filter((voice) => {
+      const q = voiceSearchQuery.trim().toLowerCase();
+      const role = VOICE_ROLES[voice.name] || "";
+      const matchesSearch =
+        !q ||
+        voice.name.toLowerCase().includes(q) ||
+        role.toLowerCase().includes(q) ||
+        voice.gender.toLowerCase().includes(q) ||
+        voice.country.toLowerCase().includes(q) ||
+        voice.tone.toLowerCase().includes(q);
+
+      const matchesGender = voiceFilters.gender === "All Genders" || voice.gender.toLowerCase() === voiceFilters.gender.toLowerCase();
+      const matchesCountry = voiceFilters.country === "All Countries" || voice.country.toLowerCase() === voiceFilters.country.toLowerCase();
+      const matchesTone = voiceFilters.tone === "All Tones" || voice.tone.toLowerCase() === voiceFilters.tone.toLowerCase();
+
+      return matchesSearch && matchesGender && matchesCountry && matchesTone;
+    });
+  }, [voiceTableData, voiceSearchQuery, voiceFilters]);
 
   const AVAILABLE_PROCESSES = ["Insurance Verification", "Appointment Scheduling", "Follow-up", "Payment Reminder"];
 
@@ -3055,7 +3387,7 @@ export default function Settings() {
       // Only remove if more than 1 voice remains
       if (currentVoices.length > 1) {
         setCurrentVoices(prev => prev.filter(v => v.name !== voice.name));
-        setVoiceTableData(prev => prev.filter(v => v.name !== voice.name));
+        updateVoiceTableData(prev => prev.filter(v => v.name !== voice.name));
       }
     } else {
       const newVoiceObj: CurrentVoiceObj = {
@@ -3070,7 +3402,7 @@ export default function Settings() {
       setCurrentVoices(prev => [...prev, newVoiceObj]);
       // Also add to voice table
       const newId = voiceTableData.length > 0 ? Math.max(...voiceTableData.map(v => v.id)) + 1 : 1;
-      setVoiceTableData(prev => [...prev, {
+      updateVoiceTableData(prev => [...prev, {
         id: newId,
         name: voice.name,
         gender: voice.gender,
@@ -3092,7 +3424,7 @@ export default function Settings() {
   const handleRemoveFromCarousel = (voiceName: string) => {
     if (currentVoices.length <= 1) return;
     setCurrentVoices(prev => prev.filter(v => v.name !== voiceName));
-    setVoiceTableData(prev => prev.filter(v => v.name !== voiceName));
+    updateVoiceTableData(prev => prev.filter(v => v.name !== voiceName));
   };
 
   const scrollCarousel = (dir: "left" | "right") => {
@@ -3358,12 +3690,601 @@ export default function Settings() {
     return "mixed";
   };
 
+  const getSettingsPageTitle = () => {
+    switch (activeTab) {
+      case "organization":
+        return "Organization";
+      case "users":
+        return "Team";
+      case "billing":
+      case "plans":
+      case "payments":
+      case "credit-usage":
+        return "Billing";
+      case "voice-config":
+        return "AI Voices / Models";
+      case "numbers":
+        return "Numbers";
+      case "custom-fields":
+        return "Sections / Fields";
+      case "integrations":
+        return "Integrations";
+      case "audit-logs":
+        return "Audit Logs";
+      case "security":
+        return "Security";
+      default:
+        return "Organization";
+    }
+  };
+
+  const getSettingsPageSubtitle = () => {
+    switch (activeTab) {
+      case "organization":
+        return "Manage organization details, profile, timezone, and business settings";
+      case "users":
+        return "Manage team members, roles, access permissions, and invites";
+      case "billing":
+      case "plans":
+      case "payments":
+      case "credit-usage":
+        return "Manage subscription plan, invoices, payment methods, and credit balance";
+      case "voice-config":
+        return "Configure AI receptionist voice, language models, and speech parameters";
+      case "numbers":
+        return "Manage virtual phone numbers, routing, and telephony configurations";
+      case "custom-fields":
+        return "Manage layout, custom fields, and client profile schema";
+      case "integrations":
+        return "Connect your CRM, calendar, electronic health record, and external tools";
+      case "audit-logs":
+        return "View detailed activity and security audit trail across your organization";
+      case "security":
+        return "Configure security, authentication policies, and spam call protection";
+      default:
+        return "Configure system integrations, billing plans, notification channels, and preferences";
+    }
+  };
+
+  const renderPhoneNumbersSection = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold" style={TEXT_STYLES.heading}>Phone Numbers</h2>
+          <p className="text-sm mt-1" style={TEXT_STYLES.subtext}>Manage country routing and phone numbers</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={resetNumbersColumnOrder}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 cursor-pointer"
+            title="Reset column order to default"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Reset columns
+          </button>
+          <Button variant="primary" onClick={() => setShowBuyNumberModal(true)}>
+            <Plus className="w-4 h-4" />
+            Add Number
+          </Button>
+        </div>
+      </div>
+
+      {/* Horizontally Scrollable Table with Arrow Buttons */}
+      <div className="relative">
+        {/* Scroll Right Button - Semicircle (2 rows height, centered) */}
+        {showNumbersScrollIndicator && (
+          <button
+            className="absolute right-0 flex items-center justify-center z-10 transition-all cursor-pointer"
+            style={{
+              top: '50%',
+              transform: 'translateY(-50%)',
+              height: '112px',
+              width: '40px',
+              backgroundColor: 'rgba(255, 255, 255, 0.5)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              borderTopLeftRadius: '9999px',
+              borderBottomLeftRadius: '9999px',
+              borderTopRightRadius: '0',
+              borderBottomRightRadius: '0',
+              opacity: 1
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+              e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) {
+                (icon as SVGElement).style.transform = 'scale(1.1)';
+              }
+              handleNumbersScrollRightMouseEnter();
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+              e.currentTarget.style.boxShadow = '';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) {
+                (icon as SVGElement).style.transform = 'scale(1)';
+              }
+              handleNumbersScrollMouseLeave();
+            }}
+          >
+            <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
+          </button>
+        )}
+
+        {/* Scroll Left Button - Semicircle (2 rows height, centered) */}
+        {showNumbersScrollLeftIndicator && (
+          <button
+            className="absolute left-0 flex items-center justify-center z-10 transition-all cursor-pointer"
+            style={{
+              top: '50%',
+              transform: 'translateY(-50%)',
+              height: '112px',
+              width: '40px',
+              backgroundColor: 'rgba(255, 255, 255, 0.5)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              borderTopLeftRadius: '0',
+              borderBottomLeftRadius: '0',
+              borderTopRightRadius: '9999px',
+              borderBottomRightRadius: '9999px',
+              opacity: 1
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+              e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) {
+                (icon as SVGElement).style.transform = 'scale(1.1)';
+              }
+              handleNumbersScrollLeftMouseEnter();
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+              e.currentTarget.style.boxShadow = '';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) {
+                (icon as SVGElement).style.transform = 'scale(1)';
+              }
+              handleNumbersScrollMouseLeave();
+            }}
+          >
+            <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
+          </button>
+        )}
+
+        <div
+          ref={numbersTableRef}
+          className="bg-white rounded-xl border border-border scrollbar-hide"
+          style={{
+            overflowX: "auto",
+            overflowY: "visible",
+            scrollBehavior: "smooth"
+          }}
+          onScroll={(e) => {
+            const { scrollWidth, clientWidth, scrollLeft } = e.currentTarget;
+            const canScrollRight = scrollLeft < (scrollWidth - clientWidth - 10);
+            const canScrollLeft = scrollLeft > 10;
+            setShowNumbersScrollIndicator(canScrollRight);
+            setShowNumbersScrollLeftIndicator(canScrollLeft);
+          }}
+        >
+          <div style={{ minWidth: "1320px" }}>
+            <table className="w-full">
+              <thead className="bg-muted/30 border-b border-border">
+                <tr>
+                  <th style={{ width: "50px" }} className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">
+                    <SettingsIcon className="w-4 h-4 text-muted-foreground" />
+                  </th>
+                  {numbersColumnOrder.map((columnKey, index) => (
+                    <DraggableNumbersColumnHeader
+                      key={columnKey}
+                      columnKey={columnKey}
+                      index={index}
+                      label={numbersColumnConfig[columnKey].label}
+                      width={numbersColumnConfig[columnKey].width}
+                      moveColumn={moveNumbersColumn}
+                    />
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {countryRoutings.map((routing) => {
+                  const isEditing = editingRowId === routing.id;
+                  const displayData = isEditing ? editingRowData! : routing;
+
+                  const renderCell = (columnKey: string) => {
+                    switch (columnKey) {
+                      case 'phoneNumber':
+                        return (
+                          <td key={columnKey} className="px-3 py-3 text-xs font-medium whitespace-nowrap">
+                            <span className={isEditing ? "text-muted-foreground" : ""}>
+                              {routing.phoneNumber}
+                            </span>
+                          </td>
+                        );
+
+                      case 'country':
+                        return (
+                          <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                            {routing.country}
+                          </td>
+                        );
+
+                      case 'priority':
+                        return (
+                          <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                            {isEditing ? (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() =>
+                                    setEditingRowData({
+                                      ...editingRowData!,
+                                      priority: Math.max(0, editingRowData!.priority - 1),
+                                    })
+                                  }
+                                  className="p-0.5 hover:bg-muted rounded transition-colors"
+                                  title="Decrease priority"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                                <input
+                                  type="number"
+                                  value={displayData.priority}
+                                  onChange={(e) =>
+                                    setEditingRowData({
+                                      ...editingRowData!,
+                                      priority: Math.max(0, parseInt(e.target.value) || 0),
+                                    })
+                                  }
+                                  className="w-16 px-2 py-1 text-xs text-center border border-input rounded bg-input-background"
+                                  min="0"
+                                />
+                                <button
+                                  onClick={() =>
+                                    setEditingRowData({
+                                      ...editingRowData!,
+                                      priority: editingRowData!.priority + 1,
+                                    })
+                                  }
+                                  className="p-0.5 hover:bg-muted rounded transition-colors"
+                                  title="Increase priority"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              routing.priority
+                            )}
+                          </td>
+                        );
+
+                      case 'countriesServed':
+                        return (
+                          <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground">
+                            {isEditing ? (
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowEditCountriesDropdown(!showEditCountriesDropdown)}
+                                  className="w-full px-2 py-1 text-xs border border-input rounded bg-input-background text-left flex items-center justify-between"
+                                >
+                                  <span className="truncate">
+                                    {displayData.countriesServed.length > 0
+                                      ? displayData.countriesServed.join(', ')
+                                      : "Select countries"}
+                                  </span>
+                                  <ChevronDown className="w-3 h-3 flex-shrink-0" />
+                                </button>
+                                {showEditCountriesDropdown && (
+                                  <>
+                                    <div
+                                      className="fixed inset-0 z-10"
+                                      onClick={() => setShowEditCountriesDropdown(false)}
+                                    />
+                                    <div className="absolute top-full left-0 mt-1 w-full min-w-[200px] bg-white border border-border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
+                                      {allCountriesList.map((country) => (
+                                        <label
+                                          key={country}
+                                          className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={displayData.countriesServed.includes(country)}
+                                            onChange={(e) => {
+                                              let newCountries;
+                                              if (country === "All") {
+                                                newCountries = e.target.checked ? ["All"] : [];
+                                              } else {
+                                                newCountries = e.target.checked
+                                                  ? [...displayData.countriesServed.filter(c => c !== "All"), country]
+                                                  : displayData.countriesServed.filter((c) => c !== country);
+                                              }
+                                              setEditingRowData({
+                                                ...editingRowData!,
+                                                countriesServed: newCountries,
+                                              });
+                                            }}
+                                            className="w-3.5 h-3.5"
+                                          />
+                                          <span>{country}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="truncate">{routing.countriesServed.join(', ')}</span>
+                            )}
+                          </td>
+                        );
+
+                      case 'process':
+                        return (
+                          <td key={columnKey} className="px-3 py-3">
+                            {isEditing ? (
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowEditProcessDropdown(!showEditProcessDropdown)}
+                                  className="w-full px-2 py-1 text-xs border border-input rounded bg-input-background text-left flex items-center justify-between"
+                                >
+                                  <span className="truncate">
+                                    {displayData.processes.length > 0
+                                      ? `${displayData.processes.length} selected`
+                                      : "Select processes"}
+                                  </span>
+                                  <ChevronDown className="w-3 h-3 flex-shrink-0" />
+                                </button>
+                                {showEditProcessDropdown && (
+                                  <>
+                                    <div
+                                      className="fixed inset-0 z-10"
+                                      onClick={() => setShowEditProcessDropdown(false)}
+                                    />
+                                    <div className="absolute top-full left-0 mt-1 w-full min-w-[200px] bg-white border border-border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
+                                      {availableProcesses.map((process) => (
+                                        <label
+                                          key={process.id}
+                                          className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={displayData.processes.includes(process.label)}
+                                            onChange={(e) => {
+                                              const newProcesses = e.target.checked
+                                                ? [...displayData.processes, process.label]
+                                                : displayData.processes.filter((p) => p !== process.label);
+                                              setEditingRowData({
+                                                ...editingRowData!,
+                                                processes: newProcesses,
+                                              });
+                                            }}
+                                            className="w-3.5 h-3.5"
+                                          />
+                                          <span>{process.label}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {routing.processes.length > 0 ? (
+                                  routing.processes.map((process) => (
+                                    <span
+                                      key={process}
+                                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary whitespace-nowrap"
+                                    >
+                                      {process}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">No processes</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        );
+
+                      case 'provider':
+                        return (
+                          <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                            {routing.provider}
+                          </td>
+                        );
+
+                      case 'inboundOutbound':
+                        return (
+                          <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                            {isEditing ? (
+                              <select
+                                value={displayData.inboundOutbound}
+                                onChange={(e) =>
+                                  setEditingRowData({
+                                    ...editingRowData!,
+                                    inboundOutbound: e.target.value as "Inbound" | "Outbound" | "Both",
+                                  })
+                                }
+                                className="w-full px-2 py-1 text-xs border border-input rounded bg-input-background"
+                              >
+                                <option value="Inbound">Inbound</option>
+                                <option value="Outbound">Outbound</option>
+                                <option value="Both">Both</option>
+                              </select>
+                            ) : (
+                              routing.inboundOutbound
+                            )}
+                          </td>
+                        );
+
+                      case 'status':
+                        return (
+                          <td key={columnKey} className="px-3 py-3">
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={displayData.status}
+                                onChange={() => {
+                                  if (isEditing) {
+                                    setEditingRowData({ ...editingRowData!, status: !editingRowData!.status });
+                                  } else {
+                                    setCountryRoutings((prev) =>
+                                      prev.map((r) => (r.id === routing.id ? { ...r, status: !r.status } : r))
+                                    );
+                                  }
+                                }}
+                              />
+                              <div className="w-9 h-5 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                            </label>
+                          </td>
+                        );
+
+                      case 'verified':
+                        return (
+                          <td key={columnKey} className="px-3 py-3">
+                            {routing.country === "United States" ? (
+                              <div className="flex items-center justify-start">
+                                <div
+                                  className="inline-flex items-center justify-center"
+                                  style={{
+                                    backgroundColor: "#22C55E",
+                                    color: "#FFFFFF",
+                                    width: "24px",
+                                    height: "24px",
+                                    borderRadius: "50%",
+                                  }}
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        );
+
+                      default:
+                        return null;
+                    }
+                  };
+
+                  return (
+                    <tr key={routing.id} className="border-b border-border hover:bg-muted/10 transition-colors">
+                      {/* 3-Dot Menu */}
+                      <td className="px-3 py-3">
+                        <div className="relative">
+                          <button
+                            onClick={() => setOpenActionsMenuId(openActionsMenuId === routing.id ? null : routing.id)}
+                            className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-all"
+                            title="Actions"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                          {openActionsMenuId === routing.id && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-10"
+                                onClick={() => setOpenActionsMenuId(null)}
+                              />
+                              <div className="absolute left-0 top-full mt-1 w-40 bg-white border border-border rounded-lg shadow-lg z-20 py-1">
+                                {routing.country === "United States" ? (
+                                  <button
+                                    onClick={() => {
+                                      setSelectedVerifyNumber(routing);
+                                      setShowVerifyNumberModal(true);
+                                      setOpenActionsMenuId(null);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center gap-2"
+                                  >
+                                    <ShieldCheck className="w-3.5 h-3.5" />
+                                    Verify
+                                  </button>
+                                ) : (
+                                  <Tooltip text="Verification only available for US numbers">
+                                    <button
+                                      disabled
+                                      className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 opacity-50 cursor-not-allowed"
+                                    >
+                                      <ShieldCheck className="w-3.5 h-3.5" />
+                                      Verify
+                                    </button>
+                                  </Tooltip>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    setEditingRowId(routing.id);
+                                    setEditingRowData({ ...routing });
+                                    setShowEditProcessDropdown(false);
+                                    setOpenActionsMenuId(null);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center gap-2"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    handleDeleteRouting(routing.id);
+                                    setOpenActionsMenuId(null);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-destructive/10 text-destructive transition-colors flex items-center gap-2"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Delete
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Dynamic Columns based on numbersColumnOrder */}
+                      {numbersColumnOrder.map((columnKey) => renderCell(columnKey))}
+
+                      {/* Save/Cancel buttons for edit mode */}
+                      {isEditing && (
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={handleSaveEditedRow}
+                              className="p-1.5 text-white bg-primary hover:bg-primary/90 rounded-lg transition-all"
+                              title="Save changes"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={handleCancelEdit}
+                              className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all"
+                              title="Cancel"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
-          title="Settings"
-          subtitle="Configure system integrations, billing plans, notification channels, and team preferences"
+          title={getSettingsPageTitle()}
+          subtitle={getSettingsPageSubtitle()}
           badge={
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               System Admin
@@ -3373,455 +4294,570 @@ export default function Settings() {
           <HowItWorksButton label="How it works" onClick={() => openHowItWorks(activeTab)} />
         </PageHeader>
 
-        <div className="flex gap-6 items-start">
-          {/* Left Navigation */}
-          <div className="w-[230px] flex-shrink-0 bg-white/80 backdrop-blur-xl border border-white/80 shadow-[0_4px_24px_rgba(0,0,0,0.03)] rounded-[28px] p-3.5 space-y-1 self-start">
-            {/* Header Label */}
-            <div className="px-3.5 pt-1.5 pb-2 text-[10px] font-bold uppercase tracking-widest text-[#8e8e93] font-display">
-              SETTINGS
-            </div>
+        {/* Organization Tab (Matching Reference Image 2) */}
+        {activeTab === "organization" && (
+          <div className="space-y-4">
+            {/* Top Filter & Search Action Bar using PageTopBar */}
+            <PageTopBar
+              searchQuery={orgSearchQuery}
+              onSearchChange={(q) => {
+                setOrgSearchQuery(q);
+                setOrgCurrentPage(1);
+              }}
+              searchPlaceholder="Search organizations..."
+              filterPresets={[
+                {
+                  id: "all",
+                  label: "All Organizations",
+                  count: orgList.length,
+                  isActive: orgCategoryFilter === "All",
+                  onClick: () => {
+                    setOrgCategoryFilter("All");
+                    setOrgCurrentPage(1);
+                  },
+                },
+                {
+                  id: "healthcare",
+                  label: "Healthcare",
+                  count: orgList.filter((o) => o.industryCategory === "Healthcare" || o.industry === "Healthcare").length,
+                  isActive: orgCategoryFilter === "Healthcare",
+                  onClick: () => {
+                    setOrgCategoryFilter("Healthcare");
+                    setOrgCurrentPage(1);
+                  },
+                },
+                {
+                  id: "ophthalmology",
+                  label: "Ophthalmology",
+                  count: orgList.filter((o) => o.industryCategory === "Ophthalmology" || o.industry === "Ophthalmology").length,
+                  isActive: orgCategoryFilter === "Ophthalmology",
+                  onClick: () => {
+                    setOrgCategoryFilter("Ophthalmology");
+                    setOrgCurrentPage(1);
+                  },
+                },
+                {
+                  id: "dental",
+                  label: "Dental Care",
+                  count: orgList.filter((o) => o.industryCategory === "Dental Care" || o.industry === "Dental Care").length,
+                  isActive: orgCategoryFilter === "Dental Care",
+                  onClick: () => {
+                    setOrgCategoryFilter("Dental Care");
+                    setOrgCurrentPage(1);
+                  },
+                },
+              ]}
+              filterFields={[
+                {
+                  id: "name",
+                  label: "Organization Name",
+                  type: "text",
+                  placeholder: "Filter by organization name...",
+                  value: orgSearchQuery,
+                  onChange: (val) => {
+                    setOrgSearchQuery(val || "");
+                    setOrgCurrentPage(1);
+                  },
+                },
+                {
+                  id: "category",
+                  label: "Industry Category",
+                  type: "select",
+                  value: orgCategoryFilter,
+                  onChange: (val) => {
+                    setOrgCategoryFilter(val || "All");
+                    setOrgCurrentPage(1);
+                  },
+                  options: [
+                    { label: "All Categories", value: "All" },
+                    { label: "Healthcare", value: "Healthcare" },
+                    { label: "Ophthalmology", value: "Ophthalmology" },
+                    { label: "Dental Care", value: "Dental Care" },
+                    { label: "Dermatologist", value: "Dermatologist" },
+                  ],
+                },
+              ]}
+              primaryAction={{
+                label: "Create Organization",
+                icon: <Plus className="w-3.5 h-3.5" />,
+                onClick: () => setShowCreateOrgModal(true),
+              }}
+            />
 
-            <nav className="space-y-1">
-              {tabs.map((tab: any) => {
-                const isBillingChild = ["plans", "payments", "credit-usage"].includes(activeTab);
-                const isBillingActive = tab.id === "billing-parent" && isBillingChild;
-                const isActive = activeTab === tab.id || isBillingActive;
-                const Icon = tab.icon;
+            {/* Organizations Table */}
+            {(() => {
+              const filteredOrgs = orgList.filter((o) => {
+                const matchCategory =
+                  orgCategoryFilter === "All" ||
+                  o.industryCategory === orgCategoryFilter ||
+                  o.industry === orgCategoryFilter;
+                const matchSearch =
+                  !orgSearchQuery.trim() ||
+                  o.name.toLowerCase().includes(orgSearchQuery.toLowerCase()) ||
+                  o.email.toLowerCase().includes(orgSearchQuery.toLowerCase()) ||
+                  o.industry.toLowerCase().includes(orgSearchQuery.toLowerCase());
+                return matchCategory && matchSearch;
+              });
 
-                return (
-                  <div key={tab.id}>
+              const orgColumns: TableColumn<typeof orgList[0]>[] = [
+                {
+                  key: "name",
+                  header: "ORGANIZATION NAME",
+                  align: "left",
+                  render: (org) => (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenOrgDrawer(org)}
+                      className="inline-flex items-center gap-2 text-xs font-semibold text-[#1456f0] hover:underline cursor-pointer text-left"
+                    >
+                      <span>{org.flag || "🇮🇳"}</span>
+                      <span>{org.name}</span>
+                    </button>
+                  ),
+                },
+                {
+                  key: "email",
+                  header: "EMAIL",
+                  align: "left",
+                  render: (org) => (
+                    <span className="text-xs text-gray-600 font-normal">
+                      {org.email}
+                    </span>
+                  ),
+                },
+                {
+                  key: "industry",
+                  header: "INDUSTRY",
+                  align: "center",
+                  render: (org) => (
+                    <span className="text-xs text-gray-700 font-medium">
+                      {org.industry || "Ophthalmology"}
+                    </span>
+                  ),
+                },
+                {
+                  key: "preferredTime",
+                  header: "PREFERRED TIME",
+                  align: "center",
+                  render: (org) => (
+                    <span className="text-xs text-gray-600">
+                      {org.preferredTime || "2:00 PM · IST"}
+                    </span>
+                  ),
+                },
+                {
+                  key: "users",
+                  header: "USERS",
+                  align: "center",
+                  render: (org) => (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+                      <User className="w-3.5 h-3.5 text-gray-400" />
+                      <span>{org.users ?? 1} Users</span>
+                    </span>
+                  ),
+                },
+                {
+                  key: "createdDate",
+                  header: "CREATED ON",
+                  align: "center",
+                  render: (org) => (
+                    <span className="text-xs text-gray-500">
+                      {org.createdDate || "Oct 02, 26, 12:33 PM"}
+                    </span>
+                  ),
+                },
+              ];
+
+              return (
+                <TableComponent
+                  columns={orgColumns}
+                  data={filteredOrgs}
+                  getRowId={(org) => org.id}
+                  enableSelection={true}
+                  selectedIds={selectedOrgRows}
+                  onSelectionChange={setSelectedOrgRows}
+                  emptyMessage="No organizations found matching your criteria."
+                />
+              );
+            })()}
+          </div>
+        )}
+
+            {/* Users / Team Tab (Matching Image 3 & 4) */}
+            {activeTab === "users" && (
+              <div className="space-y-4">
+                {/* Team Toolbar using standard PageTopBar */}
+                <PageTopBar
+                  modes={[
+                    { id: "users", label: "Users", badge: allUsers.length },
+                    { id: "roles", label: "Roles", badge: roles.length },
+                    { id: "departments", label: "Departments", badge: 3 },
+                  ]}
+                  activeMode={teamSubTab}
+                  onModeChange={(m) => setTeamSubTab(m as any)}
+                  searchQuery={teamSearchQuery}
+                  onSearchChange={setTeamSearchQuery}
+                  searchPlaceholder={
+                    teamSubTab === "roles"
+                      ? "Search roles..."
+                      : teamSubTab === "departments"
+                      ? "Search departments..."
+                      : "Search users..."
+                  }
+                  filterPresets={[
+                    {
+                      id: "all",
+                      label: "All Team Members",
+                      count: allUsers.length,
+                      isActive: !teamSearchQuery,
+                      onClick: () => setTeamSearchQuery(""),
+                    },
+                    {
+                      id: "admins",
+                      label: "Admins",
+                      count: allUsers.filter((u: any) => u.role?.toLowerCase().includes("admin")).length,
+                      isActive: false,
+                      onClick: () => setTeamSearchQuery("Admin"),
+                    },
+                    {
+                      id: "members",
+                      label: "Members & Staff",
+                      count: allUsers.filter((u: any) => !u.role?.toLowerCase().includes("admin")).length,
+                      isActive: false,
+                      onClick: () => setTeamSearchQuery(""),
+                    },
+                  ]}
+                  filterFields={[
+                    {
+                      id: "name",
+                      label: "Name / Email",
+                      type: "text",
+                      placeholder: "Filter by name or email...",
+                      value: teamSearchQuery,
+                      onChange: (val) => setTeamSearchQuery(val || ""),
+                    },
+                    {
+                      id: "role",
+                      label: "Role",
+                      type: "select",
+                      value: "all",
+                      onChange: (val) => setTeamSearchQuery(val === "all" ? "" : val || ""),
+                      options: [
+                        { label: "All Roles", value: "all" },
+                        { label: "Admin", value: "Admin" },
+                        { label: "Manager", value: "Manager" },
+                        { label: "Agent", value: "Agent" },
+                      ],
+                    },
+                  ]}
+                  primaryAction={{
+                    label:
+                      teamSubTab === "roles"
+                        ? "Create Role"
+                        : teamSubTab === "departments"
+                        ? "Create Department"
+                        : "Add User",
+                    icon: <Plus className="w-3.5 h-3.5" />,
+                    onClick: () => {
+                      if (teamSubTab === "roles") {
+                        setShowRolesDrawer(true);
+                      } else if (teamSubTab === "departments") {
+                        toast.info("Create department");
+                      } else {
+                        setShowAddUserModal(true);
+                      }
+                    },
+                  }}
+                />
+
+                {/* VIEW 1: ROLES TABLE */}
+                {teamSubTab === "roles" && (() => {
+                  const filteredRoles = roles.filter(
+                    (r) =>
+                      !teamSearchQuery.trim() ||
+                      r.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
+                      (r.description && r.description.toLowerCase().includes(teamSearchQuery.toLowerCase()))
+                  );
+
+                  const roleColumns: TableColumn<Role>[] = [
+                    {
+                      key: "name",
+                      header: "ROLE NAME",
+                      align: "left",
+                      render: (r) => (
+                        <button
+                          type="button"
+                          onClick={() => setShowRolesDrawer(true)}
+                          className="text-xs font-bold text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0 flex items-center gap-1.5"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <Shield className="w-3.5 h-3.5" />
+                          {r.name}
+                        </button>
+                      ),
+                    },
+                    {
+                      key: "description",
+                      header: "DESCRIPTION",
+                      align: "left",
+                      render: (r) => (
+                        <span className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {r.description || "Custom role permissions"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "users",
+                      header: "USERS ASSIGNED",
+                      align: "center",
+                      render: (r) => {
+                        const count = allUsers.filter(
+                          (u) => (u.role || "").toLowerCase() === (r.name || "").toLowerCase()
+                        ).length;
+                        return (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+                            <User className="w-3 h-3 text-slate-500" />
+                            {count} {count === 1 ? "user" : "users"}
+                          </span>
+                        );
+                      },
+                    },
+                    {
+                      key: "permissions",
+                      header: "PERMISSIONS",
+                      align: "center",
+                      render: (r) => (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase ${
+                            r.isDefault
+                              ? "bg-blue-50 text-blue-700 border border-blue-200/60"
+                              : "bg-purple-50 text-purple-700 border border-purple-200/60"
+                          }`}
+                        >
+                          {r.isDefault ? "SYSTEM DEFAULT" : "CUSTOM ROLE"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "actions",
+                      header: "ACTIONS",
+                      align: "center",
+                      render: () => (
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowRolesDrawer(true)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Role Permissions"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ),
+                    },
+                  ];
+
+                  return (
+                    <TableComponent
+                      columns={roleColumns}
+                      data={filteredRoles}
+                      getRowId={(r) => r.id}
+                      emptyMessage="No roles found matching your search."
+                    />
+                  );
+                })()}
+
+                {/* VIEW 2: USERS TABLE (Dynamic synced with team store) */}
+                {teamSubTab === "users" && (() => {
+                  const filteredUsers = allUsers.filter((u) => {
+                    const matchSearch =
+                      teamSearchQuery === "" ||
+                      u.name.toLowerCase().includes(teamSearchQuery.toLowerCase()) ||
+                      u.email.toLowerCase().includes(teamSearchQuery.toLowerCase());
+                    const matchRole = teamRoleFilter === "All" || u.role === teamRoleFilter;
+                    return matchSearch && matchRole;
+                  });
+
+                  const userColumns: TableColumn<User>[] = [
+                    {
+                      key: "name",
+                      header: "NAME",
+                      align: "left",
+                      render: (u) => (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTeamMember(u);
+                            setIsTeamDrawerOpen(true);
+                          }}
+                          className="text-xs font-semibold text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0 text-left"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {u.name}
+                        </button>
+                      ),
+                    },
+                    {
+                      key: "role",
+                      header: "ROLE",
+                      align: "center",
+                      render: (u) => (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase ${
+                            (u.role || "").toUpperCase() === "ADMIN"
+                              ? "bg-slate-200 text-slate-800"
+                              : (u.role || "").toUpperCase() === "EXECUTIVE"
+                              ? "bg-slate-100 text-slate-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {u.role || "UNASSIGNED"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "email",
+                      header: "EMAIL",
+                      align: "left",
+                      render: (u) => (
+                        <span className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {u.email}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "createdAt",
+                      header: "CREATED AT",
+                      align: "center",
+                      render: (u) => (
+                        <span className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {(u as any).createdAt || "Oct 1, 2026"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "status",
+                      header: "STATUS",
+                      align: "center",
+                      render: (u) => (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          {u.status === false ? "Inactive" : "Active"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "credits",
+                      header: "CREDITS",
+                      align: "center",
+                      render: (u) => (
+                        <span className="inline-flex items-center gap-1 text-xs text-slate-600 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          <span className="text-amber-500">🔑</span> {(u as any).credits || "0 / 0"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "usageBalance",
+                      header: "USAGE BALANCE",
+                      align: "center",
+                      render: (u) => (
+                        <div className="flex items-center gap-2 max-w-[120px] mx-auto">
+                          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded-full"
+                              style={{ width: `${(u as any).usagePercent || 0}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            {(u as any).usagePercent || 0}%
+                          </span>
+                        </div>
+                      ),
+                    },
+                  ];
+
+                  return (
+                    <TableComponent
+                      columns={userColumns}
+                      data={filteredUsers}
+                      getRowId={(u) => String(u.id)}
+                      enableSelection={true}
+                      selectedIds={selectedTeamRows}
+                      onSelectionChange={setSelectedTeamRows}
+                      emptyMessage="No users found matching your filters."
+                    />
+                  );
+                })()}
+
+                {/* VIEW 3: DEPARTMENTS TABLE */}
+                {teamSubTab === "departments" && (
+                  <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-2xs p-8 text-center text-slate-500 text-xs">
+                    <Building2 className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                    <p className="font-semibold text-slate-700">3 Active Departments</p>
+                    <p className="text-slate-400 mt-0.5">Clinical Operations · Administration · Customer Support</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Unified Billing & Subscription Page */}
+            {(activeTab === "billing" || ["plans", "payments", "credit-usage"].includes(activeTab)) && (
+              <div className="space-y-6">
+                {/* Billing Top Sub-Tabs Navigation */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 border-b border-slate-200 pb-3">
+
+                  <div className="inline-flex p-1 bg-slate-100 rounded-2xl border border-slate-200/80 self-start sm:self-auto">
                     <button
                       type="button"
                       onClick={() => {
-                        if (tab.isParent) {
-                          setBillingExpanded(!billingExpanded);
-                          if (!billingExpanded) {
-                            setActiveTab("plans");
-                          }
-                        } else {
-                          setActiveTab(tab.id);
-                        }
+                        setBillingSubTab("plans");
+                        navigate("/settings/billing/plans");
                       }}
-                      className={`relative w-full flex items-center justify-between px-3.5 py-2.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer ${
-                        isActive && !tab.isParent
-                          ? "text-white shadow-sm"
-                          : isActive && tab.isParent
-                          ? "text-[#181e25] bg-slate-100/70"
-                          : "text-[#45515e] hover:text-[#222222] hover:bg-slate-100/60"
+                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        billingSubTab === "plans"
+                          ? "bg-[#181e25] text-white shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
                       }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      {isActive && !tab.isParent && (
-                        <motion.div
-                          layoutId="settingsTabActivePill"
-                          className="absolute inset-0 bg-gradient-to-r from-[#181e25] to-[#2c3e50] rounded-full -z-10 shadow-sm"
-                          transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                        />
-                      )}
-
-                      <div className="flex items-center gap-3 min-w-0">
-                        {Icon && (
-                          <Icon
-                            className={`w-4 h-4 flex-shrink-0 transition-colors ${
-                              isActive && !tab.isParent ? "text-white" : "text-slate-500"
-                            }`}
-                          />
-                        )}
-                        <span className="truncate">{tab.label}</span>
-                      </div>
-
-                      {tab.isParent && (
-                        <span className="text-slate-400">
-                          {billingExpanded ? (
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          ) : (
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          )}
-                        </span>
-                      )}
+                      Plans
                     </button>
-
-                    {tab.isParent && billingExpanded && tab.children && (
-                      <div className="ml-7 my-1 pl-2 border-l border-slate-200/60 space-y-1">
-                        {tab.children.map((child: any) => {
-                          const isChildActive = activeTab === child.id;
-                          return (
-                            <button
-                              key={child.id}
-                              type="button"
-                              onClick={() => setActiveTab(child.id)}
-                              className={`w-full text-left px-3 py-1.5 rounded-full text-xs transition-colors cursor-pointer flex items-center justify-between ${
-                                isChildActive
-                                  ? "text-[#1456f0] bg-blue-50/80 font-bold"
-                                  : "text-[#64748b] hover:text-[#222222] hover:bg-slate-100/50 font-medium"
-                              }`}
-                            >
-                              <span>{child.label}</span>
-                              {isChildActive && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#1456f0]" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBillingSubTab("payments");
+                        navigate("/settings/billing/payments");
+                      }}
+                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        billingSubTab === "payments"
+                          ? "bg-[#181e25] text-white shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      Payments
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBillingSubTab("credit-usage");
+                        navigate("/settings/billing/credit-usage");
+                      }}
+                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        billingSubTab === "credit-usage"
+                          ? "bg-[#181e25] text-white shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      Credit Usage
+                    </button>
                   </div>
-                );
-              })}
-            </nav>
-          </div>
+                </div>
 
-          {/* Content Area */}
-          <div className="flex-1 min-w-0 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 lg:p-8" style={{ overflowX: "hidden" }}>
-            {/* Organization Tab */}
-            {activeTab === "organization" && (
+                {/* Sub-tab 1: Plans */}
+                {billingSubTab === "plans" && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold" style={TEXT_STYLES.heading}>Organization</h2>
-                    <p className="text-sm mt-1" style={TEXT_STYLES.subtext}>View organization details and settings</p>
-                  </div>
-                  {isEditingOrganization ? (
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" onClick={() => {
-                        setIsEditingOrganization(false);
-                        setEditOrgData({
-                          name: activeOrganization.name,
-                          industryCategory: activeOrganization.industryCategory || "Healthcare",
-                          industry: activeOrganization.industry || "General Physician",
-                          location: activeOrganization.location || (activeOrganization.locations && activeOrganization.locations[0]) || "California",
-                          locations: activeOrganization.locations || ["California"],
-                          email: activeOrganization.email,
-                          phone: activeOrganization.phone || "",
-                          countryCode: "+1",
-                          countryFlag: "🇺🇸",
-                          countryName: "United States",
-                          website: "https://example.com",
-                          preferredCallingTime: "14:00",
-                          timezone: "UTC-08:00 (Pacific Time)",
-                          defaultCallingCountry: "United States",
-                          address: "123 Healthcare Ave, Suite 100, San Francisco, CA 94102",
-                          billingContactName: "John Smith",
-                          billingContactEmail: "billing@healthcare.com",
-                          language: selectedLanguage,
-                        });
-                      }}>
-                        Cancel
-                      </Button>
-                      <Button variant="primary" onClick={handleSaveOrganization}>
-                        Save Changes
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button variant="primary" onClick={() => {
-                      setEditOrgData({ ...editOrgData, language: selectedLanguage });
-                      setIsEditingOrganization(true);
-                    }}>
-                      <Edit className="w-4 h-4" />
-                      Edit
-                    </Button>
-                  )}
-                </div>
-
-                {/* Basic Info */}
-                <div className="bg-white/90 rounded-[20px] p-6 border border-slate-200/70 shadow-2xs space-y-4">
-                  <h3 className="font-bold text-xs uppercase tracking-wider pb-3 border-b border-slate-100 font-display text-slate-500">BASIC INFO</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Organization Name
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <Input
-                          value={editOrgData.name}
-                          onChange={(e) => setEditOrgData({ ...editOrgData, name: e.target.value })}
-                          className="mt-1"
-                        />
-                      ) : (
-                        <p className="mt-1 text-foreground font-medium">{activeOrganization.name}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Industry Category
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <select
-                          value={editOrgData.industryCategory}
-                          onChange={(e) => {
-                            const cat = e.target.value;
-                            const indList = getIndustriesForCategory(cat);
-                            setEditOrgData({
-                              ...editOrgData,
-                              industryCategory: cat,
-                              industry: indList[0] || "",
-                            });
-                          }}
-                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm"
-                        >
-                          {INITIAL_CATEGORIES.map((c) => (
-                            <option key={c.id} value={c.name}>{c.name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <p className="mt-1 text-foreground font-medium">{activeOrganization.industryCategory || "Healthcare"}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Industry
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <select
-                          value={editOrgData.industry}
-                          onChange={(e) => setEditOrgData({ ...editOrgData, industry: e.target.value })}
-                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm"
-                        >
-                          {getIndustriesForCategory(editOrgData.industryCategory).map((ind) => (
-                            <option key={ind} value={ind}>{ind}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <p className="mt-1 text-foreground font-medium">{activeOrganization.industry || "General Physician"}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Location
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <select
-                          value={editOrgData.location}
-                          onChange={(e) => setEditOrgData({
-                            ...editOrgData,
-                            location: e.target.value,
-                            locations: [e.target.value],
-                          })}
-                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm"
-                        >
-                          {STANDARD_LOCATIONS.map((loc) => (
-                            <option key={loc} value={loc}>{loc}</option>
-                          ))}
-                          {editOrgData.location && !STANDARD_LOCATIONS.includes(editOrgData.location) && (
-                            <option value={editOrgData.location}>{editOrgData.location}</option>
-                          )}
-                        </select>
-                      ) : (
-                        <p className="mt-1 text-foreground font-medium">
-                          {activeOrganization.location || (activeOrganization.locations && activeOrganization.locations.length > 0 ? activeOrganization.locations.join(", ") : "California")}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Organization Locations */}
-                <OrganizationLocationsSection isEditing={isEditingOrganization} />
-
-                {/* Billing Info */}
-                <div className="bg-white/90 rounded-[20px] p-6 border border-slate-200/70 shadow-2xs space-y-4">
-                  <h3 className="font-bold text-xs uppercase tracking-wider pb-3 border-b border-slate-100 font-display text-slate-500">BILLING INFO</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="md:col-span-2">
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Address
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <Input
-                          value={editOrgData.address}
-                          onChange={(e) => setEditOrgData({ ...editOrgData, address: e.target.value })}
-                          className="mt-1"
-                        />
-                      ) : (
-                        <p className="mt-1 text-foreground">123 Healthcare Ave, Suite 100, San Francisco, CA 94102</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Billing Contact Name
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <Input
-                          value={editOrgData.billingContactName}
-                          onChange={(e) => setEditOrgData({ ...editOrgData, billingContactName: e.target.value })}
-                          className="mt-1"
-                        />
-                      ) : (
-                        <p className="mt-1 text-foreground">John Smith</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Billing Contact Email
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <Input
-                          type="email"
-                          value={editOrgData.billingContactEmail}
-                          onChange={(e) => setEditOrgData({ ...editOrgData, billingContactEmail: e.target.value })}
-                          className="mt-1"
-                        />
-                      ) : (
-                        <p className="mt-1 text-foreground">billing@healthcare.com</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Dashboard Translation */}
-                <div className="bg-muted/30 rounded-xl p-6 border border-border space-y-4">
-                  <h3 className="font-semibold text-sm pb-3 border-b border-border" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>DASHBOARD TRANSLATION</h3>
-                  <div>
-                    <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                      Language
-                      {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                    </label>
-                    {isEditingOrganization ? (
-                      <select
-                        value={editOrgData.language}
-                        onChange={(e) => setEditOrgData({ ...editOrgData, language: e.target.value })}
-                        className="mt-1 w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                      >
-                        <option value="English">English</option>
-                        <option value="Spanish">Spanish</option>
-                        <option value="French">French</option>
-                        <option value="German">German</option>
-                      </select>
-                    ) : (
-                      <p className="mt-1 text-foreground">{selectedLanguage}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Users Tab */}
-            {activeTab === "users" && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold" style={TEXT_STYLES.heading}>Team</h2>
-                    <p className="text-sm mt-1" style={TEXT_STYLES.subtext}>Manage team members for {activeOrganization.name}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Button variant="outline" onClick={() => setShowRolesDrawer(true)} className="flex items-center gap-1.5 font-semibold">
-                      <Shield className="w-4 h-4 text-blue-600" />
-                      Roles & Permissions
-                    </Button>
-                    <Button variant="primary" onClick={() => setShowAddUserModal(true)}>
-                      <Plus className="w-4 h-4" />
-                      Add User
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl border border-border overflow-hidden shadow-sm">
-                  <table className="w-full">
-                    <thead style={{ backgroundColor: '#1F2937' }} className="border-b border-border">
-                      <tr>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', width: '40px' }}></th>
-                        <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Name</th>
-                        <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Email</th>
-                        <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Role</th>
-                        <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {users.map((user) => (
-                        <tr key={user.id} className="border-b border-border hover:bg-[#F1F5F9] transition-colors group">
-                          <td className="px-4 py-4">
-                            <div className="relative org-dropdown-menu-container">
-                              <button
-                                onClick={() => setOpenOrgDropdownId(openOrgDropdownId === user.id ? null : user.id)}
-                                className="p-1 hover:bg-gray-200 rounded transition-colors"
-                                style={{ color: "#6B7280" }}
-                              >
-                                <MoreVertical className="w-4 h-4" />
-                              </button>
-
-                              {/* Dropdown Menu */}
-                              {openOrgDropdownId === user.id && (
-                                <div
-                                  className="absolute left-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[140px]"
-                                  style={{ marginTop: "4px" }}
-                                >
-                                  <button
-                                    onClick={() => handleEditUser(user)}
-                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors rounded-t-lg"
-                                    style={{ color: "#111827" }}
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteUser(user)}
-                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors rounded-b-lg"
-                                    style={{ color: "#EF4444" }}
-                                  >
-                                    Delete User
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <button
-                              onClick={() => handleEditUser(user)}
-                              className="text-sm font-semibold text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0"
-                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                            >
-                              {user.name}
-                            </button>
-                          </td>
-                          <td className="px-6 py-4">
-                            <p className="text-sm text-[#6B7280]" style={{ fontFamily: 'Outfit, sans-serif' }}>{user.email}</p>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${user.role === "Admin"
-                              ? "bg-[#EFF6FF] text-[#2563EB]"
-                              : user.role === "Manager"
-                                ? "bg-[#F0FDF4] text-[#10B981]"
-                                : user.role === "Supervisor"
-                                  ? "bg-[#FEF3C7] text-[#F59E0B]"
-                                  : "bg-[#F3F4F6] text-[#6B7280]"
-                              }`}>
-                              {user.role || "Agent"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <label className="relative inline-flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={user.status}
-                                onChange={() => handleToggleUserStatus(user.id)}
-                              />
-                              <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                            </label>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* Billing Plans */}
-            {activeTab === "plans" && (
-              <div className="space-y-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-[22px] font-bold text-[#111827]" style={{ fontFamily: 'DM Sans, sans-serif' }}>Plans</h2>
-                    <p className="text-sm mt-1 text-[#6B7280]" style={{ fontFamily: 'Outfit, sans-serif' }}>Manage plans, subscriptions, and payments</p>
-                  </div>
-                </div>
 
                 <div className="space-y-6">
                   {/* Section A - Current Subscription */}
@@ -4041,8 +5077,6 @@ export default function Settings() {
                     )}
                   </div>
                 </div>
-              </div>
-            )}
 
             {/* Manage Plan Drawer */}
             <Drawer
@@ -4155,9 +5189,11 @@ export default function Settings() {
                 </div>
               </div>
             </Drawer>
+          </div>
+        )}
 
-            {/* Billing Payments */}
-            {activeTab === "payments" && (
+          {/* Sub-tab 2: Payments */}
+          {billingSubTab === "payments" && (
               <div className="space-y-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
@@ -4313,76 +5349,59 @@ export default function Settings() {
 
                     {/* Transaction History */}
                     <h3 className="text-base font-bold mt-8">Transaction History</h3>
-                    <div className="bg-white rounded-xl border border-border overflow-hidden">
-                      <table className="w-full">
-                        <thead className="bg-muted/30 border-b border-border">
-                          <tr>
-                            <th className="text-left px-6 py-3 text-sm font-medium text-[#64748B]">Date</th>
-                            <th className="text-left px-6 py-3 text-sm font-medium text-[#64748B]">Description</th>
-                            <th className="text-left px-6 py-3 text-sm font-medium text-[#64748B]">Amount</th>
-                            <th className="text-left px-6 py-3 text-sm font-medium text-[#64748B]">Status</th>
-                            <th className="text-right px-6 py-3 text-sm font-medium text-[#64748B]">Invoice</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr className="border-b border-border">
-                            <td className="px-6 py-4 text-sm">May 1, 2026</td>
-                            <td className="px-6 py-4 text-sm">Professional Plan (Annual)</td>
-                            <td className="px-6 py-4 text-sm font-medium">$1,896</td>
-                            <td className="px-6 py-4">
-                              <span className="flex items-center gap-1 text-sm text-green-600">
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                </svg>
-                                Paid
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <button className="text-[13px] text-[#2563EB] underline hover:text-blue-700">Download</button>
-                            </td>
-                          </tr>
-                          <tr className="border-b border-border">
-                            <td className="px-6 py-4 text-sm">Apr 1, 2026</td>
-                            <td className="px-6 py-4 text-sm">Professional Plan (Monthly)</td>
-                            <td className="px-6 py-4 text-sm font-medium">$158</td>
-                            <td className="px-6 py-4">
-                              <span className="flex items-center gap-1 text-sm text-green-600">
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                </svg>
-                                Paid
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <button className="text-[13px] text-[#2563EB] underline hover:text-blue-700">Download</button>
-                            </td>
-                          </tr>
-                          <tr className="border-b border-border">
-                            <td className="px-6 py-4 text-sm">Mar 1, 2026</td>
-                            <td className="px-6 py-4 text-sm">Professional Plan (Monthly)</td>
-                            <td className="px-6 py-4 text-sm font-medium">$158</td>
-                            <td className="px-6 py-4">
-                              <span className="flex items-center gap-1 text-sm text-green-600">
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                </svg>
-                                Paid
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <button className="text-[13px] text-[#2563EB] underline hover:text-blue-700">Download</button>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
+                    {(() => {
+                      const txData = [
+                        { id: "tx-1", date: "May 1, 2026", description: "Professional Plan (Annual)", amount: "$1,896", status: "Paid" },
+                        { id: "tx-2", date: "Apr 1, 2026", description: "Professional Plan (Monthly)", amount: "$158", status: "Paid" },
+                        { id: "tx-3", date: "Mar 1, 2026", description: "Professional Plan (Monthly)", amount: "$158", status: "Paid" },
+                      ];
+
+                      const txColumns: TableColumn<typeof txData[0]>[] = [
+                        { key: "date", header: "Date", align: "left", render: (tx) => <span className="text-sm text-slate-700">{tx.date}</span> },
+                        { key: "description", header: "Description", align: "left", render: (tx) => <span className="text-sm font-medium text-slate-900">{tx.description}</span> },
+                        { key: "amount", header: "Amount", align: "right", render: (tx) => <span className="text-sm font-semibold text-slate-900">{tx.amount}</span> },
+                        {
+                          key: "status",
+                          header: "Status",
+                          align: "center",
+                          render: (tx) => (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              {tx.status}
+                            </span>
+                          ),
+                        },
+                        {
+                          key: "invoice",
+                          header: "Invoice",
+                          align: "right",
+                          render: () => (
+                            <button
+                              type="button"
+                              onClick={() => toast.success("Invoice downloaded")}
+                              className="text-xs font-semibold text-[#2563EB] hover:underline cursor-pointer"
+                            >
+                              Download
+                            </button>
+                          ),
+                        },
+                      ];
+
+                      return (
+                        <TableComponent
+                          columns={txColumns}
+                          data={txData}
+                          getRowId={(tx) => tx.id}
+                        />
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Credit Usage Tab */}
-            {activeTab === "credit-usage" && (
+            {/* Sub-tab 3: Credit Usage */}
+            {billingSubTab === "credit-usage" && (
               <div className="space-y-0">
                 {/* Page Header */}
                 <div className="mb-4">
@@ -4717,186 +5736,196 @@ export default function Settings() {
                       </div>
 
                       {/* Table */}
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-[#E5E7EB]">
-                            <th className="w-8 px-4 py-3" />
-                            <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Name</th>
-                            <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Email</th>
-                            <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Credits</th>
-                            <th className="text-left px-4 py-3 text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Usage Balance</th>
-                            <th className="w-8 px-4 py-3" />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {teamMembersFilter === "active" ? (
-                            [
-                              { name: "Eye Mantra test dev", role: "TEAM MEMBER", email: "dev@mantracare.com", used: 0, total: 1000, pct: 0 },
-                              { name: "Karan Hinduja", role: "TEAM MEMBER", email: "karan@mantra.care", used: 0, total: 6000, pct: 0 },
-                              { name: "Varsha", role: "TEAM MEMBER", email: "varsha@mantra.care", used: 7921, total: 11000, pct: 72 },
-                            ]
-                              .filter((m) => {
-                                if (!teamMembersSearch) return true;
-                                const q = teamMembersSearch.toLowerCase();
-                                return m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
-                              })
-                              .map((member, idx, arr) => {
-                                return (
-                                  <tr key={member.email} className={`${idx !== arr.length - 1 ? "border-b border-[#F3F4F6]" : ""} hover:bg-[#F9FAFB] transition-colors`}>
-                                    <td className="px-4 py-4 text-center" style={{ position: 'relative' }}>
-                                      <button
-                                        className="text-[#9CA3AF] hover:text-[#374151] transition-colors"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setOpenMemberRowMenu(openMemberRowMenu === member.email ? null : member.email);
-                                        }}
-                                      >
-                                        <MoreVertical className="w-4 h-4" />
-                                      </button>
-                                      {openMemberRowMenu === member.email && (
-                                        <>
-                                          <div
-                                            className="fixed inset-0"
-                                            style={{ zIndex: 9998 }}
-                                            onClick={() => setOpenMemberRowMenu(null)}
-                                          />
-                                          <div
-                                            style={{
-                                              position: 'absolute',
-                                              top: '100%',
-                                              left: '50%',
-                                              transform: 'translateX(-50%)',
-                                              zIndex: 9999,
-                                              backgroundColor: '#FFFFFF',
-                                              border: '0.5px solid #E5E7EB',
-                                              borderRadius: '8px',
-                                              boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                                              minWidth: '110px',
-                                              padding: '4px',
-                                            }}
-                                          >
-                                            <button
-                                              className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-[13px] text-[#374151] hover:bg-[#F3F4F6] transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setOpenMemberRowMenu(null);
-                                                setSelectedMemberForUsage(member);
-                                                setShowMemberUsageDrawer(true);
-                                                setMemberUsageTab("breakdown");
-                                              }}
-                                            >
-                                              <Eye className="w-3.5 h-3.5 text-[#6B7280]" />
-                                              View
-                                            </button>
-                                          </div>
-                                        </>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <p className="text-[13px] font-semibold text-[#2563EB] cursor-pointer hover:underline" style={{ fontFamily: "Outfit, sans-serif" }}>{member.name}</p>
-                                      <span className="text-[10px] text-[#9CA3AF] font-medium tracking-wide">+ {member.role}</span>
-                                    </td>
-                                    <td className="px-4 py-4 text-[13px] text-[#374151]" style={{ fontFamily: "Outfit, sans-serif" }}>{member.email}</td>
-                                    <td className="px-4 py-4">
-                                      <div className="flex items-center gap-1.5">
-                                        <Coins className="w-3.5 h-3.5 text-[#F59E0B] flex-shrink-0" />
-                                        <span className="text-[13px] text-[#374151]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                          {member.used.toLocaleString()} / {member.total.toLocaleString()}
-                                        </span>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <div className="flex items-center gap-3">
-                                        <div className="flex-1 h-1.5 bg-[#F3F4F6] rounded-full overflow-hidden">
-                                          <div
-                                            className="h-full rounded-full"
-                                            style={{ width: `${member.pct}%`, backgroundColor: "#2563EB" }}
-                                          />
-                                        </div>
-                                        <span className="text-[12px] text-[#6B7280] w-8 text-right flex-shrink-0" style={{ fontFamily: "Outfit, sans-serif" }}>{member.pct}%</span>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })
-                          ) : (
-                            pendingInvites.length === 0 ? (
-                              <tr>
-                                <td colSpan={6} className="px-4 py-12 text-center">
-                                  <div className="flex flex-col items-center justify-center gap-2">
-                                    <User className="w-10 h-10 text-[#D1D5DB]" />
-                                    <p className="text-[14px] text-[#9CA3AF]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                      No pending invitations yet
-                                    </p>
-                                  </div>
-                                </td>
-                              </tr>
-                            ) : (
-                              pendingInvites
-                                .filter((invite) => {
-                                  if (!teamMembersSearch) return true;
-                                  const q = teamMembersSearch.toLowerCase();
-                                  return invite.email.toLowerCase().includes(q) || invite.role.toLowerCase().includes(q);
-                                })
-                                .map((invite, idx, arr) => (
-                                  <tr key={invite.id} className={`${idx !== arr.length - 1 ? "border-b border-[#F3F4F6]" : ""} hover:bg-[#F9FAFB] transition-colors`}>
-                                    <td className="px-4 py-4" />
-                                    <td className="px-4 py-4">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center flex-shrink-0">
-                                          <Mail className="w-4 h-4 text-[#9CA3AF]" />
-                                        </div>
-                                        <span className="text-[13px] font-medium text-[#374151]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                          {invite.email}
-                                        </span>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <span className="text-[13px] text-[#6B7280]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                        {invite.role}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <span className="inline-flex items-center px-2.5 py-1 bg-[#FEF3C7] text-[#92400E] text-[11px] font-semibold rounded-full">
-                                        Pending
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <span className="text-[12px] text-[#9CA3AF]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                        Sent {invite.sentAt}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-4">
-                                      <div className="flex items-center gap-2">
-                                        <button
-                                          onClick={() => {
-                                            toast.success("Invitation resent successfully");
-                                          }}
-                                          className="text-[13px] text-[#2563EB] hover:text-[#1D4ED8] font-medium"
-                                          style={{ fontFamily: "Outfit, sans-serif" }}
-                                        >
-                                          Resend
-                                        </button>
-                                        <span className="text-[#D1D5DB]">|</span>
-                                        <button
-                                          onClick={() => {
-                                            setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
-                                            toast.success("Invitation cancelled");
-                                          }}
-                                          className="text-[13px] text-[#DC2626] hover:text-[#B91C1C] font-medium"
-                                          style={{ fontFamily: "Outfit, sans-serif" }}
-                                        >
-                                          Cancel
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))
-                            )
-                          )}
-                        </tbody>
-                      </table>
+                      {teamMembersFilter === "active" ? (() => {
+                        const activeMembersData = [
+                          { id: "dev@mantracare.com", name: "Eye Mantra test dev", role: "TEAM MEMBER", email: "dev@mantracare.com", used: 0, total: 1000, pct: 0 },
+                          { id: "karan@mantra.care", name: "Karan Hinduja", role: "TEAM MEMBER", email: "karan@mantra.care", used: 0, total: 6000, pct: 0 },
+                          { id: "varsha@mantra.care", name: "Varsha", role: "TEAM MEMBER", email: "varsha@mantra.care", used: 7921, total: 11000, pct: 72 },
+                        ].filter((m) => {
+                          if (!teamMembersSearch) return true;
+                          const q = teamMembersSearch.toLowerCase();
+                          return m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+                        });
+
+                        const columns: TableColumn<any>[] = [
+                          {
+                            header: "Name",
+                            accessorKey: "name",
+                            align: "left",
+                            render: (member) => (
+                              <div>
+                                <p
+                                  onClick={() => {
+                                    setSelectedMemberForUsage(member);
+                                    setShowMemberUsageDrawer(true);
+                                    setMemberUsageTab("breakdown");
+                                  }}
+                                  className="text-[13px] font-semibold text-[#2563EB] cursor-pointer hover:underline"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  {member.name}
+                                </p>
+                                <span className="text-[10px] text-[#9CA3AF] font-medium tracking-wide">+ {member.role}</span>
+                              </div>
+                            ),
+                          },
+                          {
+                            header: "Email",
+                            accessorKey: "email",
+                            align: "left",
+                            render: (member) => (
+                              <span className="text-[13px] text-[#374151]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {member.email}
+                              </span>
+                            ),
+                          },
+                          {
+                            header: "Credits",
+                            align: "left",
+                            render: (member) => (
+                              <div className="flex items-center gap-1.5">
+                                <Coins className="w-3.5 h-3.5 text-[#F59E0B] flex-shrink-0" />
+                                <span className="text-[13px] text-[#374151]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  {member.used.toLocaleString()} / {member.total.toLocaleString()}
+                                </span>
+                              </div>
+                            ),
+                          },
+                          {
+                            header: "Usage Balance",
+                            align: "left",
+                            render: (member) => (
+                              <div className="flex items-center gap-3" style={{ minWidth: "140px" }}>
+                                <div className="flex-1 h-1.5 bg-[#F3F4F6] rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full"
+                                    style={{ width: `${member.pct}%`, backgroundColor: "#2563EB" }}
+                                  />
+                                </div>
+                                <span className="text-[12px] text-[#6B7280] w-8 text-right flex-shrink-0" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  {member.pct}%
+                                </span>
+                              </div>
+                            ),
+                          },
+                        ];
+
+                        return (
+                          <TableComponent
+                            columns={columns}
+                            data={activeMembersData}
+                            getRowId={(m) => m.id}
+                            onRowClick={(member) => {
+                              setSelectedMemberForUsage(member);
+                              setShowMemberUsageDrawer(true);
+                              setMemberUsageTab("breakdown");
+                            }}
+                            rowActions={[
+                              {
+                                label: "View Usage",
+                                icon: <Eye className="w-3.5 h-3.5 text-[#6B7280]" />,
+                                onClick: (member) => {
+                                  setSelectedMemberForUsage(member);
+                                  setShowMemberUsageDrawer(true);
+                                  setMemberUsageTab("breakdown");
+                                },
+                              },
+                            ]}
+                            emptyMessage="No team members match your search."
+                          />
+                        );
+                      })() : (() => {
+                        const pendingData = pendingInvites.filter((invite) => {
+                          if (!teamMembersSearch) return true;
+                          const q = teamMembersSearch.toLowerCase();
+                          return invite.email.toLowerCase().includes(q) || invite.role.toLowerCase().includes(q);
+                        });
+
+                        const pendingColumns: TableColumn<any>[] = [
+                          {
+                            header: "Email",
+                            accessorKey: "email",
+                            align: "left",
+                            render: (invite) => (
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-[#F3F4F6] flex items-center justify-center flex-shrink-0">
+                                  <Mail className="w-4 h-4 text-[#9CA3AF]" />
+                                </div>
+                                <span className="text-[13px] font-medium text-[#374151]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  {invite.email}
+                                </span>
+                              </div>
+                            ),
+                          },
+                          {
+                            header: "Role",
+                            accessorKey: "role",
+                            align: "left",
+                            render: (invite) => (
+                              <span className="text-[13px] text-[#6B7280]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {invite.role}
+                              </span>
+                            ),
+                          },
+                          {
+                            header: "Status",
+                            align: "center",
+                            render: () => (
+                              <span className="inline-flex items-center px-2.5 py-1 bg-[#FEF3C7] text-[#92400E] text-[11px] font-semibold rounded-full">
+                                Pending
+                              </span>
+                            ),
+                          },
+                          {
+                            header: "Sent At",
+                            accessorKey: "sentAt",
+                            align: "left",
+                            render: (invite) => (
+                              <span className="text-[12px] text-[#9CA3AF]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                Sent {invite.sentAt}
+                              </span>
+                            ),
+                          },
+                        ];
+
+                        if (pendingInvites.length === 0) {
+                          return (
+                            <div className="px-4 py-12 text-center flex flex-col items-center justify-center gap-2">
+                              <User className="w-10 h-10 text-[#D1D5DB]" />
+                              <p className="text-[14px] text-[#9CA3AF]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                No pending invitations yet
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <TableComponent
+                            columns={pendingColumns}
+                            data={pendingData}
+                            getRowId={(inv) => inv.id}
+                            rowActions={[
+                              {
+                                label: "Resend Invitation",
+                                icon: <Mail className="w-3.5 h-3.5 text-[#2563EB]" />,
+                                onClick: () => {
+                                  toast.success("Invitation resent successfully");
+                                },
+                              },
+                              {
+                                label: "Cancel Invitation",
+                                icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+                                isDanger: true,
+                                onClick: (invite) => {
+                                  setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
+                                  toast.success("Invitation cancelled");
+                                },
+                              },
+                            ]}
+                            emptyMessage="No pending invitations match your search."
+                          />
+                        );
+                      })()}
                     </div>
 
                     {/* Invite Member Modal */}
@@ -5188,53 +6217,90 @@ export default function Settings() {
                           />
                         </div>
                       </div>
-                      <div className="overflow-hidden rounded-lg border border-[#E5E7EB]">
-                        <table className="w-full">
-                          <thead className="bg-[#111827] text-white">
-                            <tr>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">Transaction ID</th>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">User</th>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">Role</th>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">Type</th>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">Description</th>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">Credits</th>
-                              <th className="text-left px-4 py-3 text-[11px] font-semibold uppercase tracking-wide">Date</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {[
-                              { id: "Txn-1778389229", user: "Anurag Kashuap", role: "System User", type: "Domestic call outbound usage", description: "Outbound call usage by Anurag Kashuap", credits: "-1.00", date: "May 10, 2026, 10:30 AM" },
-                              { id: "Txn-1778389228", user: "Sarah Johnson", role: "Admin", type: "International call inbound usage", description: "Inbound international call usage", credits: "-2.50", date: "May 10, 2026, 9:15 AM" },
-                              { id: "Txn-1778389227", user: "Michael Chen", role: "Agent", type: "Domestic call inbound usage", description: "Inbound call usage by Michael Chen", credits: "-0.75", date: "May 9, 2026, 4:45 PM" },
-                              { id: "Txn-1778389226", user: "Anurag Kashuap", role: "System User", type: "Webhook usage", description: "API webhook processing", credits: "-0.10", date: "May 9, 2026, 2:20 PM" },
-                              { id: "Txn-1778389225", user: "Sarah Johnson", role: "Admin", type: "International call outbound usage", description: "Outbound international call", credits: "-3.25", date: "May 9, 2026, 11:00 AM" },
-                            ]
-                              .filter((t) => {
-                                if (!creditUsageSearchQuery) return true;
-                                const q = creditUsageSearchQuery.toLowerCase();
-                                return t.id.toLowerCase().includes(q) || t.user.toLowerCase().includes(q) || t.type.toLowerCase().includes(q) || t.description.toLowerCase().includes(q);
-                              })
-                              .map((transaction, index, arr) => (
-                                <tr key={transaction.id} className={`${index !== arr.length - 1 ? "border-b border-[#F3F4F6]" : ""} hover:bg-[#F9FAFB] transition-colors`}>
-                                  <td className="px-4 py-3 text-[13px] text-[#374151]">{transaction.id}</td>
-                                  <td className="px-4 py-3 text-[13px] text-[#374151] font-medium">{transaction.user}</td>
-                                  <td className="px-4 py-3">
-                                    <span className="px-2 py-0.5 bg-[#EFF6FF] text-[#2563EB] text-[11px] rounded-full font-medium">{transaction.role}</span>
-                                  </td>
-                                  <td className="px-4 py-3 text-[13px] text-[#374151]">{transaction.type}</td>
-                                  <td className="px-4 py-3 text-[13px] text-[#6B7280]">{transaction.description}</td>
-                                  <td className="px-4 py-3">
-                                    <div className="flex items-center gap-1">
-                                      <Coins className="w-3.5 h-3.5 text-[#F59E0B]" />
-                                      <span className="text-[13px] font-semibold text-[#DC2626]">{transaction.credits}</span>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3 text-[13px] text-[#6B7280]">{transaction.date}</td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      {(() => {
+                        const txData = [
+                          { id: "Txn-1778389229", user: "Anurag Kashuap", role: "System User", type: "Domestic call outbound usage", description: "Outbound call usage by Anurag Kashuap", credits: "-1.00", date: "May 10, 2026, 10:30 AM" },
+                          { id: "Txn-1778389228", user: "Sarah Johnson", role: "Admin", type: "International call inbound usage", description: "Inbound international call usage", credits: "-2.50", date: "May 10, 2026, 9:15 AM" },
+                          { id: "Txn-1778389227", user: "Michael Chen", role: "Agent", type: "Domestic call inbound usage", description: "Inbound call usage by Michael Chen", credits: "-0.75", date: "May 9, 2026, 4:45 PM" },
+                          { id: "Txn-1778389226", user: "Anurag Kashuap", role: "System User", type: "Webhook usage", description: "API webhook processing", credits: "-0.10", date: "May 9, 2026, 2:20 PM" },
+                          { id: "Txn-1778389225", user: "Sarah Johnson", role: "Admin", type: "International call outbound usage", description: "Outbound international call", credits: "-3.25", date: "May 9, 2026, 11:00 AM" },
+                        ].filter((t) => {
+                          if (!creditUsageSearchQuery) return true;
+                          const q = creditUsageSearchQuery.toLowerCase();
+                          return t.id.toLowerCase().includes(q) || t.user.toLowerCase().includes(q) || t.type.toLowerCase().includes(q) || t.description.toLowerCase().includes(q);
+                        });
+
+                        const txColumns: TableColumn<any>[] = [
+                          {
+                            header: "Transaction ID",
+                            accessorKey: "id",
+                            align: "left",
+                            render: (t) => (
+                              <span className="text-[13px] text-[#374151] font-mono">{t.id}</span>
+                            ),
+                          },
+                          {
+                            header: "User",
+                            accessorKey: "user",
+                            align: "left",
+                            render: (t) => (
+                              <span className="text-[13px] text-[#374151] font-medium">{t.user}</span>
+                            ),
+                          },
+                          {
+                            header: "Role",
+                            accessorKey: "role",
+                            align: "center",
+                            render: (t) => (
+                              <span className="px-2 py-0.5 bg-[#EFF6FF] text-[#2563EB] text-[11px] rounded-full font-medium">{t.role}</span>
+                            ),
+                          },
+                          {
+                            header: "Type",
+                            accessorKey: "type",
+                            align: "left",
+                            render: (t) => (
+                              <span className="text-[13px] text-[#374151]">{t.type}</span>
+                            ),
+                          },
+                          {
+                            header: "Description",
+                            accessorKey: "description",
+                            align: "left",
+                            render: (t) => (
+                              <span className="text-[13px] text-[#6B7280]">{t.description}</span>
+                            ),
+                          },
+                          {
+                            header: "Credits",
+                            accessorKey: "credits",
+                            align: "center",
+                            render: (t) => (
+                              <div className="flex items-center justify-center gap-1">
+                                <Coins className="w-3.5 h-3.5 text-[#F59E0B]" />
+                                <span className="text-[13px] font-semibold text-[#DC2626]">{t.credits}</span>
+                              </div>
+                            ),
+                          },
+                          {
+                            header: "Date",
+                            accessorKey: "date",
+                            align: "center",
+                            render: (t) => (
+                              <span className="text-[13px] text-[#6B7280]">{t.date}</span>
+                            ),
+                          },
+                        ];
+
+                        return (
+                          <TableComponent
+                            columns={txColumns}
+                            data={txData}
+                            getRowId={(t) => t.id}
+                            emptyMessage="No transactions match your search."
+                          />
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -5317,1321 +6383,768 @@ export default function Settings() {
                 )}
               </div>
             )}
+          </div>
+        )}
 
 
             {/* AI Voices / Models Tab */}
             {activeTab === "voice-config" && (
-              <div className="space-y-8">
-                  {/* AI Models Section */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <h2 className="text-xl font-bold" style={TEXT_STYLES.heading}>AI Models</h2>
-                      <Button variant="outline" onClick={() => openHowItWorks("voice-config")}>
-                        <Play className="w-4 h-4" />
-                        How it works
-                      </Button>
-                    </div>
-                    <p className="text-sm mb-4" style={TEXT_STYLES.subtext}>Manage AI service providers</p>
-
-                    <div className="bg-white rounded-xl border border-border overflow-hidden">
-                      <table className="w-full">
-                        <thead className="bg-muted/30 border-b border-border">
-                          <tr>
-                            <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>Service Provider</th>
-                            <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>Model Name</th>
-                            <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>Status</th>
-                            <th className="text-right px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {aiModels.map((model) => (
-                            <tr key={model.id} className="border-b border-border hover:bg-muted/10 transition-colors">
-                              <td className="px-6 py-4">
-                                <p className="text-sm font-medium">{model.provider}</p>
-                              </td>
-                              <td className="px-6 py-4">
-                                <p className="text-sm" style={TEXT_STYLES.subtext}>{model.modelName}</p>
-                              </td>
-                              <td className="px-6 py-4">
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    className="sr-only peer"
-                                    checked={model.status}
-                                    onChange={() => {
-                                      setAIModels((prev) =>
-                                        prev.map((m) =>
-                                          m.id === model.id ? { ...m, status: !m.status } : m
-                                        )
-                                      );
-                                    }}
-                                  />
-                                  <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                                </label>
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
-                                    title="Edit model"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all"
-                                    title="Delete model"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* Choose Voice Section */}
-                  <div>
-                    {/* Header Row with Gear Icon */}
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-xl font-bold" style={TEXT_STYLES.heading}>Choose Voice</h2>
-                        <button
-                          className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
-                          title="Voice Settings"
-                        >
-                          <SettingsIcon className="w-5 h-5" />
-                        </button>
-                        <Info className="w-4 h-4 text-muted-foreground cursor-help" />
-                      </div>
-                    </div>
-
-                    {/* Subtitle Info Banner */}
-                    <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
-                      <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                      <p className="text-sm text-blue-900">
-                        Choose the voice your AI Receptionist will use when answering the phone.
-                      </p>
-                    </div>
-
-                    {/* Explore All Voices Button */}
-                    <div className="flex justify-end mb-4">
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowVoiceLibraryModal(true)}
-                      >
-                        Explore All Voices
-                      </Button>
-                    </div>
-
-                    {/* Backdrop to close open menus */}
-                    {addProcessVoiceId !== null && (
-                      <div
-                        className="fixed inset-0 z-[5]"
-                        onClick={() => setAddProcessVoiceId(null)}
-                      />
-                    )}
-
-                    {/* Voice Table */}
-                    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-                      <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
-                        <table className="w-full min-w-[1200px]">
-                          <thead className="border-b border-border" style={{ backgroundColor: '#1F2937' }}>
-                            <tr>
-                              {/* Settings icon for column visibility */}
-                              <th className="px-2 py-2.5 text-center relative" style={{ width: '32px' }}>
-                                <div className="relative inline-block">
-                                  <button
-                                    onClick={() => {
-                                      setShowVoiceColumnToggle(!showVoiceColumnToggle);
-                                    }}
-                                    className="inline-flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
-                                    aria-label="Customize Columns"
-                                  >
-                                    <SettingsIcon className="w-4 h-4 text-[#E5E7EB] hover:text-white transition-colors" />
-                                  </button>
-                                  {showVoiceColumnToggle && (
-                                    <div className="absolute left-0 top-full mt-2 w-56 bg-card border border-border rounded-xl shadow-lg p-4 z-50">
-                                      <h3 className="font-semibold mb-3" style={{ color: '#1F2937', fontFamily: 'DM Sans, sans-serif' }}>Visible Columns</h3>
-                                      <div className="space-y-2">
-                                        {Object.keys(voiceVisibleColumns).map((col) => (
-                                          <label key={col} className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                              type="checkbox"
-                                              checked={voiceVisibleColumns[col as keyof typeof voiceVisibleColumns]}
-                                              onChange={(e) =>
-                                                setVoiceVisibleColumns({
-                                                  ...voiceVisibleColumns,
-                                                  [col]: e.target.checked,
-                                                })
-                                              }
-                                              className="w-4 h-4"
-                                            />
-                                            <span className="text-sm capitalize" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                              {col === 'voiceName' ? 'Voice Name' : col}
-                                            </span>
-                                          </label>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              </th>
-                              {voiceColumnOrder.map((columnKey, index) => {
-                                const columnLabels: { [key: string]: string } = {
-                                  voiceName: 'Voice Name',
-                                  gender: 'Gender',
-                                  country: 'Country',
-                                  tone: 'Tone',
-                                  age: 'Age',
-                                  process: 'Process',
-                                  preview: 'Preview',
-                                  status: 'Status',
-                                };
-
-                                return voiceVisibleColumns[columnKey as keyof typeof voiceVisibleColumns] ? (
-                                  <DraggableVoiceColumnHeader
-                                    key={columnKey}
-                                    columnKey={columnKey}
-                                    index={index}
-                                    label={columnLabels[columnKey]}
-                                    moveColumn={moveVoiceColumn}
-                                  />
-                                ) : null;
-                              })}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {voiceTableData.map((voice) => (
-                              <tr key={voice.id} className="border-b border-border hover:bg-muted/10 transition-colors">
-                                {/* Settings icon column (column visibility toggle) */}
-                                <td className="px-2 py-3" />
-
-                                {voiceColumnOrder.map((columnKey) => {
-                                  if (!voiceVisibleColumns[columnKey as keyof typeof voiceVisibleColumns]) return null;
-
-                                  if (columnKey === 'voiceName') {
-                                    return (
-                                      <td key={columnKey} className="px-4 py-3">
-                                        <span className="text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                          {voice.name}
-                                        </span>
-                                      </td>
-                                    );
-                                  }
-
-                                  if (columnKey === 'gender') {
-                                    return (
-                                      <td key={columnKey} className="px-4 py-3">
-                                        <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                          {voice.gender}
-                                        </span>
-                                      </td>
-                                    );
-                                  }
-
-                                  if (columnKey === 'country') {
-                                    return (
-                                      <td key={columnKey} className="px-4 py-3">
-                                        <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                          {voice.country}
-                                        </span>
-                                      </td>
-                                    );
-                                  }
-
-                                  if (columnKey === 'tone') {
-                                    return (
-                                      <td key={columnKey} className="px-4 py-3">
-                                        <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                          {voice.tone}
-                                        </span>
-                                      </td>
-                                    );
-                                  }
-
-                                  if (columnKey === 'age') {
-                                    return (
-                                      <td key={columnKey} className="px-4 py-3">
-                                        <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                          {voice.age}
-                                        </span>
-                                      </td>
-                                    );
-                                  }
-
-                                  if (columnKey === 'process') {
-                                    return (
-                                      <td key={columnKey} className="px-4 py-3">
-                                        <div className="flex flex-wrap items-center gap-1">
-                                          {voice.processes.map((proc) => (
-                                            <span
-                                              key={proc}
-                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            >
-                                              {proc}
-                                              <button
-                                                onClick={() => {
-                                                  setVoiceTableData((prev) =>
-                                                    prev.map((v) =>
-                                                      v.id === voice.id
-                                                        ? { ...v, processes: v.processes.filter((p) => p !== proc) }
-                                                        : v
-                                                    )
-                                                  );
-                                                }}
-                                                className="ml-0.5 hover:text-primary/70"
-                                                title={`Remove ${proc}`}
-                                              >
-                                                <X className="w-2.5 h-2.5" />
-                                              </button>
-                                            </span>
-                                          ))}
-                                          {/* + button to add a process */}
-                                          <div className="relative">
-                                            <button
-                                              onClick={() => setAddProcessVoiceId(addProcessVoiceId === voice.id ? null : voice.id)}
-                                              className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-dashed border-primary/50 text-primary hover:bg-primary/10 transition-colors"
-                                              title="Add Process"
-                                            >
-                                              <Plus className="w-3 h-3" />
-                                            </button>
-                                            {addProcessVoiceId === voice.id && (
-                                              <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-3 min-w-[220px]">
-                                                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Assign Process</p>
-                                                <div className="space-y-1">
-                                                  {AVAILABLE_PROCESSES.map((proc) => {
-                                                    const assigned = voice.processes.includes(proc);
-                                                    return (
-                                                      <label key={proc} className="flex items-center gap-2 cursor-pointer px-1 py-1 rounded hover:bg-gray-50">
-                                                        <input
-                                                          type="checkbox"
-                                                          checked={assigned}
-                                                          onChange={() => {
-                                                            setVoiceTableData((prev) =>
-                                                              prev.map((v) =>
-                                                                v.id === voice.id
-                                                                  ? {
-                                                                    ...v,
-                                                                    processes: assigned
-                                                                      ? v.processes.filter((p) => p !== proc)
-                                                                      : [...v.processes, proc],
-                                                                  }
-                                                                  : v
-                                                              )
-                                                            );
-                                                          }}
-                                                          className="w-4 h-4 accent-primary"
-                                                        />
-                                                        <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{proc}</span>
-                                                      </label>
-                                                    );
-                                                  })}
-                                                </div>
-                                                <button
-                                                  onClick={() => setAddProcessVoiceId(null)}
-                                                  className="mt-3 w-full px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                                                >
-                                                  Done
-                                                </button>
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </td>
-                                    );
-                                  }
-
-                                  if (columnKey === 'preview') {
-                                    return (
-                                      <td key={columnKey} className="px-4 py-3">
-                                        <button
-                                          onClick={() => {
-                                            setSelectedVoiceForPreview(voice);
-                                            setShowVoicePreviewModal(true);
-                                          }}
-                                          className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-all"
-                                          title="Preview Voice"
-                                        >
-                                          <Play className="w-4 h-4" />
-                                        </button>
-                                      </td>
-                                    );
-                                  }
-
-                                  if (columnKey === 'status') {
-                                    return (
-                                      <td key={columnKey} className="px-4 py-3">
-                                        <label className="relative inline-flex items-center cursor-pointer">
-                                          <input
-                                            type="checkbox"
-                                            className="sr-only peer"
-                                            checked={voice.status}
-                                            onChange={() => {
-                                              setVoiceTableData((prev) =>
-                                                prev.map((v) =>
-                                                  v.id === voice.id ? { ...v, status: !v.status } : v
-                                                )
-                                              );
-                                            }}
-                                          />
-                                          <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                                        </label>
-                                      </td>
-                                    );
-                                  }
-
-                                  return null;
-                                })}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-            )}
-
-            {/* Numbers Tab */}
-            {activeTab === "numbers" && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold" style={TEXT_STYLES.heading}>Phone Numbers</h2>
-                    <p className="text-sm mt-1" style={TEXT_STYLES.subtext}>Manage country routing and phone numbers</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={resetNumbersColumnOrder}
-                      className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                      title="Reset column order to default"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Reset columns
-                    </button>
-                    <Button variant="primary" onClick={() => setShowBuyNumberModal(true)}>
-                      <Plus className="w-4 h-4" />
-                      Add Number
-                    </Button>
-                  </div>
-                </div>
+                {/* Unified Top Bar with clean Model / Voice mode tabs, search, and contextual filters */}
+                <PageTopBar
+                  searchQuery={voiceSearchQuery}
+                  onSearchChange={setVoiceSearchQuery}
+                  searchPlaceholder={
+                    voiceConfigSubTab === "models"
+                      ? "Search models..."
+                      : "Search voices..."
+                  }
+                  modes={[
+                    {
+                      id: "models",
+                      label: "Models",
+                    },
+                    {
+                      id: "voices",
+                      label: "Voices",
+                    },
+                  ]}
+                  activeMode={voiceConfigSubTab}
+                  onModeChange={(mode) => setVoiceConfigSubTab(mode as "models" | "voices")}
+                  filterFields={[
+                    ...(voiceConfigSubTab === "models"
+                      ? [
+                          {
+                            id: "provider",
+                            label: "Provider",
+                            type: "select" as const,
+                            value: modelProviderFilter,
+                            onChange: (val: any) => setModelProviderFilter(val || "All Providers"),
+                            options: [
+                              { label: "All Providers", value: "All Providers" },
+                              { label: "Google", value: "Google" },
+                              { label: "OpenAI", value: "OpenAI" },
+                              { label: "Anthropic", value: "Anthropic" },
+                              { label: "DeepSeek", value: "DeepSeek" },
+                              { label: "Meta", value: "Meta" },
+                            ],
+                          },
+                          {
+                            id: "status",
+                            label: "Status",
+                            type: "select" as const,
+                            value: modelStatusFilter,
+                            onChange: (val: any) => setModelStatusFilter(val || "All Status"),
+                            options: [
+                              { label: "All Status", value: "All Status" },
+                              { label: "Active", value: "Active" },
+                              { label: "Inactive", value: "Inactive" },
+                            ],
+                          },
+                        ]
+                      : [
+                          {
+                            id: "gender",
+                            label: "Gender",
+                            type: "select" as const,
+                            value: voiceFilters.gender,
+                            onChange: (val: any) => setVoiceFilters((prev) => ({ ...prev, gender: val || "All Genders" })),
+                            options: [
+                              { label: "All Genders", value: "All Genders" },
+                              { label: "Female", value: "Female" },
+                              { label: "Male", value: "Male" },
+                            ],
+                          },
+                          {
+                            id: "country",
+                            label: "Accent",
+                            type: "select" as const,
+                            value: voiceFilters.country,
+                            onChange: (val: any) => setVoiceFilters((prev) => ({ ...prev, country: val || "All Countries" })),
+                            options: [
+                              { label: "All Accents", value: "All Countries" },
+                              { label: "USA", value: "USA" },
+                              { label: "UK", value: "UK" },
+                              { label: "Australia", value: "Australia" },
+                              { label: "Canada", value: "Canada" },
+                              { label: "Ireland", value: "Ireland" },
+                            ],
+                          },
+                          {
+                            id: "tone",
+                            label: "Tone",
+                            type: "select" as const,
+                            value: voiceFilters.tone,
+                            onChange: (val: any) => setVoiceFilters((prev) => ({ ...prev, tone: val || "All Tones" })),
+                            options: [
+                              { label: "All Tones", value: "All Tones" },
+                              { label: "Professional", value: "Professional" },
+                              { label: "Formal", value: "Formal" },
+                              { label: "Friendly", value: "Friendly" },
+                              { label: "Casual", value: "Casual" },
+                              { label: "Empathetic", value: "Empathetic" },
+                              { label: "Energetic", value: "Energetic" },
+                            ],
+                          },
+                        ]),
+                  ]}
+                  onClearAllFilters={() => {
+                    setVoiceSearchQuery("");
+                    setModelProviderFilter("All Providers");
+                    setModelStatusFilter("All Status");
+                    setVoiceFilters({ language: "All Languages", tone: "All Tones", gender: "All Genders", age: "All Ages", country: "All Countries" });
+                  }}
+                />
 
-                {/* Horizontally Scrollable Table with Arrow Buttons */}
-                <div className="relative">
-                  {/* Scroll Right Button - Semicircle (2 rows height, centered) */}
-                  {showNumbersScrollIndicator && (
-                    <button
-                      className="absolute right-0 flex items-center justify-center z-10 transition-all"
-                      style={{
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        height: '112px',
-                        width: '40px',
-                        backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                        backdropFilter: 'blur(8px)',
-                        WebkitBackdropFilter: 'blur(8px)',
-                        borderTopLeftRadius: '9999px',
-                        borderBottomLeftRadius: '9999px',
-                        borderTopRightRadius: '0',
-                        borderBottomRightRadius: '0',
-                        opacity: 1
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
-                        e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                        const icon = e.currentTarget.querySelector('svg');
-                        if (icon) {
-                          (icon as SVGElement).style.transform = 'scale(1.1)';
-                        }
-                        handleNumbersScrollRightMouseEnter();
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-                        e.currentTarget.style.boxShadow = '';
-                        const icon = e.currentTarget.querySelector('svg');
-                        if (icon) {
-                          (icon as SVGElement).style.transform = 'scale(1)';
-                        }
-                        handleNumbersScrollMouseLeave();
-                      }}
-                    >
-                      <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
-                    </button>
-                  )}
+                {/* ======================================================== */}
+                {/* SECTION 1: AI MODELS (Clean Direct Cards Grid with Logos) */}
+                {/* ======================================================== */}
+                {voiceConfigSubTab === "models" && (
+                  filteredAIModels.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200">
+                      No AI models found matching your search.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+                      {filteredAIModels.map((model) => (
+                        <div
+                          key={model.id}
+                          className={`bg-white rounded-2xl border transition-all duration-200 p-4 flex items-center justify-between gap-3 shadow-2xs ${
+                            model.isActive
+                              ? "border-[#E2E8F0] hover:border-slate-300 hover:shadow-xs"
+                              : "border-gray-200/70 opacity-70"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {renderProviderLogo(model.provider)}
 
-                  {/* Scroll Left Button - Semicircle (2 rows height, centered) */}
-                  {showNumbersScrollLeftIndicator && (
-                    <button
-                      className="absolute left-0 flex items-center justify-center z-10 transition-all"
-                      style={{
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        height: '112px',
-                        width: '40px',
-                        backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                        backdropFilter: 'blur(8px)',
-                        WebkitBackdropFilter: 'blur(8px)',
-                        borderTopLeftRadius: '0',
-                        borderBottomLeftRadius: '0',
-                        borderTopRightRadius: '9999px',
-                        borderBottomRightRadius: '9999px',
-                        opacity: 1
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
-                        e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                        const icon = e.currentTarget.querySelector('svg');
-                        if (icon) {
-                          (icon as SVGElement).style.transform = 'scale(1.1)';
-                        }
-                        handleNumbersScrollLeftMouseEnter();
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-                        e.currentTarget.style.boxShadow = '';
-                        const icon = e.currentTarget.querySelector('svg');
-                        if (icon) {
-                          (icon as SVGElement).style.transform = 'scale(1)';
-                        }
-                        handleNumbersScrollMouseLeave();
-                      }}
-                    >
-                      <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
-                    </button>
-                  )}
+                            <div className="min-w-0">
+                              <h4
+                                className="text-sm font-bold text-gray-900 truncate"
+                                style={{ fontFamily: 'Outfit, sans-serif' }}
+                              >
+                                {model.name}
+                              </h4>
+                              <p
+                                className="text-xs text-gray-500 font-medium truncate mt-0.5"
+                                style={{ fontFamily: 'DM Sans, sans-serif' }}
+                              >
+                                {model.provider}
+                              </p>
+                            </div>
+                          </div>
 
-                  <div
-                    ref={numbersTableRef}
-                    className="bg-white rounded-xl border border-border scrollbar-hide"
-                    style={{
-                      overflowX: "auto",
-                      overflowY: "visible",
-                      scrollBehavior: "smooth"
-                    }}
-                    onScroll={(e) => {
-                      const { scrollWidth, clientWidth, scrollLeft } = e.currentTarget;
-                      const canScrollRight = scrollLeft < (scrollWidth - clientWidth - 10);
-                      const canScrollLeft = scrollLeft > 10;
-                      setShowNumbersScrollIndicator(canScrollRight);
-                      setShowNumbersScrollLeftIndicator(canScrollLeft);
-                    }}
-                  >
-                    <div style={{ minWidth: "1320px" }}>
-                        <table className="w-full">
-                          <thead className="bg-muted/30 border-b border-border">
-                            <tr>
-                              <th style={{ width: "50px" }} className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">
-                                <SettingsIcon className="w-4 h-4 text-muted-foreground" />
-                              </th>
-                              {numbersColumnOrder.map((columnKey, index) => (
-                                <DraggableNumbersColumnHeader
-                                  key={columnKey}
-                                  columnKey={columnKey}
-                                  index={index}
-                                  label={numbersColumnConfig[columnKey].label}
-                                  width={numbersColumnConfig[columnKey].width}
-                                  moveColumn={moveNumbersColumn}
-                                />
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {countryRoutings.map((routing) => {
-                              const isEditing = editingRowId === routing.id;
-                              const displayData = isEditing ? editingRowData! : routing;
+                          {/* Clean Active Toggle Switch */}
+                          <div className="flex items-center shrink-0">
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={model.isActive}
+                                onChange={() => handleToggleModel(model.id, model.name)}
+                              />
+                              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                            </label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
 
-                              const renderCell = (columnKey: string) => {
-                                switch (columnKey) {
-                                  case 'phoneNumber':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3 text-xs font-medium whitespace-nowrap">
-                                        <span className={isEditing ? "text-muted-foreground" : ""}>
-                                          {routing.phoneNumber}
-                                        </span>
-                                      </td>
-                                    );
-
-                                  case 'country':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                                        {routing.country}
-                                      </td>
-                                    );
-
-                                  case 'priority':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                                        {isEditing ? (
-                                          <div className="flex items-center gap-1">
-                                            <button
-                                              onClick={() =>
-                                                setEditingRowData({
-                                                  ...editingRowData!,
-                                                  priority: Math.max(0, editingRowData!.priority - 1),
-                                                })
-                                              }
-                                              className="p-0.5 hover:bg-muted rounded transition-colors"
-                                              title="Decrease priority"
-                                            >
-                                              <Minus className="w-3 h-3" />
-                                            </button>
-                                            <input
-                                              type="number"
-                                              value={displayData.priority}
-                                              onChange={(e) =>
-                                                setEditingRowData({
-                                                  ...editingRowData!,
-                                                  priority: Math.max(0, parseInt(e.target.value) || 0),
-                                                })
-                                              }
-                                              className="w-16 px-2 py-1 text-xs text-center border border-input rounded bg-input-background"
-                                              min="0"
-                                            />
-                                            <button
-                                              onClick={() =>
-                                                setEditingRowData({
-                                                  ...editingRowData!,
-                                                  priority: editingRowData!.priority + 1,
-                                                })
-                                              }
-                                              className="p-0.5 hover:bg-muted rounded transition-colors"
-                                              title="Increase priority"
-                                            >
-                                              <Plus className="w-3 h-3" />
-                                            </button>
-                                          </div>
-                                        ) : (
-                                          routing.priority
-                                        )}
-                                      </td>
-                                    );
-
-                                  case 'countriesServed':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground">
-                                        {isEditing ? (
-                                          <div className="relative">
-                                            <button
-                                              type="button"
-                                              onClick={() => setShowEditCountriesDropdown(!showEditCountriesDropdown)}
-                                              className="w-full px-2 py-1 text-xs border border-input rounded bg-input-background text-left flex items-center justify-between"
-                                            >
-                                              <span className="truncate">
-                                                {displayData.countriesServed.length > 0
-                                                  ? displayData.countriesServed.join(', ')
-                                                  : "Select countries"}
-                                              </span>
-                                              <ChevronDown className="w-3 h-3 flex-shrink-0" />
-                                            </button>
-                                            {showEditCountriesDropdown && (
-                                              <>
-                                                <div
-                                                  className="fixed inset-0 z-10"
-                                                  onClick={() => setShowEditCountriesDropdown(false)}
-                                                />
-                                                <div className="absolute top-full left-0 mt-1 w-full min-w-[200px] bg-white border border-border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
-                                                  {allCountriesList.map((country) => (
-                                                    <label
-                                                      key={country}
-                                                      className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
-                                                    >
-                                                      <input
-                                                        type="checkbox"
-                                                        checked={displayData.countriesServed.includes(country)}
-                                                        onChange={(e) => {
-                                                          let newCountries;
-                                                          if (country === "All") {
-                                                            newCountries = e.target.checked ? ["All"] : [];
-                                                          } else {
-                                                            newCountries = e.target.checked
-                                                              ? [...displayData.countriesServed.filter(c => c !== "All"), country]
-                                                              : displayData.countriesServed.filter((c) => c !== country);
-                                                          }
-                                                          setEditingRowData({
-                                                            ...editingRowData!,
-                                                            countriesServed: newCountries,
-                                                          });
-                                                        }}
-                                                        className="w-3.5 h-3.5"
-                                                      />
-                                                      <span>{country}</span>
-                                                    </label>
-                                                  ))}
-                                                </div>
-                                              </>
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <span className="truncate">{routing.countriesServed.join(', ')}</span>
-                                        )}
-                                      </td>
-                                    );
-
-                                  case 'process':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3">
-                                        {isEditing ? (
-                                          <div className="relative">
-                                            <button
-                                              type="button"
-                                              onClick={() => setShowEditProcessDropdown(!showEditProcessDropdown)}
-                                              className="w-full px-2 py-1 text-xs border border-input rounded bg-input-background text-left flex items-center justify-between"
-                                            >
-                                              <span className="truncate">
-                                                {displayData.processes.length > 0
-                                                  ? `${displayData.processes.length} selected`
-                                                  : "Select processes"}
-                                              </span>
-                                              <ChevronDown className="w-3 h-3 flex-shrink-0" />
-                                            </button>
-                                            {showEditProcessDropdown && (
-                                              <>
-                                                <div
-                                                  className="fixed inset-0 z-10"
-                                                  onClick={() => setShowEditProcessDropdown(false)}
-                                                />
-                                                <div className="absolute top-full left-0 mt-1 w-full min-w-[200px] bg-white border border-border rounded-lg shadow-lg z-20 max-h-60 overflow-y-auto">
-                                                  {availableProcesses.map((process) => (
-                                                    <label
-                                                      key={process.id}
-                                                      className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer text-xs"
-                                                    >
-                                                      <input
-                                                        type="checkbox"
-                                                        checked={displayData.processes.includes(process.label)}
-                                                        onChange={(e) => {
-                                                          const newProcesses = e.target.checked
-                                                            ? [...displayData.processes, process.label]
-                                                            : displayData.processes.filter((p) => p !== process.label);
-                                                          setEditingRowData({
-                                                            ...editingRowData!,
-                                                            processes: newProcesses,
-                                                          });
-                                                        }}
-                                                        className="w-3.5 h-3.5"
-                                                      />
-                                                      <span>{process.label}</span>
-                                                    </label>
-                                                  ))}
-                                                </div>
-                                              </>
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <div className="flex flex-wrap gap-1">
-                                            {routing.processes.length > 0 ? (
-                                              routing.processes.map((process) => (
-                                                <span
-                                                  key={process}
-                                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary whitespace-nowrap"
-                                                >
-                                                  {process}
-                                                </span>
-                                              ))
-                                            ) : (
-                                              <span className="text-[10px] text-muted-foreground">No processes</span>
-                                            )}
-                                          </div>
-                                        )}
-                                      </td>
-                                    );
-
-                                  case 'provider':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                                        {routing.provider}
-                                      </td>
-                                    );
-
-                                  case 'inboundOutbound':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                                        {isEditing ? (
-                                          <select
-                                            value={displayData.inboundOutbound}
-                                            onChange={(e) =>
-                                              setEditingRowData({
-                                                ...editingRowData!,
-                                                inboundOutbound: e.target.value as "Inbound" | "Outbound" | "Both",
-                                              })
-                                            }
-                                            className="w-full px-2 py-1 text-xs border border-input rounded bg-input-background"
-                                          >
-                                            <option value="Inbound">Inbound</option>
-                                            <option value="Outbound">Outbound</option>
-                                            <option value="Both">Both</option>
-                                          </select>
-                                        ) : (
-                                          routing.inboundOutbound
-                                        )}
-                                      </td>
-                                    );
-
-                                  case 'status':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3">
-                                        <label className="relative inline-flex items-center cursor-pointer">
-                                          <input
-                                            type="checkbox"
-                                            className="sr-only peer"
-                                            checked={displayData.status}
-                                            onChange={() => {
-                                              if (isEditing) {
-                                                setEditingRowData({ ...editingRowData!, status: !editingRowData!.status });
-                                              } else {
-                                                setCountryRoutings((prev) =>
-                                                  prev.map((r) => (r.id === routing.id ? { ...r, status: !r.status } : r))
-                                                );
-                                              }
-                                            }}
-                                          />
-                                          <div className="w-9 h-5 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-                                        </label>
-                                      </td>
-                                    );
-
-                                  case 'verified':
-                                    return (
-                                      <td key={columnKey} className="px-3 py-3">
-                                        {routing.country === "United States" ? (
-                                          <div className="flex items-center justify-start">
-                                            <div
-                                              className="inline-flex items-center justify-center"
-                                              style={{
-                                                backgroundColor: "#22C55E",
-                                                color: "#FFFFFF",
-                                                width: "24px",
-                                                height: "24px",
-                                                borderRadius: "50%",
-                                              }}
-                                            >
-                                              <Check className="w-3.5 h-3.5" />
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <span className="text-xs text-muted-foreground">—</span>
-                                        )}
-                                      </td>
-                                    );
-
-                                  default:
-                                    return null;
-                                }
-                              };
-
-                              return (
-                                <tr key={routing.id} className="border-b border-border hover:bg-muted/10 transition-colors">
-                                  {/* 3-Dot Menu */}
-                                  <td className="px-3 py-3">
-                                    <div className="relative">
-                                      <button
-                                        onClick={() => setOpenActionsMenuId(openActionsMenuId === routing.id ? null : routing.id)}
-                                        className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-all"
-                                        title="Actions"
-                                      >
-                                        <MoreVertical className="w-4 h-4" />
-                                      </button>
-                                      {openActionsMenuId === routing.id && (
-                                        <>
-                                          <div
-                                            className="fixed inset-0 z-10"
-                                            onClick={() => setOpenActionsMenuId(null)}
-                                          />
-                                          <div className="absolute left-0 top-full mt-1 w-40 bg-white border border-border rounded-lg shadow-lg z-20 py-1">
-                                            {routing.country === "United States" ? (
-                                              <button
-                                                onClick={() => {
-                                                  setSelectedVerifyNumber(routing);
-                                                  setShowVerifyNumberModal(true);
-                                                  setOpenActionsMenuId(null);
-                                                }}
-                                                className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center gap-2"
-                                              >
-                                                <ShieldCheck className="w-3.5 h-3.5" />
-                                                Verify
-                                              </button>
-                                            ) : (
-                                              <Tooltip text="Verification only available for US numbers">
-                                                <button
-                                                  disabled
-                                                  className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 opacity-50 cursor-not-allowed"
-                                                >
-                                                  <ShieldCheck className="w-3.5 h-3.5" />
-                                                  Verify
-                                                </button>
-                                              </Tooltip>
-                                            )}
-                                            <button
-                                              onClick={() => {
-                                                setEditingRowId(routing.id);
-                                                setEditingRowData({ ...routing });
-                                                setShowEditProcessDropdown(false);
-                                                setOpenActionsMenuId(null);
-                                              }}
-                                              className="w-full text-left px-3 py-2 text-xs hover:bg-muted/50 transition-colors flex items-center gap-2"
-                                            >
-                                              <Edit className="w-3.5 h-3.5" />
-                                              Edit
-                                            </button>
-                                            <button
-                                              onClick={() => {
-                                                handleDeleteRouting(routing.id);
-                                                setOpenActionsMenuId(null);
-                                              }}
-                                              className="w-full text-left px-3 py-2 text-xs hover:bg-destructive/10 text-destructive transition-colors flex items-center gap-2"
-                                            >
-                                              <Trash2 className="w-3.5 h-3.5" />
-                                              Delete
-                                            </button>
-                                          </div>
-                                        </>
-                                      )}
-                                    </div>
-                                  </td>
-
-                                  {/* Dynamic Columns based on numbersColumnOrder */}
-                                  {numbersColumnOrder.map((columnKey) => renderCell(columnKey))}
-
-                                  {/* Save/Cancel buttons for edit mode */}
-                                  {isEditing && (
-                                    <td className="px-3 py-3">
-                                      <div className="flex items-center gap-1">
-                                        <button
-                                          onClick={handleSaveEditedRow}
-                                          className="p-1.5 text-white bg-primary hover:bg-primary/90 rounded-lg transition-all"
-                                          title="Save changes"
-                                        >
-                                          <Check className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          onClick={handleCancelEdit}
-                                          className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all"
-                                          title="Cancel"
-                                        >
-                                          <X className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    </td>
-                                  )}
-
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                  </div>
-                </div>
-
-              </div>
-            )}
-
-            {/* Layout Tab (Custom Fields & Custom Sections) */}
-            {(activeTab === "custom-fields" || activeTab === "layout") && (
-              <div className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <h1 className="text-[22px] font-bold text-[#111827] leading-tight">Sections/Fields</h1>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="inline-flex items-center gap-0 bg-gray-100 p-1 rounded-lg border border-gray-200">
-                    <button
-                      onClick={() => setLayoutViewTab("fields")}
-                      className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                        layoutViewTab === "fields"
-                          ? "bg-white text-[#111827] shadow-xs font-bold"
-                          : "text-gray-500 hover:text-gray-800"
-                      }`}
-                    >
-                      Custom Fields
-                    </button>
-                    <button
-                      onClick={() => setLayoutViewTab("sections")}
-                      className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                        layoutViewTab === "sections"
-                          ? "bg-white text-[#111827] shadow-xs font-bold"
-                          : "text-gray-500 hover:text-gray-800"
-                      }`}
-                    >
-                      Custom Sections
-                    </button>
-                  </div>
-
-                  <div className="relative w-64">
-                    <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder={layoutViewTab === "fields" ? "Search fields..." : "Search sections..."}
-                      value={layoutSearchQuery}
-                      onChange={(e) => setLayoutSearchQuery(e.target.value)}
-                      className="w-full pl-8 pr-8 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-gray-400"
-                    />
-                    {layoutSearchQuery && (
-                      <button
-                        onClick={() => setLayoutSearchQuery("")}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* UNIFIED CONTAINER: TAB BAR JOINED DIRECTLY WITH TABLE */}
-                <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
-                  {/* Module Tabs Bar */}
-                  <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-gray-200 bg-white">
-                    {/* Rectangular Module Tabs (No Count Badges) */}
-                    <div className="flex items-center gap-1 overflow-x-auto">
-                      {[
-                        { id: "clients", label: "Clients", module: "client" },
-                        { id: "call-logs", label: "Call Logs", module: "call" },
-                        { id: "processes", label: "Processes", module: "process" },
-                        { id: "appointments", label: "Appointments", module: "appointment" },
-                        { id: "forms", label: "Forms", module: "appointment" },
-                        { id: "team", label: "Team", module: "organization" },
-                        { id: "scribe", label: "AI Scribe", module: "scribe" },
-                      ].map((m) => {
-                        const isSelected = customFieldsTab === m.id;
+                {/* ======================================================== */}
+                {/* SECTION 2: AI VOICES (20 Voices, Direct Cards with Toggle) */}
+                {/* ======================================================== */}
+                {voiceConfigSubTab === "voices" && (
+                  filteredVoiceTableData.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200">
+                      No AI voices found matching your search or filters.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+                      {filteredVoiceTableData.map((voice) => {
+                        const isPlaying = playingVoiceId === voice.id;
                         return (
-                          <button
-                            key={m.id}
-                            onClick={() => setCustomFieldsTab(m.id as any)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
-                              isSelected
-                                ? "bg-[#111827] text-white shadow-xs"
-                                : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                          <div
+                            key={voice.id}
+                            className={`bg-white rounded-2xl border transition-all duration-200 p-3.5 sm:p-4 flex items-center justify-between gap-3 group shadow-2xs ${
+                              isPlaying
+                                ? "border-blue-500 shadow-xs ring-2 ring-blue-100"
+                                : voice.status
+                                ? "border-[#E2E8F0] hover:border-slate-300 hover:shadow-xs"
+                                : "border-gray-200/70 opacity-70"
                             }`}
                           >
-                            {m.label}
-                          </button>
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <button
+                                type="button"
+                                onClick={() => handlePlayVoice(voice)}
+                                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer shadow-2xs ${
+                                  isPlaying
+                                    ? "bg-blue-600 text-white ring-4 ring-blue-100 scale-105"
+                                    : "bg-slate-900 hover:bg-slate-800 text-white group-hover:scale-105"
+                                }`}
+                                title={isPlaying ? "Stop audio" : "Play preview"}
+                              >
+                                {isPlaying ? (
+                                  <Square className="w-3.5 h-3.5 fill-current" />
+                                ) : (
+                                  <Play className="w-3.5 h-3.5 ml-0.5 fill-current" />
+                                )}
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <h4
+                                    className="text-sm font-bold text-gray-900 truncate"
+                                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                                  >
+                                    {voice.name} - {VOICE_ROLES[voice.name] || `${voice.tone} Assistant`}
+                                  </h4>
+                                  {isPlaying && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 shrink-0">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
+                                      Playing
+                                    </span>
+                                  )}
+                                </div>
+                                <p
+                                  className="text-xs text-gray-500 font-medium truncate mt-0.5"
+                                  style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                >
+                                  {getNationality(voice.country)} · {voice.gender} · English
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Active Toggle Switch for Voice */}
+                            <div className="flex items-center shrink-0 pl-1">
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  className="sr-only peer"
+                                  checked={voice.status}
+                                  onChange={() => handleToggleVoice(voice.id, voice.name)}
+                                />
+                                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                              </label>
+                            </div>
+                          </div>
                         );
                       })}
                     </div>
+                  )
+                )}
+              </div>
+            )}
 
-                    {/* Action Button inside Bar */}
-                    {layoutViewTab === "fields" ? (
-                      <button
-                        onClick={() => {
-                          setNewFieldData({
-                            label: "",
-                            key: "",
-                            type: "String / Text",
-                            sectionId: "",
-                            required: false,
-                            multiple: false,
-                            showAlways: true,
-                            enableTooltip: false,
-                            visibleToSelected: false,
+            {/* Numbers tab has been integrated into Integrations > Telephony */}
+
+            {/* Layout Tab (Custom Fields & Custom Sections) */}
+            {(activeTab === "custom-fields" || activeTab === "layout" || activeTab === "sections-fields") && (
+              <div className="space-y-4">
+                {/* Top Toolbar using standard PageTopBar */}
+                <PageTopBar
+                  modes={[
+                    { id: "fields", label: "Fields" },
+                    { id: "sections", label: "Sections" },
+                  ]}
+                  activeMode={layoutViewTab}
+                  onModeChange={(mode) => {
+                    setLayoutViewTab(mode as any);
+                    setLayoutCurrentPage(1);
+                  }}
+                  leftElement={
+                    <select
+                      value={customFieldsTab}
+                      onChange={(e) => {
+                        setCustomFieldsTab(e.target.value as any);
+                        setLayoutCurrentPage(1);
+                      }}
+                      className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="organization">Organizations</option>
+                      <option value="clients">Clients</option>
+                      <option value="call-logs">Call Logs</option>
+                      <option value="processes">Processes</option>
+                      <option value="appointments">Appointments</option>
+                      <option value="services">Services</option>
+                      <option value="invoices">Invoices</option>
+                      <option value="forms">Forms</option>
+                      <option value="team">Team</option>
+                      <option value="scribe">AI Scribe</option>
+                    </select>
+                  }
+                  searchQuery={layoutSearchQuery}
+                  onSearchChange={(query) => {
+                    setLayoutSearchQuery(query);
+                    setLayoutCurrentPage(1);
+                  }}
+                  searchPlaceholder={layoutViewTab === "fields" ? "Search fields..." : "Search sections..."}
+                  filterPresets={
+                    layoutViewTab === "fields"
+                      ? [
+                          {
+                            id: "all",
+                            label: "All Fields",
+                            isActive: !layoutSearchQuery,
+                            onClick: () => setLayoutSearchQuery(""),
+                          },
+                          {
+                            id: "required",
+                            label: "Required Fields",
+                            isActive: false,
+                            onClick: () => setLayoutSearchQuery("required"),
+                          },
+                          {
+                            id: "text",
+                            label: "Text Fields",
+                            isActive: false,
+                            onClick: () => setLayoutSearchQuery("text"),
+                          },
+                          {
+                            id: "select",
+                            label: "Dropdowns & Choices",
+                            isActive: false,
+                            onClick: () => setLayoutSearchQuery("select"),
+                          },
+                        ]
+                      : [
+                          {
+                            id: "all",
+                            label: "All Sections",
+                            isActive: !layoutSearchQuery,
+                            onClick: () => setLayoutSearchQuery(""),
+                          },
+                        ]
+                  }
+                  filterFields={
+                    layoutViewTab === "fields"
+                      ? [
+                          {
+                            id: "label",
+                            label: "Field Label / Key",
+                            type: "text",
+                            placeholder: "Filter by field name...",
+                            value: layoutSearchQuery,
+                            onChange: (val) => setLayoutSearchQuery(val || ""),
+                          },
+                          {
+                            id: "entity",
+                            label: "Target Entity",
+                            type: "select",
+                            value: customFieldsTab,
+                            onChange: (val) => setCustomFieldsTab(val as any),
                             options: [
-                              { id: 1, label: "Option 1", value: "option_1" },
-                              { id: 2, label: "Option 2", value: "option_2" },
+                              { label: "Organizations", value: "organization" },
+                              { label: "Clients", value: "clients" },
+                              { label: "Call Logs", value: "call-logs" },
+                              { label: "Processes", value: "processes" },
+                              { label: "Appointments", value: "appointments" },
+                              { label: "Services", value: "services" },
+                              { label: "Invoices", value: "invoices" },
+                              { label: "Forms", value: "forms" },
+                              { label: "Team", value: "team" },
+                              { label: "AI Scribe", value: "scribe" },
                             ],
-                            tableColumns: [
-                              { id: "col_1", name: "Item Name", type: "Text" },
-                              { id: "col_2", name: "Quantity", type: "Number" },
-                              { id: "col_3", name: "Unit Price", type: "Money" },
-                            ],
-                          });
-                          setShowAddFieldDrawer(true);
-                        }}
-                        className="px-3.5 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-semibold hover:bg-[#1f2937] transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ml-3"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Add Field
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setNewSectionData({ title: "", description: "", iconName: "layers", fieldKeys: [] });
-                          setShowAddSectionDrawer(true);
-                        }}
-                        className="px-3.5 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-semibold hover:bg-[#1f2937] transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ml-3"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Add Section
-                      </button>
-                    )}
-                  </div>
+                          },
+                        ]
+                      : [
+                          {
+                            id: "title",
+                            label: "Section Title",
+                            type: "text",
+                            placeholder: "Filter sections...",
+                            value: layoutSearchQuery,
+                            onChange: (val) => setLayoutSearchQuery(val || ""),
+                          },
+                        ]
+                  }
+                  primaryAction={{
+                    label: layoutViewTab === "fields" ? "Add Field" : "Add Section",
+                    icon: <Plus className="w-3.5 h-3.5" />,
+                    onClick: () => {
+                      if (layoutViewTab === "fields") {
+                        setNewFieldData({
+                          label: "",
+                          key: "",
+                          type: "String / Text",
+                          sectionId: "",
+                          required: false,
+                          multiple: false,
+                          showAlways: true,
+                          enableTooltip: false,
+                          visibleToSelected: false,
+                          options: [
+                            { id: 1, label: "Option 1", value: "option_1" },
+                            { id: 2, label: "Option 2", value: "option_2" },
+                          ],
+                          tableColumns: [
+                            { id: "col_1", name: "Item Name", type: "Text" },
+                            { id: "col_2", name: "Quantity", type: "Number" },
+                            { id: "col_3", name: "Unit Price", type: "Money" },
+                          ],
+                        });
+                        setShowAddFieldDrawer(true);
+                      } else {
+                        setNewSectionData({ title: "", description: "", fieldKeys: [] });
+                        setShowAddSectionDrawer(true);
+                      }
+                    },
+                  }}
+                />
 
-                  {/* TAB 1: CUSTOM FIELDS TABLE VIEW */}
-                  {layoutViewTab === "fields" && (
-                    <table className="w-full">
-                      <thead className="bg-[#F8FAFC] border-b border-gray-200">
-                        <tr>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Label</th>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Key</th>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Field Type</th>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Required</th>
-                          <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody key={`fields-${customFieldsTab}-${currentModule}`}>
-                        {(() => {
-                          const currentFields = getAllFields(currentModule).filter((field) =>
-                            isFieldMatchingOrg(field, activeOrganization)
+                {/* TABLE CONTAINER */}
+                <div className="bg-white rounded-none border-0 overflow-hidden shadow-2xs">
+                  {/* TAB 1: FIELDS TABLE VIEW */}
+                  {layoutViewTab === "fields" && (() => {
+                    const currentFields = getAllFields(currentModule).filter((field) =>
+                      isFieldMatchingOrg(field, activeOrganization)
+                    );
+                    const sections = getAllSections(currentModule).filter((sec) =>
+                      isSectionMatchingOrg(sec, activeOrganization)
+                    );
+
+                    const filteredFields = currentFields.filter((field) => {
+                      if (!layoutSearchQuery.trim()) return true;
+                      const q = layoutSearchQuery.toLowerCase();
+                      const typeName = (FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType).toLowerCase();
+                      const originType = (field.source || "custom").toLowerCase();
+                      return (
+                        field.label.toLowerCase().includes(q) ||
+                        field.key.toLowerCase().includes(q) ||
+                        typeName.includes(q) ||
+                        originType.includes(q)
+                      );
+                    });
+
+                    const fieldsColumns: TableColumn<any>[] = [
+                      {
+                        id: "label",
+                        header: "Label",
+                        render: (field) => <span className="font-medium text-[#111827]">{field.label}</span>,
+                      },
+                      {
+                        id: "key",
+                        header: "Key",
+                        render: (field) => <span className="font-mono text-gray-600">{field.key}</span>,
+                      },
+                      {
+                        id: "type",
+                        header: "Type",
+                        render: (field) => {
+                          const isSystem = field.source === "system";
+                          const isTemplate = field.source === "template";
+                          return (
+                            <span className={`font-medium ${isSystem ? "text-gray-500" : isTemplate ? "text-purple-600" : "text-blue-600"}`}>
+                              {isSystem ? "System" : isTemplate ? "Template" : "Custom"}
+                            </span>
                           );
-                          const sections = getAllSections(currentModule).filter((sec) =>
-                            isSectionMatchingOrg(sec, activeOrganization)
+                        },
+                      },
+                      {
+                        id: "fieldType",
+                        header: "Field Type",
+                        render: (field) => {
+                          const isCompositeField =
+                            field.inputType !== "new_list" &&
+                            (field.compositeDisplayMode !== undefined ||
+                            field.inputType === "table" ||
+                            field.inputType === "group" ||
+                            field.inputType === "group_repeatable" ||
+                            (field.inputType === "list_open" && (field.listEntryType === "structured" || (field.subFields && field.subFields.length > 0))) ||
+                            (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig));
+
+                          const isListField =
+                            !isCompositeField &&
+                            (field.inputType === "list_open" ||
+                            field.inputType === "list_select" ||
+                            field.inputType === "select" ||
+                            field.inputType === "multiselect" ||
+                            field.inputType === "list");
+
+                          const isAdvanceList =
+                            field.inputType === "new_list" &&
+                            (field.newListConfig?.sourceMode === "advance_2" ||
+                             field.newListConfig?.sourceMode === "advance_list" ||
+                             Boolean(field.newListConfig?.advanceListId));
+
+                          const typeName =
+                            isCompositeField
+                              ? field.compositeDisplayMode === "table" || field.inputType === "table"
+                                ? "Group Field (Table)"
+                                : "Group Field (Group)"
+                              : isAdvanceList
+                              ? "List (Advance)"
+                              : field.inputType === "new_list"
+                              ? "List"
+                              : field.inputType === "list_open"
+                              ? "List (Open · Tags)"
+                              : isListField
+                              ? field.selectionMode === "multiple" || field.inputType === "multiselect"
+                                ? "List (Multi)"
+                                : "List"
+                              : FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
+
+                          let typeBadgeStyle = "bg-blue-50 text-blue-700";
+                          let TypeIcon = Type;
+                          if (isCompositeField) {
+                            typeBadgeStyle = "bg-indigo-50 text-indigo-700";
+                            TypeIcon = field.compositeDisplayMode === "table" || field.inputType === "table" ? TableIcon : Layers;
+                          }
+                          else if (isAdvanceList) {
+                            typeBadgeStyle = "bg-purple-50 text-purple-700";
+                            TypeIcon = Layers;
+                          }
+                          else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
+                          else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
+                            typeBadgeStyle = field.selectionMode === "multiple" ? "bg-teal-50 text-teal-700" : "bg-emerald-50 text-emerald-700";
+                            TypeIcon = ClipboardList;
+                          }
+                          else if (field.inputType === "new_list") {
+                            typeBadgeStyle = "bg-indigo-50 text-indigo-700";
+                            TypeIcon = Layers;
+                          }
+                          else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
+                          else if (field.inputType === "list_open") {
+                            typeBadgeStyle = "bg-emerald-50 text-emerald-700";
+                            TypeIcon = Tag;
+                          }
+                          else if (field.inputType === "crm_bind") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = LinkIcon; }
+                          else if (field.inputType === "date" || field.inputType === "date_time") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Calendar; }
+                          else if (field.inputType === "number") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Hash; }
+                          else if (field.inputType === "money") { typeBadgeStyle = "bg-green-50 text-green-700"; TypeIcon = DollarSign; }
+                          else if (field.inputType === "textarea" || field.inputType === "richtext") { typeBadgeStyle = "bg-orange-50 text-orange-700"; TypeIcon = AlignLeft; }
+                          else if (field.inputType === "link" || field.inputType === "whatsapp_link") { typeBadgeStyle = "bg-sky-50 text-sky-700"; TypeIcon = LinkIcon; }
+                          else if (field.inputType === "yes_no") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = CheckCircle2; }
+                          else if (field.inputType === "file") { typeBadgeStyle = "bg-violet-50 text-violet-700"; TypeIcon = FileText; }
+                          else if (field.inputType === "rating") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Star; }
+                          else if (field.inputType === "user") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = User; }
+
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${typeBadgeStyle}`}>
+                              <TypeIcon className="w-3.5 h-3.5" />
+                              <span>{typeName}</span>
+                            </span>
                           );
+                        },
+                      },
+                      {
+                        id: "required",
+                        header: "Required",
+                        render: (field) => field.required ? (
+                          <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-none border border-amber-200/50">Required</span>
+                        ) : (
+                          <span className="text-gray-400">Optional</span>
+                        ),
+                      },
+                    ];
 
-                          const filteredFields = currentFields.filter((field) => {
-                            if (!layoutSearchQuery.trim()) return true;
-                            const q = layoutSearchQuery.toLowerCase();
-                            const typeName = (FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType).toLowerCase();
-                            const originType = (field.source || "custom").toLowerCase();
-                            return (
-                              field.label.toLowerCase().includes(q) ||
-                              field.key.toLowerCase().includes(q) ||
-                              typeName.includes(q) ||
-                              originType.includes(q)
-                            );
-                          });
-
-                          return filteredFields.map((field) => {
-                            const assignedSection = sections.find((s) => s.fieldKeys?.includes(field.key) || s.id === field.sectionId);
-                            const isCompositeField =
-                              field.compositeDisplayMode !== undefined ||
-                              field.inputType === "table" ||
-                              field.inputType === "group" ||
-                              field.inputType === "group_repeatable" ||
-                              (field.inputType === "list_open" && (field.listEntryType === "structured" || (field.subFields && field.subFields.length > 0))) ||
-                              (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig);
-
-                            const isListField =
-                              !isCompositeField &&
-                              (field.inputType === "list_open" ||
-                              field.inputType === "list_select" ||
-                              field.inputType === "select" ||
-                              field.inputType === "multiselect" ||
-                              field.inputType === "list");
-                            const typeName =
-                              isCompositeField
-                                ? field.compositeDisplayMode === "table" || field.inputType === "table"
-                                  ? "Group Field (Table)"
-                                  : "Group Field (Group)"
-                                : field.inputType === "list_open"
-                                ? "List (Open · Tags)"
-                                : isListField
-                                ? field.selectionMode === "multiple" || field.inputType === "multiselect"
-                                  ? "List (Multi-Select)"
-                                  : "List (Select)"
-                                : FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
-
-                            // Type badge style
-                            let typeBadgeStyle = "bg-blue-50 text-blue-700";
-                            let TypeIcon = Type;
-                            if (isCompositeField) {
-                              typeBadgeStyle = "bg-indigo-50 text-indigo-700";
-                              TypeIcon = field.compositeDisplayMode === "table" || field.inputType === "table" ? TableIcon : Layers;
+                    const fieldsRowActions = (field: any) => {
+                      const isSystem = field.source === "system";
+                      const assignedSection = sections.find((s) => s.fieldKeys?.includes(field.key) || s.id === field.sectionId);
+                      const actions: TableRowAction<any>[] = [];
+                      if (!isSystem) {
+                        actions.push({
+                          label: "Edit field",
+                          icon: <Edit className="w-3.5 h-3.5 text-gray-500" />,
+                          onClick: () => {
+                            setEditingFieldId(field.id);
+                            setEditingFieldData({
+                              label: field.label,
+                              type: FIELD_TYPE_REVERSE_MAP[field.inputType] || "String / Text",
+                              sectionId: assignedSection?.id || "",
+                              required: field.required || false,
+                              options: field.options || [
+                                { id: 1, label: "Option 1", value: "option_1" },
+                                { id: 2, label: "Option 2", value: "option_2" },
+                              ],
+                              tableColumns: field.tableColumns || [
+                                { id: "col_1", name: "Item Name", type: "Text" },
+                                { id: "col_2", name: "Quantity", type: "Number" },
+                              ],
+                            });
+                          },
+                        });
+                      }
+                      actions.push({
+                        label: "Copy key",
+                        icon: <Copy className="w-3.5 h-3.5 text-gray-500" />,
+                        onClick: () => {
+                          navigator.clipboard.writeText(field.key);
+                          toast.success(`Copied key "${field.key}"`);
+                        },
+                      });
+                      if (!isSystem) {
+                        actions.push({
+                          label: "Delete field",
+                          icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+                          isDanger: true,
+                          onClick: () => {
+                            if (confirm(`Delete field "${field.label}"?`)) {
+                              deleteCustomField(currentModule, field.id);
+                              toast.success("Field deleted");
                             }
-                            else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
-                            else if (field.inputType === "new_list") {
-                              typeBadgeStyle = "bg-indigo-50 text-indigo-700";
-                              TypeIcon = Layers;
-                            }
-                            else if (field.inputType === "list_open") {
-                              typeBadgeStyle = "bg-emerald-50 text-emerald-700";
-                              TypeIcon = Tag;
-                            }
-                            else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
-                              typeBadgeStyle = field.selectionMode === "multiple" ? "bg-teal-50 text-teal-700" : "bg-emerald-50 text-emerald-700";
-                              TypeIcon = field.selectionMode === "multiple" ? Tag : ClipboardList;
-                            }
-                            else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
-                            else if (field.inputType === "date" || field.inputType === "date_time") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Calendar; }
-                            else if (field.inputType === "number") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Hash; }
-                            else if (field.inputType === "money") { typeBadgeStyle = "bg-green-50 text-green-700"; TypeIcon = DollarSign; }
-                            else if (field.inputType === "textarea" || field.inputType === "richtext") { typeBadgeStyle = "bg-orange-50 text-orange-700"; TypeIcon = AlignLeft; }
-                            else if (field.inputType === "link" || field.inputType === "whatsapp_link") { typeBadgeStyle = "bg-sky-50 text-sky-700"; TypeIcon = LinkIcon; }
-                            else if (field.inputType === "yes_no") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = CheckCircle2; }
-                            else if (field.inputType === "file") { typeBadgeStyle = "bg-violet-50 text-violet-700"; TypeIcon = FileIcon; }
-                            else if (field.inputType === "rating") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Star; }
-                            else if (field.inputType === "user") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = User; }
+                          },
+                        });
+                      }
+                      return actions;
+                    };
 
-                            const isSystem = field.source === "system";
-                            const isTemplate = field.source === "template";
+                    return (
+                      <TableComponent
+                        data={filteredFields}
+                        columns={fieldsColumns}
+                        getRowId={(f) => f.id}
+                        rowActions={fieldsRowActions}
+                        selectedIds={selectedFieldIds}
+                        onSelectionChange={setSelectedFieldIds}
+                        bulkActions={[
+                          {
+                            label: "Delete Selected",
+                            icon: <Trash2 className="w-3.5 h-3.5" />,
+                            variant: "danger",
+                            onClick: (ids) => {
+                              const customSelected = currentFields.filter((f) => ids.has(f.id) && f.source !== "system");
+                              if (customSelected.length === 0) {
+                                toast.info("Selected fields are system fields and cannot be deleted");
+                                return;
+                              }
+                              if (confirm(`Delete ${customSelected.length} selected field(s)?`)) {
+                                customSelected.forEach((f) => deleteCustomField(currentModule, f.id));
+                                setSelectedFieldIds(new Set());
+                                toast.success(`Deleted ${customSelected.length} field(s)`);
+                              }
+                            },
+                          },
+                        ]}
+                        emptyMessage="No fields found for this entity."
+                      />
+                    );
+                  })()}
 
-                            return (
-                              <tr key={`${currentModule}-${field.key}-${field.id}`} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-0">
-                                <td className="px-5 py-3.5">
-                                  <span className="text-sm font-medium text-[#111827]">{field.label}</span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">{field.key}</span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  {isSystem ? (
-                                    <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200/60">System</span>
-                                  ) : isTemplate ? (
-                                    <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200/60">Template</span>
-                                  ) : (
-                                    <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/60">Custom</span>
-                                  )}
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${typeBadgeStyle}`}>
-                                    <TypeIcon className="w-3.5 h-3.5" />
-                                    <span>{typeName}</span>
-                                  </span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  {field.required ? (
-                                    <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/50">Required</span>
-                                  ) : (
-                                    <span className="text-xs text-gray-400">Optional</span>
-                                  )}
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <div className="flex items-center justify-end gap-1">
-                                    {!isSystem && (
-                                      <button
-                                        onClick={() => {
-                                          setEditingFieldId(field.id);
-                                          setEditingFieldData({
-                                            label: field.label,
-                                            type: FIELD_TYPE_REVERSE_MAP[field.inputType] || "String / Text",
-                                            sectionId: assignedSection?.id || "",
-                                            required: field.required || false,
-                                            options: field.options || [
-                                              { id: 1, label: "Option 1", value: "option_1" },
-                                              { id: 2, label: "Option 2", value: "option_2" },
-                                            ],
-                                            tableColumns: field.tableColumns || [
-                                              { id: "col_1", name: "Item Name", type: "Text" },
-                                              { id: "col_2", name: "Quantity", type: "Number" },
-                                            ],
-                                          });
-                                        }}
-                                        className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                                        title="Edit field"
-                                      >
-                                        <Edit className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                    {!isSystem ? (
-                                      <button
-                                        onClick={() => {
-                                          if (confirm(`Delete field "${field.label}"?`)) {
-                                            deleteCustomField(currentModule, field.id);
-                                            toast.success("Field deleted");
-                                          }
-                                        }}
-                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                        title="Delete field"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    ) : <span className="w-7" />}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          });
-                        })()}
-                      </tbody>
-                    </table>
-                  )}
+                  {/* TAB 2: SECTIONS TABLE VIEW */}
+                  {layoutViewTab === "sections" && (() => {
+                    const allSecs = getAllSections(currentModule).filter((sec) =>
+                      isSectionMatchingOrg(sec, activeOrganization)
+                    );
 
-                  {/* TAB 2: CUSTOM SECTIONS TABLE VIEW */}
-                  {layoutViewTab === "sections" && (
-                    <table className="w-full">
-                      <thead className="bg-[#F8FAFC] border-b border-gray-200">
-                        <tr>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Section</th>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Fields</th>
-                          <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody key={`sections-${customFieldsTab}-${currentModule}`}>
-                        {(() => {
-                          const allSecs = getAllSections(currentModule).filter((sec) =>
-                            isSectionMatchingOrg(sec, activeOrganization)
+                    const filteredSections = allSecs.filter((sec) => {
+                      if (!layoutSearchQuery.trim()) return true;
+                      const q = layoutSearchQuery.toLowerCase();
+                      const originType = (sec.source || "custom").toLowerCase();
+                      return (
+                        sec.title.toLowerCase().includes(q) ||
+                        (sec.description && sec.description.toLowerCase().includes(q)) ||
+                        originType.includes(q)
+                      );
+                    });
+
+                    const sectionsColumns: TableColumn<any>[] = [
+                      {
+                        id: "title",
+                        header: "Section",
+                        render: (sec) => <span className="font-medium text-[#111827]">{sec.title}</span>,
+                      },
+                      {
+                        id: "type",
+                        header: "Type",
+                        render: (sec) => {
+                          const isSystem = sec.source === "system";
+                          const isTemplate = sec.source === "template";
+                          return (
+                            <span className={`font-medium ${isSystem ? "text-gray-500" : isTemplate ? "text-purple-600" : "text-blue-600"}`}>
+                              {isSystem ? "System" : isTemplate ? "Template" : "Custom"}
+                            </span>
                           );
+                        },
+                      },
+                      {
+                        id: "fields",
+                        header: "Fields",
+                        render: (sec) => {
+                          const count = (sec.fieldKeys || []).length;
+                          return (
+                            <span className="text-gray-500 font-medium">
+                              {count} {count === 1 ? "field" : "fields"}
+                            </span>
+                          );
+                        },
+                      },
+                      {
+                        id: "description",
+                        header: "Description",
+                        render: (sec) => (
+                          <span className="text-gray-500 truncate max-w-[200px] inline-block" title={sec.description || ""}>
+                            {sec.description || <span className="text-gray-300 italic">—</span>}
+                          </span>
+                        ),
+                      },
+                    ];
 
-                          const filteredSections = allSecs.filter((sec) => {
-                            if (!layoutSearchQuery.trim()) return true;
-                            const q = layoutSearchQuery.toLowerCase();
-                            const originType = (sec.source || "custom").toLowerCase();
-                            return (
-                              sec.title.toLowerCase().includes(q) ||
-                              (sec.description && sec.description.toLowerCase().includes(q)) ||
-                              originType.includes(q)
-                            );
-                          });
+                    const sectionsRowActions = (sec: any) => {
+                      const isSystem = sec.source === "system";
+                      const actions: TableRowAction<any>[] = [
+                        {
+                          label: "Edit section",
+                          icon: <Edit className="w-3.5 h-3.5 text-gray-500" />,
+                          onClick: () => {
+                            setEditingSectionId(sec.id);
+                            setEditingSectionData({
+                              title: sec.title,
+                              description: sec.description || "",
+                              fieldKeys: sec.fieldKeys || [],
+                            });
+                          },
+                        },
+                      ];
+                      if (!isSystem) {
+                        actions.push({
+                          label: "Delete section",
+                          icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+                          isDanger: true,
+                          onClick: () => {
+                            if (confirm(`Delete section "${sec.title}"?`)) {
+                              deleteCustomSection(currentModule, sec.id);
+                              toast.success("Section deleted");
+                            }
+                          },
+                        });
+                      }
+                      return actions;
+                    };
 
-                          return filteredSections.map((sec) => {
-                            const isSystem = sec.source === "system";
-                            const isTemplate = sec.source === "template";
-                            const assignedFieldCount = (sec.fieldKeys || []).length;
-                            return (
-                              <tr key={`${currentModule}-${sec.id}`} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-0">
-                                <td className="px-5 py-3.5">
-                                  <span className="text-sm font-medium text-[#111827]">{sec.title}</span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  {isSystem ? (
-                                    <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200/60">System</span>
-                                  ) : isTemplate ? (
-                                    <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200/60">Template</span>
-                                  ) : (
-                                    <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/60">Custom</span>
-                                  )}
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <span className="text-xs text-gray-500 font-medium">
-                                    {assignedFieldCount} {assignedFieldCount === 1 ? 'field' : 'fields'}
-                                  </span>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <button
-                                      onClick={() => {
-                                        setEditingSectionId(sec.id);
-                                        setEditingSectionData({
-                                          title: sec.title,
-                                          description: sec.description || "",
-                                          iconName: sec.iconName || "layers",
-                                          fieldKeys: sec.fieldKeys || [],
-                                        });
-                                      }}
-                                      className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                                      title="Edit section"
-                                    >
-                                      <Edit className="w-3.5 h-3.5" />
-                                    </button>
-                                    {!isSystem ? (
-                                      <button
-                                        onClick={() => {
-                                          if (confirm(`Delete section "${sec.title}"?`)) {
-                                            deleteCustomSection(currentModule, sec.id);
-                                            toast.success("Section deleted");
-                                          }
-                                        }}
-                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                        title="Delete section"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    ) : <span className="w-7" />}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          });
-                        })()}
-                      </tbody>
-                    </table>
-                  )}
+                    return (
+                      <TableComponent
+                        data={filteredSections}
+                        columns={sectionsColumns}
+                        getRowId={(s) => s.id}
+                        rowActions={sectionsRowActions}
+                        selectedIds={selectedSectionIds}
+                        onSelectionChange={setSelectedSectionIds}
+                        bulkActions={[
+                          {
+                            label: "Delete Selected",
+                            icon: <Trash2 className="w-3.5 h-3.5" />,
+                            variant: "danger",
+                            onClick: (ids) => {
+                              const customSelected = allSecs.filter((s) => ids.has(s.id) && s.source !== "system");
+                              if (customSelected.length === 0) {
+                                toast.info("Selected sections are system sections and cannot be deleted");
+                                return;
+                              }
+                              if (confirm(`Delete ${customSelected.length} selected section(s)?`)) {
+                                customSelected.forEach((s) => deleteCustomSection(currentModule, s.id));
+                                setSelectedSectionIds(new Set());
+                                toast.success(`Deleted ${customSelected.length} section(s)`);
+                              }
+                            },
+                          },
+                        ]}
+                        emptyMessage="No sections found for this entity."
+                      />
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -6639,106 +7152,104 @@ export default function Settings() {
             {/* Audit Logs Tab */}
 
             {activeTab === "audit-logs" && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold" style={TEXT_STYLES.heading}>
-                      Audit Logs <span className="text-sm font-normal" style={TEXT_STYLES.subtext}>({auditLogs.length} on this page)</span>
-                    </h2>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Button variant="outline" onClick={() => { }}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                      </svg>
-                      Filters
-                    </Button>
-                    <Button variant="outline" onClick={() => toast.success("Audit logs refreshed")}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="space-y-4">
+                {/* Top Search Toolbar using standard PageTopBar */}
+                <PageTopBar
+                  searchQuery={auditLogSearchQuery}
+                  onSearchChange={setAuditLogSearchQuery}
+                  searchPlaceholder="Search audit logs..."
+                  showFilterToggle={true}
+                  onExport={() => toast.success("Exporting audit logs...")}
+                  primaryAction={{
+                    label: "Refresh",
+                    icon: (
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
-                      Refresh
-                    </Button>
-                    <Button variant="outline" onClick={() => toast.success("Exporting audit logs...")}>
-                      Export
-                    </Button>
-                  </div>
-                </div>
+                    ),
+                    onClick: () => toast.success("Audit logs refreshed"),
+                  }}
+                />
 
                 {/* Audit Logs Table */}
-                <div className="bg-white rounded-xl border border-border overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-muted/30 border-b border-border">
-                        <tr>
-                          <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>Time</th>
-                          <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>Event</th>
-                          <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>Method</th>
-                          <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>User</th>
-                          <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>Agent</th>
-                          <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {auditLogs.map((log) => (
-                          <tr key={log.id} className="border-b border-border hover:bg-muted/10 transition-colors">
-                            <td className="px-6 py-4">
-                              <p className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{log.time}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-sm font-medium" style={TEXT_STYLES.heading}>{log.event}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-sm" style={TEXT_STYLES.subtext}>{log.method}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-sm text-primary" style={{ fontFamily: 'Outfit, sans-serif' }}>{log.user}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{log.agent}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <button
-                                onClick={() => {
-                                  setSelectedAuditLog(log);
-                                  setShowRequestBodyModal(true);
-                                }}
-                                className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
-                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                {(() => {
+                  const filteredAuditLogs = auditLogs.filter((log) => {
+                    if (!auditLogSearchQuery.trim()) return true;
+                    const q = auditLogSearchQuery.toLowerCase();
+                    return (
+                      log.time.toLowerCase().includes(q) ||
+                      log.event.toLowerCase().includes(q) ||
+                      log.method.toLowerCase().includes(q) ||
+                      log.user.toLowerCase().includes(q) ||
+                      log.agent.toLowerCase().includes(q)
+                    );
+                  });
 
-                {/* Pagination */}
-                <div className="flex items-center justify-between">
-                  <Button variant="outline" disabled onClick={() => setAuditLogPage(auditLogPage - 1)}>
-                    <ChevronRight className="w-4 h-4 rotate-180" />
-                    Previous
-                  </Button>
-                  <p className="text-sm" style={TEXT_STYLES.subtext}>Page {auditLogPage}</p>
-                  <Button variant="outline" onClick={() => setAuditLogPage(auditLogPage + 1)}>
-                    Next
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
+                  const auditColumns: TableColumn<typeof auditLogs[0]>[] = [
+                    {
+                      key: "time",
+                      header: "Time",
+                      align: "left",
+                      render: (log) => <p className="text-xs" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{log.time}</p>,
+                    },
+                    {
+                      key: "event",
+                      header: "Event",
+                      align: "left",
+                      render: (log) => <p className="text-xs font-semibold text-[#111827]">{log.event}</p>,
+                    },
+                    {
+                      key: "method",
+                      header: "Method",
+                      align: "center",
+                      render: (log) => <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-slate-100 text-slate-700">{log.method}</span>,
+                    },
+                    {
+                      key: "user",
+                      header: "User",
+                      align: "left",
+                      render: (log) => <p className="text-xs text-primary font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>{log.user}</p>,
+                    },
+                    {
+                      key: "agent",
+                      header: "Agent",
+                      align: "left",
+                      render: (log) => <p className="text-xs" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{log.agent}</p>,
+                    },
+                    {
+                      key: "actions",
+                      header: "Action",
+                      align: "center",
+                      render: (log) => (
+                        <button
+                          onClick={() => {
+                            setSelectedAuditLog(log);
+                            setShowRequestBodyModal(true);
+                          }}
+                          className="flex items-center justify-center p-1 text-primary hover:text-primary/80 transition-colors cursor-pointer"
+                          title="View Request Body"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      ),
+                    },
+                  ];
+
+                  return (
+                    <TableComponent
+                      columns={auditColumns}
+                      data={filteredAuditLogs}
+                      getRowId={(log) => log.id}
+                      emptyMessage="No audit logs found"
+                    />
+                  );
+                })()}
               </div>
             )}
 
             {/* Security Tab */}
             {activeTab === "security" && (
               <div className="space-y-6">
-                <PageHeader
-                  title="Security"
-                  subtitle="Configure security and spam protection settings."
-                />
-
                 {/* Robo Call Detection Section */}
                 <div className="bg-white rounded-xl border border-border overflow-hidden">
                   <div
@@ -7003,13 +7514,6 @@ export default function Settings() {
             {/* Integrations Tab */}
             {activeTab === "integrations" && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold">Integrations</h2>
-                    <p className="text-sm text-muted-foreground mt-1">Connect your tools to sync data and automate workflows</p>
-                  </div>
-                </div>
-
                 {/* Integration Category Tabs */}
                 <div className="border-b border-border">
                   <div className="flex gap-6">
@@ -7072,7 +7576,10 @@ export default function Settings() {
 
                 {/* Integration Cards */}
                 {integrationTab === "telephony" ? (
-                  <TelephonyIntegrationPanel />
+                  <div className="space-y-6">
+                    <TelephonyIntegrationPanel />
+                    {renderPhoneNumbersSection()}
+                  </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {integrations
@@ -7225,8 +7732,137 @@ export default function Settings() {
 
             {/* Reception Tab */}
             {activeTab === "reception" && <ReceptionSettingsTab />}
+        {/* Organization Detail Drawer */}
+        <OrganizationDetailDrawer
+          isOpen={showOrgDrawer}
+          onClose={() => setShowOrgDrawer(false)}
+          organization={selectedOrgForDrawer}
+          onSave={handleSaveOrgFromDrawer}
+        />
+
+        {/* Create Organization Modal */}
+        <Modal
+          isOpen={showCreateOrgModal}
+          onClose={() => setShowCreateOrgModal(false)}
+          title="Create New Organization"
+          maxWidth="md"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setShowCreateOrgModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleCreateOrg}
+                className="bg-[#111827] hover:bg-[#1f2937] text-white"
+              >
+                Create Organization
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4 py-2" style={{ fontFamily: "Outfit, sans-serif" }}>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Organization Name <span className="text-red-500">*</span>
+              </label>
+              <Input
+                value={newOrgFormData.name}
+                onChange={(e) => setNewOrgFormData({ ...newOrgFormData, name: e.target.value })}
+                placeholder="e.g. Apollo Diagnostics"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Industry Category
+                </label>
+                <select
+                  value={newOrgFormData.industryCategory}
+                  onChange={(e) => {
+                    const cat = e.target.value;
+                    const indList = getIndustriesForCategory(cat);
+                    setNewOrgFormData({
+                      ...newOrgFormData,
+                      industryCategory: cat,
+                      industry: indList[0] || "",
+                    });
+                  }}
+                  className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-900"
+                >
+                  {INITIAL_CATEGORIES.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Industry / Specialty
+                </label>
+                <select
+                  value={newOrgFormData.industry}
+                  onChange={(e) => setNewOrgFormData({ ...newOrgFormData, industry: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-900"
+                >
+                  {getIndustriesForCategory(newOrgFormData.industryCategory).map((ind) => (
+                    <option key={ind} value={ind}>
+                      {ind}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Official Email <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="email"
+                value={newOrgFormData.email}
+                onChange={(e) => setNewOrgFormData({ ...newOrgFormData, email: e.target.value })}
+                placeholder="admin@organization.com"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Country Flag
+                </label>
+                <select
+                  value={newOrgFormData.flag}
+                  onChange={(e) => setNewOrgFormData({ ...newOrgFormData, flag: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-900"
+                >
+                  <option value="🇮🇳">🇮🇳 India</option>
+                  <option value="🇺🇸">🇺🇸 United States</option>
+                  <option value="🇬🇧">🇬🇧 United Kingdom</option>
+                  <option value="🇨🇦">🇨🇦 Canada</option>
+                  <option value="🇦🇺">🇦🇺 Australia</option>
+                  <option value="🇦🇪">🇦🇪 UAE</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Preferred Time
+                </label>
+                <Input
+                  value={newOrgFormData.preferredTime}
+                  onChange={(e) => setNewOrgFormData({ ...newOrgFormData, preferredTime: e.target.value })}
+                  placeholder="2:00 PM · IST"
+                />
+              </div>
+            </div>
           </div>
-        </div>
+        </Modal>
 
         {/* Edit Organization Modal */}
         <Modal
@@ -10721,94 +11357,104 @@ export default function Settings() {
                   </div>
 
                   {/* Numbers Table */}
-                  {telephonyNumbers.filter((n) => n.provider === selectedIntegration.id).length > 0 ? (
-                    <div className="border border-border rounded-xl overflow-hidden">
-                      <table className="w-full">
-                        <thead className="bg-muted/50">
-                          <tr>
-                            <th className="text-left px-4 py-3 text-xs font-semibold" style={TEXT_STYLES.subtext}>Number</th>
-                            <th className="text-left px-4 py-3 text-xs font-semibold" style={TEXT_STYLES.subtext}>Country</th>
-                            <th className="text-left px-4 py-3 text-xs font-semibold" style={TEXT_STYLES.subtext}>Provider</th>
-                            <th className="text-left px-4 py-3 text-xs font-semibold" style={TEXT_STYLES.subtext}>Status</th>
-                            <th className="text-right px-4 py-3 text-xs font-semibold" style={TEXT_STYLES.subtext}>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                          {telephonyNumbers
-                            .filter((n) => n.provider === selectedIntegration.id)
-                            .map((number) => (
-                              <tr
-                                key={number.id}
-                                className={`hover:bg-muted/30 transition-colors ${number.isDefault ? "bg-primary/5" : ""
-                                  }`}
-                              >
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium text-sm">{number.number}</span>
-                                    {number.isDefault && (
-                                      <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">
-                                        Default
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-sm">{number.country}</td>
-                                <td className="px-4 py-3 text-sm text-muted-foreground capitalize">
-                                  {selectedIntegration.name}
-                                </td>
-                                <td className="px-4 py-3">
-                                  <label className="flex items-center gap-2 cursor-pointer w-fit">
-                                    <div className="relative">
-                                      <input
-                                        type="checkbox"
-                                        checked={number.status === "active"}
-                                        onChange={() => handleToggleNumberStatus(number.id)}
-                                        className="sr-only peer"
-                                      />
-                                      <div className="w-11 h-6 bg-muted rounded-full peer-checked:bg-primary transition-colors"></div>
-                                      <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
-                                    </div>
-                                    <span className="text-xs" style={TEXT_STYLES.subtext}>
-                                      {number.status === "active" ? "Active" : "Inactive"}
-                                    </span>
-                                  </label>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center justify-end gap-2">
-                                    <button
-                                      onClick={() => handleEditNumber(number)}
-                                      className="p-2 hover:bg-muted rounded-lg transition-colors"
-                                      title="Edit number"
-                                    >
-                                      <Edit className="w-4 h-4 text-muted-foreground" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteNumber(number.id)}
-                                      className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
-                                      title="Delete number"
-                                    >
-                                      <Trash2 className="w-4 h-4 text-destructive" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
-                      <Phone className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                      <h4 className="font-semibold mb-1" style={TEXT_STYLES.heading}>No numbers configured</h4>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Add a phone number to start routing calls through this provider
-                      </p>
-                      <Button variant="outline" onClick={handleAddNumber} size="sm">
-                        <Plus className="w-4 h-4" />
-                        Add Your First Number
-                      </Button>
-                    </div>
-                  )}
+                  {(() => {
+                    const integrationNumbers = telephonyNumbers.filter((n) => n.provider === selectedIntegration.id);
+
+                    if (integrationNumbers.length === 0) {
+                      return (
+                        <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
+                          <Phone className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                          <h4 className="font-semibold mb-1" style={TEXT_STYLES.heading}>No numbers configured</h4>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            Add a phone number to start routing calls through this provider
+                          </p>
+                          <Button variant="outline" onClick={handleAddNumber} size="sm">
+                            <Plus className="w-4 h-4" />
+                            Add Your First Number
+                          </Button>
+                        </div>
+                      );
+                    }
+
+                    const numberColumns: TableColumn<any>[] = [
+                      {
+                        header: "Number",
+                        accessorKey: "number",
+                        align: "left",
+                        render: (number) => (
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{number.number}</span>
+                            {number.isDefault && (
+                              <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                        ),
+                      },
+                      {
+                        header: "Country",
+                        accessorKey: "country",
+                        align: "left",
+                        render: (number) => (
+                          <span className="text-sm">{number.country}</span>
+                        ),
+                      },
+                      {
+                        header: "Provider",
+                        align: "left",
+                        render: () => (
+                          <span className="text-sm text-muted-foreground capitalize">
+                            {selectedIntegration.name}
+                          </span>
+                        ),
+                      },
+                      {
+                        header: "Status",
+                        accessorKey: "status",
+                        align: "center",
+                        render: (number) => (
+                          <label className="flex items-center justify-center gap-2 cursor-pointer w-fit mx-auto" onClick={(e) => e.stopPropagation()}>
+                            <div className="relative">
+                              <input
+                                type="checkbox"
+                                checked={number.status === "active"}
+                                onChange={() => handleToggleNumberStatus(number.id)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-muted rounded-full peer-checked:bg-primary transition-colors"></div>
+                              <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                            </div>
+                            <span className="text-xs" style={TEXT_STYLES.subtext}>
+                              {number.status === "active" ? "Active" : "Inactive"}
+                            </span>
+                          </label>
+                        ),
+                      },
+                    ];
+
+                    return (
+                      <TableComponent
+                        columns={numberColumns}
+                        data={integrationNumbers}
+                        getRowId={(n) => n.id}
+                        rowActions={[
+                          {
+                            label: "Edit Number",
+                            icon: <Edit className="w-4 h-4 text-muted-foreground" />,
+                            onClick: (number) => handleEditNumber(number),
+                          },
+                          {
+                            label: "Delete Number",
+                            icon: <Trash2 className="w-4 h-4 text-destructive" />,
+                            isDanger: true,
+                            onClick: (number) => handleDeleteNumber(number.id),
+                          },
+                        ]}
+                        emptyMessage="No numbers configured for this provider."
+                      />
+                    );
+                  })()}
 
                   {/* Routing Settings */}
                   {telephonyNumbers.filter((n) => n.provider === selectedIntegration.id).length > 0 && (
@@ -11666,7 +12312,7 @@ export default function Settings() {
             field={editingFieldId !== null ? (getAllFields(currentModule).find((f) => f.id === editingFieldId) || null) : null}
             initialModule={currentModule as Exclude<FieldModule, "deal">}
             sections={getAllSections(currentModule)}
-            isAdmin={true}
+            isAdmin={false}
             onClose={() => {
               setShowAddFieldDrawer(false);
               setEditingFieldId(null);
@@ -11683,7 +12329,7 @@ export default function Settings() {
           <AdminSectionDrawer
             section={editingSectionId !== null ? (getAllSections(currentModule).find((s) => s.id === editingSectionId) || null) : null}
             initialModule={currentModule as Exclude<FieldModule, "deal">}
-            isAdmin={true}
+            isAdmin={false}
             onClose={() => {
               setShowAddSectionDrawer(false);
               setEditingSectionId(null);
@@ -12057,6 +12703,16 @@ export default function Settings() {
           roles={roles}
           onSaveRoles={handleSaveRoles}
           assignedUserCounts={assignedUserCounts}
+        />
+
+        <AddTeamMemberDrawer
+          isOpen={showAddUserModal}
+          onClose={() => setShowAddUserModal(false)}
+          onSuccess={(newMember) => {
+            setAllUsers((prev) => [...prev, newMember as any]);
+            setShowAddUserModal(false);
+            toast.success(`Team member ${newMember.name} added`);
+          }}
         />
       </div>
     </div>

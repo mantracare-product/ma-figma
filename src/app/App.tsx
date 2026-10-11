@@ -6,6 +6,7 @@ import { AIProviderProvider } from "./context/AIProviderContext";
 import { AuthProvider } from "./context/AuthContext";
 import { HowItWorksProvider } from "./context/HowItWorksContext";
 import { OrganizationProvider } from "./context/OrganizationContext";
+import { SidebarMenuProvider } from "./context/SidebarMenuContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SidebarProvider } from "./context/SidebarContext";
 import { ClientFieldsProvider } from "./context/ClientFieldsContext";
@@ -22,22 +23,24 @@ export default function App() {
         <AuthProvider>
           <SidebarProvider>
             <OrganizationProvider>
-              <HowItWorksProvider>
-                <AIProviderProvider>
-                  <FieldRegistryProvider>
-                    <ProcessTemplateProvider>
-                      <ClientFieldsProvider>
-                        <InvoiceProvider>
-                          <DndProvider backend={HTML5Backend}>
-                            <RouterProvider router={router} />
-                            <Toaster position="bottom-right" />
-                          </DndProvider>
-                        </InvoiceProvider>
-                      </ClientFieldsProvider>
-                    </ProcessTemplateProvider>
-                  </FieldRegistryProvider>
-                </AIProviderProvider>
-              </HowItWorksProvider>
+              <SidebarMenuProvider>
+                <HowItWorksProvider>
+                  <AIProviderProvider>
+                    <FieldRegistryProvider>
+                      <ProcessTemplateProvider>
+                        <ClientFieldsProvider>
+                          <InvoiceProvider>
+                            <DndProvider backend={HTML5Backend}>
+                              <RouterProvider router={router} />
+                              <Toaster position="bottom-right" />
+                            </DndProvider>
+                          </InvoiceProvider>
+                        </ClientFieldsProvider>
+                      </ProcessTemplateProvider>
+                    </FieldRegistryProvider>
+                  </AIProviderProvider>
+                </HowItWorksProvider>
+              </SidebarMenuProvider>
             </OrganizationProvider>
           </SidebarProvider>
         </AuthProvider>

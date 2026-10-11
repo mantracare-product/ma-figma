@@ -10,6 +10,7 @@ const MODULE_LABELS: Record<Exclude<FieldModule, "deal">, string> = {
   client: "Client Fields",
   process: "Process Fields",
   appointment: "Appointment Fields",
+  invoice: "Invoice Fields",
   call: "Call Fields",
   service: "Service Fields",
   organization: "Organization Fields",
@@ -17,13 +18,14 @@ const MODULE_LABELS: Record<Exclude<FieldModule, "deal">, string> = {
   scribe: "AI Scribe Fields",
 };
 
-const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "call", "service", "organization", "teamMember", "scribe"];
+const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "invoice", "call", "service", "organization", "teamMember", "scribe"];
 
 // Module → singular noun for prose labels
 const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plural: string }> = {
   client: { singular: "client", plural: "clients" },
   process: { singular: "process", plural: "processes" },
   appointment: { singular: "appointment", plural: "appointments" },
+  invoice: { singular: "invoice", plural: "invoices" },
   call: { singular: "call", plural: "calls" },
   service: { singular: "service", plural: "services" },
   organization: { singular: "organization", plural: "organizations" },
@@ -74,9 +76,11 @@ export function CreateFieldModal({
 }
 
 export interface SelectFieldsModalProps {
-  initiallySelected: string[];
+  initiallySelected?: string[];
+  currentFieldKeys?: string[];
   onClose: () => void;
   onApply: (keys: string[]) => void;
+  onOpenCreateModal?: () => void;
   onlyModules?: FieldModule[];
   activeProcessId?: string;
   activeProcessName?: string;
@@ -86,8 +90,10 @@ export interface SelectFieldsModalProps {
 
 export function SelectFieldsModal({
   initiallySelected,
+  currentFieldKeys,
   onClose,
   onApply,
+  onOpenCreateModal,
   onlyModules,
   activeProcessId,
   activeProcessName,
@@ -97,8 +103,18 @@ export function SelectFieldsModal({
   const { getAllFields, updateCustomField } = useFieldRegistry();
   const { activeOrganization } = useOrganization();
   const [fieldSearchQuery, setFieldSearchQuery] = useState("");
-  const [selectedFieldsForModal, setSelectedFieldsForModal] = useState<string[]>(() => initiallySelected);
+  const [selectedFieldsForModal, setSelectedFieldsForModal] = useState<string[]>(
+    () => initiallySelected || currentFieldKeys || []
+  );
   const [createFieldModalOpenFor, setCreateFieldModalOpenFor] = useState<FieldModule | null>(null);
+
+  useEffect(() => {
+    if (initiallySelected) {
+      setSelectedFieldsForModal(initiallySelected);
+    } else if (currentFieldKeys) {
+      setSelectedFieldsForModal(currentFieldKeys);
+    }
+  }, [initiallySelected, currentFieldKeys]);
 
   const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
 
@@ -284,7 +300,13 @@ export function SelectFieldsModal({
                     <div className="pt-2 border-t border-gray-100 flex justify-end">
                       <button
                         type="button"
-                        onClick={() => setCreateFieldModalOpenFor(group.module as FieldModule)}
+                        onClick={() => {
+                          if (onOpenCreateModal) {
+                            onOpenCreateModal();
+                          } else {
+                            setCreateFieldModalOpenFor(group.module as FieldModule);
+                          }
+                        }}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50/80 rounded-md border border-dashed border-blue-200 transition-colors cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />

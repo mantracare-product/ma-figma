@@ -5,6 +5,7 @@ import {
   DEFAULT_CALL_TRIGGER_SETTINGS,
   Process,
   Stage,
+  EntityType,
   saveStoredProcesses,
   getStoredProcesses,
   saveStoredWorkflowSteps,
@@ -46,6 +47,8 @@ export interface ProcessTemplateStage {
   stageCode?: string;
   description: string;
   statusColor: string;
+  systemCategory?: string;
+  isSystemCategoryRequired?: boolean;
   systemInstruction?: string;
   aiModel?: string;
   speechSpeed?: number;
@@ -67,6 +70,7 @@ export interface ProcessTemplate {
   description: string;
   categoryName: string;
   industryName: string;
+  entityType?: EntityType;
   isSystem?: boolean;
   status: "active" | "draft";
   version: string;
@@ -426,6 +430,92 @@ export const SEED_PROCESS_TEMPLATES: ProcessTemplate[] = [
     createdAt: "2026-02-10T15:00:00Z",
     updatedAt: "2026-03-08T18:00:00Z",
   },
+  {
+    id: "tmpl-entity-appointment",
+    name: "Standard Appointment Scheduling & Care",
+    description: "End-to-end appointment scheduling, reminders, check-in, and completion.",
+    categoryName: "Operations",
+    industryName: "All",
+    entityType: "appointment",
+    isSystem: true,
+    status: "active",
+    version: "1.0.0",
+    globalSettings: DEFAULT_PROCESS_GLOBAL_SETTINGS,
+    stages: [
+      { id: "tmpl-appt-1", stageOrder: 1, name: "Booked", stageCode: "BOOKED", description: "Appointment confirmed and scheduled", statusColor: "#3B82F6", systemCategory: "booked", isSystemCategoryRequired: true },
+      { id: "tmpl-appt-2", stageOrder: 2, name: "Rescheduled", stageCode: "RESCHED", description: "Appointment moved", statusColor: "#F59E0B", systemCategory: "rescheduled", isSystemCategoryRequired: true },
+      { id: "tmpl-appt-3", stageOrder: 3, name: "Reminder", stageCode: "REMIND", description: "Reminder notification dispatched", statusColor: "#8B5CF6", systemCategory: "reminder", isSystemCategoryRequired: false },
+      { id: "tmpl-appt-4", stageOrder: 4, name: "Checked In", stageCode: "CHKIN", description: "Patient arrived or joined", statusColor: "#06B6D4", systemCategory: "checked_in", isSystemCategoryRequired: false },
+      { id: "tmpl-appt-5", stageOrder: 5, name: "Completed", stageCode: "DONE", description: "Consultation completed", statusColor: "#10B981", systemCategory: "completed", isSystemCategoryRequired: true },
+      { id: "tmpl-appt-6", stageOrder: 6, name: "Cancelled", stageCode: "CANCEL", description: "Appointment cancelled", statusColor: "#EF4444", systemCategory: "cancelled", isSystemCategoryRequired: true },
+      { id: "tmpl-appt-7", stageOrder: 7, name: "No-show", stageCode: "NOSHOW", description: "Patient missed scheduled time", statusColor: "#64748B", systemCategory: "no_show", isSystemCategoryRequired: false },
+    ],
+    createdAt: "2026-03-01T00:00:00Z",
+    updatedAt: "2026-03-01T00:00:00Z",
+  },
+  {
+    id: "tmpl-entity-invoice",
+    name: "Patient Billing & Invoicing Lifecycle",
+    description: "Comprehensive billing cycle from draft generation to full settlement.",
+    categoryName: "Finance",
+    industryName: "All",
+    entityType: "invoice",
+    isSystem: true,
+    status: "active",
+    version: "1.0.0",
+    globalSettings: DEFAULT_PROCESS_GLOBAL_SETTINGS,
+    stages: [
+      { id: "tmpl-inv-1", stageOrder: 1, name: "Draft", stageCode: "DRAFT", description: "Invoice draft generated", statusColor: "#64748B", systemCategory: "draft", isSystemCategoryRequired: true },
+      { id: "tmpl-inv-2", stageOrder: 2, name: "Sent", stageCode: "SENT", description: "Delivered to payer/patient", statusColor: "#3B82F6", systemCategory: "sent", isSystemCategoryRequired: false },
+      { id: "tmpl-inv-3", stageOrder: 3, name: "Viewed", stageCode: "VIEWED", description: "Opened by recipient", statusColor: "#06B6D4", systemCategory: "viewed", isSystemCategoryRequired: false },
+      { id: "tmpl-inv-4", stageOrder: 4, name: "Partially Paid", stageCode: "PARTIAL", description: "Partial payment recorded", statusColor: "#F59E0B", systemCategory: "partially_paid", isSystemCategoryRequired: false },
+      { id: "tmpl-inv-5", stageOrder: 5, name: "Paid", stageCode: "PAID", description: "Full balance settled", statusColor: "#10B981", systemCategory: "paid", isSystemCategoryRequired: true },
+      { id: "tmpl-inv-6", stageOrder: 6, name: "Overdue", stageCode: "OVERDUE", description: "Overdue payment", statusColor: "#F97316", systemCategory: "overdue", isSystemCategoryRequired: false },
+      { id: "tmpl-inv-7", stageOrder: 7, name: "Void", stageCode: "VOID", description: "Cancelled/void invoice", statusColor: "#EF4444", systemCategory: "void", isSystemCategoryRequired: true },
+    ],
+    createdAt: "2026-03-01T00:00:00Z",
+    updatedAt: "2026-03-01T00:00:00Z",
+  },
+  {
+    id: "tmpl-entity-insurance",
+    name: "Insurance Coverage Verification",
+    description: "Eligibility determination and verification process.",
+    categoryName: "Operations",
+    industryName: "All",
+    entityType: "insurance",
+    isSystem: true,
+    status: "active",
+    version: "1.0.0",
+    globalSettings: DEFAULT_PROCESS_GLOBAL_SETTINGS,
+    stages: [
+      { id: "tmpl-ins-1", stageOrder: 1, name: "Pending", stageCode: "PENDING", description: "Verification underway", statusColor: "#F59E0B", systemCategory: "pending", isSystemCategoryRequired: true },
+      { id: "tmpl-ins-2", stageOrder: 2, name: "Verified", stageCode: "VERIFIED", description: "Active coverage confirmed", statusColor: "#10B981", systemCategory: "verified", isSystemCategoryRequired: true },
+      { id: "tmpl-ins-3", stageOrder: 3, name: "Failed", stageCode: "FAILED", description: "Coverage inactive or rejected", statusColor: "#EF4444", systemCategory: "failed", isSystemCategoryRequired: true },
+    ],
+    createdAt: "2026-03-01T00:00:00Z",
+    updatedAt: "2026-03-01T00:00:00Z",
+  },
+  {
+    id: "tmpl-entity-claim",
+    name: "Claims Processing & Adjudication",
+    description: "Medical coding, submission, review and reimbursement.",
+    categoryName: "Operations",
+    industryName: "All",
+    entityType: "claim",
+    isSystem: true,
+    status: "active",
+    version: "1.0.0",
+    globalSettings: DEFAULT_PROCESS_GLOBAL_SETTINGS,
+    stages: [
+      { id: "tmpl-clm-1", stageOrder: 1, name: "Draft", stageCode: "DRAFT", description: "Prepared for submission", statusColor: "#64748B", systemCategory: "draft", isSystemCategoryRequired: true },
+      { id: "tmpl-clm-2", stageOrder: 2, name: "Submitted", stageCode: "SUBMIT", description: "Sent to clearinghouse", statusColor: "#3B82F6", systemCategory: "submitted", isSystemCategoryRequired: true },
+      { id: "tmpl-clm-3", stageOrder: 3, name: "In Review", stageCode: "REVIEW", description: "Payer adjudication", statusColor: "#8B5CF6", systemCategory: "in_review", isSystemCategoryRequired: false },
+      { id: "tmpl-clm-4", stageOrder: 4, name: "Paid", stageCode: "PAID", description: "Claim paid and reconciled", statusColor: "#10B981", systemCategory: "paid", isSystemCategoryRequired: true },
+      { id: "tmpl-clm-5", stageOrder: 5, name: "Denied", stageCode: "DENIED", description: "Claim denied", statusColor: "#EF4444", systemCategory: "denied", isSystemCategoryRequired: true },
+    ],
+    createdAt: "2026-03-01T00:00:00Z",
+    updatedAt: "2026-03-01T00:00:00Z",
+  },
 ];
 
 export function getStoredProcessTemplates(): ProcessTemplate[] {
@@ -434,7 +524,25 @@ export function getStoredProcessTemplates(): ProcessTemplate[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        // Ensure entity templates exist
+        let changed = false;
+        const result = [...parsed];
+        const entityTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim"];
+        for (const et of entityTypes) {
+          if (!result.some((t: ProcessTemplate) => t.entityType === et)) {
+            const seed = SEED_PROCESS_TEMPLATES.find((s) => s.entityType === et);
+            if (seed) {
+              result.push(seed);
+              changed = true;
+            }
+          }
+        }
+        if (changed) {
+          try {
+            localStorage.setItem(PROCESS_TEMPLATES_STORAGE_KEY, JSON.stringify(result));
+          } catch {}
+        }
+        return result;
       }
     }
   } catch {}
@@ -538,7 +646,7 @@ export function ProcessTemplateProvider({ children }: { children: React.ReactNod
     });
   }, []);
 
-  // Instantiates an active Client Process from an Admin Template
+  // Instantiates an active Process from an Admin Template
   const instantiateProcessFromTemplate = useCallback((template: ProcessTemplate, customName?: string): Process => {
     const existingProcesses = getStoredProcesses();
     const newProcessId = String(Date.now());
@@ -563,6 +671,8 @@ export function ProcessTemplateProvider({ children }: { children: React.ReactNod
         description: tStage.description,
         status: "active",
         color: tStage.statusColor || "#3b82f6",
+        systemCategory: tStage.systemCategory,
+        isSystemCategoryRequired: tStage.isSystemCategoryRequired,
         enableCalling: tStage.enableCalling ?? tStage.automaticCalling,
         callTriggerSettings: tStage.callTriggerSettings ? { ...tStage.callTriggerSettings } : undefined,
         channelSources: tStage.channelSources,
@@ -585,6 +695,7 @@ export function ProcessTemplateProvider({ children }: { children: React.ReactNod
       name: customName || template.name,
       description: template.description,
       assignedToUserId: 1,
+      entityType: template.entityType || "client",
       stages: clientStages,
       aiSettings: {
         platform: template.globalSettings.aiModel || "OpenAI - GPT-4o",

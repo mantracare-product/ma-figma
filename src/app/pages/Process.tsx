@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Link, useNavigate } from "react-router";
-import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check } from "lucide-react";
+import { Link, useNavigate, useLocation } from "react-router";
+import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, CreditCard, SquareArrowOutUpRight, ArrowUpRight } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -17,12 +17,16 @@ import { toast } from "sonner";
 import { useAIProviders } from "../context/AIProviderContext";
 import { useSidebar } from "../context/SidebarContext";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { useDrag, useDrop } from "react-dnd";
 import FlowBuilderTab from "../components/process/FlowBuilderTab";
+import FlowBuilderDrawer from "../components/process/FlowBuilderDrawer";
+import AddAutomationDrawer from "../components/process/AddAutomationDrawer";
+import StageAutomationCards from "../components/process/StageAutomationCards";
 import { WorkflowStep } from "../types/workflow";
-import VariablePickerButton, { FETCH_FIELD_SOURCES, FIELDS_BY_SOURCE_MAP } from "../components/process/VariablePickerButton";
+import { SelectFieldsModal } from "../components/help/FieldManager";
 import StepParametersFields from "../components/process/StepParametersFields";
 import StepDetailDrawer from "../components/process/StepDetailDrawer";
 import { assignNumberToStage } from "../../lib/useStageNumberRouting";
@@ -40,7 +44,16 @@ import {
   ScopingRule,
   ProcessPermissions,
   isProcessMatchingOrg,
+  ProcessTransitionTarget,
+  EntityType,
+  isRequiredSystemCategory,
+  isStageDeletable,
+  DEFAULT_ENTITY_PROCESSES,
 } from "../../lib/useProcessStore";
+import { getStoredVoices, VoiceConfigItem, VOICE_STORE_EVENT } from "../../lib/useVoiceStore";
+import { getActiveAIModels, AI_MODELS_STORE_EVENT, AIModelConfig } from "../../lib/aiModelsStore";
+import { getStagesTargetedByAutomation, AUTOMATION_STORE_EVENT, useAutomationRules, AutomationRule } from "../../lib/useAutomationStore";
+import StageAutomationsTab from "../components/process/StageAutomationsTab";
 
 interface AISettings {
   platform: string;
@@ -62,9 +75,18 @@ export interface Stage {
   description: string;
   status: string;
   color?: string;
+  systemCategory?: string;
+  isSystemCategoryRequired?: boolean;
   isInitial?: boolean;
   isFinal?: boolean;
-  stagePosition?: "initial" | "final" | null;
+  isFinalStage?: boolean;
+  stageCategory?: "in_progress" | "success" | "lost";
+  stagePosition?: "initial" | "intermediate" | "final" | null;
+  intentTrigger?: string; // "interested" | "not_interested" | "call_back" | "needs_info" | "disqualified" | "custom"
+  intentLabel?: string;
+  intentDescription?: string;
+  endPipelineOnReach?: boolean; // System setting to end this pipeline and move to next pipeline
+  nextProcessTransitions?: ProcessTransitionTarget[];
   aiSettings?: AISettings;
   // Persisted stage configuration
   stageType?: string;
@@ -92,6 +114,7 @@ export interface Process {
   assignedToUserId: number;
   stages: Stage[];
   aiSettings: AISettings;
+  entityType?: EntityType;
   // Scoping & Tenant Permissions
   industryCategory?: string;
   industry?: string;
@@ -99,6 +122,7 @@ export interface Process {
   scopingRules?: ScopingRule[];
   permissions?: ProcessPermissions;
   source?: "system" | "template" | "custom";
+  draft?: boolean;
 }
 
 
@@ -235,6 +259,217 @@ const FORM_TEMPLATES = [
   }
 ];
 
+const CHEVRON_PALETTE = [
+  "#3B82F6", // Royal Blue
+  "#06B6D4", // Cyan
+  "#10B981", // Emerald Green
+  "#EF4444", // Coral Red
+  "#F59E0B", // Amber
+  "#8B5CF6", // Purple
+  "#EC4899", // Pink
+  "#2563EB", // Cobalt Blue
+];
+
+interface ChevronStageItemProps {
+  stage: Stage;
+  index: number;
+  totalStages: number;
+  moveStage: (dragIndex: number, hoverIndex: number) => void;
+  onRemove: (stageId: string) => void;
+  onEdit: (stage: Stage) => void;
+  onSelect: (stage: Stage) => void;
+  isSelected?: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  color?: string;
+  isLastStage?: boolean;
+  isCompact?: boolean;
+  isFlexible?: boolean;
+  isLostStage?: boolean;
+  onHoverStage?: (info: { name: string; x: number; y: number } | null) => void;
+  onAddAfter?: () => void;
+}
+
+const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
+  stage,
+  index,
+  totalStages,
+  moveStage,
+  onRemove,
+  onEdit,
+  onSelect,
+  isSelected,
+  isFirst,
+  isLast,
+  color,
+  isLastStage,
+  isCompact = false,
+  isFlexible = false,
+  isLostStage = false,
+  onHoverStage,
+  onAddAfter,
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+
+  const [{ isDragging }, drag] = useDrag({
+    type: "STAGE",
+    item: () => ({ index }),
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  });
+
+  const [{ isOver }, drop] = useDrop({
+    accept: "STAGE",
+    hover(item: { index: number }, monitor) {
+      if (!ref.current) return;
+      const dragIndex = item.index;
+      const hoverIndex = index;
+      if (dragIndex === hoverIndex) return;
+
+      const hoverBoundingRect = ref.current.getBoundingClientRect();
+      const hoverMiddleX = (hoverBoundingRect.right - hoverBoundingRect.left) / 2;
+      const clientOffset = monitor.getClientOffset();
+      if (!clientOffset) return;
+      const hoverClientX = clientOffset.x - hoverBoundingRect.left;
+
+      if (dragIndex < hoverIndex && hoverClientX < hoverMiddleX) return;
+      if (dragIndex > hoverIndex && hoverClientX > hoverMiddleX) return;
+
+      moveStage(dragIndex, hoverIndex);
+      item.index = hoverIndex;
+    },
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+    }),
+  });
+
+  drag(drop(ref));
+
+  const chevronClip = isFirst
+    ? "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)"
+    : "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%, 14px 50%)";
+
+  return (
+    <div
+      ref={ref}
+      className={`relative group flex items-center ${
+        isFlexible ? "flex-1 min-w-0" : "flex-shrink-0"
+      } ${isFirst ? "" : "-ml-3.5"}`}
+      onMouseEnter={(e) => {
+        if (onHoverStage) {
+          const rect = e.currentTarget.getBoundingClientRect();
+          onHoverStage({ name: stage.name, x: rect.left + rect.width / 2, y: rect.top });
+        }
+      }}
+      onMouseLeave={() => {
+        if (onHoverStage) {
+          onHoverStage(null);
+        }
+      }}
+    >
+      {/* Chevron Ribbon Body */}
+      <div
+        onClick={() => onSelect(stage)}
+        onDoubleClick={() => onEdit(stage)}
+        className={`relative flex items-center h-10 select-none cursor-pointer transition-all ${
+          isFlexible ? "w-full min-w-0" : "flex-shrink-0"
+        } ${isFirst ? "rounded-l-lg" : ""} ${isDragging ? "opacity-35 scale-95" : "opacity-100"} ${
+          isOver ? "ring-2 ring-white scale-105 z-20" : ""
+        } ${isSelected ? "brightness-110 shadow-md ring-2 ring-white/80 z-20" : "hover:brightness-105 hover:z-10"}`}
+        style={{
+          backgroundColor: color || stage.color || CHEVRON_PALETTE[index % CHEVRON_PALETTE.length],
+          clipPath: chevronClip,
+          ...(isCompact
+            ? { width: "38px", minWidth: "38px", paddingLeft: isFirst ? "8px" : "14px", paddingRight: "6px" }
+            : isLostStage
+            ? { minWidth: isFirst ? "52px" : "62px", maxWidth: "80px", paddingLeft: isFirst ? "8px" : "14px", paddingRight: "14px" }
+            : isFlexible
+            ? { minWidth: "125px", width: "100%", paddingLeft: isFirst ? "14px" : "20px", paddingRight: "20px" }
+            : { minWidth: "130px", paddingLeft: isFirst ? "14px" : "24px", paddingRight: "24px" }),
+        }}
+        title={`Stage: ${stage.name} (Click to view, double click to edit)`}
+      >
+        {!isLast && (
+          <svg
+            className="absolute right-0 top-0 h-full w-[15px] pointer-events-none z-10"
+            viewBox="0 0 15 40"
+            preserveAspectRatio="none"
+            fill="none"
+          >
+            <path
+              d="M 1 0 L 14 20 L 1 40"
+              stroke="white"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+
+        {!isCompact && (
+          <>
+            <div
+              className="cursor-grab active:cursor-grabbing p-0.5 -ml-1 mr-1 shrink-0 transition-colors text-white/70 group-hover:text-white"
+              title="Drag to reorder"
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+            </div>
+
+            <span
+              className={`${isLostStage ? "text-[10px]" : "text-xs"} font-semibold tracking-wide truncate flex-1 text-center pr-1 flex items-center justify-center gap-1 text-white`}
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <span className="truncate">{stage.name}</span>
+            </span>
+
+            {/* Edit & Delete Actions: strictly visible on hover only */}
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 -mr-2 pointer-events-none group-hover:pointer-events-auto">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(stage);
+                }}
+                className="p-1 rounded-md transition-all text-white/80 hover:text-white hover:bg-black/25 cursor-pointer"
+                title="Edit stage"
+              >
+                <Edit className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(stage.id);
+                }}
+                className="p-1 rounded-md transition-all text-white/80 hover:text-rose-200 hover:bg-rose-500/30 cursor-pointer"
+                title="Delete stage"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Subtle + button at the chevron tip on hover */}
+      {onAddAfter && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onAddAfter();
+          }}
+          className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-30 w-5 h-5 rounded-full bg-white text-gray-700 shadow-md border border-gray-200 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-120 hover:bg-blue-600 hover:text-white hover:border-blue-600 cursor-pointer pointer-events-none group-hover:pointer-events-auto"
+          title="Add stage"
+        >
+          <Plus className="w-3 h-3 stroke-[2.5]" />
+        </button>
+      )}
+    </div>
+  );
+};
+
 interface DraggableStageProps {
   stage: Stage;
   index: number;
@@ -245,73 +480,68 @@ interface DraggableStageProps {
 }
 
 const DraggableStage = ({ stage, index, totalStages = 1, moveStage, onRemove, onEdit }: DraggableStageProps) => {
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [isLocalDragging, setIsLocalDragging] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const isFinal = totalStages > 0 && index === totalStages - 1;
 
   const [{ isDragging }, drag] = useDrag({
     type: "STAGE",
-    item: { index },
+    item: () => ({ index }),
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
   });
 
-  const [, drop] = useDrop({
+  const [{ isOver }, drop] = useDrop({
     accept: "STAGE",
-    hover: (item: { index: number }) => {
-      if (item.index !== index) {
-        moveStage(item.index, index);
-        item.index = index;
-      }
+    hover(item: { index: number }, monitor) {
+      if (!ref.current) return;
+      const dragIndex = item.index;
+      const hoverIndex = index;
+      if (dragIndex === hoverIndex) return;
+
+      const hoverBoundingRect = ref.current.getBoundingClientRect();
+      const hoverMiddleX = (hoverBoundingRect.right - hoverBoundingRect.left) / 2;
+      const clientOffset = monitor.getClientOffset();
+      if (!clientOffset) return;
+      const hoverClientX = clientOffset.x - hoverBoundingRect.left;
+
+      if (dragIndex < hoverIndex && hoverClientX < hoverMiddleX) return;
+      if (dragIndex > hoverIndex && hoverClientX > hoverMiddleX) return;
+
+      moveStage(dragIndex, hoverIndex);
+      item.index = hoverIndex;
     },
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+    }),
   });
 
+  drag(drop(ref));
+
   return (
-    <div
-      className="relative flex-shrink-0 group"
-      draggable={true}
-      onDragStart={(e) => {
-        setIsLocalDragging(true);
-        e.dataTransfer.setData("text/plain", String(index));
-        e.dataTransfer.effectAllowed = "move";
-      }}
-      onDragEnd={() => {
-        setIsLocalDragging(false);
-        setIsDragOver(false);
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        if (!isDragOver) setIsDragOver(true);
-      }}
-      onDragLeave={() => setIsDragOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setIsDragOver(false);
-        const fromIdx = parseInt(e.dataTransfer.getData("text/plain"), 10);
-        if (!isNaN(fromIdx) && fromIdx !== index) {
-          moveStage(fromIdx, index);
-        }
-      }}
-    >
+    <div className="relative flex-shrink-0 group">
       <div
-        ref={(node) => { drag(drop(node)); }}
-        className={`relative flex items-center gap-2 px-4 py-3 cursor-grab active:cursor-grabbing transition-all shadow-md hover:shadow-lg select-none ${
-          isDragOver ? "ring-2 ring-white scale-105" : ""
-        }`}
+        ref={ref}
+        className={`relative flex items-center gap-2 px-4 py-3 cursor-grab active:cursor-grabbing transition-all shadow-md hover:shadow-lg select-none ${isOver ? "ring-2 ring-white scale-105" : ""
+          }`}
         style={{
-          backgroundColor: stage.color || "#22D3EE",
-          opacity: isDragging || isLocalDragging ? 0.4 : 1,
-          minWidth: "165px",
+          backgroundColor: stage.color || (isFinal ? "#EC4899" : "#22D3EE"),
+          opacity: isDragging ? 0.35 : 1,
+          minWidth: "170px",
           clipPath: "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)",
         }}
         onDoubleClick={() => onEdit(stage)}
-        title="Drag to reorder stage, or click edit"
+        title={isFinal ? "Final Stage (Completion Point) - Double click to edit" : "Drag to reorder stage, or click edit"}
       >
         <GripVertical className="w-3.5 h-3.5 text-white/70 group-hover:text-white shrink-0" />
-        <span className="text-sm font-semibold text-white pr-2 flex-1 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+        <span className="text-sm font-semibold text-white pr-1.5 flex-1 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
           {stage.name}
         </span>
+        {isFinal && (
+          <span className="text-[10px] font-bold bg-black/35 text-white px-1.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs whitespace-nowrap">
+            🏁 Final
+          </span>
+        )}
         <button
           type="button"
           onClick={(e) => {
@@ -323,6 +553,193 @@ const DraggableStage = ({ stage, index, totalStages = 1, moveStage, onRemove, on
         >
           <Edit className="w-3.5 h-3.5" />
         </button>
+      </div>
+    </div>
+  );
+};
+
+// Draggable Stage Component for Sidebar Cards
+interface SidebarDraggableStageProps {
+  processId: string;
+  stage: Stage;
+  index: number;
+  totalStages?: number;
+  isSelected: boolean;
+  onSelect: () => void;
+  onMoveStage: (processId: string, dragIndex: number, hoverIndex: number) => void;
+  onRemove?: (stageId: string) => void;
+  onEdit?: (stage: Stage) => void;
+  onAddAfter?: (stage: Stage) => void;
+}
+
+const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
+  processId,
+  stage,
+  index,
+  totalStages = 1,
+  isSelected,
+  onSelect,
+  onMoveStage,
+  onRemove,
+  onEdit,
+  onAddAfter,
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const isFinal = totalStages > 0 && index === totalStages - 1;
+
+  const [{ isDragging }, drag] = useDrag({
+    type: "SIDEBAR_STAGE",
+    item: (): { index: number; processId: string } => ({
+      index,
+      processId,
+    }),
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  });
+
+  const [{ isOver }, drop] = useDrop({
+    accept: "SIDEBAR_STAGE",
+    hover(item: { index: number; processId: string }, monitor) {
+      if (!ref.current) return;
+      const dragIndex = item.index;
+      const hoverIndex = index;
+
+      if (dragIndex === hoverIndex || item.processId !== processId) {
+        return;
+      }
+
+      const hoverBoundingRect = ref.current.getBoundingClientRect();
+      const hoverMiddleY = (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2;
+      const clientOffset = monitor.getClientOffset();
+      if (!clientOffset) return;
+      const hoverClientY = clientOffset.y - hoverBoundingRect.top;
+
+      if (dragIndex < hoverIndex && hoverClientY < hoverMiddleY) {
+        return;
+      }
+      if (dragIndex > hoverIndex && hoverClientY > hoverMiddleY) {
+        return;
+      }
+
+      onMoveStage(processId, dragIndex, hoverIndex);
+      item.index = hoverIndex;
+    },
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+    }),
+  });
+
+  drag(drop(ref));
+
+  return (
+    <div
+      ref={ref}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect();
+      }}
+      className={`group/stage w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all cursor-grab active:cursor-grabbing select-none ${isOver
+        ? "bg-blue-100 ring-2 ring-blue-400 scale-[1.02]"
+        : isSelected
+          ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200 shadow-xs"
+          : "text-gray-700 hover:bg-gray-50 border border-transparent"
+        } ${isDragging ? "opacity-30 scale-95" : ""}`}
+      title="Drag to reorder stage or click to view details"
+    >
+      <GripVertical className="w-3.5 h-3.5 text-gray-400 group-hover/stage:text-gray-600 transition-colors shrink-0 cursor-grab" />
+      <span
+        className="w-2 h-2 rounded-full flex-shrink-0"
+        style={{ backgroundColor: stage.color || (isFinal ? "#EC4899" : "#22D3EE") }}
+      />
+      <span className="flex-1 truncate font-medium">
+        {stage.name}
+      </span>
+      {(() => {
+        const lower = (stage.name || "").toLowerCase().trim();
+        const isLostExplicit =
+          stage.stageCategory === "lost" ||
+          stage.intentTrigger === "not_interested" ||
+          stage.intentTrigger === "call_back" ||
+          lower.includes("not interested") ||
+          lower.includes("not_interested") ||
+          lower.includes("lost") ||
+          lower.includes("unqualified") ||
+          lower.includes("cancel") ||
+          lower.includes("call back") ||
+          (lower.includes("not") && lower.includes("interest"));
+
+        const isSuccess =
+          !isLostExplicit &&
+          (stage.stageCategory === "success" ||
+            stage.intentTrigger === "interested" ||
+            lower === "won" ||
+            lower === "interested" ||
+            lower.includes("closed won") ||
+            (lower.includes("interested") && !lower.includes("not")) ||
+            lower.includes("qualified") ||
+            lower.includes("success"));
+
+        const isLost =
+          isLostExplicit ||
+          (!isSuccess && (stage.isFinalStage || stage.isFinal));
+
+        if (isSuccess) {
+          return (
+            <span className="px-1 py-0.2 rounded text-[8.5px] font-semibold tracking-wide bg-emerald-50 text-emerald-600 border border-emerald-200/60 shrink-0">
+              Won
+            </span>
+          );
+        }
+        if (isLost) {
+          return (
+            <span className="px-1 py-0.2 rounded text-[8.5px] font-semibold tracking-wide bg-rose-50 text-rose-600 border border-rose-200/60 shrink-0">
+              Lost
+            </span>
+          );
+        }
+        return null;
+      })()}
+      <div className="opacity-0 group-hover/stage:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+        {onAddAfter && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddAfter(stage);
+            }}
+            className="p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50 transition-all cursor-pointer"
+            title="Add stage"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {onEdit && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(stage);
+            }}
+            className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-all cursor-pointer"
+            title="Edit stage"
+          >
+            <Edit className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {onRemove && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(stage.id);
+            }}
+            className="p-1 text-gray-400 hover:text-red-500 rounded hover:bg-red-50 transition-all cursor-pointer"
+            title="Delete stage"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -509,11 +926,13 @@ const INTENT_CONDITION_OPTIONS: Record<string, string[]> = {
   ],
 };
 
-const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "inchat" | "postcall">> = {
+const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   "whatsapp": ["stage", "incall", "inchat", "postcall"],
   "sms": ["stage", "incall", "inchat", "postcall"],
   "email": ["stage", "incall", "inchat", "postcall"],
   "send-invoice": ["stage", "incall", "inchat", "postcall"],
+  "generate_invoice": ["stage", "postcall"],
+  "send_payment": ["stage", "incall", "inchat", "postcall"],
   "processmovement": ["inchat", "postcall"],
   "movetonewprocess": ["stage", "inchat", "postcall"],
   "endworkflow": ["stage", "inchat", "postcall"],
@@ -538,7 +957,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "inchat" 
   "managecalendar": ["incall", "postcall"],
 };
 
-const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "incall" | "inchat" | "postcall", excludeId?: string) => {
+const buildAvailablePredecessors = (steps: WorkflowStep[], lane: string, excludeId?: string) => {
   const laneSteps = steps.filter(s => (s.trigger ?? "stage") === lane && s.id !== excludeId);
   // Identify which step ids belong to a parallel group (>=2 consecutive parallel steps)
   const parallelMemberIds = new Set<string>();
@@ -570,9 +989,11 @@ export default function Process() {
   const activeProviders = getActiveProviders();
   const { setCollapsed } = useSidebar();
   const navigate = useNavigate();
+  const location = useLocation();
   const { activeOrganization: organization } = useOrganization();
   const { templates: adminProcessTemplates, instantiateProcessFromTemplate } = useProcessTemplates();
 
+  // Auto-collapse client sidebar when on workflow / process page
   useEffect(() => {
     setCollapsed(true);
   }, [setCollapsed]);
@@ -584,14 +1005,143 @@ export default function Process() {
   }, [processes]);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [showEntityDropdown, setShowEntityDropdown] = useState(false);
+  const entityDropdownRef = useRef<HTMLDivElement>(null);
+  const [newStageCategory, setNewStageCategory] = useState<"in_progress" | "success" | "lost">("in_progress");
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (entityDropdownRef.current && !entityDropdownRef.current.contains(e.target as Node)) {
+        setShowEntityDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  const targetProcessFromNav = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const targetEntity = params.get("entity") || (location.state as any)?.entity;
+    const targetProcessId = params.get("processId") || params.get("process") || (location.state as any)?.processId;
+    const targetProcessName = params.get("processName") || params.get("name") || (location.state as any)?.processName;
+    if (!targetProcessId && !targetProcessName && !targetEntity) return null;
+    return processes.find((p) => {
+      if (targetProcessId && (p.id === targetProcessId || p.id.toLowerCase() === targetProcessId.toLowerCase())) {
+        return true;
+      }
+      if (targetProcessName && p.name.trim().toLowerCase() === targetProcessName.trim().toLowerCase()) {
+        return true;
+      }
+      if (targetEntity && p.entityType === targetEntity) {
+        return true;
+      }
+      return false;
+    }) || null;
+  }, [location.search, location.state, processes]);
+
+  const [selectedProcess, setSelectedProcess] = useState<string | null>(() => {
+    if (targetProcessFromNav) return targetProcessFromNav.id;
+    return null;
+  });
+  const [selectedEntity, setSelectedEntity] = useState<EntityType>(() => {
+    if (targetProcessFromNav?.entityType) return targetProcessFromNav.entityType;
+    return "client";
+  });
+  const [replacementStageId, setReplacementStageId] = useState<string>("");
+  const [isEditingProcessInfo, setIsEditingProcessInfo] = useState(false);
+  const [draftProcessName, setDraftProcessName] = useState("");
+  const [draftProcessDescription, setDraftProcessDescription] = useState("");
+
+  useEffect(() => {
+    setIsEditingProcessInfo(false);
+  }, [selectedProcess]);
+
+  useEffect(() => {
+    if (targetProcessFromNav) {
+      setSelectedEntity(targetProcessFromNav.entityType || "client");
+      setSelectedProcess(targetProcessFromNav.id);
+      setViewMode("process");
+      setExpandedStage(null);
+    }
+  }, [targetProcessFromNav]);
+
+  const ENTITY_TABS: Array<{ id: EntityType; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+    { id: "client", label: "Processes", icon: GitBranch },
+    { id: "appointment", label: "Appointments", icon: Calendar },
+    { id: "invoice", label: "Invoices", icon: FileText },
+    { id: "insurance", label: "Insurance", icon: Shield },
+    { id: "claim", label: "Claims", icon: ClipboardList },
+  ];
+
+  const entityModes = useMemo(() => {
+    return ENTITY_TABS.map((tab) => {
+      const Icon = tab.icon;
+      const count = processes.filter((p) => (p.entityType || "client") === tab.id).length;
+      return {
+        id: tab.id,
+        label: tab.label,
+        icon: <Icon className="w-3.5 h-3.5" />,
+        badge: (tab.id === "client" || tab.id === "appointment") && count > 1 ? count : undefined,
+      };
+    });
+  }, [processes]);
+
+  const handleEntityModeChange = (modeId: string) => {
+    const nextEntity = modeId as EntityType;
+    setSelectedEntity(nextEntity);
+    const firstOfEntity = processes.find((p) => (p.entityType || "client") === nextEntity);
+    if (firstOfEntity) {
+      setSelectedProcess(firstOfEntity.id);
+      setViewMode("process");
+      setExpandedStage(null);
+    }
+  };
+
+  // Filtered by selected entity
+  const entityFilteredProcesses = useMemo(() => {
+    return processes.filter((p) => {
+      const pEntity = p.entityType || "client";
+      return pEntity === selectedEntity;
+    });
+  }, [processes, selectedEntity]);
 
   // Client-visible processes filtered by organization's industry category, industry, and location
   const clientVisibleProcesses = useMemo(() => {
-    return processes.filter((p) => {
+    const matching = entityFilteredProcesses.filter((p) => {
       if (p.permissions?.canHide === false) return false;
       return isProcessMatchingOrg(p, organization);
     });
-  }, [processes, organization]);
+    // For appointment entity, allow multiple processes matching the client organization's category, industry, and location
+    if (selectedEntity === "appointment") {
+      if (matching.length > 0) {
+        return matching;
+      }
+      return entityFilteredProcesses.length > 0 ? entityFilteredProcesses : [DEFAULT_ENTITY_PROCESSES.appointment];
+    }
+    // For other non-client entities (invoice, insurance, claim), display one process matching the organization's industry & category
+    if (selectedEntity !== "client") {
+      if (matching.length > 0) {
+        return [matching[0]];
+      }
+      return entityFilteredProcesses.length > 0 ? [entityFilteredProcesses[0]] : [];
+    }
+    return matching;
+  }, [entityFilteredProcesses, selectedEntity, organization]);
+
+  // Auto-select first process if none selected or selected belongs to another entity
+  useEffect(() => {
+    if (targetProcessFromNav) return;
+    if (clientVisibleProcesses.length > 0) {
+      const currentExists = clientVisibleProcesses.some((p) => p.id === selectedProcess);
+      if (!currentExists) {
+        setSelectedProcess(clientVisibleProcesses[0].id);
+        setViewMode("process");
+        setExpandedStage(null);
+      }
+    } else {
+      setSelectedProcess(null);
+    }
+  }, [clientVisibleProcesses, selectedProcess, targetProcessFromNav]);
 
   // Filter client-visible processes by search query
   const filteredProcesses = useMemo(() => {
@@ -606,26 +1156,57 @@ export default function Process() {
     });
   }, [clientVisibleProcesses, searchQuery]);
 
-  const [selectedProcess, setSelectedProcess] = useState<string | null>(null);
-  const [isEditingProcessInfo, setIsEditingProcessInfo] = useState(false);
-  const [draftProcessName, setDraftProcessName] = useState("");
-  const [draftProcessDescription, setDraftProcessDescription] = useState("");
-
-  useEffect(() => {
-    setIsEditingProcessInfo(false);
-  }, [selectedProcess]);
-
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [customApiIntegrations, setCustomApiIntegrations] = useState<any[]>([]);
 
 
   const [viewMode, setViewMode] = useState<"process" | "stage" | null>(null); // Track what we're viewing
-  const [activeTab, setActiveTab] = useState<string>("basic");
+  const [activeTab, setActiveTab] = useState<string>("general");
   const [expandedProcesses, setExpandedProcesses] = useState<string[]>(["1"]); // Expand Patient Intake by default
   const [selectedAIModel, setSelectedAIModel] = useState("Gemini 2.5 Flash");
+  const [activeAIModels, setActiveAIModels] = useState<AIModelConfig[]>(getActiveAIModels);
   const [aiModelExpanded, setAiModelExpanded] = useState(false);
   const [stageVoiceSpeed, setStageVoiceSpeed] = useState<number>(1.0);
-  const [stageVoice, setStageVoice] = useState<string>("Ava");
+  const [stageVoice, setStageVoice] = useState<string>("Nova");
+  const [configuredVoices, setConfiguredVoices] = useState<VoiceConfigItem[]>(getStoredVoices);
+  const [hoveredStageTooltip, setHoveredStageTooltip] = useState<{ name: string; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const handleVoiceUpdate = () => setConfiguredVoices(getStoredVoices());
+    window.addEventListener(VOICE_STORE_EVENT, handleVoiceUpdate);
+    window.addEventListener("storage", handleVoiceUpdate);
+    return () => {
+      window.removeEventListener(VOICE_STORE_EVENT, handleVoiceUpdate);
+      window.removeEventListener("storage", handleVoiceUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleModelUpdate = () => {
+      const active = getActiveAIModels();
+      setActiveAIModels(active);
+      if (!active.some((m) => m.name === selectedAIModel) && active.length > 0) {
+        setSelectedAIModel(active[0].name);
+      }
+    };
+    window.addEventListener(AI_MODELS_STORE_EVENT, handleModelUpdate);
+    window.addEventListener("storage", handleModelUpdate);
+    return () => {
+      window.removeEventListener(AI_MODELS_STORE_EVENT, handleModelUpdate);
+      window.removeEventListener("storage", handleModelUpdate);
+    };
+  }, [selectedAIModel]);
+
+  const activeConfiguredVoices = useMemo(() => {
+    const active = configuredVoices.filter((v) => v.status === true);
+    return active.length > 0 ? active : configuredVoices;
+  }, [configuredVoices]);
+
+  useEffect(() => {
+    if (activeConfiguredVoices.length > 0 && !activeConfiguredVoices.some((v) => v.name === stageVoice)) {
+      setStageVoice(activeConfiguredVoices[0].name);
+    }
+  }, [activeConfiguredVoices, stageVoice]);
 
   // Advanced tab section states
   // Retry Rules state
@@ -785,6 +1366,71 @@ export default function Process() {
   // CHANGE 1: Collapsible sections state
   const [workflowStepsExpanded, setWorkflowStepsExpanded] = useState(true);
   const [workflowStepsDrawerOpen, setWorkflowStepsDrawerOpen] = useState(false);
+  const [stageConfigTab, setStageConfigTab] = useState<"general" | "automations">("general");
+  const [editingAutomationRule, setEditingAutomationRule] = useState<AutomationRule | null>(null);
+  const { rules: allAutomationRules, createRule, updateRule, deleteRule, toggleRule } = useAutomationRules();
+  const selectedProcessData = processes.find((p) => p.id === selectedProcess);
+
+  const stageRules = useMemo(() => {
+    if (!expandedStage) return [];
+    const stage = selectedProcessData?.stages.find((s) => s.id === expandedStage);
+    if (!stage) return [];
+
+    return allAutomationRules.filter((r) => {
+      const trigEvt = (r.trigger?.event || "").toLowerCase();
+      const isStageTrigger = trigEvt.startsWith("stage.") || trigEvt.includes("stage") || trigEvt.endsWith(".entered_stage") || r.trigger?.params?.category === "stage";
+
+      const ruleStageId = r.trigger?.params?.stageId || r.trigger?.params?.triggerStageId || r.action?.stageId || (r as any).params?.stageId;
+      const ruleStageName = r.trigger?.params?.stageName || r.trigger?.params?.triggerStageName || r.action?.stageName;
+      const ruleProcId = r.trigger?.params?.processId || r.trigger?.params?.triggerProcessId || r.action?.processId;
+
+      const matchesStage = ruleStageId === stage.id || 
+        (ruleStageName && ruleStageName.toLowerCase() === stage.name.toLowerCase()) ||
+        r.action?.stageId === stage.id;
+
+      const matchesProcess = !ruleProcId || ruleProcId === "all" || ruleProcId === selectedProcess || (selectedProcessData && r.trigger?.params?.processName === selectedProcessData.name);
+
+      return isStageTrigger && matchesStage && matchesProcess;
+    });
+  }, [allAutomationRules, expandedStage, selectedProcess, selectedProcessData]);
+
+  const editingRuleInitialAutomation = useMemo(() => {
+    if (!editingAutomationRule) return null;
+    const isExit = (editingAutomationRule.trigger?.event || "").includes("exit");
+    return {
+      id: editingAutomationRule.id,
+      orgId: editingAutomationRule.orgId || "default",
+      name: editingAutomationRule.name,
+      description: editingAutomationRule.description,
+      scope: "stage" as const,
+      status: editingAutomationRule.enabled ? ("active" as const) : ("draft" as const),
+      trigger: {
+        type: "stage" as const,
+        when: isExit ? ("exit" as const) : ("entry" as const),
+        category: "stage",
+        event: editingAutomationRule.trigger?.event || (isExit ? "stage.exit" : "stage.entry"),
+        params: editingAutomationRule.trigger?.params || {},
+      },
+      steps: (editingAutomationRule.actions || []).map((s: any) => ({
+        ...s,
+        id: s.id,
+        name: s.name,
+        description: s.description || "",
+        iconKey: s.iconKey || "zap",
+        stepKey: s.stepKey,
+        trigger: s.trigger || "stage",
+        executionType: s.executionType || "wait",
+        delayValue: s.delay?.value ?? s.delayValue ?? 0,
+        delayUnit: s.delay?.unit ?? s.delayUnit ?? "minutes",
+        params: s.params || {},
+        branches: s.branches,
+      })),
+      createdAt: editingAutomationRule.createdAt,
+      updatedAt: editingAutomationRule.updatedAt,
+    };
+  }, [editingAutomationRule]);
+  const [editingAutomationStepId, setEditingAutomationStepId] = useState<string | undefined>(undefined);
+  const [automationDrawerView, setAutomationDrawerView] = useState<"library" | "flowbuilder">("library");
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
   const [workflowStepCategory, setWorkflowStepCategory] = useState("all");
   const [workflowStepSearch, setWorkflowStepSearch] = useState("");
@@ -827,22 +1473,35 @@ export default function Process() {
     setSecondaryLanguages(stg.secondaryLanguages ?? []);
     setWorkflowSteps(stg.workflowSteps ?? []);
     setEnableCalling(stg.enableCalling ?? true);
+
+    const stgAI = stg.aiSettings || proc?.aiSettings || {
+      platform: "Gemini 2.5 Flash",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    };
+    setSelectedAIModel(stgAI.platform || "Gemini 2.5 Flash");
+    setStageVoiceSpeed(stgAI.voiceSpeed ?? 1.0);
+    setStageVoice(stgAI.voice || "Ava");
+    setStageTone(stgAI.tone || "Professional");
+    setStageStyle(stgAI.style || "Balanced");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProcess, expandedStage, viewMode]);
 
   // Auto-persist workflowSteps immediately (only discrete drawer-save changes, safe to auto-save)
   useEffect(() => {
-    if (!selectedProcess || !expandedStage || viewMode !== "stage") return;
+    if (!selectedProcess || !expandedStage) return;
     setProcesses((prev) =>
       prev.map((p) =>
         p.id !== selectedProcess
           ? p
           : {
-              ...p,
-              stages: p.stages.map((s) =>
-                s.id !== expandedStage ? s : { ...s, workflowSteps }
-              ),
-            }
+            ...p,
+            stages: p.stages.map((s) =>
+              s.id !== expandedStage ? s : { ...s, workflowSteps }
+            ),
+          }
       )
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1048,7 +1707,7 @@ export default function Process() {
   const [expandedConditionIndex, setExpandedConditionIndex] = useState<number | null>(0);
   const [conditionPreview, setConditionPreview] = useState("");
 
-  const [stepTrigger, setStepTrigger] = useState<"stage" | "incall" | "inchat" | "postcall">("stage");
+  const [stepTrigger, setStepTrigger] = useState<string>("stage");
   const [connectAfterId, setConnectAfterId] = useState<string | undefined>(undefined);
   const [stepActionName, setStepActionName] = useState("");
   const [stepActionReason, setStepActionReason] = useState("");
@@ -1504,8 +2163,21 @@ export default function Process() {
   const webhookUrlRef = useRef<HTMLInputElement>(null);
   const apiEndpointRef = useRef<HTMLInputElement>(null);
   const apiAuthRef = useRef<HTMLInputElement>(null);
-  const fetchAvailSummaryRef = useRef<HTMLTextAreaElement>(null);
-  const webhookJsonBodyRef = useRef<HTMLTextAreaElement>(null);
+  const callerPitchRef = useRef<HTMLTextAreaElement>(null);
+  const greetingIntroRef = useRef<HTMLTextAreaElement>(null);
+  const objectiveTextRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleEditWorkflowStep = (step: WorkflowStep) => {
+    resetStepDetailState();
+    setCurrentEditingStep(step);
+    setIsCreatingNewStep(false);
+    setStepTrigger(step.trigger ?? "stage");
+    setExecutionType(step.executionType ?? "wait");
+    setDelayValue(step.delayValue ?? 5);
+    setDelayUnit(step.delayUnit ?? "Minute");
+    restoreStepParams(step.stepKey, step.params);
+    setStepDetailDrawerOpen(true);
+  };
 
   const webhookIntDropdownRef = useRef<HTMLDivElement>(null);
   const webhookActionDropdownRef = useRef<HTMLDivElement>(null);
@@ -1519,11 +2191,67 @@ export default function Process() {
   const [tcCallDurationMinutes, setTcCallDurationMinutes] = useState<number>(5);
   const [tcHangupWindowMinutes, setTcHangupWindowMinutes] = useState<number>(1);
 
-  // CHANGE 2: Caller Pitch accordion and mode state
+  // Caller Pitch accordion and mode state
   const [callerPitchExpanded, setCallerPitchExpanded] = useState(true);
   const [callerPitchMode, setCallerPitchMode] = useState<"single" | "comprehensive">("single");
   const [enableCalling, setEnableCalling] = useState<boolean>(true);
   const [showCallTriggerDrawer, setShowCallTriggerDrawer] = useState(false);
+  const [pitchFieldPickerTarget, setPitchFieldPickerTarget] = useState<"callerPitch" | "greetingIntro" | "objective" | null>(null);
+
+  const handleInsertPitchFields = (keys: string[]) => {
+    if (!pitchFieldPickerTarget || keys.length === 0) {
+      setPitchFieldPickerTarget(null);
+      return;
+    }
+    const tokenStr = keys.map((k) => `{{${k}}}`).join(" ");
+
+    if (pitchFieldPickerTarget === "callerPitch") {
+      const el = callerPitchRef.current;
+      if (el) {
+        const start = el.selectionStart ?? callerPitch.length;
+        const end = el.selectionEnd ?? callerPitch.length;
+        const next = callerPitch.slice(0, start) + tokenStr + callerPitch.slice(end);
+        setCallerPitch(next);
+        setTimeout(() => {
+          el.focus();
+          el.setSelectionRange(start + tokenStr.length, start + tokenStr.length);
+        }, 0);
+      } else {
+        setCallerPitch((prev) => (prev ? `${prev} ${tokenStr}` : tokenStr));
+      }
+    } else if (pitchFieldPickerTarget === "greetingIntro") {
+      const el = greetingIntroRef.current;
+      if (el) {
+        const start = el.selectionStart ?? greetingIntroMessage.length;
+        const end = el.selectionEnd ?? greetingIntroMessage.length;
+        const next = greetingIntroMessage.slice(0, start) + tokenStr + greetingIntroMessage.slice(end);
+        setGreetingIntroMessage(next);
+        setTimeout(() => {
+          el.focus();
+          el.setSelectionRange(start + tokenStr.length, start + tokenStr.length);
+        }, 0);
+      } else {
+        setGreetingIntroMessage((prev) => (prev ? `${prev} ${tokenStr}` : tokenStr));
+      }
+    } else if (pitchFieldPickerTarget === "objective") {
+      const el = objectiveTextRef.current;
+      if (el) {
+        const start = el.selectionStart ?? objectiveText.length;
+        const end = el.selectionEnd ?? objectiveText.length;
+        const next = objectiveText.slice(0, start) + tokenStr + objectiveText.slice(end);
+        setObjectiveText(next);
+        setTimeout(() => {
+          el.focus();
+          el.setSelectionRange(start + tokenStr.length, start + tokenStr.length);
+        }, 0);
+      } else {
+        setObjectiveText((prev) => (prev ? `${prev} ${tokenStr}` : tokenStr));
+      }
+    }
+
+    setPitchFieldPickerTarget(null);
+    toast.success(`Inserted ${keys.length} field${keys.length > 1 ? "s" : ""}`);
+  };
 
   // When to move accordion state
   const [whenToMoveExpanded, setWhenToMoveExpanded] = useState(false);
@@ -1715,10 +2443,78 @@ export default function Process() {
   const [showDeleteStageModal, setShowDeleteStageModal] = useState(false);
   const [stageToDelete, setStageToDelete] = useState<Stage | null>(null);
   const [showEditStageModal, setShowEditStageModal] = useState(false);
-  const [editingStage, setEditingStage] = useState<{ id: string; name: string; color: string } | null>(null);
+  const [editingStage, setEditingStage] = useState<{
+    id: string;
+    name: string;
+    color: string;
+    systemCategory?: string;
+    isSystemCategoryRequired?: boolean;
+    isFinalStage?: boolean;
+    nextProcessTransitions?: ProcessTransitionTarget[];
+  } | null>(null);
+  const [showTransitionModal, setShowTransitionModal] = useState(false);
+  const [transitionSourceStageId, setTransitionSourceStageId] = useState<string | null>(null);
+  const [handoffTargetProcessId, setHandoffTargetProcessId] = useState<string>("");
+  const [handoffTargetStageName, setHandoffTargetStageName] = useState<string>("");
+  const [handoffAutoMove, setHandoffAutoMove] = useState<boolean>(true);
   const [isColorGridExpanded, setIsColorGridExpanded] = useState(false);
   const [isEditColorGridExpanded, setIsEditColorGridExpanded] = useState(false);
   const [hasInteractedWithColor, setHasInteractedWithColor] = useState(false);
+  const [isFlowBuilderDrawerOpen, setIsFlowBuilderDrawerOpen] = useState(false);
+  const [targetedStages, setTargetedStages] = useState<Set<string>>(() => getStagesTargetedByAutomation());
+
+  useEffect(() => {
+    const handleAutoRulesUpdated = () => {
+      setTargetedStages(getStagesTargetedByAutomation());
+    };
+    window.addEventListener(AUTOMATION_STORE_EVENT, handleAutoRulesUpdated);
+    return () => window.removeEventListener(AUTOMATION_STORE_EVENT, handleAutoRulesUpdated);
+  }, []);
+
+  // Last Stage & Intent Routing Modal States
+  const [showLastStageModal, setShowLastStageModal] = useState(false);
+  const [lastStageForm, setLastStageForm] = useState<{
+    id?: string;
+    name: string;
+    description: string;
+    color: string;
+    intentTrigger: string;
+    intentLabel: string;
+    intentDescription: string;
+    endPipelineOnReach: boolean;
+    targetProcessId: string;
+    targetStageName: string;
+    autoMove: boolean;
+    isEditing?: boolean;
+  }>({
+    name: "Interested",
+    description: "Caller expresses interest and wants to proceed with next steps",
+    color: "#22C55E",
+    intentTrigger: "interested",
+    intentLabel: "Interested",
+    intentDescription: "Caller agrees to proceed or requests consultation",
+    endPipelineOnReach: true,
+    targetProcessId: "",
+    targetStageName: "",
+    autoMove: true,
+    isEditing: false,
+  });
+
+  // Intent Simulation Modal States
+  const [showIntentSimulatorModal, setShowIntentSimulatorModal] = useState(false);
+  const [simSourceStageId, setSimSourceStageId] = useState<string>("");
+  const [simUtterance, setSimUtterance] = useState<string>("Yes, I'd love to schedule a consultation for tomorrow afternoon!");
+  const [simSelectedScenario, setSimSelectedScenario] = useState<string>("interested");
+  const [simIsRunning, setSimIsRunning] = useState<boolean>(false);
+  const [simResolvedData, setSimResolvedData] = useState<{
+    detectedIntent: string;
+    assignedStageName: string;
+    assignedStageColor: string;
+    targetProcessName?: string;
+    targetStageName?: string;
+    endPipeline: boolean;
+    autoMoved: boolean;
+  } | null>(null);
 
   // Template states
   const [processModalTab, setProcessModalTab] = useState<"create" | "template">("create");
@@ -1729,7 +2525,9 @@ export default function Process() {
   // Form states
   const [newProcess, setNewProcess] = useState({ name: "", description: "" });
   const [newStage, setNewStage] = useState({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "AI Receives Calls" });
-  const [newStagePosition, setNewStagePosition] = useState<"initial" | "final" | null>(null);
+  const [newStagePosition, setNewStagePosition] = useState<"initial" | "final" | "sequential" | null>(null);
+  const [insertAfterStageId, setInsertAfterStageId] = useState<string | null>(null);
+  const [newStageOutcome, setNewStageOutcome] = useState<"won" | "lost">("won");
   const [newStageSelectedNumbers, setNewStageSelectedNumbers] = useState<string[]>([]);
   const [showHowToReceiveCallModal, setShowHowToReceiveCallModal] = useState(false);
   const [applyAdvancedSettingsToAllStages, setApplyAdvancedSettingsToAllStages] = useState(false);
@@ -1883,8 +2681,6 @@ export default function Process() {
     ],
   };
 
-  const selectedProcessData = processes.find((p) => p.id === selectedProcess);
-
   const handleAddProcess = () => {
     // Manual creation
     if (!newProcess.name || !newProcess.description) {
@@ -1892,11 +2688,29 @@ export default function Process() {
       return;
     }
 
+    const isAppointment = selectedEntity === "appointment";
+    const newProcessId = `proc-${selectedEntity}-${Date.now()}`;
+
     const process: Process = {
-      id: String(processes.length + 1),
+      id: newProcessId,
       ...newProcess,
       assignedToUserId: 1,
-      stages: [],
+      stages: [], // Newly added process has no predefined stages
+      entityType: isAppointment ? "appointment" : "client",
+      industryCategory: organization?.industryCategory || "All",
+      industry: organization?.industry || "All",
+      locations: organization?.location ? [organization.location] : (organization?.locations || ["All"]),
+      scopingRules: organization?.industryCategory
+        ? [
+            {
+              id: `rule_${Date.now()}`,
+              industryCategory: organization.industryCategory,
+              industries: organization.industry ? [organization.industry] : [],
+              locations: organization.location ? [organization.location] : [],
+              entities: isAppointment ? ["appointment"] : ["client", "process"],
+            },
+          ]
+        : undefined,
       aiSettings: {
         platform: "OpenAI - GPT-4o",
         voiceSpeed: 1.0,
@@ -1913,7 +2727,7 @@ export default function Process() {
     setViewMode("process");
     setNewProcess({ name: "", description: "" });
     setShowAddProcessModal(false);
-    toast.success("Process added successfully");
+    toast.success(`${isAppointment ? "Appointment process" : "Process"} added successfully`);
   };
 
   const handleUpdateProcess = (field: string, value: any) => {
@@ -1927,6 +2741,19 @@ export default function Process() {
   };
 
   const handleDeleteProcess = (processId: string) => {
+    const target = processes.find((p) => p.id === processId);
+    if (target?.entityType && target.entityType !== "client" && target.entityType !== "appointment") {
+      toast.error("Standard entity processes cannot be deleted.");
+      return;
+    }
+    if (
+      target?.entityType === "appointment" &&
+      target.id === DEFAULT_ENTITY_PROCESSES.appointment.id &&
+      processes.filter((p) => p.entityType === "appointment").length <= 1
+    ) {
+      toast.error("Default appointment process cannot be deleted when it is the only process.");
+      return;
+    }
     setProcesses(processes.filter((p) => p.id !== processId));
     if (selectedProcess === processId) {
       setSelectedProcess(null);
@@ -1948,12 +2775,10 @@ export default function Process() {
     );
   };
 
-  const moveStage = (dragIndex: number, hoverIndex: number) => {
-    if (!selectedProcess) return;
-
-    setProcesses(
-      processes.map((p) => {
-        if (p.id === selectedProcess) {
+  const moveStageForProcess = (processId: string, dragIndex: number, hoverIndex: number) => {
+    setProcesses((prevProcesses) =>
+      prevProcesses.map((p) => {
+        if (p.id === processId) {
           const newStages = [...p.stages];
           const [draggedStage] = newStages.splice(dragIndex, 1);
           newStages.splice(hoverIndex, 0, draggedStage);
@@ -1964,8 +2789,21 @@ export default function Process() {
     );
   };
 
+  const moveStage = (dragIndex: number, hoverIndex: number) => {
+    if (!selectedProcess) return;
+    moveStageForProcess(selectedProcess, dragIndex, hoverIndex);
+  };
+
   const handleRemoveStage = (stageId: string) => {
     if (!selectedProcess) return;
+    const proc = processes.find((p) => p.id === selectedProcess);
+    if (!proc) return;
+
+    const check = isStageDeletable(proc, stageId);
+    if (!check.deletable) {
+      toast.error(check.reason || "This stage fulfills a required system category and cannot be deleted.");
+      return;
+    }
 
     setProcesses(
       processes.map((p) =>
@@ -1981,7 +2819,11 @@ export default function Process() {
     setEditingStage({
       id: stage.id,
       name: stage.name,
-      color: stage.color || "#22D3EE"
+      color: stage.color || "#22D3EE",
+      systemCategory: stage.systemCategory,
+      isSystemCategoryRequired: stage.isSystemCategoryRequired,
+      isFinalStage: stage.isFinalStage || stage.isFinal || false,
+      nextProcessTransitions: stage.nextProcessTransitions ? [...stage.nextProcessTransitions] : [],
     });
     setShowEditStageModal(true);
   };
@@ -1996,7 +2838,15 @@ export default function Process() {
             ...p,
             stages: p.stages.map((s) =>
               s.id === editingStage.id
-                ? { ...s, name: editingStage.name, color: editingStage.color }
+                ? {
+                  ...s,
+                  name: editingStage.name,
+                  color: editingStage.color,
+                  isFinalStage: editingStage.isFinalStage,
+                  isFinal: editingStage.isFinalStage,
+                  stagePosition: editingStage.isFinalStage ? "final" : (s.stagePosition === "initial" ? "initial" : "intermediate"),
+                  nextProcessTransitions: editingStage.nextProcessTransitions || [],
+                }
                 : s
             ),
           }
@@ -2008,7 +2858,260 @@ export default function Process() {
     toast.success("Stage updated successfully");
   };
 
+  const handleOpenTransitionModal = (stageId?: string) => {
+    const finalStage = selectedProcessData?.stages && selectedProcessData.stages.length > 0
+      ? selectedProcessData.stages[selectedProcessData.stages.length - 1]
+      : undefined;
+    const sourceId = stageId || finalStage?.id || null;
+    setTransitionSourceStageId(sourceId);
+    const otherProc = processes.find((p) => p.id !== selectedProcess);
+    if (otherProc) {
+      setHandoffTargetProcessId(otherProc.id);
+      setHandoffTargetStageName(otherProc.stages[0]?.name || "Initial Contact");
+    } else {
+      setHandoffTargetProcessId("");
+      setHandoffTargetStageName("");
+    }
+    setHandoffAutoMove(true);
+    setShowTransitionModal(true);
+  };
+
+  const handleSaveQuickTransition = () => {
+    const finalStage = selectedProcessData?.stages && selectedProcessData.stages.length > 0
+      ? selectedProcessData.stages[selectedProcessData.stages.length - 1]
+      : undefined;
+    const sourceStageId = transitionSourceStageId || finalStage?.id;
+
+    if (!selectedProcess || !sourceStageId) {
+      toast.error("Please select a valid stage");
+      return;
+    }
+
+    const targetProcId = handoffTargetProcessId || processes.find((p) => p.id !== selectedProcess)?.id;
+    if (!targetProcId) {
+      toast.error("Please select a target process");
+      return;
+    }
+
+    const targetProc = processes.find((p) => p.id === targetProcId);
+    if (!targetProc) return;
+
+    const targetStage = targetProc.stages.find((s) => s.name === handoffTargetStageName) || targetProc.stages[0];
+    const targetStageName = targetStage?.name || handoffTargetStageName || "Initial Contact";
+
+    const newTransition: ProcessTransitionTarget = {
+      id: `trans-${Date.now()}`,
+      targetProcessId: targetProc.id,
+      targetProcessName: targetProc.name,
+      targetStageId: targetStage?.id,
+      targetStageName,
+      autoMove: handoffAutoMove,
+    };
+
+    setProcesses((prev) =>
+      prev.map((p) =>
+        p.id === selectedProcess
+          ? {
+            ...p,
+            stages: p.stages.map((s) =>
+              s.id === transitionSourceStageId
+                ? {
+                  ...s,
+                  isFinalStage: true,
+                  isFinal: true,
+                  nextProcessTransitions: [...(s.nextProcessTransitions || []), newTransition],
+                }
+                : s
+            ),
+          }
+          : p
+      )
+    );
+
+    setShowTransitionModal(false);
+    toast.success(`Handoff to "${targetProc.name}: ${targetStageName}" connected ✓`);
+  };
+
+  const handleRemoveTransitionFromStage = (sourceStageId: string, transitionIndex: number) => {
+    if (!selectedProcess) return;
+    setProcesses((prev) =>
+      prev.map((p) =>
+        p.id === selectedProcess
+          ? {
+            ...p,
+            stages: p.stages.map((s) =>
+              s.id === sourceStageId
+                ? {
+                  ...s,
+                  nextProcessTransitions: (s.nextProcessTransitions || []).filter((_, idx) => idx !== transitionIndex),
+                }
+                : s
+            ),
+          }
+          : p
+      )
+    );
+    toast.success("Transition removed");
+  };
+
+  const handleOpenAddLastStageModal = () => {
+    const otherProc = processes.find((p) => p.id !== selectedProcess) || processes[0];
+    setLastStageForm({
+      name: "Interested",
+      description: "Customer expressed clear interest and wants to proceed",
+      color: "#22C55E",
+      intentTrigger: "interested",
+      intentLabel: "Interested",
+      intentDescription: "Caller expresses interest, agrees to service or confirms next step",
+      endPipelineOnReach: true,
+      targetProcessId: otherProc ? otherProc.id : "",
+      targetStageName: otherProc?.stages[0]?.name || "Post-Visit Check",
+      autoMove: true,
+      isEditing: false,
+    });
+    setShowLastStageModal(true);
+  };
+
+  const handleOpenEditLastStageModal = (stage: Stage) => {
+    const existingTrans = stage.nextProcessTransitions?.[0];
+    const otherProc = processes.find((p) => p.id !== selectedProcess) || processes[0];
+    setLastStageForm({
+      id: stage.id,
+      name: stage.name,
+      description: stage.description || "",
+      color: stage.color || "#22C55E",
+      intentTrigger: stage.intentTrigger || "interested",
+      intentLabel: stage.intentLabel || stage.name,
+      intentDescription: stage.intentDescription || "",
+      endPipelineOnReach: stage.endPipelineOnReach !== false,
+      targetProcessId: existingTrans?.targetProcessId || otherProc?.id || "",
+      targetStageName: existingTrans?.targetStageName || otherProc?.stages[0]?.name || "",
+      autoMove: existingTrans?.autoMove !== false,
+      isEditing: true,
+    });
+    setShowLastStageModal(true);
+  };
+
+  const handleSaveLastStageModal = () => {
+    if (!selectedProcess) return;
+    if (!lastStageForm.name.trim()) {
+      toast.error("Please enter an outcome stage name");
+      return;
+    }
+
+    const targetProc = processes.find((p) => p.id === lastStageForm.targetProcessId);
+    const targetStage = targetProc?.stages.find((s) => s.name === lastStageForm.targetStageName) || targetProc?.stages[0];
+
+    const transitions: ProcessTransitionTarget[] = [];
+    if (lastStageForm.endPipelineOnReach && targetProc) {
+      transitions.push({
+        id: `trans-${Date.now()}`,
+        targetProcessId: targetProc.id,
+        targetProcessName: targetProc.name,
+        targetStageId: targetStage?.id,
+        targetStageName: targetStage?.name || lastStageForm.targetStageName,
+        autoMove: lastStageForm.autoMove,
+        condition: `When intent is ${lastStageForm.intentLabel || lastStageForm.name}`,
+        endCurrentProcess: true,
+      });
+    }
+
+    if (lastStageForm.isEditing && lastStageForm.id) {
+      // Update existing stage
+      setProcesses((prev) =>
+        prev.map((p) =>
+          p.id === selectedProcess
+            ? {
+              ...p,
+              stages: p.stages.map((s) =>
+                s.id === lastStageForm.id
+                  ? {
+                    ...s,
+                    name: lastStageForm.name.trim(),
+                    description: lastStageForm.description.trim(),
+                    color: lastStageForm.color,
+                    isFinalStage: true,
+                    isFinal: true,
+                    intentTrigger: lastStageForm.intentTrigger,
+                    intentLabel: lastStageForm.intentLabel,
+                    intentDescription: lastStageForm.intentDescription,
+                    endPipelineOnReach: lastStageForm.endPipelineOnReach,
+                    nextProcessTransitions: transitions,
+                  }
+                  : s
+              ),
+            }
+            : p
+        )
+      );
+      toast.success(`Outcome stage "${lastStageForm.name}" updated`);
+    } else {
+      // Add new last stage option
+      const newStageObj: Stage = {
+        id: `${selectedProcess}-outcome-${Date.now()}`,
+        name: lastStageForm.name.trim(),
+        description: lastStageForm.description.trim(),
+        color: lastStageForm.color,
+        status: "active",
+        stageType: "No Call Activity",
+        isFinalStage: true,
+        isFinal: true,
+        intentTrigger: lastStageForm.intentTrigger,
+        intentLabel: lastStageForm.intentLabel,
+        intentDescription: lastStageForm.intentDescription,
+        endPipelineOnReach: lastStageForm.endPipelineOnReach,
+        nextProcessTransitions: transitions,
+        callTriggerSettings: getDefaultCallTriggerSettings(),
+      };
+
+      setProcesses((prev) =>
+        prev.map((p) =>
+          p.id === selectedProcess
+            ? {
+              ...p,
+              stages: [...p.stages, newStageObj],
+            }
+            : p
+        )
+      );
+      toast.success(`Last stage option "${lastStageForm.name}" added`);
+    }
+
+    setShowLastStageModal(false);
+  };
+
+  const handleRunIntentSimulation = () => {
+    if (!selectedProcessData) return;
+    setSimIsRunning(true);
+    setSimResolvedData(null);
+
+    setTimeout(() => {
+      // Find matching stage based on intent trigger or fallback to first final stage
+      const finalStages = selectedProcessData.stages.filter((s) => s.isFinalStage || s.isFinal);
+      let matchedStage = finalStages.find((s) => s.intentTrigger === simSelectedScenario);
+      if (!matchedStage && finalStages.length > 0) {
+        matchedStage = finalStages[0];
+      }
+
+      const trans = matchedStage?.nextProcessTransitions?.[0];
+
+      setSimResolvedData({
+        detectedIntent: simSelectedScenario === "interested" ? "Interested" : simSelectedScenario === "not_interested" ? "Not Interested" : simSelectedScenario === "call_back" ? "Call Back Later" : "Custom Intent",
+        assignedStageName: matchedStage?.name || "Interested",
+        assignedStageColor: matchedStage?.color || "#22C55E",
+        targetProcessName: trans?.targetProcessName,
+        targetStageName: trans?.targetStageName,
+        endPipeline: matchedStage?.endPipelineOnReach !== false,
+        autoMoved: trans?.autoMove !== false,
+      });
+      setSimIsRunning(false);
+    }, 600);
+  };
+
   const handleQuickAddStage = () => {
+    setNewStagePosition("sequential");
+    setNewStageOutcome("won");
+    setInsertAfterStageId(null);
     setShowAddStageModal(true);
   };
 
@@ -2024,17 +3127,74 @@ export default function Process() {
       return;
     }
 
+    const targetCategory: "in_progress" | "success" | "lost" =
+      newStageCategory || (newStageOutcome === "lost" ? "lost" : "in_progress");
+
+    if (targetCategory === "success") {
+      const existingSuccess = selectedProc.stages.filter(s => s.stageCategory === "success");
+      if (existingSuccess.length >= 1) {
+        toast.error("Only one stage is allowed in the Success category");
+        return;
+      }
+    }
+
+    const isLost = targetCategory === "lost";
+    const isSuccess = targetCategory === "success";
+
     const stage: Stage = {
       id: `${selectedProcess}-${Date.now()}`,
       name: newStage.name.trim(),
       description: newStage.description.trim(),
-      color: newStage.color || STAGE_PRESET_COLORS[0],
+      color: newStage.color || (isLost ? "#EF4444" : isSuccess ? "#10B981" : STAGE_PRESET_COLORS[0]),
       stageType: newStage.type || "Receive Inbound Calls",
       status: "active",
       callTriggerSettings: getDefaultCallTriggerSettings(),
+      stageCategory: targetCategory,
+      isFinalStage: isLost,
+      isFinal: isLost,
+      stagePosition: isLost ? "final" : isSuccess ? "final" : (newStagePosition === "initial" ? "initial" : "intermediate"),
     };
 
-    const updatedStages = [...selectedProc.stages, stage];
+    let updatedStages: Stage[];
+    const prevIdx = insertAfterStageId
+      ? selectedProc.stages.findIndex((s) => s.id === insertAfterStageId)
+      : -1;
+
+    if (prevIdx >= 0) {
+      updatedStages = [
+        ...selectedProc.stages.slice(0, prevIdx + 1),
+        stage,
+        ...selectedProc.stages.slice(prevIdx + 1),
+      ];
+    } else if (newStagePosition === "initial") {
+      updatedStages = [stage, ...selectedProc.stages];
+    } else if (targetCategory === "lost") {
+      updatedStages = [...selectedProc.stages, stage];
+    } else if (targetCategory === "success") {
+      // Success stage placed before lost stages
+      const firstLostIdx = selectedProc.stages.findIndex((s) => s.stageCategory === "lost" || s.isFinalStage || s.isFinal);
+      if (firstLostIdx >= 0) {
+        updatedStages = [
+          ...selectedProc.stages.slice(0, firstLostIdx),
+          stage,
+          ...selectedProc.stages.slice(firstLostIdx),
+        ];
+      } else {
+        updatedStages = [...selectedProc.stages, stage];
+      }
+    } else {
+      // In progress stage: place before success and lost stages
+      const firstOutcomeIdx = selectedProc.stages.findIndex((s) => s.stageCategory === "success" || s.stageCategory === "lost" || s.isFinalStage || s.isFinal);
+      if (firstOutcomeIdx >= 0) {
+        updatedStages = [
+          ...selectedProc.stages.slice(0, firstOutcomeIdx),
+          stage,
+          ...selectedProc.stages.slice(firstOutcomeIdx),
+        ];
+      } else {
+        updatedStages = [...selectedProc.stages, stage];
+      }
+    }
 
     setProcesses(
       processes.map((p) =>
@@ -2052,6 +3212,9 @@ export default function Process() {
     setViewMode("stage");
     setNewStage({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "AI Receives Calls" });
     setNewStagePosition(null);
+    setNewStageOutcome("won");
+    setNewStageCategory(null);
+    setInsertAfterStageId(null);
     setNewStageSelectedNumbers([]);
     setShowNewStageNumberDropdown(false);
     setHasInteractedWithColor(false);
@@ -2063,6 +3226,64 @@ export default function Process() {
 
   const handleDeleteStage = () => {
     if (!stageToDelete || !selectedProcess) return;
+    const proc = processes.find((p) => p.id === selectedProcess);
+    if (!proc) return;
+
+    const check = isStageDeletable(proc, stageToDelete.id);
+    if (!check.deletable) {
+      toast.error(check.reason || "This stage fulfills a required system category and cannot be deleted.");
+      setShowDeleteStageModal(false);
+      setStageToDelete(null);
+      return;
+    }
+
+    // Migrate existing records if a replacement stage was chosen
+    if (replacementStageId && replacementStageId !== stageToDelete.id) {
+      try {
+        // Invoices
+        const rawInv = localStorage.getItem("mantra_invoices_v1");
+        if (rawInv) {
+          const invList = JSON.parse(rawInv);
+          if (Array.isArray(invList)) {
+            const updated = invList.map((inv: any) =>
+              inv.currentStageId === stageToDelete.id
+                ? { ...inv, currentStageId: replacementStageId }
+                : inv
+            );
+            localStorage.setItem("mantra_invoices_v1", JSON.stringify(updated));
+          }
+        }
+        // Appointments
+        const rawAppts = sessionStorage.getItem("appointments_v1") || localStorage.getItem("appointments_v1");
+        if (rawAppts) {
+          const apptList = JSON.parse(rawAppts);
+          if (Array.isArray(apptList)) {
+            const updated = apptList.map((appt: any) =>
+              appt.currentStageId === stageToDelete.id
+                ? { ...appt, currentStageId: replacementStageId }
+                : appt
+            );
+            sessionStorage.setItem("appointments_v1", JSON.stringify(updated));
+            localStorage.setItem("appointments_v1", JSON.stringify(updated));
+          }
+        }
+        // Claims
+        const rawClaims = localStorage.getItem("mantra_claims_v1");
+        if (rawClaims) {
+          const claimList = JSON.parse(rawClaims);
+          if (Array.isArray(claimList)) {
+            const updated = claimList.map((clm: any) =>
+              clm.currentStageId === stageToDelete.id
+                ? { ...clm, currentStageId: replacementStageId }
+                : clm
+            );
+            localStorage.setItem("mantra_claims_v1", JSON.stringify(updated));
+          }
+        }
+      } catch (err) {
+        console.warn("Record migration on stage delete:", err);
+      }
+    }
 
     setProcesses(
       processes.map((p) =>
@@ -2074,8 +3295,9 @@ export default function Process() {
 
     setShowDeleteStageModal(false);
     setStageToDelete(null);
+    setReplacementStageId("");
     setExpandedStage(null);
-    setViewMode("process"); // Go back to process view after deleting stage
+    setViewMode("process");
     toast.success("Stage deleted successfully");
   };
 
@@ -2126,9 +3348,9 @@ export default function Process() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
-          title="Process Settings"
+          title="Workflow"
           subtitle="Design how your AI receptionist behaves at every step, from greeting to hand-off"
           badge={
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
@@ -2138,164 +3360,282 @@ export default function Process() {
           actions={
             <>
               <Button variant="outline" onClick={() => setShowTestProcessDrawer(true)}>Test Process</Button>
-              <HowItWorksButton label="How Process Settings Works" onClick={() => setShowHelp(true)} />
+              <HowItWorksButton label="How Workflow Works" onClick={() => setShowHelp(true)} />
             </>
           }
         />
-
-        {/* Top Control Bar: Search Bar + Add New Process */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3.5 flex items-center justify-between gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search processes..."
-              className="w-full pl-10 pr-9 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
-              style={{ fontFamily: 'Outfit, sans-serif' }}
-            />
-            {searchQuery && (
+        {/* Top Control Bar: PageTopBar with Entity Dropdown + Search + Add New Process */}
+        <PageTopBar
+          leftElement={
+            <div className="relative" ref={entityDropdownRef}>
               <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer rounded-full hover:bg-gray-200 transition-colors"
+                type="button"
+                onClick={() => setShowEntityDropdown(!showEntityDropdown)}
+                className="h-[36px] px-3.5 bg-white hover:bg-gray-50 border border-border/80 rounded-lg text-xs font-semibold flex items-center gap-2 text-gray-800 transition-all shadow-2xs cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+                title="Select Entity Workflow"
               >
-                <X className="w-3.5 h-3.5" />
+                <span>{ENTITY_TABS.find((t) => t.id === selectedEntity)?.label || "Entity"} Workflow</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-blue-50 text-blue-600 border border-blue-200">
+                  {processes.filter((p) => (p.entityType || "client") === selectedEntity).length}
+                </span>
+                <ChevronDown className={`w-3.5 h-3.5 text-gray-500 transition-transform ${showEntityDropdown ? "rotate-180" : ""}`} />
               </button>
-            )}
-          </div>
-          <button
-            onClick={() => setShowAddProcessModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-sm hover:shadow transition-all cursor-pointer flex-shrink-0"
-            style={{ fontFamily: 'DM Sans, sans-serif' }}
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add New Process</span>
-          </button>
-        </div>
+              {showEntityDropdown && (
+                <div className="absolute left-0 top-full mt-1 w-52 bg-white border border-border rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                  {ENTITY_TABS.map((tab) => {
+                    const count = processes.filter((p) => (p.entityType || "client") === tab.id).length;
+                    const isSelected = selectedEntity === tab.id;
+                    const Icon = tab.icon;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => {
+                          handleEntityModeChange(tab.id);
+                          setShowEntityDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                          isSelected ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Icon className="w-3.5 h-3.5 text-gray-500" />
+                          <span>{tab.label}</span>
+                          <span className="text-[10px] text-gray-400 font-normal">({count})</span>
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          }
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search processes..."
+          filterPresets={
+            selectedEntity === "client" || selectedEntity === "appointment"
+              ? [
+                {
+                  id: "all",
+                  label: "All Processes",
+                  count: clientVisibleProcesses.length,
+                  isActive: !searchQuery,
+                  onClick: () => setSearchQuery(""),
+                },
+                {
+                  id: "active",
+                  label: "Active Processes",
+                  count: clientVisibleProcesses.filter((p) => !p.draft).length,
+                  isActive: false,
+                  onClick: () => setSearchQuery(""),
+                },
+                {
+                  id: "drafts",
+                  label: "Draft Processes",
+                  count: clientVisibleProcesses.filter((p) => p.draft).length,
+                  isActive: false,
+                  onClick: () => setSearchQuery(""),
+                },
+              ]
+              : undefined
+          }
+          filterFields={[
+            {
+              id: "name",
+              label: "Process Name",
+              type: "text",
+              placeholder: "Filter by process name...",
+              value: searchQuery,
+              onChange: (val) => setSearchQuery(val || ""),
+            },
+          ]}
+          primaryAction={
+            selectedEntity === "client" || selectedEntity === "appointment"
+              ? {
+                label: selectedEntity === "appointment" ? "Add Appointment Workflow" : "Add Workflow",
+                icon: <Plus className="w-3.5 h-3.5" />,
+                onClick: () => {
+                  setNewProcess({ name: "", description: "" });
+                  setShowAddProcessModal(true);
+                },
+              }
+              : undefined
+          }
+        />
 
         <div className="flex gap-6 min-h-[calc(100vh-270px)]">
           {/* Left Panel - Process List */}
-          <div className="w-80 bg-white rounded-2xl border border-gray-200 shadow-sm p-4 h-[calc(100vh-270px)] overflow-y-auto flex-shrink-0">
-            <div className="space-y-1.5">
-              {filteredProcesses.length === 0 ? (
-                <div className="p-4 text-center rounded-xl bg-gray-50 border border-dashed border-gray-200">
-                  <p className="text-xs text-gray-500 font-medium">
-                    {searchQuery ? "No processes match your search" : "No processes configured for your organization scope"}
-                  </p>
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="mt-2 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
-                    >
-                      Clear Search
-                    </button>
-                  )}
-                </div>
-              ) : (
-                filteredProcesses.map((process, index) => {
+          <div className="w-80 h-[calc(100vh-270px)] overflow-y-auto flex-shrink-0 space-y-3 pr-1">
+            {filteredProcesses.length === 0 ? (
+              <div className="p-4 text-center rounded-xl bg-white border border-dashed border-gray-200">
+                <p className="text-xs text-gray-500 font-medium">
+                  {searchQuery ? "No processes match your search" : "No processes configured for your organization scope"}
+                </p>
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="mt-2 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    Clear Search
+                  </button>
+                )}
+              </div>
+            ) : (
+              filteredProcesses.map((process) => {
                 const isExpanded = expandedProcesses.includes(process.id);
-                const isProcessSelected = selectedProcess === process.id && viewMode === "process";
-                const isProcessActive = selectedProcess === process.id; // Highlight if process or any of its stages is active
+                const isProcessSelected = selectedProcess === process.id;
 
                 return (
-                  <div key={process.id} className={index > 0 ? "pt-1.5" : ""}>
-                    {/* Process Row */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedProcesses((prev) =>
-                            prev.includes(process.id)
-                              ? prev.filter((id) => id !== process.id)
-                              : [...prev, process.id]
-                          );
-                        }}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <ChevronRight className={`w-4 h-4 text-gray-600 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""
-                          }`} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedProcess(process.id);
-                          setExpandedStage(null);
-                          setViewMode("process");
-                          if (!isExpanded) {
-                            setExpandedProcesses((prev) => [...prev, process.id]);
-                          }
-                        }}
-                        className={`flex-1 flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isProcessSelected
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                          : isProcessActive
-                            ? "bg-blue-50 text-blue-700 border border-blue-200"
-                            : "hover:bg-gray-50 border border-transparent"
-                          }`}
-                      >
-                        <span className="flex-1 text-left font-semibold text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>{process.name}</span>
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${isProcessSelected
-                          ? "bg-white/20 text-white"
-                          : isProcessActive
-                            ? "bg-blue-200 text-blue-700"
-                            : "bg-gray-100 text-gray-600"
-                          }`}>
-                          {process.stages.length}
-                        </span>
-                      </button>
-                    </div>
-
-                    {/* Stages (when expanded) */}
-                    {isExpanded && (
-                      <div className="ml-10 mt-2 space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                        {process.stages.length === 0 ? (
-                          <div className="px-4 py-3 text-sm italic text-gray-400 bg-gray-50 rounded-lg" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            No stages yet
-                          </div>
-                        ) : (
-                          process.stages.map((stage, index) => {
-                            const isStageSelected = selectedProcess === process.id && expandedStage === stage.id && viewMode === "stage";
-
-                            return (
-                              <button
-                                key={stage.id}
-                                onClick={() => {
-                                  setSelectedProcess(process.id);
-                                  setExpandedStage(stage.id);
-                                  setViewMode("stage");
-                                }}
-                                className={`w-full flex items-center gap-2.5 text-left px-4 py-2.5 rounded-lg text-sm transition-all ${isStageSelected
-                                  ? "bg-purple-50 text-purple-700 font-medium border border-purple-200"
-                                  : "text-gray-700 hover:bg-gray-100 border border-transparent"
-                                  }`}
-                              >
-                                <span
-                                  className="w-2 h-2 rounded-full flex-shrink-0"
-                                  style={{ backgroundColor: stage.color || '#22D3EE' }}
-                                />
-                                <span className="flex-1 font-medium">{stage.name}</span>
-                              </button>
-                            );
-                          })
-                        )}
+                  <div
+                    key={process.id}
+                    onClick={() => {
+                      setSelectedProcess(process.id);
+                      setExpandedStage(null);
+                      setViewMode("process");
+                      if (!isExpanded) {
+                        setExpandedProcesses((prev) => [...prev, process.id]);
+                      }
+                    }}
+                    className={`bg-white rounded-2xl p-4 border transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-md cursor-pointer ${isProcessSelected && viewMode === "process"
+                      ? "border-blue-400 ring-2 ring-blue-500/20 shadow-md"
+                      : isProcessSelected
+                        ? "border-blue-200 bg-blue-50/20 shadow-sm"
+                        : "border-gray-200/80 hover:border-gray-300"
+                      }`}
+                  >
+                    {/* Process Header Row */}
+                    <div className="flex items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedProcess(process.id);
-                            setShowAddStageModal(true);
+                            setExpandedProcesses((prev) =>
+                              prev.includes(process.id)
+                                ? prev.filter((id) => id !== process.id)
+                                : [...prev, process.id]
+                            );
                           }}
-                          className="w-full flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50/80 transition-colors border border-dashed border-blue-200 hover:border-blue-300 mt-1 cursor-pointer"
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                          className="p-1 -ml-1 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-colors shrink-0 cursor-pointer"
+                          aria-label="Toggle stages"
                         >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Add Stage</span>
+                          <ChevronRight
+                            className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""
+                              }`}
+                          />
                         </button>
+                        <span
+                          className="font-bold text-sm text-gray-900 truncate"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {process.name}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Process Description */}
+                    {process.description && (
+                      <p
+                        className="text-xs text-gray-500 font-normal leading-relaxed line-clamp-2 mt-2 pl-6"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {process.description}
+                      </p>
+                    )}
+
+                    {/* Stages (when expanded) */}
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-gray-100 pl-6 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                        {process.stages.length === 0 ? (
+                          <div
+                            className="px-3 py-2 text-xs italic text-gray-400 bg-gray-50 rounded-lg flex items-center justify-between"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <span>No stages yet</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedProcess(process.id);
+                                setNewStagePosition("sequential");
+                                setNewStageOutcome("won");
+                                setShowAddStageModal(true);
+                              }}
+                              className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            {process.stages.map((stage, originalIdx) => {
+                              const isStageSelected =
+                                selectedProcess === process.id &&
+                                expandedStage === stage.id &&
+                                viewMode === "stage";
+
+                              return (
+                                <SidebarDraggableStage
+                                  key={stage.id}
+                                  processId={process.id}
+                                  stage={stage}
+                                  index={originalIdx}
+                                  totalStages={process.stages.length}
+                                  isSelected={isStageSelected}
+                                  onSelect={() => {
+                                    setSelectedProcess(process.id);
+                                    setExpandedStage(stage.id);
+                                    setViewMode("stage");
+                                  }}
+                                  onMoveStage={moveStageForProcess}
+                                  onEdit={(stg) => {
+                                    setSelectedProcess(process.id);
+                                    handleEditStage(stg);
+                                  }}
+                                  onAddAfter={(stg) => {
+                                    setSelectedProcess(process.id);
+                                    const isWon = stg?.stageCategory === "success" || stg?.name?.toLowerCase().includes("won");
+                                    const isLost = stg?.stageCategory === "lost" || stg?.isFinalStage || stg?.isFinal;
+                                    if (isWon || isLost) {
+                                      setNewStagePosition("final");
+                                      setNewStageCategory("lost");
+                                      setNewStageOutcome("lost");
+                                      setInsertAfterStageId(stg?.id || null);
+                                      setNewStage((prev) => ({ ...prev, color: "#EF4444" }));
+                                    } else {
+                                      setNewStagePosition("sequential");
+                                      setNewStageCategory("in_progress");
+                                      setNewStageOutcome("won");
+                                      setInsertAfterStageId(stg?.id || null);
+                                    }
+                                    setShowAddStageModal(true);
+                                  }}
+                                  onRemove={(stgId) => {
+                                    setProcesses((prev) =>
+                                      prev.map((p) =>
+                                        p.id === process.id
+                                          ? { ...p, stages: p.stages.filter((s) => s.id !== stgId) }
+                                          : p
+                                      )
+                                    );
+                                    toast.success("Stage removed");
+                                  }}
+                                />
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                 );
-              }))}
-            </div>
+              })
+            )}
           </div>
 
           {/* Right Panel - Process or Stage Settings */}
@@ -2325,9 +3665,6 @@ export default function Process() {
                             >
                               <Edit className="w-4.5 h-4.5" />
                             </button>
-                            <span className="text-sm px-4 py-1.5 bg-blue-100 text-blue-700 rounded-full font-semibold whitespace-nowrap">
-                              Process
-                            </span>
                           </div>
                           <p
                             className="text-base whitespace-pre-wrap mt-1"
@@ -2384,7 +3721,6 @@ export default function Process() {
                       )}
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
-                      <HowItWorksButton label="How Process Works" onClick={() => setShowProcessHowItWorksModal(true)} />
                       <Tooltip text="Temporary Disable">
                         <label className="relative inline-flex items-center cursor-pointer">
                           <input
@@ -2405,63 +3741,275 @@ export default function Process() {
 
                 <div className="flex-1 overflow-y-auto">
                   <div className="p-8 space-y-6">
-                    {/* Stage Management */}
-                    <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-                      <h3 className="text-xl font-bold mb-5" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Stages</h3>
+                    {/* Clean Pipeline Stages Ribbon & Last Stage Options */}
+                    <div className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-200/90 shadow-2xs space-y-4">
+                      {/* Main Horizontal Stages Strip */}
+                      {(() => {
+                        const allStages = selectedProcessData.stages || [];
+                        if (allStages.length === 0) {
+                          return (
+                            <div className="py-8 px-4 flex flex-col items-center justify-center text-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/60">
+                              <p className="text-sm font-semibold text-gray-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                No stages defined for this process yet
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1 mb-4 max-w-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                Define your workflow by adding sequential stages or final outcome stages (Won / Lost).
+                              </p>
+                              <div className="flex items-center gap-2.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNewStagePosition("sequential");
+                                    setNewStageOutcome("won");
+                                    setShowAddStageModal(true);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs hover:shadow-sm transition-all cursor-pointer"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>+ Add Sequential Stage</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNewStagePosition("final");
+                                    setNewStageOutcome("lost");
+                                    setShowAddStageModal(true);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-lg text-xs font-semibold shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>+ Add Final Stage</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
 
-                      <div className="flex items-center gap-3 overflow-x-auto overflow-y-hidden pb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                        {selectedProcessData.stages.map((stage, index) => (
-                          <DraggableStage
-                            key={stage.id}
-                            stage={stage}
-                            index={index}
-                            moveStage={moveStage}
-                            onRemove={handleRemoveStage}
-                            onEdit={handleEditStage}
-                          />
-                        ))}
-                        <button
-                          onClick={handleQuickAddStage}
-                          className="flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 transition-all flex-shrink-0 shadow-lg hover:shadow-xl"
-                        >
-                          <Plus className="w-6 h-6 text-white" />
-                        </button>
-                      </div>
-                    </div>
+                        const hasExplicitCategories = allStages.some((s) => s.stageCategory !== undefined);
 
-                    {/* Knowledge Base */}
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex items-center justify-between gap-4 flex-wrap">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                          <Database className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <h3 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                            Knowledge Base
-                          </h3>
-                          <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                            Give the AI reference material scoped to this process. The scope will be pre-selected for you.
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (!selectedProcessData) return;
-                          navigate("/knowledge-base", {
-                            state: {
-                              prefillProcess: {
-                                id: selectedProcessData.id,
-                                name: selectedProcessData.name,
-                                stages: selectedProcessData.stages.map((s) => ({ id: s.id, name: s.name })),
-                              },
-                            },
-                          });
-                        }}
-                      >
-                        <Database className="w-4 h-4" />
-                        Add Knowledge Base
-                      </Button>
+                        const inProgressStages = allStages.filter((s, idx) => {
+                          if (s.stageCategory === "in_progress") return true;
+                          if (s.stageCategory === "success" || s.stageCategory === "lost") return false;
+                          if (s.isFinalStage || s.isFinal) return false;
+                          const nonFinal = allStages.filter((x) => !x.isFinalStage && !x.isFinal);
+                          if (!hasExplicitCategories && nonFinal.length > 0 && s.id === nonFinal[nonFinal.length - 1].id) {
+                            return false;
+                          }
+                          return true;
+                        });
+
+                        const rawSuccessStages = allStages.filter((s, idx) => {
+                          if (s.stageCategory === "success") return true;
+                          if (s.stageCategory === "in_progress" || s.stageCategory === "lost") return false;
+                          if (s.isFinalStage || s.isFinal) return false;
+                          const nonFinal = allStages.filter((x) => !x.isFinalStage && !x.isFinal);
+                          if (!hasExplicitCategories && nonFinal.length > 0 && s.id === nonFinal[nonFinal.length - 1].id) {
+                            return true;
+                          }
+                          return false;
+                        });
+
+                        // Enforce single won stage only
+                        const successStages = rawSuccessStages.slice(0, 1);
+                        const extraSuccessAsLost = rawSuccessStages.slice(1);
+
+                        const lostStages = allStages.filter((s) => {
+                          if (extraSuccessAsLost.some((ex) => ex.id === s.id)) return true;
+                          if (s.stageCategory === "lost") return true;
+                          if (s.stageCategory === "in_progress" || s.stageCategory === "success") return false;
+                          return !!(s.isFinalStage || s.isFinal);
+                        });
+
+                        return (
+                          <div className="flex flex-col lg:flex-row items-stretch gap-3 sm:gap-4 w-full">
+                            {/* 1. In Progress Category - FULL LENGTH */}
+                            <div className="flex-[3] min-w-0 space-y-1.5 flex flex-col justify-between">
+                              <div className="flex items-center px-1 select-none">
+                                <span className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  In Progress
+                                </span>
+                              </div>
+                              <div className="flex items-center w-full">
+                                <div className="flex-1 min-w-0 flex items-center w-full">
+                                  {inProgressStages.length > 0 ? (
+                                    inProgressStages.map((stage, idx) => {
+                                      const originalIndex = allStages.findIndex((s) => s.id === stage.id);
+                                      return (
+                                        <ChevronStageItem
+                                          key={stage.id}
+                                          stage={stage}
+                                          index={originalIndex >= 0 ? originalIndex : idx}
+                                          totalStages={allStages.length}
+                                          moveStage={moveStage}
+                                          onRemove={handleRemoveStage}
+                                          onEdit={handleEditStage}
+                                          onSelect={(s) => {
+                                            setExpandedStage(s.id);
+                                            setViewMode("stage");
+                                          }}
+                                          isSelected={expandedStage === stage.id}
+                                          isFirst={idx === 0}
+                                          isLast={idx === inProgressStages.length - 1}
+                                          color={stage.color || CHEVRON_PALETTE[(originalIndex >= 0 ? originalIndex : idx) % CHEVRON_PALETTE.length]}
+                                          isFlexible={true}
+                                          onHoverStage={setHoveredStageTooltip}
+                                          onAddAfter={() => {
+                                            setNewStagePosition("sequential");
+                                            setNewStageCategory("in_progress");
+                                            setNewStageOutcome("won");
+                                            setInsertAfterStageId(stage.id);
+                                            setShowAddStageModal(true);
+                                          }}
+                                        />
+                                      );
+                                    })
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setNewStagePosition("sequential");
+                                        setNewStageCategory("in_progress");
+                                        setNewStageOutcome("won");
+                                        setShowAddStageModal(true);
+                                      }}
+                                      className="h-10 px-3 flex-1 flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-blue-600 border border-dashed border-gray-200 hover:border-blue-300 rounded-md bg-gray-50/50 hover:bg-blue-50/30 transition-colors cursor-pointer"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Add in-progress stage</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 2. Won Category (Only 1 Stage Allowed) */}
+                            <div className="flex-shrink-0 space-y-1.5 flex flex-col justify-between" style={{ minWidth: "120px", maxWidth: "180px" }}>
+                              <div className="flex items-center px-1 select-none">
+                                <span className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  Won
+                                </span>
+                              </div>
+                              <div className="flex items-center w-full">
+                                <div className="flex-1 min-w-0 flex items-center w-full">
+                                  {successStages.length > 0 ? (
+                                    successStages.map((stage, idx) => {
+                                      const originalIndex = allStages.findIndex((s) => s.id === stage.id);
+                                      return (
+                                        <ChevronStageItem
+                                          key={stage.id}
+                                          stage={stage}
+                                          index={originalIndex >= 0 ? originalIndex : idx}
+                                          totalStages={allStages.length}
+                                          moveStage={moveStage}
+                                          onRemove={handleRemoveStage}
+                                          onEdit={handleEditStage}
+                                          onSelect={(s) => {
+                                            setExpandedStage(s.id);
+                                            setViewMode("stage");
+                                          }}
+                                          isSelected={expandedStage === stage.id}
+                                          isFirst={true}
+                                          isLast={true}
+                                          color={stage.color || "#10B981"}
+                                          isLastStage={true}
+                                          isFlexible={true}
+                                          onHoverStage={setHoveredStageTooltip}
+                                          onAddAfter={() => {
+                                            setNewStagePosition("final");
+                                            setNewStageCategory("lost");
+                                            setNewStageOutcome("lost");
+                                            setInsertAfterStageId(stage.id);
+                                            setNewStage((prev) => ({ ...prev, color: "#EF4444" }));
+                                            setShowAddStageModal(true);
+                                          }}
+                                        />
+                                      );
+                                    })
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setNewStagePosition("final");
+                                        setNewStageCategory("success");
+                                        setNewStageOutcome("won");
+                                        setShowAddStageModal(true);
+                                      }}
+                                      className="h-10 px-3 flex-1 flex items-center justify-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-dashed border-gray-200 hover:border-gray-300 rounded-md bg-gray-50/40 hover:bg-gray-100 transition-colors cursor-pointer"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Add won stage</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 3. Lost Category - SQUEEZED SIZE */}
+                            <div className="flex-shrink-0 space-y-1.5 flex flex-col justify-between">
+                              <div className="flex items-center px-1 select-none">
+                                <span className="text-[10px] font-semibold tracking-wider text-gray-400 uppercase" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  Lost
+                                </span>
+                              </div>
+                              <div className="flex items-center">
+                                <div className="flex items-center">
+                                  {lostStages.length > 0 ? (
+                                    lostStages.map((stage, idx) => {
+                                      const originalIndex = allStages.findIndex((s) => s.id === stage.id);
+                                      return (
+                                        <ChevronStageItem
+                                          key={stage.id}
+                                          stage={stage}
+                                          index={originalIndex >= 0 ? originalIndex : idx}
+                                          totalStages={allStages.length}
+                                          moveStage={moveStage}
+                                          onRemove={handleRemoveStage}
+                                          onEdit={handleOpenEditLastStageModal}
+                                          onSelect={(s) => {
+                                            setExpandedStage(s.id);
+                                            setViewMode("stage");
+                                          }}
+                                          isSelected={expandedStage === stage.id}
+                                          isFirst={idx === 0}
+                                          isLast={idx === lostStages.length - 1}
+                                          color={stage.color || "#EF4444"}
+                                          isLastStage={true}
+                                          isLostStage={true}
+                                          onHoverStage={setHoveredStageTooltip}
+                                          onAddAfter={() => {
+                                            setNewStagePosition("final");
+                                            setNewStageCategory("lost");
+                                            setNewStageOutcome("lost");
+                                            setInsertAfterStageId(stage.id);
+                                            setNewStage((prev) => ({ ...prev, color: "#EF4444" }));
+                                            setShowAddStageModal(true);
+                                          }}
+                                        />
+                                      );
+                                    })
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setNewStagePosition("final");
+                                        setNewStageCategory("lost");
+                                        setNewStageOutcome("lost");
+                                        setShowAddStageModal(true);
+                                      }}
+                                      className="h-10 px-3 flex items-center justify-center gap-1.5 text-xs text-rose-500 hover:text-rose-600 border border-dashed border-rose-200 hover:border-rose-300 rounded-md bg-rose-50/40 hover:bg-rose-50 transition-colors cursor-pointer"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                      <span>Add lost stage</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Advanced Settings */}
@@ -2486,150 +4034,7 @@ export default function Process() {
 
                       {advancedSettingsExpanded && (
                         <div className="px-6 pb-6 space-y-4 border-t border-gray-200 pt-6 bg-gray-50/50">
-                          {/* AI Voice & Model */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-                            <button
-                              type="button"
-                              onClick={() => setAiDefaultSettingsExpanded(!aiDefaultSettingsExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                  <Bot className="w-5 h-5 text-blue-600" />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    AI Voice &amp; Model
-                                  </span>
-                                  <Tooltip text="Settings defined here are automatically applied to all stages by default." placement="top">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    window.location.href = '/settings?tab=voice-config';
-                                  }}
-                                  className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
-                                >
-                                  <Settings className="w-4 h-4 text-gray-500" />
-                                </button>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${aiDefaultSettingsExpanded ? 'rotate-180' : ''}`} />
-                              </div>
-                            </button>
 
-                            {aiDefaultSettingsExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                <div>
-                                  <label className="block text-sm font-semibold mb-2 text-gray-700">AI Model</label>
-                                  <select
-                                    value={selectedProcessData.aiSettings.platform}
-                                    onChange={(e) => handleUpdateProcessAI("platform", e.target.value)}
-                                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
-                                  >
-                                    <option value="Gemini 2.5 Flash">Gemini 2.5 Flash</option>
-                                    <option value="GPT-4o Mini">GPT-4o Mini</option>
-                                    <option value="Deepseek V4 Flash">Deepseek V4 Flash</option>
-                                  </select>
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-1.5">
-                                      <label className="text-sm font-semibold text-gray-700">
-                                        Voice Speed
-                                      </label>
-                                      <Tooltip text="Controls how fast the AI speaks during calls.">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
-                                    <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-bold rounded-lg">
-                                      {selectedProcessData.aiSettings.voiceSpeed}x
-                                    </span>
-                                  </div>
-                                  <input
-                                    type="range"
-                                    min="0.5"
-                                    max="2"
-                                    step="0.1"
-                                    value={selectedProcessData.aiSettings.voiceSpeed}
-                                    onChange={(e) => handleUpdateProcessAI("voiceSpeed", parseFloat(e.target.value))}
-                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                                  />
-                                  <div className="flex justify-between text-xs mt-2 text-gray-500 font-medium">
-                                    <span>0.5x</span>
-                                    <span>2.0x</span>
-                                  </div>
-                                </div>
-
-                                {/* Voice / Tone / Style — 3-column grid */}
-                                <div className="grid grid-cols-3 gap-3">
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-semibold text-gray-700">Voice</label>
-                                      <Tooltip text="Choose the voice your AI receptionist uses on calls.">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
-                                    <select
-                                      value={selectedProcessData.aiSettings.voice || "Ava"}
-                                      onChange={(e) => handleUpdateProcessAI("voice", e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      <option>Ava</option>
-                                      <option>Eva</option>
-                                      <option>Aria</option>
-                                      <option>Sam</option>
-                                      <option>Jack</option>
-                                      <option>Mango</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-semibold text-gray-700">Tone</label>
-                                      <Tooltip text="Select the default tone of voice the AI will use during calls (e.g. Professional, Friendly).">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
-                                    <select
-                                      value={selectedProcessData.aiSettings.tone || "Professional"}
-                                      onChange={(e) => handleUpdateProcessAI("tone", e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      <option value="Professional">Professional</option>
-                                      <option value="Friendly">Friendly</option>
-                                      <option value="Empathetic">Empathetic</option>
-                                      <option value="Casual">Casual</option>
-                                      <option value="Persuasive">Persuasive</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-semibold text-gray-700">Style</label>
-                                      <Tooltip text="Select the default conversational style (e.g. Concise, Detailed).">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
-                                    <select
-                                      value={selectedProcessData.aiSettings.style || "Balanced"}
-                                      onChange={(e) => handleUpdateProcessAI("style", e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      <option value="Balanced">Balanced</option>
-                                      <option value="Concise">Concise</option>
-                                      <option value="Detailed">Detailed</option>
-                                    </select>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
 
 
 
@@ -2878,401 +4283,6 @@ export default function Process() {
                             )}
                           </div>
 
-                          {/* Retry Rules */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
-                            <button
-                              type="button"
-                              onClick={() => setRetryRulesExpanded(!retryRulesExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <RefreshCw className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Retry Rules
-                                  </span>
-                                  <Tooltip text="Automatically retry the call if it fails, based on the rules below.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                                  {retryRulesEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${retryRulesExpanded ? 'rotate-180' : ''}`} />
-                              </div>
-                            </button>
-
-                            {retryRulesExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
-                                      Enable Retry Rules
-                                    </span>
-                                    <Tooltip text="If call fails, automatically retry calling based on rules configured below.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={retryRulesEnabled}
-                                      onChange={(e) => setRetryRulesEnabled(e.target.checked)}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Retry Attempts
-                                    </label>
-                                    <Tooltip text="Number of call retry attempts to make before failing permanently.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={10}
-                                    value={retryAttempts}
-                                    onChange={(e) => setRetryAttempts(parseInt(e.target.value) || 1)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Delay Between Retries (minutes)
-                                    </label>
-                                    <Tooltip text="Time to wait between each retry attempt.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    value={retryDelay}
-                                    onChange={(e) => setRetryDelay(parseInt(e.target.value) || 1)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  />
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Fallback Stage
-                                    </label>
-                                    <Tooltip text="Workflow stage to transition call task to if all retry attempts fail.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <select
-                                    value={retryFallbackStage}
-                                    onChange={(e) => setRetryFallbackStage(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors appearance-none"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  >
-                                    <option value="Do Nothing">Do Nothing</option>
-                                    {selectedProcessData?.stages.map((s) => (
-                                      <option key={s.id} value={s.name}>
-                                        {s.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Skip Day Rules */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
-                            <button
-                              type="button"
-                              onClick={() => setSkipDayRulesExpanded(!skipDayRulesExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <Calendar className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Skip Day Rules
-                                  </span>
-                                  <Tooltip text="Avoid placing outbound calls on selected days or dates.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                                  {skipDayRulesEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${skipDayRulesExpanded ? 'rotate-180' : ''}`} />
-                              </div>
-                            </button>
-
-                            {skipDayRulesExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
-                                      Enable Skip Day Rules
-                                    </span>
-                                    <Tooltip text="Avoid making automated outbound calls on selected days/dates.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={skipDayRulesEnabled}
-                                      onChange={(e) => setSkipDayRulesEnabled(e.target.checked)}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Weekly Off Days
-                                    </label>
-                                    <Tooltip text="Days of the week to skip automated calling.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => {
-                                      const isActive = weeklyOffDays.includes(day);
-                                      return (
-                                        <button
-                                          key={day}
-                                          type="button"
-                                          onClick={() =>
-                                            setWeeklyOffDays((prev) =>
-                                              isActive ? prev.filter((d) => d !== day) : [...prev, day]
-                                            )
-                                          }
-                                          className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-all ${isActive
-                                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                                            : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600'
-                                            }`}
-                                          style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                        >
-                                          {day}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Custom Off Dates
-                                    </label>
-                                    <Tooltip text="Specific calendar dates on which no calls will be placed.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="date"
-                                      value={customOffDate}
-                                      onChange={(e) => setCustomOffDate(e.target.value)}
-                                      className="flex-1 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (customOffDate && !customOffDatesList.includes(customOffDate)) {
-                                          setCustomOffDatesList((prev) => [...prev, customOffDate]);
-                                          setCustomOffDate('');
-                                        }
-                                      }}
-                                      className="w-9 h-9 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors flex-shrink-0"
-                                    >
-                                      <Plus className="w-4 h-4 text-white" />
-                                    </button>
-                                  </div>
-
-                                  {customOffDatesList.length > 0 && (
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                      {customOffDatesList.map((date) => (
-                                        <span
-                                          key={date}
-                                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-medium"
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          {date}
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setCustomOffDatesList((prev) => prev.filter((d) => d !== date))
-                                            }
-                                            className="hover:text-blue-900 transition-colors"
-                                          >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                  <p className="mt-2 text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>
-                                    Calls will not be scheduled on selected days and dates.
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Business Hours */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
-                            <button
-                              type="button"
-                              onClick={() => setBusinessHoursExpanded(!businessHoursExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <Clock className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Business Hours
-                                  </span>
-                                  <Tooltip text="Restrict when the AI actively receives calls/messages or makes outbound calls to specific hours per day.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${businessHoursEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                  {businessHoursEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${businessHoursExpanded ? 'rotate-180' : ''}`} />
-                              </div>
-                            </button>
-
-                            {businessHoursExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                {/* Enable toggle */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
-                                      Enable Business Hours
-                                    </span>
-                                    <Tooltip text="When enabled, this process/stage will only actively operate within the hours defined below.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={businessHoursEnabled}
-                                      onChange={(e) => setBusinessHoursEnabled(e.target.checked)}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-
-                                {/* Timezone */}
-                                <div>
-                                  <label className="text-sm font-medium block mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>Timezone</label>
-                                  <select
-                                    value={businessHoursTimezone}
-                                    onChange={(e) => setBusinessHoursTimezone(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                  >
-                                    <option value="America/New_York">Eastern Time (ET)</option>
-                                    <option value="America/Chicago">Central Time (CT)</option>
-                                    <option value="America/Denver">Mountain Time (MT)</option>
-                                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                                    <option value="Asia/Kolkata">India Standard Time (IST)</option>
-                                    <option value="Europe/London">GMT / London</option>
-                                  </select>
-                                </div>
-
-                                {/* Per-day hours */}
-                                <div className="space-y-2">
-                                  <label className="text-sm font-medium block" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>Hours by Day</label>
-                                  {(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const).map((day) => {
-                                    const dayData = businessHoursByDay[day];
-                                    return (
-                                      <div key={day} className="flex items-center gap-3 p-2.5 bg-white border border-gray-200 rounded-lg">
-                                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                                          <input
-                                            type="checkbox"
-                                            className="sr-only peer"
-                                            checked={dayData.enabled}
-                                            onChange={(e) =>
-                                              setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], enabled: e.target.checked } }))
-                                            }
-                                          />
-                                          <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
-                                        </label>
-                                        <span className="text-sm font-semibold w-10 shrink-0" style={{ fontFamily: 'DM Sans, sans-serif', color: dayData.enabled ? '#020817' : '#9CA3AF' }}>
-                                          {day}
-                                        </span>
-                                        <input
-                                          type="time"
-                                          value={dayData.start}
-                                          disabled={!dayData.enabled}
-                                          onChange={(e) =>
-                                            setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], start: e.target.value } }))
-                                          }
-                                          className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 disabled:bg-gray-50"
-                                        />
-                                        <span className="text-xs text-gray-400">to</span>
-                                        <input
-                                          type="time"
-                                          value={dayData.end}
-                                          disabled={!dayData.enabled}
-                                          onChange={(e) =>
-                                            setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], end: e.target.value } }))
-                                          }
-                                          className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 disabled:bg-gray-50"
-                                        />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-
-                                {/* Outside-hours behavior */}
-                                <div>
-                                  <label className="text-sm font-medium block mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                    When contacted outside business hours
-                                  </label>
-                                  <select
-                                    value={outsideHoursAction}
-                                    onChange={(e) => setOutsideHoursAction(e.target.value as typeof outsideHoursAction)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors mb-3"
-                                  >
-                                    <option value="message">Play/Send a custom message</option>
-                                    <option value="voicemail">Route to voicemail</option>
-                                    <option value="queue">Queue until next business hours</option>
-                                  </select>
-                                  {outsideHoursAction === "message" && (
-                                    <textarea
-                                      value={outsideHoursMessage}
-                                      onChange={(e) => setOutsideHoursMessage(e.target.value)}
-                                      rows={3}
-                                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:border-blue-500 transition-colors"
-                                      placeholder="We're currently closed. Our business hours are..."
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
 
                           {/* Detect Voicemail */}
                           <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
@@ -3359,75 +4369,127 @@ export default function Process() {
 
                 return (
                   <div className="h-full flex flex-col">
-                    {/* Stage Header */}
-                    <div className="px-6 py-4 border-b border-border">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <h2 className="text-2xl font-bold" style={{ fontFamily: 'DM Sans, sans-serif' }}>{stage.name}</h2>
-                            <span className="text-sm px-3 py-1 bg-secondary/10 text-secondary rounded-full" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Stage
-                            </span>
-                          </div>
-                          <p className="text-sm mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{stage.description}</p>
+                    {/* Stage Header: Tabs + Corner Automations Button */}
+                    <div className="px-6 py-3.5 border-b border-border bg-white flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200">
+                          <button
+                            type="button"
+                            onClick={() => setStageConfigTab("general")}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                              stageConfigTab === "general"
+                                ? "bg-white text-gray-900 shadow-2xs"
+                                : "text-gray-500 hover:text-gray-900"
+                            }`}
+                          >
+                            General
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setStageConfigTab("automations")}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                              stageConfigTab === "automations"
+                                ? "bg-white text-gray-900 shadow-2xs"
+                                : "text-gray-500 hover:text-gray-900"
+                            }`}
+                          >
+                            <Zap className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Automations</span>
+                            {stageRules.length > 0 && (
+                              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                                {stageRules.length}
+                              </span>
+                            )}
+                          </button>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Tooltip text="Temporarily disable this stage">
-                            <label className="relative inline-flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={temporaryDisableEnabled}
-                                onChange={(e) => {
-                                  setTemporaryDisableEnabled(e.target.checked);
-                                  toast.success(e.target.checked ? "Stage temporarily disabled" : "Stage re-enabled");
-                                }}
-                              />
-                              <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                            </label>
+                        <span className="text-xs px-2.5 py-1 rounded-md font-semibold" style={{ backgroundColor: `${stage.color || '#3B82F6'}15`, color: stage.color || '#3B82F6', fontFamily: 'Outfit, sans-serif' }}>
+                          {stage.name}
+                        </span>
+                      </div>
+
+                      {/* Right Corner: Add Automation (in automations tab) + Stage Delete */}
+                      <div className="flex items-center gap-2.5">
+                        {stageConfigTab === "automations" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingAutomationRule(null);
+                              setSelectedWorkflowStepCard(null);
+                              setEditingAutomationStepId(undefined);
+                              setAutomationDrawerView("flowbuilder");
+                              setWorkflowStepsDrawerOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-2xs transition-all cursor-pointer"
+                            style={{ fontFamily: 'DM Sans, sans-serif' }}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add Automation</span>
+                          </button>
+                        )}
+
+                        {stage.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stage.systemCategory) ? (
+                          <Tooltip text="Required stage cannot be deleted">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled
+                              className="opacity-50 cursor-not-allowed text-gray-400 h-9 w-9 p-0"
+                            >
+                              <Lock className="w-4 h-4 text-gray-400" />
+                            </Button>
                           </Tooltip>
-                          <HowItWorksButton label="How Stage Works" onClick={() => setShowStageHowItWorksModal(true)} />
+                        ) : (
                           <Tooltip text="Delete Stage">
                             <Button
                               variant="outline"
                               size="sm"
+                              className="h-9 w-9 p-0 hover:bg-red-50 hover:border-red-200"
                               onClick={() => {
                                 setStageToDelete(stage);
+                                const others = selectedProcessData?.stages.filter((s) => s.id !== stage.id) || [];
+                                if (others.length > 0) {
+                                  setReplacementStageId(others[0].id);
+                                }
                                 setShowDeleteStageModal(true);
                               }}
                             >
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
                           </Tooltip>
-                        </div>
-                      </div>
-
-                      {/* Stage Tabs */}
-                      <div className="flex gap-2 mt-4">
-                        {[
-                          { id: "basic", label: "Basic" },
-                          { id: "automation", label: "Automation" },
-                          { id: "flowbuilder", label: "Flow Builder" },
-                        ].map((tab) => (
-                          <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === tab.id
-                              ? "bg-primary text-primary-foreground"
-                              : "text-muted-foreground hover:bg-muted"
-                              }`}
-                          >
-                            {tab.label}
-                          </button>
-                        ))}
+                        )}
                       </div>
                     </div>
 
                     {/* Stage Content */}
                     <div className="flex-1 overflow-y-auto p-6">
-                      {/* Basic Tab */}
-                      {activeTab === "basic" && (
-                        <div className="space-y-6">
+                      {stageConfigTab === "automations" ? (
+                        <StageAutomationsTab
+                          stage={stage}
+                          processId={selectedProcess || ""}
+                          processName={selectedProcessData?.name}
+                          rules={stageRules}
+                          onToggleRule={toggleRule}
+                          onEditRule={(rule) => {
+                            setEditingAutomationRule(rule);
+                            setSelectedWorkflowStepCard(null);
+                            setEditingAutomationStepId(undefined);
+                            setAutomationDrawerView("flowbuilder");
+                            setWorkflowStepsDrawerOpen(true);
+                          }}
+                          onDeleteRule={(ruleId) => {
+                            deleteRule(ruleId);
+                            toast.success("Stage automation deleted");
+                          }}
+                          onAddRule={() => {
+                            setEditingAutomationRule(null);
+                            setSelectedWorkflowStepCard(null);
+                            setEditingAutomationStepId(undefined);
+                            setAutomationDrawerView("flowbuilder");
+                            setWorkflowStepsDrawerOpen(true);
+                          }}
+                        />
+                      ) : (
+                      <div className="space-y-6">
                           {/* Stage Configuration Section */}
                           <div className="space-y-4">
                             {/* Type and Right Column Field Row */}
@@ -3729,462 +4791,6 @@ export default function Process() {
                               )}
                             </div>
 
-                            {/* Caller Pitch - Hide completely when Type is "Transfer to Human" or "No Call Activity" */}
-                            {stageType !== "Transfer to Human" && stageType !== "No Call Activity" && (
-                              <div className="rounded-lg border border-border overflow-hidden">
-                                {/* Collapsible Header */}
-                                <button
-                                  onClick={() => setCallerPitchExpanded(!callerPitchExpanded)}
-                                  className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-                                >
-                                  <div className="flex flex-col items-start gap-1">
-                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Caller Pitch
-                                    </span>
-                                    <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                      Script or instruction used when initiating outbound calls.
-                                    </span>
-                                  </div>
-                                  <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${callerPitchExpanded ? "rotate-180" : ""}`} />
-                                </button>
-
-                                {/* Expanded Content */}
-                                {callerPitchExpanded && (
-                                  <div className="p-6 border-t border-border">
-                                    {/* Mode Toggle */}
-                                    <div className="flex items-center gap-3 mb-6">
-                                      <div className="flex gap-2 bg-muted/30 p-1 rounded-lg w-fit">
-                                        <button
-                                          onClick={() => setCallerPitchMode("single")}
-                                          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${callerPitchMode === "single"
-                                            ? "bg-primary text-white"
-                                            : "text-gray-600 hover:text-gray-900"
-                                            }`}
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          Single Prompt
-                                        </button>
-                                        <button
-                                          onClick={() => setCallerPitchMode("comprehensive")}
-                                          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${callerPitchMode === "comprehensive"
-                                            ? "bg-primary text-white"
-                                            : "text-gray-600 hover:text-gray-900"
-                                            }`}
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          Comprehensive
-                                        </button>
-                                      </div>
-                                      {callerPitchMode === "single" ? (
-                                        <InfoTooltip text="Single Prompt lets you write the entire outbound script as one open text box, with a Generate with AI shortcut — the fastest option for a simple stage." />
-                                      ) : (
-                                        <InfoTooltip text="Comprehensive mode lets you set a separate greeting, objective, business info, and languages instead of one combined script." />
-                                      )}
-                                    </div>
-
-                                    {/* Single Prompt Mode */}
-                                    {callerPitchMode === "single" && (
-                                      <div>
-                                        <textarea
-                                          value={callerPitch}
-                                          onChange={(e) => setCallerPitch(e.target.value)}
-                                          className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
-                                          style={{ fontFamily: 'Outfit, sans-serif', minHeight: '120px' }}
-                                        />
-                                        <div className="flex items-center justify-end mt-2">
-                                          <button
-                                            onClick={() => {
-                                              toast.success("AI generation coming soon!");
-                                            }}
-                                            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                                          >
-                                            <Zap className="w-4 h-4" />
-                                            Generate with AI
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Comprehensive Mode */}
-                                    {callerPitchMode === "comprehensive" && (
-                                      <div className="space-y-3">
-                                        {/* A. Greeting / Intro Message */}
-                                        <div className="rounded-lg border border-border overflow-hidden">
-                                          <button
-                                            onClick={() => setGreetingIntroExpanded(!greetingIntroExpanded)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-muted/20 transition-colors"
-                                          >
-                                            <div className="flex flex-col items-start gap-0.5">
-                                              <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Greeting / Intro Message
-                                              </span>
-                                              {!greetingIntroExpanded && greetingIntroMessage && (
-                                                <span className="text-xs truncate max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                  {greetingIntroMessage.slice(0, 80)}...
-                                                </span>
-                                              )}
-                                              {!greetingIntroExpanded && !greetingIntroMessage && (
-                                                <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                                  Not configured
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${greetingIntroExpanded ? "rotate-180" : ""}`} />
-                                          </button>
-
-                                          {greetingIntroExpanded && (
-                                            <div className="p-4 border-t border-border">
-                                              <textarea
-                                                value={greetingIntroMessage}
-                                                onChange={(e) => setGreetingIntroMessage(e.target.value)}
-                                                placeholder="Hi, this is Alex. Who do I have the pleasure of speaking with today?"
-                                                className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
-                                                style={{ fontFamily: 'Outfit, sans-serif', minHeight: '100px' }}
-                                              />
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* B. Objective */}
-                                        <div className="rounded-lg border border-border overflow-hidden">
-                                          <button
-                                            onClick={() => setObjectiveExpanded(!objectiveExpanded)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-muted/20 transition-colors"
-                                          >
-                                            <div className="flex flex-col items-start gap-0.5">
-                                              <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Objective
-                                              </span>
-                                              {!objectiveExpanded && objectiveText && (
-                                                <span className="text-xs truncate max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                  {objectiveText.slice(0, 80)}...
-                                                </span>
-                                              )}
-                                              {!objectiveExpanded && !objectiveText && (
-                                                <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                                  Not configured
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${objectiveExpanded ? "rotate-180" : ""}`} />
-                                          </button>
-
-                                          {objectiveExpanded && (
-                                            <div className="p-4 border-t border-border">
-                                              <textarea
-                                                value={objectiveText}
-                                                onChange={(e) => setObjectiveText(e.target.value)}
-                                                placeholder="You are an AI assistant. Your role is to answer general inquiries, schedule appointments, and provide information about our services."
-                                                className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
-                                                style={{ fontFamily: 'Outfit, sans-serif', minHeight: '100px' }}
-                                              />
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* C. Business Information */}
-                                        <div className="rounded-lg border border-border overflow-hidden">
-                                          <button
-                                            onClick={() => setBusinessInfoExpanded(!businessInfoExpanded)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-muted/20 transition-colors"
-                                          >
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Business Information
-                                              </span>
-                                              {!businessInfoExpanded && businessInfoItems.length > 0 && (
-                                                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-200 text-gray-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                  {businessInfoItems.length} {businessInfoItems.length === 1 ? 'item' : 'items'}
-                                                </span>
-                                              )}
-                                              {!businessInfoExpanded && businessInfoItems.length === 0 && (
-                                                <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                                  No data added
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${businessInfoExpanded ? "rotate-180" : ""}`} />
-                                          </button>
-
-                                          {businessInfoExpanded && (
-                                            <div className="p-4 border-t border-border space-y-3">
-                                              <p className="text-sm mb-3" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                Add business information that the AI should know while speaking with callers.
-                                              </p>
-
-                                              {/* Existing Business Info Items */}
-                                              {businessInfoItems.map((item) => (
-                                                <div key={item.id} className="p-3 border border-border rounded-lg bg-muted/20">
-                                                  <div className="flex items-start justify-between mb-2">
-                                                    <div className="flex items-center gap-2">
-                                                      <span className="text-sm font-bold" style={{ color: '#111827', fontFamily: 'DM Sans, sans-serif' }}>
-                                                        {item.title}
-                                                      </span>
-                                                      {item.active && (
-                                                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                          Active
-                                                        </span>
-                                                      )}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                      <button
-                                                        onClick={() => {
-                                                          setEditingBusinessInfoId(item.id);
-                                                          setBusinessInfoFormData({
-                                                            title: item.title,
-                                                            information: item.information,
-                                                            active: item.active
-                                                          });
-                                                          setShowBusinessInfoForm(true);
-                                                        }}
-                                                        className="text-blue-600 hover:text-blue-700"
-                                                      >
-                                                        <Edit className="w-4 h-4" />
-                                                      </button>
-                                                      <button
-                                                        onClick={() => {
-                                                          setBusinessInfoItems(businessInfoItems.filter(i => i.id !== item.id));
-                                                          toast.success("Information deleted");
-                                                        }}
-                                                        className="text-red-600 hover:text-red-700"
-                                                      >
-                                                        <Trash2 className="w-4 h-4" />
-                                                      </button>
-                                                    </div>
-                                                  </div>
-                                                  <p className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                                                    {item.information}
-                                                  </p>
-                                                </div>
-                                              ))}
-
-                                              {/* Inline Add/Edit Form */}
-                                              {showBusinessInfoForm && (
-                                                <div className="p-4 border border-primary/30 rounded-lg bg-blue-50/30 space-y-3">
-                                                  <div>
-                                                    <label className="block text-xs font-medium mb-1" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                                      Title
-                                                    </label>
-                                                    <input
-                                                      type="text"
-                                                      value={businessInfoFormData.title}
-                                                      onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, title: e.target.value })}
-                                                      placeholder="Example: Clinic Timings"
-                                                      className="w-full p-2 bg-white border border-input rounded-lg text-sm"
-                                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                    />
-                                                  </div>
-                                                  <div>
-                                                    <label className="block text-xs font-medium mb-1" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                                      Information
-                                                    </label>
-                                                    <textarea
-                                                      value={businessInfoFormData.information}
-                                                      onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, information: e.target.value })}
-                                                      placeholder="Example: Our clinic is open Monday to Saturday from 9 AM to 7 PM."
-                                                      className="w-full p-2 bg-white border border-input rounded-lg resize-none text-sm"
-                                                      style={{ fontFamily: 'Outfit, sans-serif', minHeight: '80px' }}
-                                                    />
-                                                  </div>
-                                                  <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                      <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                        Active
-                                                      </label>
-                                                      <label className="relative inline-flex items-center cursor-pointer">
-                                                        <input
-                                                          type="checkbox"
-                                                          className="sr-only peer"
-                                                          checked={businessInfoFormData.active}
-                                                          onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, active: e.target.checked })}
-                                                        />
-                                                        <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                                                      </label>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                      <button
-                                                        onClick={() => {
-                                                          setShowBusinessInfoForm(false);
-                                                          setEditingBusinessInfoId(null);
-                                                          setBusinessInfoFormData({ title: "", information: "", active: true });
-                                                        }}
-                                                        className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                      >
-                                                        Cancel
-                                                      </button>
-                                                      <button
-                                                        onClick={() => {
-                                                          if (businessInfoFormData.title && businessInfoFormData.information) {
-                                                            if (editingBusinessInfoId !== null) {
-                                                              // Edit existing
-                                                              setBusinessInfoItems(businessInfoItems.map(item =>
-                                                                item.id === editingBusinessInfoId
-                                                                  ? { ...item, ...businessInfoFormData }
-                                                                  : item
-                                                              ));
-                                                              toast.success("Information updated");
-                                                            } else {
-                                                              // Add new
-                                                              setBusinessInfoItems([...businessInfoItems, {
-                                                                id: Date.now(),
-                                                                ...businessInfoFormData
-                                                              }]);
-                                                              toast.success("Information added");
-                                                            }
-                                                            setShowBusinessInfoForm(false);
-                                                            setEditingBusinessInfoId(null);
-                                                            setBusinessInfoFormData({ title: "", information: "", active: true });
-                                                          }
-                                                        }}
-                                                        className="px-4 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary-hover"
-                                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                      >
-                                                        Done
-                                                      </button>
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                              )}
-
-                                              {/* Add Information Button */}
-                                              {!showBusinessInfoForm && (
-                                                <button
-                                                  onClick={() => setShowBusinessInfoForm(true)}
-                                                  className="w-full px-4 py-2 border border-dashed border-gray-400 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium"
-                                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                >
-                                                  <Plus className="w-4 h-4" />
-                                                  Add Information
-                                                </button>
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* D. Languages */}
-                                        <div className="rounded-lg border border-border overflow-hidden">
-                                          <button
-                                            type="button"
-                                            onClick={() => setLanguagesExpanded(!languagesExpanded)}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-muted/20 transition-colors"
-                                          >
-                                            <div className="flex flex-col items-start gap-0.5">
-                                              <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Languages
-                                              </span>
-                                              {!languagesExpanded && (primaryLanguage || secondaryLanguages.length > 0) && (
-                                                <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                  {primaryLanguage && `Primary: ${primaryLanguage}`}
-                                                  {primaryLanguage && secondaryLanguages.length > 0 && ' · '}
-                                                  {secondaryLanguages.length > 0 && `Secondary: ${secondaryLanguages.join(', ')}`}
-                                                </span>
-                                              )}
-                                              {!languagesExpanded && !primaryLanguage && secondaryLanguages.length === 0 && (
-                                                <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                                  Not configured
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${languagesExpanded ? "rotate-180" : ""}`} />
-                                          </button>
-
-                                          {languagesExpanded && (
-                                            <div className="p-4 border-t border-border space-y-4">
-                                              {/* Primary Language */}
-                                              <div>
-                                                <div className="flex items-center gap-2 mb-2">
-                                                  <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Primary Language *
-                                                  </label>
-                                                  <Tooltip text="The default language your AI Receptionist will speak on all calls for this stage.">
-                                                    <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                                                  </Tooltip>
-                                                </div>
-                                                <Select value={primaryLanguage} onValueChange={setPrimaryLanguage}>
-                                                  <SelectTrigger className="w-full">
-                                                    <SelectValue placeholder="Select primary language" />
-                                                  </SelectTrigger>
-                                                  <SelectContent>
-                                                    <SelectItem value="English">English</SelectItem>
-                                                    <SelectItem value="Spanish">Spanish</SelectItem>
-                                                    <SelectItem value="French">French</SelectItem>
-                                                    <SelectItem value="German">German</SelectItem>
-                                                    <SelectItem value="Italian">Italian</SelectItem>
-                                                    <SelectItem value="Portuguese">Portuguese</SelectItem>
-                                                    <SelectItem value="Chinese">Chinese</SelectItem>
-                                                    <SelectItem value="Japanese">Japanese</SelectItem>
-                                                    <SelectItem value="Korean">Korean</SelectItem>
-                                                    <SelectItem value="Arabic">Arabic</SelectItem>
-                                                  </SelectContent>
-                                                </Select>
-                                              </div>
-
-                                              {/* Secondary Languages (multi-add) */}
-                                              <div>
-                                                <div className="flex items-center gap-2 mb-2">
-                                                  <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Secondary Languages
-                                                  </label>
-                                                  <Tooltip text="Fallback language(s) the AI can switch to if the caller requests it or if their language differs from the primary. You can add multiple.">
-                                                    <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                                                  </Tooltip>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                  <Select value={secondaryLanguageDraft} onValueChange={setSecondaryLanguageDraft}>
-                                                    <SelectTrigger className="flex-1">
-                                                      <SelectValue placeholder="Select a fallback language (optional)" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                      {["English", "Spanish", "French", "German", "Italian", "Portuguese", "Chinese", "Japanese", "Korean", "Arabic"]
-                                                        .filter(lang => lang !== primaryLanguage && !secondaryLanguages.includes(lang))
-                                                        .map(lang => (
-                                                          <SelectItem key={lang} value={lang}>{lang}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                  </Select>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      if (secondaryLanguageDraft) {
-                                                        setSecondaryLanguages([...secondaryLanguages, secondaryLanguageDraft]);
-                                                        setSecondaryLanguageDraft("");
-                                                      }
-                                                    }}
-                                                    disabled={!secondaryLanguageDraft}
-                                                    className="w-9 h-9 flex items-center justify-center rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                                                  >
-                                                    <Plus className="w-4 h-4 text-white" />
-                                                  </button>
-                                                </div>
-                                                {secondaryLanguages.length > 0 && (
-                                                  <div className="flex flex-wrap gap-2 mt-2">
-                                                    {secondaryLanguages.map((lang) => (
-                                                      <span key={lang} className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">
-                                                        {lang}
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => setSecondaryLanguages(secondaryLanguages.filter(l => l !== lang))}
-                                                          className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
-                                                        >
-                                                          <X className="w-3 h-3" />
-                                                        </button>
-                                                      </span>
-                                                    ))}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
                             {/* Call Action - Hidden when Action is Handle By Human (Transfer to Human) or No Action (No Call Activity) */}
                             {stageType !== "Transfer to Human" && stageType !== "No Call Activity" && (
                               <div className="space-y-3 pt-2">
@@ -4234,13 +4840,13 @@ export default function Process() {
                                                 p.id !== selectedProcess
                                                   ? p
                                                   : {
-                                                      ...p,
-                                                      stages: p.stages.map((s) =>
-                                                        s.id !== expandedStage
-                                                          ? s
-                                                          : { ...s, enableCalling: newVal }
-                                                      ),
-                                                    }
+                                                    ...p,
+                                                    stages: p.stages.map((s) =>
+                                                      s.id !== expandedStage
+                                                        ? s
+                                                        : { ...s, enableCalling: newVal }
+                                                    ),
+                                                  }
                                               )
                                             );
                                           }
@@ -4255,546 +4861,172 @@ export default function Process() {
 
                           </div>
 
+                          {/* 1. AI Model Settings Section */}
+                          <div className="space-y-3">
+                            <div>
+                              <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                AI Model Settings
+                              </h3>
+                              <p className="text-xs text-gray-500 mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Fine-tune the technical execution of the AI agent's voice and intelligence.
+                              </p>
+                            </div>
 
-
-
-                        </div>
-                      )}
-
-                      {/* Automation Tab */}
-                      {activeTab === "automation" && (
-                        <div className="space-y-6">
-                          {/* Automation - Collapsible */}
-                          <div className="mt-8 rounded-lg border border-border overflow-hidden">
-                            <button
-                              onClick={() => setWorkflowStepsExpanded(!workflowStepsExpanded)}
-                              className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-                            >
-                              <div className="flex flex-col items-start gap-1">
-                                <div className="flex items-center gap-2">
-                                  <Zap className="w-4 h-4" style={{ color: '#020817' }} />
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Automation
-                                  </span>
-                                </div>
-                                <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                  Configure the automated steps that run for this stage.
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span onClick={(e) => e.stopPropagation()}>
-                                  <HowItWorksButton
-                                    label="How Automations Works"
-                                    onClick={() => setShowAutomationHowItWorksModal(true)}
-                                  />
-                                </span>
-                                <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${workflowStepsExpanded ? "rotate-180" : ""}`} />
-                              </div>
-                            </button>
-
-                            {workflowStepsExpanded && (
-                              <div className="border-t border-border p-4 space-y-3">
-                                {workflowSteps.length === 0 ? (
-                                  <div className="text-center py-6">
-                                    <p className="text-sm" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>No workflow steps added yet.</p>
-                                  </div>
-                                ) : (() => {
-                                  const stageSteps = workflowSteps.filter(s => !s.trigger || s.trigger === "stage");
-                                  const inCallSteps = workflowSteps.filter(s => s.trigger === "incall");
-                                  const inChatSteps = workflowSteps.filter(s => s.trigger === "inchat");
-                                  const postCallSteps = workflowSteps.filter(s => s.trigger === "postcall");
-                                  const isBlockedCallType = stageType === "No Call Activity" || stageType === "Transfer to Human";
-
-                                  const StepIcon = ({ iconKey }: { iconKey: string }) => {
-                                    const map: Record<string, React.ReactNode> = {
-                                      clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
-                                      chevronright: <ChevronRight className="w-4 h-4 text-white" />, zap: <Zap className="w-4 h-4 text-white" />,
-                                      edit: <Edit className="w-4 h-4 text-white" />, usercheck: <UserCheck className="w-4 h-4 text-white" />,
-                                      phonecall: <PhoneCall className="w-4 h-4 text-white" />, messagecircle: <MessageCircle className="w-4 h-4 text-white" />,
-                                      messagesquare: <MessageSquare className="w-4 h-4 text-white" />, mail: <Mail className="w-4 h-4 text-white" />,
-                                      filetext: <FileText className="w-4 h-4 text-white" />, clipboardlist: <ClipboardList className="w-4 h-4 text-white" />,
-                                      globe: <Globe className="w-4 h-4 text-white" />, calendar: <Calendar className="w-4 h-4 text-white" />,
-                                      refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
-                                      lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
-                                      layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
-                                      gitbranch: <GitBranch className="w-4 h-4 text-white" />,
-                                      volume2: <Volume2 className="w-4 h-4 text-white" />,
-                                    };
-                                    return <>{map[iconKey]}</>;
-                                  };
-
-                                  const moveStageStep = (dragIndex: number, hoverIndex: number) => {
-                                    const updatedStageSteps = [...stageSteps];
-                                    const [removed] = updatedStageSteps.splice(dragIndex, 1);
-                                    updatedStageSteps.splice(hoverIndex, 0, removed);
-
-                                    let stageIdx = 0;
-                                    const newWorkflowSteps = workflowSteps.map(s => {
-                                      if (!s.trigger || s.trigger === "stage") {
-                                        return updatedStageSteps[stageIdx++];
-                                      }
-                                      return s;
-                                    });
-                                    setWorkflowSteps(newWorkflowSteps);
-                                  };
-
-                                  return (
-                                    <div className="space-y-4">
-                                      {/* On Stage Entry List */}
-                                      {stageSteps.length > 0 && (
-                                        <div className="space-y-2">
-                                          <div className="flex items-center gap-1.5">
-                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                              On Stage Entry
-                                            </p>
-                                            <InfoTooltip text="These steps run automatically the moment a client enters this stage, before any call starts." />
-                                          </div>
-                                          <div className="space-y-2">
-                                            {stageSteps.map((step, idx) => (
-                                              <DraggableWorkflowStep
-                                                key={step.id}
-                                                step={step}
-                                                index={idx}
-                                                moveStep={moveStageStep}
-                                                onEdit={() => {
-                                                  resetStepDetailState();
-                                                  setCurrentEditingStep(step);
-                                                  setIsCreatingNewStep(false);
-                                                  setStepTrigger(step.trigger ?? "stage");
-                                                  setExecutionType(step.executionType ?? "wait");
-                                                  setDelayValue(step.delayValue ?? 5);
-                                                  setDelayUnit(step.delayUnit ?? "Minute");
-                                                  restoreStepParams(step.stepKey, step.params);
-                                                  setStepDetailDrawerOpen(true);
-                                                }}
-                                                onDuplicate={() => {
-                                                  const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                  const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                  if (fullIdx !== -1) {
-                                                    setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                  }
-                                                  toast.success("Step duplicated successfully");
-                                                }}
-                                                onDelete={() => {
-                                                  setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                  toast.success("Step removed successfully");
-                                                }}
-                                                StepIcon={StepIcon}
-                                                connectAfterLabel={(() => {
-                                                  if (!step.connectAfterId || step.connectAfterId === 'start') return 'from Start';
-                                                  const pred = workflowSteps.find(s => s.id === step.connectAfterId);
-                                                  return pred ? `after ${pred.name}` : undefined;
-                                                })()}
-                                              />
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {/* In Call List */}
-                                      {inCallSteps.length > 0 && (
-                                        <div className="relative">
-                                          <div className={`space-y-2 ${isBlockedCallType ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                                            <div className="flex items-center gap-1.5">
-                                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                                In Call
-                                              </p>
-                                              <InfoTooltip text="These steps run live during the conversation, based on what the caller says." />
-                                            </div>
-                                            <div className="space-y-2">
-                                              {inCallSteps.map((step) => (
-                                                <div
-                                                  key={step.id}
-                                                  className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-muted/10 transition-colors"
-                                                  onClick={(e) => {
-                                                    if ((e.target as HTMLElement).closest('button')) {
-                                                      return;
-                                                    }
-                                                    resetStepDetailState();
-                                                    setCurrentEditingStep(step);
-                                                    setIsCreatingNewStep(false);
-                                                    setStepTrigger(step.trigger ?? "stage");
-                                                    setExecutionType(step.executionType ?? "wait");
-                                                    setDelayValue(step.delayValue ?? 5);
-                                                    setDelayUnit(step.delayUnit ?? "Minute");
-                                                    restoreStepParams(step.stepKey, step.params);
-                                                    setStepDetailDrawerOpen(true);
-                                                  }}
-                                                >
-                                                  <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#2563EB' }}>
-                                                    <StepIcon iconKey={step.iconKey} />
-                                                  </div>
-                                                  <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
-                                                    <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Event Driven</p>
-                                                  </div>
-                                                  <div className="flex items-center gap-1 flex-shrink-0">
-                                                    <button
-                                                      className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                      title="Duplicate"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                        const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                        if (fullIdx !== -1) {
-                                                          setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                        }
-                                                        toast.success("Step duplicated successfully");
-                                                      }}
-                                                    >
-                                                      <Copy className="w-4 h-4 text-muted-foreground" />
-                                                    </button>
-                                                    <button
-                                                      className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                      title="Edit"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        resetStepDetailState();
-                                                        setCurrentEditingStep(step);
-                                                        setIsCreatingNewStep(false);
-                                                        setConnectAfterId(step.connectAfterId);
-                                                        setStepTrigger(step.trigger ?? "stage");
-                                                        setExecutionType(step.executionType ?? "wait");
-                                                        setDelayValue(step.delayValue ?? 5);
-                                                        setDelayUnit(step.delayUnit ?? "Minute");
-                                                        restoreStepParams(step.stepKey, step.params);
-                                                        setStepDetailDrawerOpen(true);
-                                                      }}
-                                                    >
-                                                      <Pencil className="w-4 h-4 text-muted-foreground" />
-                                                    </button>
-                                                    <button
-                                                      className="p-1.5 rounded hover:bg-red-50 transition-colors"
-                                                      title="Delete"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                        toast.success("Step removed successfully");
-                                                      }}
-                                                    >
-                                                      <Trash2 className="w-4 h-4 text-red-500" />
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                          {isBlockedCallType && (
-                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                              <span className="px-3 py-1.5 rounded-full text-xs font-medium border border-border shadow-sm flex items-center gap-1.5" style={{ backgroundColor: '#F1F5F9', color: '#64748B', borderColor: '#E2E8F0', fontFamily: 'DM Sans, sans-serif' }}>
-                                                <Ban className="w-3.5 h-3.5" />
-                                                Not available for this call type
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* In Chat List */}
-                                      {inChatSteps.length > 0 && (
-                                        <div className="space-y-2">
-                                          <div className="flex items-center gap-1.5">
-                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                              In Chat
-                                            </p>
-                                            <InfoTooltip text="These steps fire when the client sends a message in a chat channel (WhatsApp, SMS, or Website) during this stage." />
-                                          </div>
-                                          <div className="space-y-2">
-                                            {inChatSteps.map((step) => (
-                                              <div
-                                                key={step.id}
-                                                className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-muted/10 transition-colors"
-                                                onClick={(e) => {
-                                                  if ((e.target as HTMLElement).closest('button')) return;
-                                                  resetStepDetailState();
-                                                  setCurrentEditingStep(step);
-                                                  setIsCreatingNewStep(false);
-                                                  setStepTrigger(step.trigger ?? "stage");
-                                                  setExecutionType(step.executionType ?? "wait");
-                                                  setDelayValue(step.delayValue ?? 5);
-                                                  setDelayUnit(step.delayUnit ?? "Minute");
-                                                  restoreStepParams(step.stepKey, step.params);
-                                                  setStepDetailDrawerOpen(true);
-                                                }}
-                                              >
-                                                <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#7C3AED' }}>
-                                                  <StepIcon iconKey={step.iconKey} />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
-                                                  <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Message Driven</p>
-                                                </div>
-                                                <div className="flex items-center gap-1 flex-shrink-0">
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                    title="Duplicate"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                      const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                      if (fullIdx !== -1) setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                      toast.success("Step duplicated successfully");
-                                                    }}
-                                                  >
-                                                    <Copy className="w-4 h-4 text-muted-foreground" />
-                                                  </button>
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                    title="Edit"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      resetStepDetailState();
-                                                      setCurrentEditingStep(step);
-                                                      setIsCreatingNewStep(false);
-                                                      setConnectAfterId(step.connectAfterId);
-                                                      setStepTrigger(step.trigger ?? "stage");
-                                                      setExecutionType(step.executionType ?? "wait");
-                                                      setDelayValue(step.delayValue ?? 5);
-                                                      setDelayUnit(step.delayUnit ?? "Minute");
-                                                      restoreStepParams(step.stepKey, step.params);
-                                                      setStepDetailDrawerOpen(true);
-                                                    }}
-                                                  >
-                                                    <Pencil className="w-4 h-4 text-muted-foreground" />
-                                                  </button>
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-red-50 transition-colors"
-                                                    title="Delete"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                      toast.success("Step removed successfully");
-                                                    }}
-                                                  >
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                  </button>
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {/* Post Call List */}
-                                      {postCallSteps.length > 0 && (() => {
-                                        const movePostCallStep = (dragIndex: number, hoverIndex: number) => {
-                                          const updatedPostCallSteps = [...postCallSteps];
-                                          const [removed] = updatedPostCallSteps.splice(dragIndex, 1);
-                                          updatedPostCallSteps.splice(hoverIndex, 0, removed);
-
-                                          let pcIdx = 0;
-                                          const newWorkflowSteps = workflowSteps.map(s => {
-                                            if (s.trigger === "postcall") {
-                                              return updatedPostCallSteps[pcIdx++];
-                                            }
-                                            return s;
-                                          });
-                                          setWorkflowSteps(newWorkflowSteps);
-                                        };
-
-                                        return (
-                                          <div className="relative">
-                                            <div className={`space-y-2 ${isBlockedCallType ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                                              <div className="flex items-center gap-1.5">
-                                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                                  Post Call
-                                                </p>
-                                                <InfoTooltip text="These steps run after the call ends — send a follow-up text, update a field, or move the client to the next stage." />
-                                              </div>
-                                              <div className="space-y-2">
-                                                {postCallSteps.map((step, idx) => (
-                                                  <DraggableWorkflowStep
-                                                    key={step.id}
-                                                    step={step}
-                                                    index={idx}
-                                                    moveStep={movePostCallStep}
-                                                    onEdit={() => {
-                                                      resetStepDetailState();
-                                                      setCurrentEditingStep(step);
-                                                      setIsCreatingNewStep(false);
-                                                      setStepTrigger(step.trigger ?? "stage");
-                                                      setExecutionType(step.executionType ?? "wait");
-                                                      setDelayValue(step.delayValue ?? 5);
-                                                      setDelayUnit(step.delayUnit ?? "Minute");
-                                                      restoreStepParams(step.stepKey, step.params);
-                                                      setStepDetailDrawerOpen(true);
-                                                    }}
-                                                    onDuplicate={() => {
-                                                      const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                      const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                      if (fullIdx !== -1) {
-                                                        setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                      }
-                                                      toast.success("Step duplicated successfully");
-                                                    }}
-                                                    onDelete={() => {
-                                                      setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                      toast.success("Step removed successfully");
-                                                    }}
-                                                    StepIcon={StepIcon}
-                                                    connectAfterLabel={(() => {
-                                                      if (!step.connectAfterId || step.connectAfterId === "start") return "from Start";
-                                                      const pred = workflowSteps.find(s => s.id === step.connectAfterId);
-                                                      return pred ? `after ${pred.name}` : undefined;
-                                                    })()}
-                                                  />
-                                                ))}
-                                              </div>
-                                            </div>
-                                            {isBlockedCallType && (
-                                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                <span className="px-3 py-1.5 rounded-full text-xs font-medium border border-border shadow-sm flex items-center gap-1.5" style={{ backgroundColor: '#F1F5F9', color: '#64748B', borderColor: '#E2E8F0', fontFamily: 'DM Sans, sans-serif' }}>
-                                                  <Ban className="w-3.5 h-3.5" />
-                                                  Not available for this call type
-                                                </span>
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })()}
-                                    </div>
-                                  );
-                                })()}
-                                <Button
-                                  variant="primary"
-                                  onClick={() => {
-                                    setSelectedWorkflowStepCard(null);
-                                    setWorkflowStepsDrawerOpen(true);
-                                  }}
-                                  className="w-full mt-3"
-                                >
-                                  <Plus className="w-4 h-4 mr-2" />
-                                  Add Step
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Advanced Tab */}
-                      {activeTab === "advanced" && (
-                        <div className="space-y-4">
-                          {/* AI Model */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-                            <button
-                              onClick={() => setAiModelExpanded(!aiModelExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                  <Bot className="w-5 h-5 text-blue-600" />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    AI Voice & Model
-                                  </span>
-                                  <Tooltip
-                                    text="Choose the AI model that powers your receptionist. Different models offer varying levels of capabilities and performance."
-                                    placement="top"
-                                  >
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    window.location.href = '/settings?tab=voice-config';
-                                  }}
-                                  className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
-                                >
-                                  <Settings className="w-4 h-4 text-gray-500" />
-                                </button>
-                                <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${aiModelExpanded ? 'rotate-180' : ''}`}
-                                />
-                              </div>
-                            </button>
-
-                            {aiModelExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-5 bg-gray-50/40">
-                                {/* AI Model Select */}
-                                <div>
-                                  <label className="block text-sm font-semibold mb-2 text-gray-700">AI Model</label>
-                                  <select
-                                    value={selectedAIModel}
-                                    onChange={(e) => {
-                                      setSelectedAIModel(e.target.value);
-                                      toast.success("AI Model updated successfully");
-                                    }}
-                                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
-                                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                                  >
-                                    <option value="Gemini 2.5 Flash">Gemini 2.5 Flash</option>
-                                    <option value="GPT-4o Mini">GPT-4o Mini</option>
-                                    <option value="Deepseek V4 Flash">Deepseek V4 Flash</option>
-                                  </select>
-                                </div>
-
-                                {/* Voice Speed Slider */}
-                                <div>
-                                  <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-1.5">
-                                      <label className="text-sm font-semibold text-gray-700">Voice Speed</label>
-                                      <Tooltip text="Controls how fast the AI speaks during calls.">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
-                                    <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-bold rounded-lg">
-                                      {stageVoiceSpeed}x
+                            <div className="rounded-2xl border border-gray-200/80 bg-white p-6 md:p-7 shadow-xs space-y-6">
+                              {/* Row 1: AI Model & Speech Speed */}
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                                {/* AI Model */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-blue-500 font-mono font-bold text-sm leading-none">&gt;_</span>
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      AI Model
                                     </span>
+                                    <Tooltip text="Select the underlying LLM that powers the conversational logic.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
                                   </div>
-                                  <input
-                                    type="range"
-                                    min="0.5"
-                                    max="2"
-                                    step="0.1"
-                                    value={stageVoiceSpeed}
-                                    onChange={(e) => setStageVoiceSpeed(parseFloat(e.target.value))}
-                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                                  />
-                                  <div className="flex justify-between text-xs mt-2 text-gray-500 font-medium">
-                                    <span>0.5x</span>
-                                    <span>2.0x</span>
-                                  </div>
-                                </div>
-
-                                {/* Voice / Tone / Style — 3-column grid */}
-                                <div className="grid grid-cols-3 gap-3">
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-semibold text-gray-700">Voice</label>
-                                      <Tooltip text="Choose the voice your AI receptionist uses on calls.">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
+                                  <div className="relative">
                                     <select
-                                      value={stageVoice}
-                                      onChange={(e) => setStageVoice(e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
+                                      value={selectedAIModel}
+                                      onChange={(e) => {
+                                        if (e.target.value === "__view_more_models__") {
+                                          navigate('/settings?tab=voice-config&sub=models');
+                                          return;
+                                        }
+                                        setSelectedAIModel(e.target.value);
+                                        toast.success(`AI Model updated to ${e.target.value}`);
+                                      }}
+                                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-10 cursor-pointer shadow-2xs"
                                       style={{ fontFamily: 'Outfit, sans-serif' }}
                                     >
-                                      <option value="Ava">Ava</option>
-                                      <option value="Eva">Eva</option>
-                                      <option value="Aria">Aria</option>
-                                      <option value="Sam">Sam</option>
-                                      <option value="Jack">Jack</option>
-                                      <option value="Mango">Mango</option>
+                                      {activeAIModels.map((m) => (
+                                        <option key={m.id} value={m.name}>
+                                          {m.name} ({m.provider})
+                                        </option>
+                                      ))}
+                                      <option disabled value="">──────────</option>
+                                      <option value="__view_more_models__" className="text-blue-600 font-semibold">
+                                        Choose from library →
+                                      </option>
                                     </select>
+                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                                   </div>
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-semibold text-gray-700">Tone</label>
-                                      <Tooltip text="Select the default tone of voice the AI will use during calls (e.g. Professional, Friendly).">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                </div>
+
+                                {/* Speech Speed */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5">
+                                      <Volume2 className="w-4 h-4 text-amber-500" />
+                                      <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                        Speech Speed
+                                      </span>
+                                      <Tooltip text="Adjust how fast the AI speaks to ensure a natural conversational rhythm. Speech speed significantly affects naturalness — 1.0x (Natural) is highly recommended.">
+                                        <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
                                       </Tooltip>
                                     </div>
+                                    <span className="text-xs font-semibold text-gray-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      {stageVoiceSpeed.toFixed(1)}x
+                                    </span>
+                                  </div>
+                                  <div className="space-y-2 pt-1">
+                                    <input
+                                      type="range"
+                                      min="0.5"
+                                      max="1.5"
+                                      step="0.1"
+                                      value={stageVoiceSpeed}
+                                      onChange={(e) => setStageVoiceSpeed(parseFloat(e.target.value))}
+                                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                    />
+                                    <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 tracking-wider">
+                                      <span>SLOW</span>
+                                      <span>NATURAL</span>
+                                      <span>FAST</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Row 2: Voice Engine, Tone, Style in same row */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100 items-start">
+                                {/* Voice Engine */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <Mic className="w-4 h-4 text-emerald-500" />
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      Voice Engine
+                                    </span>
+                                    <Tooltip text="Choose the vocal personality that best represents your brand's tone.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="relative flex-1">
+                                      <select
+                                        value={stageVoice}
+                                        onChange={(e) => {
+                                          if (e.target.value === "__view_more_voices__") {
+                                            navigate('/settings?tab=voice-config&sub=voices');
+                                            return;
+                                          }
+                                          setStageVoice(e.target.value);
+                                          toast.success(`Voice updated to ${e.target.value}`);
+                                        }}
+                                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-7 cursor-pointer shadow-2xs"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      >
+                                        {activeConfiguredVoices.map((v) => (
+                                          <option key={v.id || v.name} value={v.name}>
+                                            {v.name} ({v.country}, {v.gender})
+                                          </option>
+                                        ))}
+                                        <option disabled value="">──────────</option>
+                                        <option value="__view_more_voices__" className="text-blue-600 font-semibold">
+                                          Choose from library →
+                                        </option>
+                                      </select>
+                                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        toast.success(`Playing preview for ${stageVoice || activeConfiguredVoices[0]?.name || "Nova"}...`);
+                                        if ("speechSynthesis" in window) {
+                                          window.speechSynthesis.cancel();
+                                          const utterance = new SpeechSynthesisUtterance("Hello! This is how your AI voice sounds.");
+                                          utterance.rate = stageVoiceSpeed;
+                                          window.speechSynthesis.speak(utterance);
+                                        }
+                                      }}
+                                      className="flex items-center gap-1.5 px-3.5 py-2.5 border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/40 rounded-xl text-sm font-semibold text-gray-800 transition-all cursor-pointer shadow-2xs group flex-shrink-0"
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      <Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
+                                      <span className="group-hover:text-emerald-700 text-xs">Test</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Tone */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      Tone
+                                    </span>
+                                    <Tooltip text="Set the emotional tone used by the AI assistant.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <div className="relative">
                                     <select
                                       value={stageTone}
-                                      onChange={(e) => setStageTone(e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
+                                      onChange={(e) => {
+                                        setStageTone(e.target.value);
+                                        toast.success(`Tone updated to ${e.target.value}`);
+                                      }}
+                                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-8 cursor-pointer shadow-2xs"
                                       style={{ fontFamily: 'Outfit, sans-serif' }}
                                     >
                                       <option value="Professional">Professional</option>
@@ -4802,30 +5034,562 @@ export default function Process() {
                                       <option value="Empathetic">Empathetic</option>
                                       <option value="Casual">Casual</option>
                                       <option value="Persuasive">Persuasive</option>
+                                      <option value="Authoritative">Authoritative</option>
                                     </select>
+                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                                   </div>
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                      <label className="text-sm font-semibold text-gray-700">Style</label>
-                                      <Tooltip text="Select the conversational style (e.g. Concise, Detailed).">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                      </Tooltip>
-                                    </div>
+                                </div>
+
+                                {/* Style */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      Style
+                                    </span>
+                                    <Tooltip text="Select conversational phrasing style (concise vs detailed).">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <div className="relative">
                                     <select
                                       value={stageStyle}
-                                      onChange={(e) => setStageStyle(e.target.value)}
-                                      className="w-full px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-sm"
+                                      onChange={(e) => {
+                                        setStageStyle(e.target.value);
+                                        toast.success(`Style updated to ${e.target.value}`);
+                                      }}
+                                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-8 cursor-pointer shadow-2xs"
                                       style={{ fontFamily: 'Outfit, sans-serif' }}
                                     >
                                       <option value="Balanced">Balanced</option>
                                       <option value="Concise">Concise</option>
                                       <option value="Detailed">Detailed</option>
+                                      <option value="Warm">Warm</option>
+                                      <option value="Expressive">Expressive</option>
                                     </select>
+                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                                   </div>
                                 </div>
                               </div>
+                            </div>
+                          </div>
+
+                          {/* 2. Caller Pitch Card */}
+                          <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-xs">
+                            {/* Collapsible Header */}
+                            <button
+                              type="button"
+                              onClick={() => setCallerPitchExpanded(!callerPitchExpanded)}
+                              className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50/70 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0 text-emerald-600">
+                                  <Sparkles className="w-5 h-5" />
+                                </div>
+                                <div className="flex flex-col items-start text-left">
+                                  <span className="text-base font-semibold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                    Caller Pitch
+                                  </span>
+                                  <span className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Script or instructions used by the AI agent when conversing on calls in this stage.
+                                  </span>
+                                </div>
+                              </div>
+                              <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${callerPitchExpanded ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {/* Expanded Content */}
+                            {callerPitchExpanded && (
+                              <div className="p-6 border-t border-gray-100 space-y-6">
+                                {/* Mode Toggle */}
+                                <div className="flex items-center gap-3">
+                                  <div className="flex gap-1.5 bg-gray-100 p-1 rounded-xl w-fit">
+                                    <button
+                                      type="button"
+                                      onClick={() => setCallerPitchMode("single")}
+                                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${callerPitchMode === "single"
+                                        ? "bg-primary text-white shadow-xs"
+                                        : "text-gray-600 hover:text-gray-900"
+                                        }`}
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      Single Prompt
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setCallerPitchMode("comprehensive")}
+                                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${callerPitchMode === "comprehensive"
+                                        ? "bg-primary text-white shadow-xs"
+                                        : "text-gray-600 hover:text-gray-900"
+                                        }`}
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      Comprehensive
+                                    </button>
+                                  </div>
+                                  {callerPitchMode === "single" ? (
+                                    <InfoTooltip text="Single Prompt lets you write the entire outbound script as one open text box, with a Generate with AI shortcut — the fastest option for a simple stage." />
+                                  ) : (
+                                    <InfoTooltip text="Comprehensive mode lets you set a separate greeting, objective, business info, and languages instead of one combined script." />
+                                  )}
+                                </div>
+
+                                {/* Single Prompt Mode */}
+                                {callerPitchMode === "single" && (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <label className="text-xs font-bold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                        Pitch Script / Prompt
+                                      </label>
+                                      <button
+                                        type="button"
+                                        onClick={() => setPitchFieldPickerTarget("callerPitch")}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors cursor-pointer"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        Select Field
+                                      </button>
+                                    </div>
+
+                                    <textarea
+                                      ref={callerPitchRef}
+                                      value={callerPitch}
+                                      onChange={(e) => setCallerPitch(e.target.value)}
+                                      className="w-full p-4 bg-gray-50/50 border border-input rounded-xl resize-none text-sm text-gray-900 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors leading-relaxed"
+                                      style={{ fontFamily: 'Outfit, sans-serif', minHeight: '140px' }}
+                                      placeholder="Write your caller script or instructions here... Use Select Field in the top right to insert dynamic variables."
+                                    />
+                                    <div className="flex items-center justify-end">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          toast.success("AI is generating optimized caller pitch...");
+                                          setCallerPitch("Hi {{name}}, this is your dedicated assistant from {{organization.name}}. I'm reaching out to follow up on your recent inquiry and help answer any questions you might have about our services. Do you have a quick moment to speak?");
+                                        }}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      >
+                                        <Zap className="w-4 h-4 text-amber-500" />
+                                        Generate with AI
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Comprehensive Mode */}
+                                {callerPitchMode === "comprehensive" && (
+                                  <div className="space-y-4">
+                                    {/* A. Greeting / Intro Message */}
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setGreetingIntroExpanded(!greetingIntroExpanded)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                                      >
+                                        <div className="flex flex-col items-start gap-0.5">
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Greeting / Intro Message
+                                          </span>
+                                          {!greetingIntroExpanded && greetingIntroMessage && (
+                                            <span className="text-xs truncate max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                              {greetingIntroMessage.slice(0, 80)}...
+                                            </span>
+                                          )}
+                                          {!greetingIntroExpanded && !greetingIntroMessage && (
+                                            <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                                              Not configured
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${greetingIntroExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+
+                                      {greetingIntroExpanded && (
+                                        <div className="p-4 border-t border-border space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                              Greeting Text
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setPitchFieldPickerTarget("greetingIntro")}
+                                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors cursor-pointer"
+                                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                                            >
+                                              <Plus className="w-3.5 h-3.5" />
+                                              Select Field
+                                            </button>
+                                          </div>
+                                          <textarea
+                                            ref={greetingIntroRef}
+                                            value={greetingIntroMessage}
+                                            onChange={(e) => setGreetingIntroMessage(e.target.value)}
+                                            placeholder="Hi, this is Alex from {{organization.name}}. Who do I have the pleasure of speaking with today?"
+                                            className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
+                                            style={{ fontFamily: 'Outfit, sans-serif', minHeight: '100px' }}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* B. Objective */}
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setObjectiveExpanded(!objectiveExpanded)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                                      >
+                                        <div className="flex flex-col items-start gap-0.5">
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Objective
+                                          </span>
+                                          {!objectiveExpanded && objectiveText && (
+                                            <span className="text-xs truncate max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                              {objectiveText.slice(0, 80)}...
+                                            </span>
+                                          )}
+                                          {!objectiveExpanded && !objectiveText && (
+                                            <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                                              Not configured
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${objectiveExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+
+                                      {objectiveExpanded && (
+                                        <div className="p-4 border-t border-border space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                              Objective Instructions
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setPitchFieldPickerTarget("objective")}
+                                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors cursor-pointer"
+                                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                                            >
+                                              <Plus className="w-3.5 h-3.5" />
+                                              Select Field
+                                            </button>
+                                          </div>
+                                          <textarea
+                                            ref={objectiveTextRef}
+                                            value={objectiveText}
+                                            onChange={(e) => setObjectiveText(e.target.value)}
+                                            placeholder="You are an AI assistant for {{organization.name}}. Your role is to answer general inquiries, schedule appointments, and provide information about our services."
+                                            className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
+                                            style={{ fontFamily: 'Outfit, sans-serif', minHeight: '100px' }}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* C. Business Information */}
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setBusinessInfoExpanded(!businessInfoExpanded)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Business Information
+                                          </span>
+                                          {!businessInfoExpanded && businessInfoItems.length > 0 && (
+                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-200 text-gray-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                              {businessInfoItems.length} {businessInfoItems.length === 1 ? 'item' : 'items'}
+                                            </span>
+                                          )}
+                                          {!businessInfoExpanded && businessInfoItems.length === 0 && (
+                                            <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                                              No data added
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${businessInfoExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+
+                                      {businessInfoExpanded && (
+                                        <div className="p-4 border-t border-border space-y-3">
+                                          <p className="text-sm mb-3" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                            Add business information that the AI should know while speaking with callers.
+                                          </p>
+
+                                          {/* Existing Business Info Items */}
+                                          {businessInfoItems.map((item) => (
+                                            <div key={item.id} className="p-3 border border-border rounded-lg bg-muted/20">
+                                              <div className="flex items-start justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-sm font-bold" style={{ color: '#111827', fontFamily: 'DM Sans, sans-serif' }}>
+                                                    {item.title}
+                                                  </span>
+                                                  {item.active && (
+                                                    <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                      Active
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setEditingBusinessInfoId(item.id);
+                                                      setBusinessInfoFormData({
+                                                        title: item.title,
+                                                        information: item.information,
+                                                        active: item.active
+                                                      });
+                                                      setShowBusinessInfoForm(true);
+                                                    }}
+                                                    className="text-blue-600 hover:text-blue-700"
+                                                  >
+                                                    <Edit className="w-4 h-4" />
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setBusinessInfoItems(businessInfoItems.filter(i => i.id !== item.id));
+                                                      toast.success("Information deleted");
+                                                    }}
+                                                    className="text-red-600 hover:text-red-700"
+                                                  >
+                                                    <Trash2 className="w-4 h-4" />
+                                                  </button>
+                                                </div>
+                                              </div>
+                                              <p className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                                                {item.information}
+                                              </p>
+                                            </div>
+                                          ))}
+
+                                          {/* Inline Add/Edit Form */}
+                                          {showBusinessInfoForm && (
+                                            <div className="p-4 border border-primary/30 rounded-lg bg-blue-50/30 space-y-3">
+                                              <div>
+                                                <label className="block text-xs font-medium mb-1" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                                  Title
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={businessInfoFormData.title}
+                                                  onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, title: e.target.value })}
+                                                  placeholder="Example: Clinic Timings"
+                                                  className="w-full p-2 bg-white border border-input rounded-lg text-sm"
+                                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                />
+                                              </div>
+                                              <div>
+                                                <label className="block text-xs font-medium mb-1" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                                  Information
+                                                </label>
+                                                <textarea
+                                                  value={businessInfoFormData.information}
+                                                  onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, information: e.target.value })}
+                                                  placeholder="Example: Our clinic is open Monday to Saturday from 9 AM to 7 PM."
+                                                  className="w-full p-2 bg-white border border-input rounded-lg resize-none text-sm"
+                                                  style={{ fontFamily: 'Outfit, sans-serif', minHeight: '80px' }}
+                                                />
+                                              </div>
+                                              <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                  <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                    Active
+                                                  </label>
+                                                  <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      className="sr-only peer"
+                                                      checked={businessInfoFormData.active}
+                                                      onChange={(e) => setBusinessInfoFormData({ ...businessInfoFormData, active: e.target.checked })}
+                                                    />
+                                                    <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                                                  </label>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setShowBusinessInfoForm(false);
+                                                      setEditingBusinessInfoId(null);
+                                                      setBusinessInfoFormData({ title: "", information: "", active: true });
+                                                    }}
+                                                    className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                                                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                  >
+                                                    Cancel
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      if (businessInfoFormData.title && businessInfoFormData.information) {
+                                                        if (editingBusinessInfoId !== null) {
+                                                          setBusinessInfoItems(businessInfoItems.map(item =>
+                                                            item.id === editingBusinessInfoId
+                                                              ? { ...item, ...businessInfoFormData }
+                                                              : item
+                                                          ));
+                                                          toast.success("Information updated");
+                                                        } else {
+                                                          setBusinessInfoItems([...businessInfoItems, {
+                                                            id: Date.now(),
+                                                            ...businessInfoFormData
+                                                          }]);
+                                                          toast.success("Information added");
+                                                        }
+                                                        setShowBusinessInfoForm(false);
+                                                        setEditingBusinessInfoId(null);
+                                                        setBusinessInfoFormData({ title: "", information: "", active: true });
+                                                      }
+                                                    }}
+                                                    className="px-4 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary-hover"
+                                                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                  >
+                                                    Done
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Add Information Button */}
+                                          {!showBusinessInfoForm && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setShowBusinessInfoForm(true)}
+                                              className="w-full px-4 py-2 border border-dashed border-gray-400 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-medium"
+                                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                                            >
+                                              <Plus className="w-4 h-4" />
+                                              Add Information
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* D. Languages */}
+                                    <div className="rounded-xl border border-border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        onClick={() => setLanguagesExpanded(!languagesExpanded)}
+                                        className="w-full flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                                      >
+                                        <div className="flex flex-col items-start gap-0.5">
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Languages
+                                          </span>
+                                          {!languagesExpanded && (primaryLanguage || secondaryLanguages.length > 0) && (
+                                            <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                              {primaryLanguage && `Primary: ${primaryLanguage}`}
+                                              {primaryLanguage && secondaryLanguages.length > 0 && ' · '}
+                                              {secondaryLanguages.length > 0 && `Secondary: ${secondaryLanguages.join(', ')}`}
+                                            </span>
+                                          )}
+                                          {!languagesExpanded && !primaryLanguage && secondaryLanguages.length === 0 && (
+                                            <span className="text-xs" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
+                                              Not configured
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${languagesExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+
+                                      {languagesExpanded && (
+                                        <div className="p-4 border-t border-border space-y-4">
+                                          {/* Primary Language */}
+                                          <div>
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                Primary Language *
+                                              </label>
+                                              <Tooltip text="The default language your AI Receptionist will speak on all calls for this stage.">
+                                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                                              </Tooltip>
+                                            </div>
+                                            <Select value={primaryLanguage} onValueChange={setPrimaryLanguage}>
+                                              <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="Select primary language" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="English">English</SelectItem>
+                                                <SelectItem value="Spanish">Spanish</SelectItem>
+                                                <SelectItem value="French">French</SelectItem>
+                                                <SelectItem value="German">German</SelectItem>
+                                                <SelectItem value="Italian">Italian</SelectItem>
+                                                <SelectItem value="Portuguese">Portuguese</SelectItem>
+                                                <SelectItem value="Chinese">Chinese</SelectItem>
+                                                <SelectItem value="Japanese">Japanese</SelectItem>
+                                                <SelectItem value="Korean">Korean</SelectItem>
+                                                <SelectItem value="Arabic">Arabic</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+
+                                          {/* Secondary Languages */}
+                                          <div>
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <label className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                Secondary Languages
+                                              </label>
+                                              <Tooltip text="Fallback language(s) the AI can switch to if the caller requests it or if their language differs from the primary. You can add multiple.">
+                                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                                              </Tooltip>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <Select value={secondaryLanguageDraft} onValueChange={setSecondaryLanguageDraft}>
+                                                <SelectTrigger className="flex-1">
+                                                  <SelectValue placeholder="Select a fallback language (optional)" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  {["English", "Spanish", "French", "German", "Italian", "Portuguese", "Chinese", "Japanese", "Korean", "Arabic"]
+                                                    .filter(lang => lang !== primaryLanguage && !secondaryLanguages.includes(lang))
+                                                    .map(lang => (
+                                                      <SelectItem key={lang} value={lang}>{lang}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                              </Select>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  if (secondaryLanguageDraft) {
+                                                    setSecondaryLanguages([...secondaryLanguages, secondaryLanguageDraft]);
+                                                    setSecondaryLanguageDraft("");
+                                                  }
+                                                }}
+                                                disabled={!secondaryLanguageDraft}
+                                                className="w-9 h-9 flex items-center justify-center rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                                              >
+                                                <Plus className="w-4 h-4 text-white" />
+                                              </button>
+                                            </div>
+                                            {secondaryLanguages.length > 0 && (
+                                              <div className="flex flex-wrap gap-2 mt-2">
+                                                {secondaryLanguages.map((lang) => (
+                                                  <span key={lang} className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">
+                                                    {lang}
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setSecondaryLanguages(secondaryLanguages.filter(l => l !== lang))}
+                                                      className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
+                                                    >
+                                                      <X className="w-3 h-3" />
+                                                    </button>
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
+
 
                           {/* ──────────────────────────── RECORD CALLS ───────────────────────── */}
                           <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
@@ -4969,329 +5733,7 @@ export default function Process() {
                             )}
                           </div>
 
-                          {/* ───────────────────────────── RETRY RULES ───────────────────────────── */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-                            {/* Header Row */}
-                            <button
-                              onClick={() => setRetryRulesExpanded(!retryRulesExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <RefreshCw className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span
-                                    className="text-sm font-medium"
-                                    style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Retry Rules
-                                  </span>
-                                  <Tooltip text="Automatically retry the call if it fails, based on the rules below.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${retryRulesEnabled
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'bg-gray-100 text-gray-500'
-                                    }`}
-                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                >
-                                  {retryRulesEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${retryRulesExpanded ? 'rotate-180' : ''
-                                    }`}
-                                />
-                              </div>
-                            </button>
 
-                            {/* Expanded Content */}
-                            {retryRulesExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                {/* Enable Toggle Row */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      className="text-sm font-medium"
-                                      style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      Enable Retry Rules
-                                    </span>
-                                    <Tooltip text="If call fails, automatically retry calling based on rules configured below.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={retryRulesEnabled}
-                                      onChange={(e) => {
-                                        setRetryRulesEnabled(e.target.checked);
-                                        toast.success(e.target.checked ? 'Retry rules enabled' : 'Retry rules disabled');
-                                      }}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-
-                                {/* Retry Attempts */}
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label
-                                      className="text-sm font-medium"
-                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                    >
-                                      Retry Attempts
-                                    </label>
-                                    <Tooltip text="Number of call retry attempts to make before failing permanently.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={10}
-                                    value={retryAttempts}
-                                    onChange={(e) => setRetryAttempts(parseInt(e.target.value) || 1)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  />
-                                </div>
-
-                                {/* Delay Between Retries */}
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label
-                                      className="text-sm font-medium"
-                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                    >
-                                      Delay Between Retries (minutes)
-                                    </label>
-                                    <Tooltip text="Time to wait between each retry attempt.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    value={retryDelay}
-                                    onChange={(e) => setRetryDelay(parseInt(e.target.value) || 1)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  />
-                                </div>
-
-                                {/* Fallback Stage */}
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label
-                                      className="text-sm font-medium"
-                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                    >
-                                      Fallback Stage
-                                    </label>
-                                    <Tooltip text="Workflow stage to transition call task to if all retry attempts fail.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <select
-                                    value={retryFallbackStage}
-                                    onChange={(e) => setRetryFallbackStage(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors appearance-none"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  >
-                                    <option value="Do Nothing">Do Nothing</option>
-                                    {selectedProcessData?.stages.map((s) => (
-                                      <option key={s.id} value={s.name}>
-                                        {s.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* ─────────────────────────── SKIP DAY RULES ──────────────────────────── */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-                            {/* Header Row */}
-                            <button
-                              onClick={() => setSkipDayRulesExpanded(!skipDayRulesExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <Calendar className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span
-                                    className="text-sm font-medium"
-                                    style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Skip Day Rules
-                                  </span>
-                                  <Tooltip text="Avoid placing outbound calls on selected days or dates.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${skipDayRulesEnabled
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'bg-gray-100 text-gray-500'
-                                    }`}
-                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                >
-                                  {skipDayRulesEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${skipDayRulesExpanded ? 'rotate-180' : ''
-                                    }`}
-                                />
-                              </div>
-                            </button>
-
-                            {/* Expanded Content */}
-                            {skipDayRulesExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                {/* Enable Toggle Row */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      className="text-sm font-medium"
-                                      style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      Enable Skip Day Rules
-                                    </span>
-                                    <Tooltip text="Avoid making automated outbound calls on selected days/dates.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={skipDayRulesEnabled}
-                                      onChange={(e) => {
-                                        setSkipDayRulesEnabled(e.target.checked);
-                                        toast.success(
-                                          e.target.checked ? 'Skip day rules enabled' : 'Skip day rules disabled'
-                                        );
-                                      }}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-
-                                {/* Weekly Off Days */}
-                                <div>
-                                  <div className="flex items-center gap-2 mb-3">
-                                    <label
-                                      className="text-sm font-medium"
-                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                    >
-                                      Weekly Off Days
-                                    </label>
-                                    <Tooltip text="Days of the week to skip automated calling.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => {
-                                      const isActive = weeklyOffDays.includes(day);
-                                      return (
-                                        <button
-                                          key={day}
-                                          type="button"
-                                          onClick={() =>
-                                            setWeeklyOffDays((prev) =>
-                                              isActive ? prev.filter((d) => d !== day) : [...prev, day]
-                                            )
-                                          }
-                                          className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-all ${isActive
-                                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                                            : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600'
-                                            }`}
-                                          style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                        >
-                                          {day}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                {/* Custom Off Dates */}
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <label
-                                      className="text-sm font-medium"
-                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                    >
-                                      Custom Off Dates
-                                    </label>
-                                    <Tooltip text="Specific calendar dates on which no calls will be placed.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="date"
-                                      value={customOffDate}
-                                      onChange={(e) => setCustomOffDate(e.target.value)}
-                                      className="flex-1 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (customOffDate && !customOffDatesList.includes(customOffDate)) {
-                                          setCustomOffDatesList((prev) => [...prev, customOffDate]);
-                                          setCustomOffDate('');
-                                        }
-                                      }}
-                                      className="w-9 h-9 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors flex-shrink-0"
-                                    >
-                                      <Plus className="w-4 h-4 text-white" />
-                                    </button>
-                                  </div>
-
-                                  {/* List of added custom dates */}
-                                  {customOffDatesList.length > 0 && (
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                      {customOffDatesList.map((date) => (
-                                        <span
-                                          key={date}
-                                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-medium"
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          {date}
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setCustomOffDatesList((prev) => prev.filter((d) => d !== date))
-                                            }
-                                            className="hover:text-blue-900 transition-colors"
-                                          >
-                                            <X className="w-3 h-3" />
-                                          </button>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-
-                                  <p
-                                    className="mt-2 text-xs"
-                                    style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}
-                                  >
-                                    Calls will not be scheduled on selected days and dates.
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
 
                           {/* ──────────────────────────── DETECT VOICEMAIL ───────────────────────── */}
                           <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
@@ -5373,353 +5815,136 @@ export default function Process() {
                             )}
                           </div>
 
-                          {/* Business Hours */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
-                            <button
-                              type="button"
-                              onClick={() => setBusinessHoursExpanded(!businessHoursExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <Clock className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Business Hours
-                                  </span>
-                                  <Tooltip text="Restrict when the AI actively receives calls/messages or makes outbound calls to specific hours per day.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${businessHoursEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                  {businessHoursEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${businessHoursExpanded ? 'rotate-180' : ''}`} />
-                              </div>
-                            </button>
-
-                            {businessHoursExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
-                                {/* Enable toggle */}
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
-                                      Enable Business Hours
-                                    </span>
-                                    <Tooltip text="When enabled, this process/stage will only actively operate within the hours defined below.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={businessHoursEnabled}
-                                      onChange={(e) => setBusinessHoursEnabled(e.target.checked)}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-
-                                {/* Timezone */}
-                                <div>
-                                  <label className="text-sm font-medium block mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>Timezone</label>
-                                  <select
-                                    value={businessHoursTimezone}
-                                    onChange={(e) => setBusinessHoursTimezone(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                                  >
-                                    <option value="America/New_York">Eastern Time (ET)</option>
-                                    <option value="America/Chicago">Central Time (CT)</option>
-                                    <option value="America/Denver">Mountain Time (MT)</option>
-                                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                                    <option value="Asia/Kolkata">India Standard Time (IST)</option>
-                                    <option value="Europe/London">GMT / London</option>
-                                  </select>
-                                </div>
-
-                                {/* Per-day hours */}
-                                <div className="space-y-2">
-                                  <label className="text-sm font-medium block" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>Hours by Day</label>
-                                  {(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const).map((day) => {
-                                    const dayData = businessHoursByDay[day];
-                                    return (
-                                      <div key={day} className="flex items-center gap-3 p-2.5 bg-white border border-gray-200 rounded-lg">
-                                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                                          <input
-                                            type="checkbox"
-                                            className="sr-only peer"
-                                            checked={dayData.enabled}
-                                            onChange={(e) =>
-                                              setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], enabled: e.target.checked } }))
-                                            }
-                                          />
-                                          <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
-                                        </label>
-                                        <span className="text-sm font-semibold w-10 shrink-0" style={{ fontFamily: 'DM Sans, sans-serif', color: dayData.enabled ? '#020817' : '#9CA3AF' }}>
-                                          {day}
-                                        </span>
-                                        <input
-                                          type="time"
-                                          value={dayData.start}
-                                          disabled={!dayData.enabled}
-                                          onChange={(e) =>
-                                            setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], start: e.target.value } }))
-                                          }
-                                          className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 disabled:bg-gray-50"
-                                        />
-                                        <span className="text-xs text-gray-400">to</span>
-                                        <input
-                                          type="time"
-                                          value={dayData.end}
-                                          disabled={!dayData.enabled}
-                                          onChange={(e) =>
-                                            setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], end: e.target.value } }))
-                                          }
-                                          className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 disabled:bg-gray-50"
-                                        />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-
-                                {/* Outside-hours behavior */}
-                                <div>
-                                  <label className="text-sm font-medium block mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                    When contacted outside business hours
-                                  </label>
-                                  <select
-                                    value={outsideHoursAction}
-                                    onChange={(e) => setOutsideHoursAction(e.target.value as typeof outsideHoursAction)}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors mb-3"
-                                  >
-                                    <option value="message">Play/Send a custom message</option>
-                                    <option value="voicemail">Route to voicemail</option>
-                                    <option value="queue">Queue until next business hours</option>
-                                  </select>
-                                  {outsideHoursAction === "message" && (
-                                    <textarea
-                                      value={outsideHoursMessage}
-                                      onChange={(e) => setOutsideHoursMessage(e.target.value)}
-                                      rows={3}
-                                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:border-blue-500 transition-colors"
-                                      placeholder="We're currently closed. Our business hours are..."
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
                         </div>
                       )}
 
 
-                      {/* Flow Builder Tab */}
-                      {activeTab === "flowbuilder" && (
-                        <div className="-m-6 h-[calc(100%+3rem)]">
-                          <FlowBuilderTab
-                            processName={selectedProcessData?.name ?? "Current Process"}
-                            stageName={stage.name}
-                            processes={processes}
-                            currentProcessId={selectedProcess ?? undefined}
-                            workflowSteps={workflowSteps}
-                            onWorkflowStepsChange={setWorkflowSteps}
-                            stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
-                          />
-                        </div>
-                      )}
 
                       {/* Automation Side Drawer */}
-                      {workflowStepsDrawerOpen && (
-                        <>
-                          {/* Backdrop */}
-                          <div
-                            className="fixed inset-0 z-40"
-                            style={{ backgroundColor: 'rgba(0,0,0,0.30)' }}
-                            onClick={() => setWorkflowStepsDrawerOpen(false)}
-                          />
-                          {/* Drawer panel — 75vw, full height, anchored right */}
-                          <div
-                            className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border"
-                            style={{ width: '55vw', minWidth: '55vw', maxWidth: '55vw', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)' }}
-                          >
-                            {/* Header */}
-                            <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border">
-                              <div className="flex items-start justify-between mb-1">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <Zap className="w-5 h-5" style={{ color: '#020817' }} />
-                                    <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Add Automation</h2>
-                                  </div>
-                                  <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Choose and configure the step before adding it to this stage.</p>
-                                </div>
-                                <button onClick={() => setWorkflowStepsDrawerOpen(false)} className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0">
-                                  <X className="w-5 h-5 text-muted-foreground" />
-                                </button>
-                              </div>
-                              {/* Search */}
-                              <div className="relative mt-4">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                <input
-                                  type="text"
-                                  value={workflowStepSearch}
-                                  onChange={e => setWorkflowStepSearch(e.target.value)}
-                                  placeholder="Search workflow steps..."
-                                  className="w-full pl-9 pr-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                />
-                              </div>
-                            </div>
+                      {/* Refactored Scope-Aware Automation Drawer (Stage Scope) */}
+                      <AddAutomationDrawer
+                        isOpen={workflowStepsDrawerOpen}
+                        onClose={() => {
+                          setWorkflowStepsDrawerOpen(false);
+                          setEditingAutomationStepId(undefined);
+                          setEditingAutomationRule(null);
+                        }}
+                        scope="stage"
+                        defaultView={automationDrawerView}
+                        initialAutomation={editingRuleInitialAutomation}
+                        stageRef={{
+                          processId: selectedProcess || "",
+                          stageId: expandedStage || "",
+                          stageName: selectedProcessData?.stages.find((s) => s.id === expandedStage)?.name,
+                          processName: selectedProcessData?.name,
+                        }}
+                        processName={selectedProcessData?.name}
+                        stageName={selectedProcessData?.stages.find((s) => s.id === expandedStage)?.name}
+                        stageColor={selectedProcessData?.stages.find((s) => s.id === expandedStage)?.color}
+                        stageType={selectedProcessData?.stages.find((s) => s.id === expandedStage)?.stageType}
+                        processes={processes}
+                        currentProcessId={selectedProcess || undefined}
+                        workflowSteps={workflowSteps}
+                        onWorkflowStepsChange={(newSteps) => {
+                          setWorkflowSteps(newSteps);
+                          if (selectedProcess && expandedStage) {
+                            setProcesses((prev) =>
+                              prev.map((p) =>
+                                p.id !== selectedProcess
+                                  ? p
+                                  : {
+                                      ...p,
+                                      stages: p.stages.map((s) =>
+                                        s.id !== expandedStage ? s : { ...s, workflowSteps: newSteps }
+                                      ),
+                                    }
+                              )
+                            );
+                          }
+                        }}
+                        stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
+                        initialStepIdToConfigure={editingAutomationStepId}
+                        onSaveAutomation={(savedAuto) => {
+                          const isExit = savedAuto.trigger.type === "stage" && (savedAuto.trigger as any).when === "exit";
+                          const updated = savedAuto.steps.map((s) => ({
+                            id: s.id,
+                            name: s.name,
+                            description: s.description || "",
+                            iconKey: s.iconKey || "zap",
+                            stepKey: s.stepKey,
+                            params: s.params || {},
+                            delayValue: s.delay?.value || 0,
+                            delayUnit: (s.delay?.unit as any) || "minutes",
+                            executionType: "wait" as const,
+                            trigger: isExit ? "exit_stage" as const : "stage" as const,
+                          }));
+                          setWorkflowSteps(updated);
+                          if (selectedProcess && expandedStage) {
+                            setProcesses((prev) =>
+                              prev.map((p) =>
+                                p.id !== selectedProcess
+                                  ? p
+                                  : {
+                                      ...p,
+                                      stages: p.stages.map((s) =>
+                                        s.id !== expandedStage ? s : { ...s, workflowSteps: updated }
+                                      ),
+                                    }
+                              )
+                            );
+                          }
 
-                            {/* Body — two column layout */}
-                            <div className="flex flex-1 overflow-hidden">
-                              {/* Left Sidebar */}
-                              <div className="w-[220px] flex-shrink-0 border-r border-border overflow-y-auto py-2 flex flex-col gap-1">
-                                {[
-                                  { key: "all", icon: <Sparkles className="w-4 h-4" />, name: "All" },
-                                  { key: "workflow", icon: <GitBranch className="w-4 h-4" />, name: "Workflow Logic" },
-                                  { key: "callerengagement", icon: <Phone className="w-4 h-4" />, name: "Caller Engagement" },
-                                  { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
-                                  { key: "data", icon: <Database className="w-4 h-4" />, name: "Data & Assignment" },
-                                  { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
-                                ].map((cat) => {
-                                  const active = workflowStepCategory === cat.key;
-                                  return (
-                                    <button
-                                      key={cat.key}
-                                      onClick={() => setWorkflowStepCategory(cat.key)}
-                                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-l-2 hover:bg-muted/40"
-                                      style={{
-                                        borderLeftColor: active ? '#2563EB' : 'transparent',
-                                        backgroundColor: active ? '#EFF6FF' : 'transparent',
-                                      }}
-                                    >
-                                      <span className="flex-shrink-0" style={{ color: active ? '#2563EB' : '#64748B' }}>
-                                        {cat.icon}
-                                      </span>
-                                      <span
-                                        className="text-sm font-semibold"
-                                        style={{
-                                          color: active ? '#2563EB' : '#020817',
-                                          fontFamily: 'DM Sans, sans-serif'
-                                        }}
-                                      >
-                                        {cat.name}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
+                          // Bidirectional sync with global automation store
+                          const stageObj = selectedProcessData?.stages.find((s) => s.id === expandedStage);
+                          if (stageObj && selectedProcess) {
+                            const rulePayload = {
+                              orgId: organization?.id || "default",
+                              name: savedAuto.name || `On ${isExit ? "Exit" : "Entry"}: ${stageObj.name}`,
+                              description: savedAuto.description || `Automation for stage ${stageObj.name}`,
+                              entityType: (selectedProcessData?.entityType as any) || "client",
+                              isAdmin: false,
+                              createdIn: "client" as const,
+                              isClientCustomization: true,
+                              source: "custom" as const,
+                              trigger: {
+                                event: isExit ? "stage.exit" : "stage.entry",
+                                label: savedAuto.name || `On Stage ${isExit ? "Exit" : "Entry"}: ${stageObj.name}`,
+                                source: "any" as const,
+                                params: {
+                                  processId: selectedProcess,
+                                  processName: selectedProcessData?.name,
+                                  stageId: stageObj.id,
+                                  stageName: stageObj.name,
+                                  triggerProcessId: selectedProcess,
+                                  triggerProcessName: selectedProcessData?.name,
+                                  triggerStageId: stageObj.id,
+                                  triggerStageName: stageObj.name,
+                                  conditions: (savedAuto.trigger as any)?.params?.conditions || [],
+                                },
+                              },
+                              action: {
+                                type: "moveToStage" as const,
+                                processId: selectedProcess,
+                                stageId: stageObj.id,
+                                processName: selectedProcessData?.name,
+                                stageName: stageObj.name,
+                              },
+                              actions: updated,
+                              enabled: savedAuto.status === "active",
+                              health: "ok" as const,
+                            };
 
-                              {/* Right Steps List */}
-                              <div className="flex-1 overflow-y-auto">
-                                {(() => {
-                                  const currentStage = selectedProcessData?.stages.find((s) => s.id === expandedStage);
-                                  const currentStageIndex = selectedProcessData?.stages.findIndex((s) => s.id === expandedStage);
-                                  const isCurrentStageLast = Boolean(
-                                    currentStage?.isFinal ||
-                                    (selectedProcessData && currentStageIndex !== undefined && currentStageIndex !== -1 && currentStageIndex === selectedProcessData.stages.length - 1)
-                                  );
-
-                                  const allSteps = [
-                                    { key: "processmovement", name: "Assign Process / Stage", desc: "Move the contact to a specific process and stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
-                                    { key: "movetonewprocess", name: "Move to New Process", desc: "Move user to a new process and stage to continue the pipeline.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
-                                    { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
-                                    { key: "callhangup", name: "Auto Hangup", desc: "Automatically end the call after the AI completes its interaction, with an optional closing message.", iconKey: "phoneoff", cats: ["all", "callerengagement"], popular: false },
-                                    { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "callerengagement"], popular: false },
-                                    { key: "idlemessages", name: "Idle Messages", desc: "Configure messages the AI speaks when the caller has not responded.", iconKey: "messagesquare", cats: ["all", "callerengagement"], popular: false },
-                                    { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
-                                    { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
-                                    { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
-                                    { key: "send-invoice", name: "Send Invoice", desc: "Send the generated invoice to the client via WhatsApp, SMS, or Email.", iconKey: "filetext", cats: ["all", "communication"], popular: false },
-                                    { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "data"], popular: false },
-                                    { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
-                                    { key: "wh_trigger", name: "API Automation", desc: "Trigger actions in external systems using your connected API integrations.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
-                                    { key: "webhook_trigger", name: "Webhook Automation", desc: "Send an event payload to a connected webhook when this step runs.", iconKey: "webhook", cats: ["all", "webhook"], popular: false },
-                                  ];
-                                  const iconMap: Record<string, React.ReactNode> = {
-                                    clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
-                                    chevronright: <ChevronRight className="w-4 h-4 text-white" />, zap: <Zap className="w-4 h-4 text-white" />,
-                                    edit: <Edit className="w-4 h-4 text-white" />, usercheck: <UserCheck className="w-4 h-4 text-white" />,
-                                    phonecall: <PhoneCall className="w-4 h-4 text-white" />, messagecircle: <MessageCircle className="w-4 h-4 text-white" />,
-                                    messagesquare: <MessageSquare className="w-4 h-4 text-white" />, mail: <Mail className="w-4 h-4 text-white" />,
-                                    filetext: <FileText className="w-4 h-4 text-white" />, clipboardlist: <ClipboardList className="w-4 h-4 text-white" />,
-                                    globe: <Globe className="w-4 h-4 text-white" />, calendar: <Calendar className="w-4 h-4 text-white" />,
-                                    refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
-                                    lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
-                                    layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
-                                    gitbranch: <GitBranch className="w-4 h-4 text-white" />,
-                                    volume2: <Volume2 className="w-4 h-4 text-white" />,
-                                    webhook: <Webhook className="w-4 h-4 text-white" />,
-                                    phoneoff: <PhoneOff className="w-4 h-4 text-white" />,
-                                  };
-                                  const filtered = allSteps.filter(s =>
-                                    s.cats.includes(workflowStepCategory) &&
-                                    (workflowStepSearch === "" || s.name.toLowerCase().includes(workflowStepSearch.toLowerCase()) || s.desc.toLowerCase().includes(workflowStepSearch.toLowerCase()))
-                                  );
-
-                                  return filtered.map((step, i) => {
-                                    const isSelected = selectedWorkflowStepCard === step.key;
-                                    const allowedTriggers = STEP_ALLOWED_TRIGGERS[step.key] || [];
-                                    const isOnlyInCall = allowedTriggers.length === 1 && allowedTriggers[0] === "incall";
-                                    const isUnavailable = isOnlyInCall && (stageType === "No Call Activity" || stageType === "Transfer to Human");
-
-                                    const buttonElement = (
-                                      <button
-                                        key={step.key}
-                                        onClick={isUnavailable ? undefined : () => {
-                                          resetStepDetailState();
-                                          setCurrentEditingStep({ id: `${step.key}-${Date.now()}`, name: step.name, description: step.desc, iconKey: step.iconKey, stepKey: step.key });
-                                          setIsCreatingNewStep(true);
-                                          setWorkflowStepsDrawerOpen(false);
-                                          setStepDetailDrawerOpen(true);
-                                        }}
-                                        className={`w-full flex items-start gap-4 px-5 py-4 text-left transition-colors ${isUnavailable ? "opacity-40 pointer-events-none cursor-not-allowed select-none" : ""}`}
-                                        style={{
-                                          borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none',
-                                          outline: isSelected ? '2px solid #2563EB' : 'none',
-                                          outlineOffset: '-2px',
-                                          backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
-                                        }}
-                                        onMouseEnter={e => { if (!isUnavailable && !isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFF'; }}
-                                        onMouseLeave={e => { if (!isUnavailable) (e.currentTarget as HTMLElement).style.backgroundColor = isSelected ? '#EFF6FF' : 'transparent'; }}
-                                      >
-                                        <div className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: '#2563EB' }}>
-                                          {iconMap[step.iconKey]}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</span>
-                                            {step.popular && (
-                                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold text-white" style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Popular</span>
-                                            )}
-                                            {isUnavailable && (
-                                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-600 border border-red-100" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                                In-Call only — unavailable
-                                              </span>
-                                            )}
-                                          </div>
-                                          <p className="text-sm mt-0.5 leading-snug" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{step.desc}</p>
-                                        </div>
-                                        <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
-                                      </button>
-                                    );
-
-                                    return isUnavailable ? (
-                                      <Tooltip key={step.key} text="In-Call only — unavailable" placement="top">
-                                        <div className="w-full pointer-events-auto">
-                                          {buttonElement}
-                                        </div>
-                                      </Tooltip>
-                                    ) : buttonElement;
-                                  });
-                                })()}
-                              </div>
-                            </div>
-                          </div>
-                        </>
-                      )}
+                            if (editingAutomationRule?.id) {
+                              updateRule(editingAutomationRule.id, rulePayload);
+                              toast.success(`Updated automation "${rulePayload.name}"`);
+                            } else {
+                              createRule(rulePayload);
+                              toast.success(`Created stage automation "${rulePayload.name}"`);
+                            }
+                          }
+                          setEditingAutomationRule(null);
+                        }}
+                      />
 
                       {/* Step Detail Drawer */}
                       <StepDetailDrawer
@@ -5756,6 +5981,11 @@ export default function Process() {
                           setStepDetailDrawerOpen(false);
                           setIsCreatingNewStep(false);
                         }}
+                        onShowInFlowBuilder={() => {
+                          setStepDetailDrawerOpen(false);
+                          setIsFlowBuilderDrawerOpen(true);
+                        }}
+                        onlyParameters={true}
                         onSave={() => {
                           const pendingIntent = intentInput.trim();
                           const finalIntentConditions = pendingIntent
@@ -5820,29 +6050,36 @@ export default function Process() {
                                 p.id !== selectedProcess
                                   ? p
                                   : {
-                                      ...p,
-                                      stages: p.stages.map((s) =>
-                                        s.id !== expandedStage
-                                          ? s
-                                          : {
-                                              ...s,
-                                              stageType,
-                                              selectedInboundNumbers,
-                                              selectedStageChannels,
-                                              channelSources,
-                                              responsiblePerson,
-                                              whenToMove,
-                                              callerPitchMode,
-                                              callerPitch,
-                                              greetingIntroMessage,
-                                              objectiveText,
-                                              businessInfoItems,
-                                              primaryLanguage,
-                                              secondaryLanguages,
-                                              enableCalling,
-                                            }
-                                      ),
-                                    }
+                                    ...p,
+                                    stages: p.stages.map((s) =>
+                                      s.id !== expandedStage
+                                        ? s
+                                        : {
+                                          ...s,
+                                          stageType,
+                                          selectedInboundNumbers,
+                                          selectedStageChannels,
+                                          channelSources,
+                                          responsiblePerson,
+                                          whenToMove,
+                                          callerPitchMode,
+                                          callerPitch,
+                                          greetingIntroMessage,
+                                          objectiveText,
+                                          businessInfoItems,
+                                          primaryLanguage,
+                                          secondaryLanguages,
+                                          enableCalling,
+                                          aiSettings: {
+                                            platform: selectedAIModel,
+                                            voiceSpeed: stageVoiceSpeed,
+                                            voice: stageVoice,
+                                            tone: stageTone,
+                                            style: stageStyle,
+                                          },
+                                        }
+                                    ),
+                                  }
                               )
                             );
                             toast.success("Stage configuration saved");
@@ -5876,7 +6113,7 @@ export default function Process() {
             setShowAddProcessModal(false);
             setNewProcess({ name: "", description: "" });
           }}
-          title="Add New Process"
+          title={selectedEntity === "appointment" ? "Add Appointment Workflow" : "Add Workflow"}
           footer={
             <>
               <Button variant="outline" onClick={() => {
@@ -5889,7 +6126,7 @@ export default function Process() {
                 variant="primary"
                 onClick={handleAddProcess}
               >
-                Add Process
+                Add Workflow
               </Button>
             </>
           }
@@ -5899,7 +6136,7 @@ export default function Process() {
               label="Process Name"
               value={newProcess.name}
               onChange={(e) => setNewProcess({ ...newProcess, name: e.target.value })}
-              placeholder="Enter process name"
+              placeholder={selectedEntity === "appointment" ? "e.g., Clinical Consultation Workflow" : "Enter process name"}
             />
             <div>
               <label className="block text-sm font-medium mb-2">Process Description</label>
@@ -5920,6 +6157,8 @@ export default function Process() {
             setShowAddStageModal(false);
             setNewStage({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "Receive Inbound Calls" });
             setNewStagePosition(null);
+            setNewStageOutcome("won");
+            setInsertAfterStageId(null);
             setNewStageSelectedNumbers([]);
             setShowNewStageNumberDropdown(false);
             setHasInteractedWithColor(false);
@@ -5935,6 +6174,8 @@ export default function Process() {
                   setShowAddStageModal(false);
                   setNewStage({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "Receive Inbound Calls" });
                   setNewStagePosition(null);
+                  setNewStageOutcome("won");
+                  setInsertAfterStageId(null);
                   setNewStageSelectedNumbers([]);
                   setShowNewStageNumberDropdown(false);
                   setHasInteractedWithColor(false);
@@ -5970,6 +6211,8 @@ export default function Process() {
               />
             </div>
 
+
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                 Description
@@ -5996,9 +6239,8 @@ export default function Process() {
                       key={color}
                       type="button"
                       onClick={() => setNewStage({ ...newStage, color })}
-                      className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-110 ${
-                        isSelected ? "ring-2 ring-offset-2 ring-slate-400 scale-105" : ""
-                      }`}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-110 ${isSelected ? "ring-2 ring-offset-2 ring-slate-400 scale-105" : ""
+                        }`}
                       style={{ backgroundColor: color }}
                       title={color}
                     >
@@ -6017,60 +6259,122 @@ export default function Process() {
           onClose={() => {
             setShowDeleteStageModal(false);
             setStageToDelete(null);
+            setReplacementStageId("");
           }}
           title="Delete Stage"
           footer={
-            <>
+            stageToDelete && (stageToDelete.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stageToDelete.systemCategory)) ? (
               <Button
                 variant="outline"
                 onClick={() => {
                   setShowDeleteStageModal(false);
                   setStageToDelete(null);
+                  setReplacementStageId("");
                 }}
               >
-                Cancel
+                Close
               </Button>
-              <Button variant="destructive" onClick={handleDeleteStage}>
-                Delete Stage
-              </Button>
-            </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeleteStageModal(false);
+                    setStageToDelete(null);
+                    setReplacementStageId("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleDeleteStage}>
+                  Delete Stage
+                </Button>
+              </>
+            )
           }
         >
-          <div className="space-y-4">
-            {/* Warning Icon */}
-            <div className="flex items-center justify-center">
-              <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
-                <AlertCircle className="w-8 h-8 text-destructive" />
+          {stageToDelete && (stageToDelete.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stageToDelete.systemCategory)) ? (
+            <div className="space-y-4 text-center py-2">
+              <div className="flex items-center justify-center">
+                <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center border border-amber-200">
+                  <Lock className="w-8 h-8 text-amber-600" />
+                </div>
               </div>
-            </div>
-
-            {/* Main Message */}
-            <div className="text-center space-y-2">
-              <p className="text-base" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                Are you sure you want to delete this stage?
-              </p>
-              <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4">
-                <p className="font-semibold text-destructive" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                  {stageToDelete?.name}
+              <div className="space-y-2">
+                <h4 className="text-base font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  Required System Stage
+                </h4>
+                <p className="text-xs text-gray-500 max-w-sm mx-auto leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  The stage <span className="font-semibold text-gray-800">"{stageToDelete.name}"</span> fulfills the required system category
+                  {stageToDelete.systemCategory ? ` "${stageToDelete.systemCategory}"` : ""} for {selectedProcessData?.entityType || "this"} workflows and cannot be deleted.
+                </p>
+                <p className="text-[11px] text-gray-400">
+                  You can rename, recolor, or reorder this stage at any time.
                 </p>
               </div>
             </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Warning Icon */}
+              <div className="flex items-center justify-center">
+                <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-8 h-8 text-destructive" />
+                </div>
+              </div>
 
-            {/* Warning Details */}
-            <div className="bg-warning/5 border border-warning/20 rounded-xl p-4">
-              <div className="flex gap-3">
-                <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                    This action cannot be undone
-                  </p>
-                  <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                    Deleting this stage will permanently remove it from the process. All associated configurations, webhooks, and settings will be lost.
+              {/* Main Message */}
+              <div className="text-center space-y-2">
+                <p className="text-base" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                  Are you sure you want to delete this stage?
+                </p>
+                <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4">
+                  <p className="font-semibold text-destructive" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    {stageToDelete?.name}
                   </p>
                 </div>
               </div>
+
+              {/* Replacement Stage Selection */}
+              {selectedProcessData && (
+                <div className="space-y-1.5 pt-1 text-left">
+                  <label className="text-xs font-semibold text-gray-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    Replacement stage for existing records:
+                  </label>
+                  <select
+                    value={replacementStageId || (selectedProcessData.stages.find(s => s.id !== stageToDelete?.id)?.id || "")}
+                    onChange={(e) => setReplacementStageId(e.target.value)}
+                    className="w-full text-xs border border-gray-300 rounded-lg p-2 bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    {selectedProcessData.stages
+                      .filter((s) => s.id !== stageToDelete?.id)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} {s.systemCategory ? `(${s.systemCategory})` : ""}
+                        </option>
+                      ))}
+                  </select>
+                  <p className="text-[11px] text-gray-500">
+                    Active records in this stage will be transitioned to the replacement stage automatically.
+                  </p>
+                </div>
+              )}
+
+              {/* Warning Details */}
+              <div className="bg-warning/5 border border-warning/20 rounded-xl p-4">
+                <div className="flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                      This action cannot be undone
+                    </p>
+                    <p className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                      Deleting this stage will remove it from the workflow pipeline.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </Modal>
 
         {/* How Process Works Modal — shared component */}
@@ -6123,8 +6427,8 @@ export default function Process() {
         <HowItWorksModal
           isOpen={showHelp}
           onClose={() => setShowHelp(false)}
-          title="How Process Settings Works"
-          summary="Process Settings is where you design the full behaviour of your AI receptionist — from how it greets callers to which actions fire after a call ends."
+          title="How Workflow Works"
+          summary="Workflow is where you design the full behaviour of your AI receptionist — from how it greets callers to which actions fire after a call ends."
           bullets={[
             "Create processes (workflows) and add stages to each one",
             "Set AI voice, model, and tone globally or per stage",
@@ -6134,6 +6438,18 @@ export default function Process() {
           ]}
           guideUrl="/guide/process-settings"
         />
+
+        {/* Pitch / Stage Prompt Select Fields Modal */}
+        {pitchFieldPickerTarget && (
+          <SelectFieldsModal
+            initiallySelected={[]}
+            activeProcessId={selectedProcess || undefined}
+            activeProcessName={selectedProcessData?.name}
+            processStages={selectedProcessData?.stages?.map((s) => ({ id: s.id, name: s.name, color: s.color }))}
+            onClose={() => setPitchFieldPickerTarget(null)}
+            onApply={handleInsertPitchFields}
+          />
+        )}
 
         {/* How to Receive Call — inline guide link in stage modal */}
         <Modal
@@ -6158,6 +6474,8 @@ export default function Process() {
                 placeholder="Enter stage name"
               />
             </div>
+
+
 
             <div>
               <label className="block text-sm font-medium mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>
@@ -6214,20 +6532,27 @@ export default function Process() {
             </div>
 
             <div className="flex items-center justify-between pt-4">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (editingStage) {
-                    handleRemoveStage(editingStage.id);
-                    setShowEditStageModal(false);
-                    setEditingStage(null);
-                  }
-                }}
-                className="border-red-500 text-red-500 hover:bg-red-50"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
-              </Button>
+              {editingStage && (editingStage.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, editingStage.systemCategory)) ? (
+                <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200" title="Required system stage cannot be deleted">
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Required Stage</span>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (editingStage) {
+                      handleRemoveStage(editingStage.id);
+                      setShowEditStageModal(false);
+                      setEditingStage(null);
+                    }
+                  }}
+                  className="border-red-500 text-red-500 hover:bg-red-50"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </Button>
+              )}
               <div className="flex items-center gap-3">
                 <Button
                   variant="outline"
@@ -6242,6 +6567,536 @@ export default function Process() {
                   Save Changes
                 </Button>
               </div>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Connect Next Process Stage Modal */}
+        <Modal
+          isOpen={showTransitionModal}
+          onClose={() => {
+            setShowTransitionModal(false);
+            setTransitionSourceStageId(null);
+          }}
+          title="Connect Next Process Stage"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              Define where leads should move when they complete this stage. This connects this process to other workflows in your workspace.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-slate-700">Destination Process</label>
+                <select
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
+                  value={handoffTargetProcessId || (processes.find((p) => p.id !== selectedProcess)?.id || "")}
+                  onChange={(e) => {
+                    setHandoffTargetProcessId(e.target.value);
+                    const targetP = processes.find((p) => p.id === e.target.value);
+                    if (targetP && targetP.stages.length > 0) {
+                      setHandoffTargetStageName(targetP.stages[0].name);
+                    }
+                  }}
+                >
+                  {processes
+                    .filter((p) => p.id !== selectedProcess)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5 text-slate-700">Destination Stage</label>
+                <select
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
+                  value={handoffTargetStageName}
+                  onChange={(e) => setHandoffTargetStageName(e.target.value)}
+                >
+                  {(
+                    processes.find(
+                      (p) => p.id === (handoffTargetProcessId || processes.find((pr) => pr.id !== selectedProcess)?.id)
+                    )?.stages || []
+                  ).map((s) => (
+                    <option key={s.id} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={handoffAutoMove}
+                  onChange={(e) => setHandoffAutoMove(e.target.checked)}
+                  className="rounded text-purple-600"
+                />
+                <span className="font-medium">Automatically advance client to this stage upon reaching final stage</span>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowTransitionModal(false);
+                  setTransitionSourceStageId(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                className="bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
+                onClick={handleSaveQuickTransition}
+              >
+                Save & Connect Stage
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Configure Last Stage Option & Next Pipeline Routing Modal */}
+        <Modal
+          isOpen={showLastStageModal}
+          onClose={() => setShowLastStageModal(false)}
+          title={lastStageForm.isEditing ? "Edit Concluding Stage & Next Pipeline Routing" : "Add Concluding Stage Option (Intent-Based)"}
+          maxWidth="2xl"
+        >
+          <div className="space-y-5">
+            <p className="text-xs text-gray-500 -mt-1 leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              Define a concluding outcome for this pipeline. When the conversation intent matches, this stage is assigned, this pipeline is ended, and the lead is automatically transferred to the next process.
+            </p>
+
+            {/* 1. Stage Info */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  Stage Name
+                </label>
+                <input
+                  type="text"
+                  value={lastStageForm.name}
+                  onChange={(e) => setLastStageForm({ ...lastStageForm, name: e.target.value })}
+                  placeholder="e.g., Interested, Not Interested, Call Back Later"
+                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold focus:border-blue-500 focus:outline-none transition-colors"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  Stage Color Tag
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 flex items-center gap-1.5 p-1.5 border border-gray-200 rounded-xl bg-gray-50 overflow-x-auto">
+                    {["#22C55E", "#EF4444", "#F59E0B", "#3B82F6", "#8B5CF6", "#EC4899", "#06B6D4"].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setLastStageForm({ ...lastStageForm, color: c })}
+                        className={`w-6 h-6 rounded-full flex-shrink-0 transition-transform hover:scale-110 ${lastStageForm.color === c ? 'ring-2 ring-blue-600 ring-offset-1 scale-105' : ''}`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                  <input
+                    type="color"
+                    value={lastStageForm.color}
+                    onChange={(e) => setLastStageForm({ ...lastStageForm, color: e.target.value })}
+                    className="w-10 h-10 rounded-xl border border-gray-200 cursor-pointer p-0.5"
+                    title="Choose custom color"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Intent Trigger Mapping */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-600" />
+                  <label className="text-xs font-bold text-gray-900 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    Map Caller Intent
+                  </label>
+                </div>
+                <span className="text-[11px] text-purple-700 font-semibold bg-purple-100/70 px-2 py-0.5 rounded-full">
+                  AI Intent Resolution
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[
+                  { id: "interested", label: "Interested", icon: "🟢", desc: "Caller agrees / wants service" },
+                  { id: "not_interested", label: "Not Interested", icon: "🔴", desc: "Caller declines / not looking" },
+                  { id: "call_back", label: "Call Back Later", icon: "🟡", desc: "Caller is busy / asks to call later" },
+                  { id: "needs_info", label: "Needs More Info", icon: "🔵", desc: "Requests proposal / questions" },
+                  { id: "disqualified", label: "Disqualified", icon: "⚪", desc: "Wrong number / outside criteria" },
+                  { id: "custom", label: "Custom Intent", icon: "🟣", desc: "Custom AI condition rule" },
+                ].map((intent) => {
+                  const isSelected = lastStageForm.intentTrigger === intent.id;
+                  return (
+                    <button
+                      key={intent.id}
+                      type="button"
+                      onClick={() =>
+                        setLastStageForm({
+                          ...lastStageForm,
+                          intentTrigger: intent.id,
+                          intentLabel: intent.label,
+                          name: lastStageForm.isEditing ? lastStageForm.name : intent.label,
+                          color: intent.id === "interested" ? "#22C55E" : intent.id === "not_interested" ? "#EF4444" : intent.id === "call_back" ? "#F59E0B" : lastStageForm.color,
+                        })
+                      }
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${isSelected
+                        ? "bg-white border-purple-500 ring-2 ring-purple-500/20 shadow-xs"
+                        : "bg-white/60 border-gray-200 hover:border-gray-300 hover:bg-white"
+                        }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-gray-900 mb-0.5">
+                        <span>{intent.icon}</span>
+                        <span>{intent.label}</span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 leading-tight line-clamp-1">{intent.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-gray-600 mb-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  AI Detection Guidance / Condition Prompt (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={lastStageForm.intentDescription}
+                  onChange={(e) => setLastStageForm({ ...lastStageForm, intentDescription: e.target.value })}
+                  placeholder="e.g., Trigger when caller explicitly states they want to book or ask for pricing"
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs focus:border-purple-500 focus:outline-none"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                />
+              </div>
+            </div>
+
+            {/* 3. Next Pipeline Routing (System Setting) */}
+            <div className="bg-purple-50/50 border border-purple-200/80 rounded-2xl p-4 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-purple-700" />
+                  <span className="text-xs font-bold text-purple-950 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    Next Pipeline System Setting
+                  </span>
+                </div>
+                <span className="text-[11px] font-semibold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                  Workflow Handoff
+                </span>
+              </div>
+
+              {/* End pipeline toggle */}
+              <div className="flex items-center justify-between p-3 bg-white border border-purple-100 rounded-xl">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    End Current Pipeline &amp; Move to Next
+                  </span>
+                  <span className="text-[11px] text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    Upon reaching this stage, conclude "{selectedProcessData?.name}" and assign the lead to the chosen destination pipeline.
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={lastStageForm.endPipelineOnReach}
+                    onChange={(e) => setLastStageForm({ ...lastStageForm, endPipelineOnReach: e.target.checked })}
+                  />
+                  <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600" />
+                </label>
+              </div>
+
+              {/* Target Process & Stage selectors */}
+              {lastStageForm.endPipelineOnReach && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                      Destination Process / Pipeline
+                    </label>
+                    <select
+                      value={lastStageForm.targetProcessId || (processes.find((p) => p.id !== selectedProcess)?.id || "")}
+                      onChange={(e) => {
+                        const newProcId = e.target.value;
+                        const targetP = processes.find((p) => p.id === newProcId);
+                        setLastStageForm({
+                          ...lastStageForm,
+                          targetProcessId: newProcId,
+                          targetStageName: targetP?.stages[0]?.name || "",
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-purple-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-none focus:border-purple-500"
+                    >
+                      {processes
+                        .filter((p) => p.id !== selectedProcess)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                      Destination Stage
+                    </label>
+                    <select
+                      value={lastStageForm.targetStageName}
+                      onChange={(e) => setLastStageForm({ ...lastStageForm, targetStageName: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-purple-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-none focus:border-purple-500"
+                    >
+                      {(
+                        processes.find(
+                          (p) => p.id === (lastStageForm.targetProcessId || processes.find((pr) => pr.id !== selectedProcess)?.id)
+                        )?.stages || []
+                      ).map((s) => (
+                        <option key={s.id} value={s.name}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={lastStageForm.autoMove}
+                        onChange={(e) => setLastStageForm({ ...lastStageForm, autoMove: e.target.checked })}
+                        className="rounded text-purple-600"
+                      />
+                      <span className="font-semibold">Automatically enroll contact into destination process immediately</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Live Flow Breadcrumb Preview */}
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">Visual Flow Preview</div>
+              <div className="flex items-center gap-2 text-xs flex-wrap font-medium text-gray-700">
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md font-bold">
+                  {selectedProcessData?.stages.filter((s) => !s.isFinalStage && !s.isFinal).slice(-1)[0]?.name || "Contacted"}
+                </span>
+                <span className="text-purple-600 font-bold">──(Intent: {lastStageForm.intentLabel || "Interested"})──►</span>
+                <span
+                  className="px-2 py-1 text-white rounded-md font-bold shadow-2xs"
+                  style={{ backgroundColor: lastStageForm.color || "#22C55E" }}
+                >
+                  {lastStageForm.name || "Outcome Stage"}
+                </span>
+                {lastStageForm.endPipelineOnReach && (
+                  <>
+                    <span className="text-gray-400 font-bold">──(End Pipeline)──►</span>
+                    <span className="px-2 py-1 bg-purple-100 text-purple-900 rounded-md font-bold flex items-center gap-1">
+                      <span>🚀</span>
+                      <span>{processes.find((p) => p.id === lastStageForm.targetProcessId)?.name || "Next Process"}:</span>
+                      <span className="underline">{lastStageForm.targetStageName || "Stage"}</span>
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
+              <Button
+                variant="outline"
+                onClick={() => setShowLastStageModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                className="bg-purple-600 hover:bg-purple-700 text-white cursor-pointer px-6"
+                onClick={handleSaveLastStageModal}
+              >
+                {lastStageForm.isEditing ? "Save Outcome Stage" : "Add Outcome Stage"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Intent Simulator Modal */}
+        <Modal
+          isOpen={showIntentSimulatorModal}
+          onClose={() => setShowIntentSimulatorModal(false)}
+          title="🧪 Test Intent Resolution & Pipeline Transition"
+          maxWidth="2xl"
+        >
+          <div className="space-y-5">
+            <p className="text-xs text-gray-500 -mt-1 leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              Simulate how customer conversation in a stage is analyzed by AI to map intent, select the appropriate concluding stage, and route the customer to the next pipeline.
+            </p>
+
+            {/* Step 1: Select Source Stage */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  1. Conversation Stage
+                </label>
+                <select
+                  value={simSourceStageId}
+                  onChange={(e) => setSimSourceStageId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-none focus:border-blue-500"
+                >
+                  {(selectedProcessData?.stages || []).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.isFinalStage ? "(Last Stage)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  2. Preset Intent Scenario
+                </label>
+                <select
+                  value={simSelectedScenario}
+                  onChange={(e) => {
+                    const sc = e.target.value;
+                    setSimSelectedScenario(sc);
+                    if (sc === "interested") {
+                      setSimUtterance("Yes, I would love to schedule a consultation for tomorrow afternoon!");
+                    } else if (sc === "not_interested") {
+                      setSimUtterance("No thank you, I am not looking for this service right now. Please remove me.");
+                    } else if (sc === "call_back") {
+                      setSimUtterance("I am driving right now, can you please call me back tomorrow around 3 PM?");
+                    }
+                    setSimResolvedData(null);
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-none focus:border-blue-500"
+                >
+                  <option value="interested">🟢 Caller is Interested</option>
+                  <option value="not_interested">🔴 Caller is Not Interested</option>
+                  <option value="call_back">🟡 Caller asks for Callback</option>
+                  <option value="custom">🟣 Custom Caller Utterance</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Caller sample utterance */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                Customer Reply / Transcribed Speech
+              </label>
+              <textarea
+                value={simUtterance}
+                onChange={(e) => {
+                  setSimUtterance(e.target.value);
+                  setSimResolvedData(null);
+                }}
+                rows={2}
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:border-indigo-500 transition-colors"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+                placeholder="Type customer reply..."
+              />
+            </div>
+
+            <div className="flex justify-center">
+              <Button
+                variant="primary"
+                onClick={handleRunIntentSimulation}
+                disabled={simIsRunning}
+                className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white px-7 py-2.5 rounded-xl font-bold shadow-sm"
+              >
+                {simIsRunning ? (
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Analyzing Intent...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" /> Run Intent &amp; Routing Simulation
+                  </span>
+                )}
+              </Button>
+            </div>
+
+            {/* Simulation Result Box */}
+            {simResolvedData && (
+              <div className="bg-gradient-to-br from-emerald-50/70 via-white to-purple-50/50 border border-emerald-200 rounded-2xl p-5 space-y-4 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                  <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Simulation Execution Succeeded
+                  </span>
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    Confidence: 98.4%
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Card 1 */}
+                  <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">1. Detected Intent</div>
+                    <div className="flex items-center gap-1.5 text-sm font-bold text-gray-900">
+                      <span>🎯</span>
+                      <span>{simResolvedData.detectedIntent}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-1">Classified from conversation speech</p>
+                  </div>
+
+                  {/* Card 2 */}
+                  <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">2. Assigned Last Stage</div>
+                    <div
+                      className="inline-flex items-center px-2.5 py-1 rounded-lg text-white font-bold text-xs shadow-2xs"
+                      style={{ backgroundColor: simResolvedData.assignedStageColor }}
+                    >
+                      <span>🏁 {simResolvedData.assignedStageName}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-1">Target outcome assigned to lead</p>
+                  </div>
+
+                  {/* Card 3 */}
+                  <div className="bg-white p-3 rounded-xl border border-purple-200 shadow-2xs">
+                    <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-1">3. Next Pipeline Routing</div>
+                    {simResolvedData.targetProcessName ? (
+                      <div>
+                        <div className="text-xs font-bold text-purple-900 truncate">
+                          ➡️ {simResolvedData.targetProcessName}
+                        </div>
+                        <div className="text-[11px] text-purple-700 truncate">
+                          Stage: {simResolvedData.targetStageName}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-500 italic">No next pipeline configured</span>
+                    )}
+                    <p className="text-[10px] text-purple-600 mt-1 font-semibold">
+                      {simResolvedData.endPipeline ? "✓ Current pipeline ended" : ""}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 font-medium">
+                  <strong>Pipeline Execution Log:</strong> Lead in stage <span className="font-bold underline">{selectedProcessData?.stages.find(s => s.id === simSourceStageId)?.name || "Contacted"}</span> was evaluated with intent <span className="font-bold">"{simResolvedData.detectedIntent}"</span>. Concluded current workflow and auto-enrolled lead into <span className="font-bold underline">{simResolvedData.targetProcessName || "Next Process"}</span> at stage <span className="font-bold underline">{simResolvedData.targetStageName || "Stage"}</span>.
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowIntentSimulatorModal(false)}
+              >
+                Close Simulator
+              </Button>
             </div>
           </div>
         </Modal>
@@ -7315,12 +8170,12 @@ export default function Process() {
                   p.id !== selectedProcess
                     ? p
                     : {
-                        ...p,
-                        stages: p.stages.map((s) => ({
-                          ...s,
-                          callTriggerSettings: { ...updatedSettings },
-                        })),
-                      }
+                      ...p,
+                      stages: p.stages.map((s) => ({
+                        ...s,
+                        callTriggerSettings: { ...updatedSettings },
+                      })),
+                    }
                 )
               );
               toast.success(`Applied trigger settings to all stages in "${procName}"`);
@@ -7331,19 +8186,47 @@ export default function Process() {
                   p.id !== selectedProcess
                     ? p
                     : {
-                        ...p,
-                        stages: p.stages.map((s) =>
-                          s.id !== expandedStage
-                            ? s
-                            : { ...s, callTriggerSettings: updatedSettings }
-                        ),
-                      }
+                      ...p,
+                      stages: p.stages.map((s) =>
+                        s.id !== expandedStage
+                          ? s
+                          : { ...s, callTriggerSettings: updatedSettings }
+                      ),
+                    }
                 )
               );
               toast.success("Call trigger settings saved for this stage");
             }
           }}
         />
+
+        <FlowBuilderDrawer
+          isOpen={isFlowBuilderDrawerOpen}
+          onClose={() => setIsFlowBuilderDrawerOpen(false)}
+          processName={processes.find((p) => p.id === selectedProcess)?.name ?? "Current Process"}
+          stageName={
+            processes.find((p) => p.id === selectedProcess)?.stages.find((s) => s.id === expandedStage)?.name ?? "Stage"
+          }
+          processes={processes}
+          currentProcessId={selectedProcess ?? undefined}
+          workflowSteps={workflowSteps}
+          onWorkflowStepsChange={setWorkflowSteps}
+          stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
+        />
+
+        {/* Page-relative Stage Hover Tooltip */}
+        {hoveredStageTooltip && (
+          <div
+            className="fixed z-[9999] pointer-events-none transform -translate-x-1/2 -translate-y-full mb-2 px-2.5 py-1 text-xs font-semibold text-white bg-gray-900 rounded-md shadow-lg whitespace-nowrap"
+            style={{
+              left: `${hoveredStageTooltip.x}px`,
+              top: `${hoveredStageTooltip.y - 8}px`,
+            }}
+          >
+            {hoveredStageTooltip.name}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+          </div>
+        )}
 
       </div>
     </div>

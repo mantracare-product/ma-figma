@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
+import TableComponent, { TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -91,6 +93,10 @@ export default function AIScribeConsole() {
     toast.success("Transcript deleted");
   };
 
+  // Pagination State (matching Clients.tsx)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+
   // Filtered Transcripts
   const filteredTranscripts = sessions.filter((s) => {
     const matchesSearch =
@@ -101,15 +107,20 @@ export default function AIScribeConsole() {
     return matchesSearch;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredTranscripts.length / rowsPerPage));
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = Math.min(startIndex + rowsPerPage, filteredTranscripts.length);
+  const paginatedTranscripts = filteredTranscripts.slice(startIndex, endIndex);
+
   const allSelected =
-    filteredTranscripts.length > 0 &&
-    filteredTranscripts.every((s) => selectedRows.has(s.id));
+    paginatedTranscripts.length > 0 &&
+    paginatedTranscripts.every((s) => selectedRows.has(s.id));
   const someSelected =
-    filteredTranscripts.some((s) => selectedRows.has(s.id)) && !allSelected;
+    paginatedTranscripts.some((s) => selectedRows.has(s.id)) && !allSelected;
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedRows(new Set(filteredTranscripts.map((s) => s.id)));
+      setSelectedRows(new Set(paginatedTranscripts.map((s) => s.id)));
     } else {
       setSelectedRows(new Set());
     }
@@ -126,7 +137,7 @@ export default function AIScribeConsole() {
     if (status === "recording" || status === "transcribed") {
       return (
         <span
-          className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"
+          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"
           style={{ fontFamily: "Outfit, sans-serif" }}
         >
           In Progress
@@ -136,7 +147,7 @@ export default function AIScribeConsole() {
     if (status === "upcoming" || status === "scheduled") {
       return (
         <span
-          className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"
+          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"
           style={{ fontFamily: "Outfit, sans-serif" }}
         >
           Upcoming
@@ -145,7 +156,7 @@ export default function AIScribeConsole() {
     }
     return (
       <span
-        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
+        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
         style={{ fontFamily: "Outfit, sans-serif" }}
       >
         Completed
@@ -155,17 +166,11 @@ export default function AIScribeConsole() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-5">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         {/* ─── PageHeader (Clean and Unified) ─────────────────────────────────── */}
         <PageHeader
           title="AI Scribe"
           subtitle="Ambient clinical voice intelligence & prescription engine"
-          badge={
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60 flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live STT
-            </span>
-          }
         >
           <div className="flex items-center gap-2.5">
             <HowItWorksButton
@@ -175,305 +180,185 @@ export default function AIScribeConsole() {
           </div>
         </PageHeader>
 
-        {/* ─── Search & Action Bar ───────────────────────────────────────────── */}
-        <div className="bg-card rounded-t-xl p-4 border border-border shadow-sm">
-          <div className="flex items-center gap-3">
-            {/* Search Bar */}
-            <div className="flex-1">
-              <div className="relative search-bar-container">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none z-10" />
-                <div className="w-full h-[44px] bg-input-background border border-input rounded-xl flex items-center pl-10 pr-3">
-                  <input
-                    type="text"
-                    placeholder="Search transcripts by patient name, keyword..."
-                    value={transcriptSearch}
-                    onChange={(e) => setTranscriptSearch(e.target.value)}
-                    className="flex-1 bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground h-full"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  />
-                  {transcriptSearch && (
-                    <button
-                      onClick={() => setTranscriptSearch("")}
-                      className="text-xs text-muted-foreground hover:text-foreground px-2"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      ✕ Clear
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+        {/* ─── Search & Action Bar powered by PageTopBar ─────────────────────── */}
+        <PageTopBar
+          isBottomPanelAttached={true}
+          searchQuery={transcriptSearch}
+          onSearchChange={(val) => {
+            setTranscriptSearch(val);
+            setCurrentPage(1);
+          }}
+          searchPlaceholder="Search transcripts by patient name, keyword..."
+          filterPresets={[
+            { id: "all", label: "All Consultations", isActive: true, onClick: () => setTranscriptSearch("") },
+            { id: "completed", label: "Completed", onClick: () => setTranscriptSearch("completed") },
+            { id: "upcoming", label: "Upcoming", onClick: () => setTranscriptSearch("upcoming") },
+          ]}
+          filterFields={[
+            {
+              id: "patient",
+              label: "Patient Name",
+              type: "text",
+              placeholder: "Filter by patient name...",
+              value: transcriptSearch,
+              onChange: (v) => setTranscriptSearch(v),
+            },
+            {
+              id: "status",
+              label: "Status",
+              type: "select",
+              options: ["All", "Completed", "Upcoming", "In Progress"],
+            },
+          ]}
+          availableFilterFieldsToAdd={["Session", "Provider", "Date", "Tags"]}
+          primaryAction={{
+            label: "Add Scribe",
+            onClick: () => setIsNewConsultationOpen(true),
+          }}
+        />
 
-            {/* Capsule Button to Add Scribe / Open Drawer */}
-            <Button
-              variant="primary"
-              onClick={() => setIsNewConsultationOpen(true)}
-              className="h-[44px] px-5 rounded-full whitespace-nowrap flex items-center gap-2 text-xs font-semibold shadow-xs"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Scribe</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* ─── Transcripts Table with Dark Gradient Thead ─────────────────────── */}
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px]">
-              <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
-                <tr>
-                  {/* Checkbox Column */}
-                  <th className="px-4 py-2.5 w-10">
-                    <input
-                      type="checkbox"
-                      checked={allSelected}
-                      ref={(el) => {
-                        if (el) el.indeterminate = someSelected;
-                      }}
-                      onChange={handleSelectAll}
-                      className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                    />
-                  </th>
-
-                  {/* Hamburger Menu Column Header */}
-                  <th className="px-2 py-2.5 text-center w-8">
-                    <SettingsIcon className="w-4 h-4 text-[#E5E7EB] mx-auto opacity-70" />
-                  </th>
-
-                  {/* NAME */}
-                  <th
-                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 opacity-50" />
-                      NAME
-                    </div>
-                  </th>
-
-                  {/* SESSION */}
-                  <th
-                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 opacity-50" />
-                      SESSION
-                    </div>
-                  </th>
-
-                  {/* DURATION */}
-                  <th
-                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 opacity-50" />
-                      DURATION
-                    </div>
-                  </th>
-
-                  {/* RESPONSIBLE */}
-                  <th
-                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 opacity-50" />
-                      RESPONSIBLE
-                    </div>
-                  </th>
-
-                  {/* CREATED AT */}
-                  <th
-                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 opacity-50" />
-                      CREATED AT
-                    </div>
-                  </th>
-
-                  {/* STATUS */}
-                  <th
-                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
-                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 opacity-50" />
-                      STATUS
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-border">
-                {filteredTranscripts.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
-                      <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                      <div className="font-bold text-sm text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        No Transcripts Found
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Click the <strong className="text-[#1A73E8]">+</strong> button above to record your first consultation.
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTranscripts.map((s) => (
-                    <tr
-                      key={s.id}
-                      className={`transition-colors cursor-pointer ${
-                        selectedRows.has(s.id) ? "bg-[#E8F0FE]" : "hover:bg-[#F1F5F9]"
-                      }`}
-                      onClick={() => handleOpenDetailDrawer(s)}
-                    >
-                      {/* Checkbox */}
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.has(s.id)}
-                          onChange={() => handleSelectRow(s.id)}
-                          className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                        />
-                      </td>
-
-                      {/* Hamburger / Kebab Menu with Dropdown in front of name */}
-                      <td className="px-2 py-3 relative kebab-menu-container" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => setOpenMenuSessionId(openMenuSessionId === s.id ? null : s.id)}
-                          className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center"
-                          style={{ width: "24px", height: "24px" }}
-                        >
-                          <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                        </button>
-
-                        {openMenuSessionId === s.id && (
-                          <div
-                            className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl z-50 border border-border py-1"
-                            style={{
-                              boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-                              minWidth: "180px",
-                            }}
-                          >
-                            <button
-                              onClick={() => {
-                                setOpenMenuSessionId(null);
-                                handleOpenDetailDrawer(s);
-                              }}
-                              className="w-full px-3 py-2 text-left text-xs hover:bg-blue-50 flex items-center gap-2.5 text-foreground transition-colors"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              <Eye className="w-3.5 h-3.5 text-[#1A73E8]" /> View Transcript
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                setOpenMenuSessionId(null);
-                                issuePrescriptionDocument(s);
-                                toast.success(`Prescription downloaded for ${s.clientName}!`);
-                              }}
-                              className="w-full px-3 py-2 text-left text-xs hover:bg-blue-50 flex items-center gap-2.5 text-foreground transition-colors"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              <Download className="w-3.5 h-3.5 text-[#1A73E8]" /> Download PDF
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                setOpenMenuSessionId(null);
-                                setWhatsAppTargetSession(s);
-                                setShowWhatsAppModal(true);
-                              }}
-                              className="w-full px-3 py-2 text-left text-xs hover:bg-emerald-50 flex items-center gap-2.5 text-emerald-700 transition-colors"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              <Share2 className="w-3.5 h-3.5 text-emerald-600" /> Share via WhatsApp
-                            </button>
-
-                            <div className="border-t border-border my-1" />
-
-                            <button
-                              onClick={(e) => handleDelete(s.id, e)}
-                              className="w-full px-3 py-2 text-left text-xs hover:bg-red-50 flex items-center gap-2.5 text-red-600 transition-colors"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-red-500" /> Delete Record
-                            </button>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* NAME (Clean without subtext) */}
-                      <td className="px-4 py-3">
-                        <span
-                          className="font-medium text-sm text-[#1A73E8] hover:underline cursor-pointer"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        >
-                          {s.clientName}
-                        </span>
-                      </td>
-
-                      {/* SESSION (Only date of the selected session) */}
-                      <td className="px-4 py-3 text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {s.appointmentId && s.appointmentId !== "none"
-                          ? new Date(s.sessionDate || s.createdAt).toLocaleDateString("en-IN", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })
-                          : (s.sessionDate
-                              ? new Date(s.sessionDate).toLocaleDateString("en-IN", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                })
-                              : "—")}
-                      </td>
-
-                      {/* DURATION (Clean without subtext) */}
-                      <td className="px-4 py-3 font-mono text-xs text-foreground">
-                        {formatTime(s.durationSeconds)}
-                      </td>
-
-                      {/* RESPONSIBLE (Doctor / Staff) */}
-                      <td className="px-4 py-3 text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {s.doctorName || "Dr. Priya Sharma"}
-                      </td>
-
-                      {/* LAST CONTACT / DATE (Clean without subtext) */}
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
-                        <span style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {new Date(s.createdAt).toLocaleDateString("en-IN", {
+        {/* ─── Transcripts Table with TableComponent ─────────────────── */}
+        {(() => {
+          const columns: TableColumn<ScribeSession>[] = [
+            {
+              id: "clientName",
+              header: "NAME",
+              align: "left",
+              render: (s) => (
+                <span
+                  className="font-medium text-xs text-[#1A73E8] hover:underline cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                  onClick={() => handleOpenDetailDrawer(s)}
+                >
+                  {s.clientName}
+                </span>
+              ),
+            },
+            {
+              id: "session",
+              header: "SESSION",
+              align: "center",
+              render: (s) => (
+                <span className="text-xs text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {s.appointmentId && s.appointmentId !== "none"
+                    ? new Date(s.sessionDate || s.createdAt).toLocaleDateString("en-IN", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })
+                    : (s.sessionDate
+                        ? new Date(s.sessionDate).toLocaleDateString("en-IN", {
                             month: "short",
                             day: "numeric",
                             year: "numeric",
-                          })}
-                        </span>
-                      </td>
+                          })
+                        : "—")}
+                </span>
+              ),
+            },
+            {
+              id: "duration",
+              header: "DURATION",
+              align: "center",
+              render: (s) => (
+                <span className="font-mono text-xs text-foreground">
+                  {formatTime(s.durationSeconds)}
+                </span>
+              ),
+            },
+            {
+              id: "responsible",
+              header: "RESPONSIBLE",
+              align: "left",
+              render: (s) => (
+                <span className="text-xs text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {s.doctorName || "Dr. Priya Sharma"}
+                </span>
+              ),
+            },
+            {
+              id: "createdAt",
+              header: "CREATED AT",
+              align: "center",
+              render: (s) => (
+                <span className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {new Date(s.createdAt).toLocaleDateString("en-IN", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
+              ),
+            },
+            {
+              id: "status",
+              header: "STATUS",
+              align: "center",
+              render: (s) => getStatusBadge(s.status),
+            },
+          ];
 
-                      {/* STATUS (Completed / Upcoming / In Progress) */}
-                      <td className="px-4 py-3">
-                        {getStatusBadge(s.status)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          const rowActions: TableRowAction<ScribeSession>[] = [
+            {
+              label: "View Transcript",
+              icon: <Eye className="w-3.5 h-3.5 text-[#1A73E8]" />,
+              onClick: (s) => handleOpenDetailDrawer(s),
+            },
+            {
+              label: "Download PDF",
+              icon: <Download className="w-3.5 h-3.5 text-[#1A73E8]" />,
+              onClick: (s) => {
+                issuePrescriptionDocument(s);
+                toast.success(`Prescription downloaded for ${s.clientName}!`);
+              },
+            },
+            {
+              label: "Share via WhatsApp",
+              icon: <Share2 className="w-3.5 h-3.5 text-emerald-600" />,
+              onClick: (s) => {
+                setWhatsAppTargetSession(s);
+                setShowWhatsAppModal(true);
+              },
+            },
+            {
+              label: "Delete Record",
+              icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+              isDanger: true,
+              onClick: (s) => {
+                deleteScribeSession(s.id);
+                toast.success("Transcript deleted");
+              },
+            },
+          ];
 
-          {/* Table Footer */}
-          <div className="px-4 py-3 border-t border-border bg-slate-50/60 flex items-center justify-between text-xs text-muted-foreground">
-            <span style={{ fontFamily: "Outfit, sans-serif" }}>
-              Showing <strong>{filteredTranscripts.length}</strong> transcripts • Click any row or the menu icon to inspect
-            </span>
-            <span className="font-mono text-[11px]">Deepgram Nova-2 Medical STT</span>
-          </div>
-        </div>
+          const bulkActions: TableBulkAction[] = [
+            {
+              label: "Delete Selected",
+              icon: <Trash2 className="w-3.5 h-3.5" />,
+              variant: "danger",
+              onClick: (ids) => {
+                ids.forEach((id) => deleteScribeSession(String(id)));
+                setSelectedRows(new Set());
+                toast.success("Deleted selected transcripts");
+              },
+            },
+          ];
+
+          return (
+            <TableComponent
+              data={filteredTranscripts}
+              columns={columns}
+              getRowId={(s) => s.id}
+              rowActions={rowActions}
+              bulkActions={bulkActions}
+              selectedIds={selectedRows}
+              onSelectionChange={(ids) => setSelectedRows(new Set(Array.from(ids) as string[]))}
+              onRowClick={(s) => handleOpenDetailDrawer(s)}
+              defaultRowsPerPage={rowsPerPage}
+              emptyMessage="No Transcripts Found. Click the + button above to record your first consultation."
+            />
+          );
+        })()}
 
         {/* ─── NEW CONSULTATION / RECORDING DRAWER ─────────────────────────── */}
         <NewConsultationDrawer

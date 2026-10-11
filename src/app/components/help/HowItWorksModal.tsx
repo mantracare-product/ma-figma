@@ -111,11 +111,11 @@ export function HowItWorksButton({ label, onClick }: HowItWorksButtonProps) {
     <button
       type="button"
       onClick={onClick}
-      className="px-3.5 py-1.5 rounded-full border border-blue-200 bg-blue-50/50 hover:bg-blue-100/70 text-xs font-semibold text-blue-600 flex items-center gap-1.5 transition-all shadow-sm hover:shadow active:scale-95"
+      className="px-2.5 py-1 rounded-full border border-blue-200 bg-blue-50/70 hover:bg-blue-100/90 text-xs font-semibold text-blue-600 flex items-center gap-1.5 transition-all shadow-xs hover:shadow active:scale-95 cursor-pointer shrink-0"
       style={{ fontFamily: "Outfit, sans-serif" }}
     >
       <Play className="w-3 h-3 fill-current" />
-      {label}
+      <span>{label}</span>
     </button>
   );
 }

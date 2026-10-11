@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Plus, Edit, Trash2, Search, Video, Settings, FileText, ChevronRight, MessageSquare, Volume2, MessageCircle, ClipboardList, Play, ChevronDown, Info, Globe, PhoneCall, RefreshCw, Code, Sliders, Calendar, Lightbulb } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Video, Settings, FileText, ChevronRight, MessageSquare, Volume2, MessageCircle, ClipboardList, Play, ChevronDown, Info, Globe, PhoneCall, RefreshCw, Code, Sliders, Calendar, Lightbulb, Sparkles } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
 import { toast } from "sonner";
 
 export default function MyAIReceptionist() {
@@ -164,28 +165,27 @@ export default function MyAIReceptionist() {
     <div className="min-h-screen" style={{ backgroundColor: '#F9FAFB' }}>
       <PageHeader title="My AI Receptionist" />
 
-      <div className="py-6 px-[150px]">
-        <div className="flex items-center justify-between mb-6">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search agents..."
-              className="w-full pl-10 pr-4 py-2 bg-white border border-border rounded-xl"
-              style={{ fontFamily: 'Outfit, sans-serif' }}
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <Button variant="primary">
+      <div className="py-6 px-[150px] space-y-6">
+        <PageTopBar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search agents, prompts, or voice models..."
+          secondaryActions={
+            <Button
+              variant="outline"
+              onClick={() => toast.info("New Campaign modal opening...")}
+              className="h-[36px] px-3.5 text-xs font-semibold"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
               New Campaign
             </Button>
-            <Button variant="primary">
-              Train Agent
-            </Button>
-          </div>
-        </div>
+          }
+          primaryAction={{
+            label: "Train Agent",
+            icon: <Sparkles className="w-4 h-4" />,
+            onClick: () => toast.success("Agent training started"),
+          }}
+        />
 
         {/* Video Preview */}
         <div className="bg-white rounded-xl border border-border overflow-hidden aspect-video flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 mb-6">
@@ -921,14 +921,6 @@ export default function MyAIReceptionist() {
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* Left Column */}
                         <div>
-                          {/* Info Message */}
-                          <div className="flex items-start gap-3 p-4 mb-4 bg-blue-50 rounded-lg border border-blue-200">
-                            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                              Choose the voice your AI Receptionist will use when answering the phone.
-                            </p>
-                          </div>
-
                           {/* Selected Voice */}
                           <div className="mb-6">
                             <h3 className="font-semibold text-sm mb-3" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>

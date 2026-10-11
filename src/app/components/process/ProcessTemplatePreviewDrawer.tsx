@@ -440,9 +440,6 @@ export default function ProcessTemplatePreviewDrawer({
                     {/* Section Header */}
                     <div className="px-5 py-3.5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-7 h-7 rounded-lg bg-blue-100/70 text-blue-700 flex items-center justify-center shrink-0">
-                          <Layers className="w-4 h-4" />
-                        </div>
                         <div className="min-w-0">
                           <h4 className="text-xs font-bold text-slate-900 truncate">
                             {section.title}

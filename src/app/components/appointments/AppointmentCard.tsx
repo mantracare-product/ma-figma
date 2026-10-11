@@ -24,6 +24,8 @@ interface Appointment {
   roomName?: string;
   tokenNumber?: string;
   checkedInAt?: string;
+  currentStageId?: string;
+  statusLabel?: string;
 }
 
 interface Employee {
@@ -232,6 +234,9 @@ export default function AppointmentCard({
 
         {/* Status Dot & Three-Dot Menu */}
         <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/80">
+            {appointment.statusLabel || "Booked"}
+          </span>
           {getStatusDot()}
           <button
             onClick={() => setShowMenu(!showMenu)}
