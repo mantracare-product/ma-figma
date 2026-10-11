@@ -8,6 +8,7 @@
 
 import { useState, useEffect } from "react";
 import { initialClients as canonicalClients, type Client } from "../data/canonicalClients";
+import { updateProcessCallLogStage } from "./processLogsStore";
 
 export type { Client };
 export const CLIENTS_STORE_EVENT = "clientsStore_updated";
@@ -28,8 +29,58 @@ export function getStoredClients(): Client[] {
   try {
     const saved = window.localStorage?.getItem(CLIENTS_STORAGE_KEY) || window.sessionStorage?.getItem(CLIENTS_STORAGE_KEY);
     if (saved) {
-      const parsed = JSON.parse(saved);
+      let parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        let changed = false;
+        parsed = parsed.map((c: Client) => {
+          if (c.id === "CL-001" && !c.processes?.includes("Patient Care Journey")) {
+            changed = true;
+            return {
+              ...c,
+              processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])),
+              stage: ["Client Checked In", "Book Appointment", "Move to Pharmacy", "Pay Bill", "Payment Done"].includes(c.stage) ? c.stage : "Client Checked In",
+            };
+          }
+          if (c.id === "CL-013" && !c.processes?.includes("Patient Care Journey")) {
+            changed = true;
+            return {
+              ...c,
+              processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])),
+              stage: ["Client Checked In", "Book Appointment", "Move to Pharmacy", "Pay Bill", "Payment Done"].includes(c.stage) ? c.stage : "Book Appointment",
+            };
+          }
+          if (c.id === "CL-014" && !c.processes?.includes("Patient Care Journey")) {
+            changed = true;
+            return {
+              ...c,
+              processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])),
+              stage: ["Client Checked In", "Book Appointment", "Move to Pharmacy", "Pay Bill", "Payment Done"].includes(c.stage) ? c.stage : "Move to Pharmacy",
+            };
+          }
+          if (c.id === "CL-002" && !c.processes?.includes("Patient Care Journey")) {
+            changed = true;
+            return {
+              ...c,
+              processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])),
+              stage: ["Client Checked In", "Book Appointment", "Move to Pharmacy", "Pay Bill", "Payment Done"].includes(c.stage) ? c.stage : "Pay Bill",
+            };
+          }
+          if (c.id === "CL-003" && !c.processes?.includes("Patient Care Journey")) {
+            changed = true;
+            return {
+              ...c,
+              processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])),
+              stage: ["Client Checked In", "Book Appointment", "Move to Pharmacy", "Pay Bill", "Payment Done"].includes(c.stage) ? c.stage : "Payment Done",
+            };
+          }
+          return c;
+        });
+        if (changed) {
+          try {
+            window.localStorage?.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(parsed));
+            window.sessionStorage?.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(parsed));
+          } catch {}
+        }
         return parsed;
       }
     }
@@ -54,6 +105,15 @@ export function saveStoredClients(clients: Client[]): void {
     console.log(`[clientsStore] Saved ${clients.length} clients to storage & dispatching events. First client:`, clients[0]?.name);
     window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT, { detail: clients }));
     broadcastChannel?.postMessage({ type: CLIENTS_STORE_EVENT, count: clients.length });
+
+    // Automatically synchronize process logs for any client enrolled in Patient Care Journey
+    try {
+      clients.forEach(c => {
+        if (c.processes?.includes("Patient Care Journey") && c.stage) {
+          updateProcessCallLogStage(c.id, "Patient Care Journey", c.stage);
+        }
+      });
+    } catch {}
   } catch (err) {
     console.error("Failed to save clients:", err);
   }

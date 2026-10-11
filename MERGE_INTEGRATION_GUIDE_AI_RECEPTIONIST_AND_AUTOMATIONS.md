@@ -175,8 +175,6 @@ During the merge of `customizations` into `ai-receptionist`, 13 files had merge 
 
 Processes now support granular AI and channel configuration cards at both the process level and stage level:
 
-1. **Voice AI Calling (`enableCalling`, `callTriggerSettings`)**:
-   - Toggles automated outbound/inbound voice AI on the workflow or stage.
 1. **Knowledge Base Integration**:
    - Positioned first at the top of the workflow channel configuration for immediate reference.
    - Direct shortcut to create or link reference articles, FAQs, and clinic protocols scoped specifically to the process and its stages.

@@ -32,7 +32,7 @@ import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "..
 import { getStagesForProcess } from "../components/ui/ProcessStageSelect";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
-import { getStoredClients } from "../../lib/clientsStore";
+import { getStoredClients, saveStoredClients } from "../../lib/clientsStore";
 import { CHEVRON_PALETTE } from "../components/common/ChevronStageRibbon";
 import { logStageMove } from "../../lib/useAutomationStore";
 import { appendActivity } from "../../lib/activityEngine";
@@ -87,7 +87,16 @@ interface Deal {
   stage: string;
 }
 
+const initialPatientCareDeals: Deal[] = [
+  { id: "DEAL-PCJ-001", dealName: "Patient Care Journey - Check-in", clientName: "Sarah Johnson", amount: 5000, currency: "₹", createdDate: "2026-10-12", status: "In Progress", responsible: "Dr. John Smith", stage: "Patient Care Journey: Client Checked In" },
+  { id: "DEAL-PCJ-002", dealName: "Patient Care Journey - Consultation", clientName: "Priya Sharma", amount: 15000, currency: "₹", createdDate: "2026-10-12", status: "In Progress", responsible: "Dr. Sarah Johnson", stage: "Patient Care Journey: Book Appointment" },
+  { id: "DEAL-PCJ-003", dealName: "Patient Care Journey - Pharmacy", clientName: "Rahul Patel", amount: 8000, currency: "₹", createdDate: "2026-10-11", status: "In Progress", responsible: "Dr. David Martinez", stage: "Patient Care Journey: Move to Pharmacy" },
+  { id: "DEAL-PCJ-004", dealName: "Patient Care Journey - Billing", clientName: "Michael Chen", amount: 12000, currency: "₹", createdDate: "2026-10-11", status: "In Progress", responsible: "Dr. Emily Davis", stage: "Patient Care Journey: Pay Bill" },
+  { id: "DEAL-PCJ-005", dealName: "Patient Care Journey - Settlement", clientName: "Emily Davis", amount: 25000, currency: "₹", createdDate: "2026-10-11", status: "Won", responsible: "Dr. John Smith", stage: "Patient Care Journey: Payment Done" },
+];
+
 const initialDeals: Deal[] = [
+  ...initialPatientCareDeals,
   { id: "DEAL-001", dealName: "Client Intake Package", clientName: "Sarah Johnson", amount: 25000, currency: "₹", createdDate: "2024-05-18", status: "In Progress", responsible: "John Smith", stage: "Client Intake: Initial Contact" },
   { id: "DEAL-002", dealName: "Intake Evaluation Bundle", clientName: "Michael Chen", amount: 0, currency: "₹", createdDate: "2024-05-17", status: "In Progress", responsible: "Emily Davis", stage: "Client Intake: Initial Contact" },
   { id: "DEAL-003", dealName: "Wellness Program Intake", clientName: "Priya Sharma", amount: 15000, currency: "₹", createdDate: "2024-05-16", status: "In Progress", responsible: "Sarah Johnson", stage: "Client Intake: Contacted" },
@@ -159,6 +168,11 @@ const getProcessFromStage = (stage: string): string => {
     'Outreach': 'Client Reactivation',
     'Reactivated': 'Client Reactivation',
     'Lost': 'Client Reactivation',
+    'Client Checked In': 'Patient Care Journey',
+    'Book Appointment': 'Patient Care Journey',
+    'Move to Pharmacy': 'Patient Care Journey',
+    'Pay Bill': 'Patient Care Journey',
+    'Payment Done': 'Patient Care Journey',
   };
   return stageToProcessMap[stage] || 'Client Intake'; // default to Client Intake
 };
@@ -548,6 +562,12 @@ export default function Deals() {
         }
         return d;
       });
+      // Ensure Patient Care Journey deals exist
+      const hasPatientDeals = list.some((d) => d.stage?.startsWith("Patient Care Journey:"));
+      if (!hasPatientDeals) {
+        list = [...initialPatientCareDeals, ...list];
+        changed = true;
+      }
       if (changed) {
         localStorage.setItem("deals", JSON.stringify(list));
         sessionStorage.setItem("deals", JSON.stringify(list));
@@ -1664,6 +1684,18 @@ export default function Deals() {
           setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
           saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
           updateProcessCallLogStage(log.clientId, log.process, stageName);
+          try {
+            const allClients = getStoredClients();
+            const targetIdx = allClients.findIndex(c => c.id === log.clientId || c.name.toLowerCase() === log.client.toLowerCase());
+            if (targetIdx >= 0) {
+              allClients[targetIdx] = {
+                ...allClients[targetIdx],
+                stage: stageName,
+                processes: Array.from(new Set([log.process, ...(allClients[targetIdx].processes || [])]))
+              };
+              saveStoredClients([...allClients]);
+            }
+          } catch {}
           setDeals((prev) =>
             prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
           );
@@ -1689,6 +1721,18 @@ export default function Deals() {
     setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
     saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
     updateProcessCallLogStage(log.clientId, log.process, stageName);
+    try {
+      const allClients = getStoredClients();
+      const targetIdx = allClients.findIndex(c => c.id === log.clientId || c.name.toLowerCase() === log.client.toLowerCase());
+      if (targetIdx >= 0) {
+        allClients[targetIdx] = {
+          ...allClients[targetIdx],
+          stage: stageName,
+          processes: Array.from(new Set([log.process, ...(allClients[targetIdx].processes || [])]))
+        };
+        saveStoredClients([...allClients]);
+      }
+    } catch {}
     setDeals((prev) =>
       prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
     );
@@ -2873,6 +2917,18 @@ export default function Deals() {
                                   }
                                 }
                                 updateProcessCallLogStage(clientId, procName, stageClean);
+                                try {
+                                  const allClients = getStoredClients();
+                                  const targetIdx = allClients.findIndex(c => c.id === clientId || c.name.toLowerCase() === targetDeal.clientName.toLowerCase());
+                                  if (targetIdx >= 0) {
+                                    allClients[targetIdx] = {
+                                      ...allClients[targetIdx],
+                                      stage: stageClean,
+                                      processes: Array.from(new Set([procName, ...(allClients[targetIdx].processes || [])]))
+                                    };
+                                    saveStoredClients([...allClients]);
+                                  }
+                                } catch {}
                                 triggerStageMoveAutomation({
                                   clientId,
                                   clientName: targetDeal.clientName,
@@ -2895,6 +2951,18 @@ export default function Deals() {
                             )
                           );
                           updateProcessCallLogStage(clientId, procName, stageClean);
+                          try {
+                            const allClients = getStoredClients();
+                            const targetIdx = allClients.findIndex(c => c.id === clientId || c.name.toLowerCase() === targetDeal.clientName.toLowerCase());
+                            if (targetIdx >= 0) {
+                              allClients[targetIdx] = {
+                                ...allClients[targetIdx],
+                                stage: stageClean,
+                                processes: Array.from(new Set([procName, ...(allClients[targetIdx].processes || [])]))
+                              };
+                              saveStoredClients([...allClients]);
+                            }
+                          } catch {}
                           if (matchingLog) {
                             const updatedLog = { ...matchingLog, currentStage: stageClean };
                             setCallLogs((prev) => prev.map((l) => (l.id === matchingLog.id ? updatedLog : l)));

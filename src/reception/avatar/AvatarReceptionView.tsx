@@ -68,6 +68,8 @@ import {
   type DirectionCategory,
   type DirectionRoom,
 } from '../types/reception';
+import { getStoredClients } from '../../lib/clientsStore';
+import { getProcessesForAiReceptionist, DEMO_PATIENT_PORTAL_PROCESS } from '../../lib/useProcessStore';
 import '../styles/navodyaTokens.css';
 import '../styles/avatarStage.css';
 
@@ -2686,6 +2688,115 @@ export const AvatarReceptionView: React.FC = () => {
             ? `${matchedCat.name} के कमरे। कृपया अपना गंतव्य चुनें।`
             : `Here are the rooms in ${matchedCat.name}. Please select your destination.`
         );
+        return true;
+      }
+
+      // Priority 2.5: "What's Next" / "What's My Status" Query (Patient Journey Lookup)
+      const STATUS_QUERY_WORDS = [
+        "what's next",
+        "whats next",
+        "what is next",
+        "what next",
+        "what's my status",
+        "whats my status",
+        "what is my status",
+        "my status",
+        "where do i go next",
+        "where to go next",
+        "what should i do next",
+        "current status",
+        "next step",
+        "next stage",
+        "what do i do next",
+        "आगे क्या करना है",
+        "मेरी स्थिति",
+        "अगला कदम",
+      ];
+      const isStatusQuery = STATUS_QUERY_WORDS.some((w) => normalized.includes(w));
+
+      if (isStatusQuery) {
+        unrecognizedAttemptsRef.current = 0;
+        console.log(`[Voice Intent Resolver] 🎯 PRIORITY 2.5 MATCH: "What's Next" / Status Query for "${normalized}"`);
+        handleUserActivity();
+
+        // 1. Identify patient (reuse existing face/phone identification flow - no new UI)
+        let recognizedPatient = selectedPatient;
+        if (!recognizedPatient && matchedCandidateName) {
+          const allClients = getStoredClients();
+          recognizedPatient = (allClients.find((c) =>
+            c.name.toLowerCase().includes(matchedCandidateName.toLowerCase())
+          ) as any) || null;
+        }
+
+        if (!recognizedPatient) {
+          speak(
+            currentLanguage === 'hi'
+              ? 'आपकी स्थिति जानने के लिए, कृपया कैमरे में देखें या अपना फ़ोन नंबर दर्ज करें।'
+              : 'To check what is next in your journey, please look into the camera or enter your phone number so I can recognize you.',
+            'speaking'
+          );
+          if (screenRef.current === 'AMBIENT' || screenRef.current === 'IDLE') {
+            enterAppointmentFlow();
+          }
+          return true;
+        }
+
+        // 2. Look up client record & current stage in canonical data layer
+        const allClients = getStoredClients();
+        const clientRecord = allClients.find((c) =>
+          c.id === recognizedPatient!.id ||
+          (c.phone && recognizedPatient!.phone && c.phone.replace(/\D/g, '') === recognizedPatient!.phone.replace(/\D/g, '')) ||
+          c.name.toLowerCase() === recognizedPatient!.name.toLowerCase()
+        ) || recognizedPatient;
+
+        // 3. Process-based visibility: only processes with connectedToAiReceptionist === true
+        const aiProcesses = getProcessesForAiReceptionist();
+        const targetProcess =
+          aiProcesses.find((p) => p.name === 'Patient Care Journey' || ((clientRecord as any).processes && (clientRecord as any).processes.includes(p.name))) ||
+          aiProcesses[0] ||
+          DEMO_PATIENT_PORTAL_PROCESS;
+
+        const stages = targetProcess.stages || [];
+        const currentStageName = (clientRecord as any).stage || 'Client Checked In';
+        const currentIndex = stages.findIndex(
+          (s) => s.name.toLowerCase() === currentStageName.toLowerCase() || s.id.toLowerCase() === currentStageName.toLowerCase()
+        );
+
+        const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+        const currentStage = stages[safeIndex];
+        const completedStages = stages.slice(0, safeIndex);
+        const nextStage = safeIndex < stages.length - 1 ? stages[safeIndex + 1] : null;
+
+        const completedText = completedStages.length > 0
+          ? completedStages.map((s) => s.name).join(', ')
+          : 'none yet';
+
+        const patientFirstName = (clientRecord.name || 'Patient').split(' ')[0];
+
+        let spokenReply = '';
+        if (nextStage) {
+          if (completedStages.length > 0) {
+            spokenReply = currentLanguage === 'hi'
+              ? `नमस्ते ${patientFirstName}, आपने ${completedText} पूरा कर लिया है। आपका वर्तमान चरण ${currentStage.name} है, और अगला चरण ${nextStage.name} है।`
+              : `Hi ${patientFirstName}! You have already completed ${completedText}. Your current step is ${currentStage.name}, and your next step is ${nextStage.name}.`;
+          } else {
+            spokenReply = currentLanguage === 'hi'
+              ? `नमस्ते ${patientFirstName}, आपका वर्तमान चरण ${currentStage.name} है। आपका अगला चरण ${nextStage.name} है।`
+              : `Hi ${patientFirstName}! Your current step is ${currentStage.name}. Your upcoming next step is ${nextStage.name}.`;
+          }
+        } else {
+          spokenReply = currentLanguage === 'hi'
+            ? `नमस्ते ${patientFirstName}, आपने अपने सभी चरण पूरे कर लिए हैं! आपकी देखभाल यात्रा संपन्न हो चुकी है।`
+            : `Hi ${patientFirstName}! You have completed all steps in your care journey, including ${currentStage.name}. You are all set!`;
+        }
+
+        showToast(`Status: ${currentStage.name} → Next: ${nextStage ? nextStage.name : 'Completed'}`);
+        speak(spokenReply, 'success', undefined, () => {
+          if (screenRef.current === 'AMBIENT') {
+            setAmbientPhase('listening');
+            startAmbientListeningRef.current?.();
+          }
+        });
         return true;
       }
 

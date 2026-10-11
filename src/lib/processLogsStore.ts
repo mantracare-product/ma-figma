@@ -20,7 +20,16 @@ export interface CallLog {
   relationshipReason?: "Call Trigger" | "Stage Change" | "Retry" | "Manual Trigger";
 }
 
+export const initialPatientCareJourneyLogs: CallLog[] = [
+  { id: "PRC-CL-001", client: "Sarah Johnson", clientId: "CL-001", type: "Inbound", status: "Completed", process: "Patient Care Journey", currentStage: "Client Checked In", duration: "2:45", date: "2026-10-12 10:15", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
+  { id: "PRC-CL-013", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Patient Care Journey", currentStage: "Book Appointment", duration: "4:12", date: "2026-10-12 09:30", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
+  { id: "PRC-CL-014", client: "Rahul Patel", clientId: "CL-014", type: "Inbound", status: "Completed", process: "Patient Care Journey", currentStage: "Move to Pharmacy", duration: "3:20", date: "2026-10-11 16:45", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "PRC-CL-002", client: "Michael Chen", clientId: "CL-002", type: "Outbound", status: "Completed", process: "Patient Care Journey", currentStage: "Pay Bill", duration: "1:50", date: "2026-10-11 14:10", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "PRC-CL-003", client: "Emily Davis", clientId: "CL-003", type: "Inbound", status: "Completed", process: "Patient Care Journey", currentStage: "Payment Done", duration: "5:05", date: "2026-10-11 11:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+];
+
 const initialCallLogs: CallLog[] = [
+  ...initialPatientCareJourneyLogs,
   // Latest calls first (Apr 13-14)
   { id: "CALL-001", client: "Sarah Johnson", clientId: "CL-001", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Contacted", duration: "4:32", date: "2024-04-13 14:30", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
   { id: "CALL-002", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Client Reactivation", currentStage: "Outreach", duration: "3:45", date: "2024-04-13 13:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
@@ -98,8 +107,19 @@ export function getStoredCallLogs(): CallLog[] {
       }
       return l;
     });
+
+    // Ensure Patient Care Journey logs are present in logs
+    const hasPatientCare = logs.some((l: CallLog) => l.process === "Patient Care Journey");
+    if (!hasPatientCare) {
+      logs = [...initialPatientCareJourneyLogs, ...logs];
+      migrated = true;
+    }
+
     if (migrated) {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+      if (typeof window !== "undefined") {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+      }
     }
     return logs;
   } catch {
@@ -166,12 +186,37 @@ export function addProcessCallLog(entry: {
 
 export function updateProcessCallLogStage(clientId: string, processName: string, newStageName: string): void {
   const currentLogs = getStoredCallLogs();
+  let found = false;
   const updated = currentLogs.map((l) => {
-    if (l.clientId === clientId && l.process.toLowerCase() === processName.toLowerCase()) {
+    if (
+      (l.clientId === clientId || (l.client && clientId && l.client.toLowerCase() === clientId.toLowerCase())) &&
+      l.process.toLowerCase() === processName.toLowerCase()
+    ) {
+      found = true;
       return { ...l, currentStage: newStageName };
     }
     return l;
   });
+
+  if (!found) {
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+    const newLog: CallLog = {
+      id: `PRC-${clientId}`,
+      client: clientId,
+      clientId: clientId,
+      type: "Inbound",
+      status: "Completed",
+      process: processName,
+      currentStage: newStageName,
+      duration: "0:00",
+      date: nowStr,
+      hasRecording: false,
+      hasTranscript: true,
+      hasScheduledCall: true,
+    };
+    updated.unshift(newLog);
+  }
+
   saveCallLogs(updated);
 }
 

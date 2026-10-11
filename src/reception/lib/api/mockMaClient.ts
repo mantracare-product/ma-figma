@@ -678,13 +678,13 @@ export class MockMaClient implements IMaClient {
       earlyArrivalBufferMin: 30,
       queueAgingCapMin: 45,
       defaultLanguages: ['en', 'hi'],
-      defaultOnboardingProcessId: 'Appointment Scheduling',
+      defaultOnboardingProcessId: 'Patient Care Journey',
     });
 
     const defaultProcess =
       (typeof window !== 'undefined' ? localStorage.getItem('ma_appointment_default_process') : null) ||
       config.defaultOnboardingProcessId ||
-      'Appointment Scheduling';
+      'Patient Care Journey';
     const rawPhone = data.phone || '';
     const digits = rawPhone.replace(/\D/g, '');
 
@@ -734,7 +734,7 @@ export class MockMaClient implements IMaClient {
       countryCode,
       countryFlag,
       processes: [defaultProcess],
-      stage: 'Initial Contact',
+      stage: 'Client Checked In',
       responsible: assignedDoctor,
       lastContact: todayStr,
       status: 'Active',

@@ -505,7 +505,87 @@ export function getEntityProcesses(
     : (entityType !== "client" && DEFAULT_ENTITY_PROCESSES[entityType] ? [DEFAULT_ENTITY_PROCESSES[entityType]] : []);
 }
 
+export const DEMO_PATIENT_PORTAL_PROCESS_ID = "demo-patient-care-journey";
+
+export const DEMO_PATIENT_PORTAL_PROCESS: Process = {
+  id: DEMO_PATIENT_PORTAL_PROCESS_ID,
+  name: "Patient Care Journey",
+  description: "End-to-end clinical journey across AI Receptionist and Patient Self-Service Portal",
+  assignedToUserId: 1,
+  entityType: "client",
+  source: "system",
+  connectedToPatientPortal: true,
+  connectedToAiReceptionist: true,
+  receptionEnabled: true,
+  aiSettings: {
+    platform: "Gemini 2.5 Flash",
+    voiceSpeed: 1.0,
+    voice: "Ava",
+    tone: "Professional",
+    style: "Balanced",
+  },
+  stages: [
+    {
+      id: "stage-client-checked-in",
+      name: "Client Checked In",
+      description: "Patient registered at AI Receptionist or verified via Patient Portal QR code scan",
+      status: "active",
+      color: "#06B6D4",
+      isInitial: true,
+      stagePosition: "initial",
+      stageCategory: "in_progress",
+    },
+    {
+      id: "stage-book-appointment",
+      name: "Book Appointment",
+      description: "Patient schedules consultation with doctor or clinical specialist",
+      status: "active",
+      color: "#3B82F6",
+      stagePosition: "intermediate",
+      stageCategory: "in_progress",
+    },
+    {
+      id: "stage-move-to-pharmacy",
+      name: "Move to Pharmacy",
+      description: "Informational step: buy prescribed medicine at dispensary counter",
+      status: "active",
+      color: "#8B5CF6",
+      stagePosition: "intermediate",
+      stageCategory: "in_progress",
+    },
+    {
+      id: "stage-pay-bill",
+      name: "Pay Bill",
+      description: "Patient reviews clinical consultation and medication bill invoice",
+      status: "active",
+      color: "#F59E0B",
+      stagePosition: "intermediate",
+      stageCategory: "in_progress",
+    },
+    {
+      id: "stage-payment-done",
+      name: "Payment Done",
+      description: "Frontend demo QR payment settlement and invoice confirmation",
+      status: "active",
+      color: "#10B981",
+      isFinal: true,
+      isFinalStage: true,
+      stagePosition: "final",
+      stageCategory: "success",
+    },
+  ],
+};
+
+export function getProcessesForPatientPortal(): Process[] {
+  return getStoredProcesses().filter((p) => Boolean(p.connectedToPatientPortal));
+}
+
+export function getProcessesForAiReceptionist(): Process[] {
+  return getStoredProcesses().filter((p) => Boolean(p.connectedToAiReceptionist));
+}
+
 export const DEFAULT_INITIAL_PROCESSES: Process[] = [
+  DEMO_PATIENT_PORTAL_PROCESS,
   {
     id: "1",
     name: "Client Intake",
@@ -771,6 +851,27 @@ export function getStoredProcesses(): Process[] {
     });
     return { ...p, stages: updatedStages };
   });
+
+  // Ensure Demo Patient Care Journey exists and retains its flags
+  const demoExists = list.some((p) => p.id === DEMO_PATIENT_PORTAL_PROCESS_ID || p.name === "Patient Care Journey");
+  if (!demoExists) {
+    list.unshift(DEMO_PATIENT_PORTAL_PROCESS);
+    changed = true;
+  } else {
+    list = list.map((p) => {
+      if (p.id === DEMO_PATIENT_PORTAL_PROCESS_ID || p.name === "Patient Care Journey") {
+        if (!p.connectedToPatientPortal || !p.connectedToAiReceptionist) {
+          changed = true;
+          return {
+            ...p,
+            connectedToPatientPortal: true,
+            connectedToAiReceptionist: true,
+          };
+        }
+      }
+      return p;
+    });
+  }
 
   // Ensure singleton processes for non-client entities exist
   const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim"];

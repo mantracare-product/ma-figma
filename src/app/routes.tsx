@@ -41,6 +41,13 @@ import AdminProcessTemplates from "./pages/admin/AdminProcessTemplates";
 import { AvatarReceptionView } from "../reception/avatar/AvatarReceptionView";
 import AdminAutomations from "./pages/admin/AdminAutomations";
 import AdminDocumentTemplates from "./pages/admin/AdminDocumentTemplates";
+import PatientPortalLayout from "./pages/patient/PatientPortalLayout";
+import PatientStatusScreen from "./pages/patient/PatientStatusScreen";
+import PatientCheckinScreen from "./pages/patient/PatientCheckinScreen";
+import PatientBookingScreen from "./pages/patient/PatientBookingScreen";
+import PatientPharmacyScreen from "./pages/patient/PatientPharmacyScreen";
+import PatientBillScreen from "./pages/patient/PatientBillScreen";
+import PatientPaymentScreen from "./pages/patient/PatientPaymentScreen";
 
 export const router = createBrowserRouter([
   {
@@ -86,6 +93,19 @@ export const router = createBrowserRouter([
   {
     path: "/reception/avatar",
     Component: AvatarReceptionView,
+  },
+  {
+    path: "/patient",
+    Component: PatientPortalLayout,
+    children: [
+      { index: true, Component: PatientStatusScreen },
+      { path: "status", Component: PatientStatusScreen },
+      { path: "checkin", Component: PatientCheckinScreen },
+      { path: "book", Component: PatientBookingScreen },
+      { path: "pharmacy", Component: PatientPharmacyScreen },
+      { path: "bill", Component: PatientBillScreen },
+      { path: "pay", Component: PatientPaymentScreen },
+    ],
   },
   {
     path: "/login",
