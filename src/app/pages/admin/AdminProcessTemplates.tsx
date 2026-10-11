@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
-import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, Eye, CreditCard } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, Eye, CreditCard, BookOpen, Radio } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Modal } from "../../components/ui/Modal";
@@ -35,6 +35,8 @@ import { SelectFieldsModal } from "../../components/help/FieldManager";
 import { assignNumberToStage } from "../../../lib/useStageNumberRouting";
 import TestProcessChatDrawer from "../../components/process/TestProcessChatDrawer";
 import CallTriggerDrawer from "../../components/process/CallTriggerDrawer";
+import ChatbotChannelDrawer from "../../components/process/ChatbotChannelDrawer";
+import { ChatbotSettings } from "../../../lib/useProcessStore";
 import ProcessDetailDrawer, { ProcessDetailHistoryFilterState, ActivityLogEntry } from "../../components/deals/ProcessDetailDrawer";
 import { useFieldRegistry } from "../../context/FieldRegistryContext";
 import { useProcessTemplates } from "../../context/ProcessTemplateContext";
@@ -109,6 +111,8 @@ export interface Stage {
   workflowSteps?: WorkflowStep[];
   enableCalling?: boolean;
   callTriggerSettings?: CallTriggerSettings;
+  enableChatbot?: boolean;
+  chatbotSettings?: ChatbotSettings;
   scopingRules?: ScopingRule[];
 }
 
@@ -119,6 +123,13 @@ export interface Process {
   assignedToUserId: number;
   stages: Stage[];
   aiSettings: AISettings;
+  receptionEnabled?: boolean;
+  enableCalling?: boolean;
+  callTriggerSettings?: CallTriggerSettings;
+  enableChatbot?: boolean;
+  chatbotSettings?: ChatbotSettings;
+  connectedToPatientPortal?: boolean;
+  connectedToAiReceptionist?: boolean;
   entityType?: EntityType;
   // Scoping & Tenant Permissions
   industryCategory?: string;
@@ -1461,6 +1472,7 @@ export default function AdminProcessTemplates() {
     setSecondaryLanguages(stg.secondaryLanguages ?? []);
     setWorkflowSteps(stg.workflowSteps ?? []);
     setEnableCalling(stg.enableCalling ?? true);
+    setEnableChatbot(stg.enableChatbot ?? true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProcess, expandedStage, viewMode]);
 
@@ -2157,6 +2169,8 @@ export default function AdminProcessTemplates() {
   const [callerPitchMode, setCallerPitchMode] = useState<"single" | "comprehensive">("single");
   const [enableCalling, setEnableCalling] = useState<boolean>(true);
   const [showCallTriggerDrawer, setShowCallTriggerDrawer] = useState(false);
+  const [enableChatbot, setEnableChatbot] = useState<boolean>(true);
+  const [showChatbotDrawer, setShowChatbotDrawer] = useState(false);
   const [editingAutomationStepId, setEditingAutomationStepId] = useState<string | undefined>(undefined);
   const callerPitchRef = useRef<HTMLTextAreaElement>(null);
   const greetingIntroRef = useRef<HTMLTextAreaElement>(null);
@@ -3717,103 +3731,163 @@ export default function AdminProcessTemplates() {
                       })()}
                     </div>
 
-                    {/* Advanced Settings */}
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                      <button
-                        onClick={() => setAdvancedSettingsExpanded(!advancedSettingsExpanded)}
-                        className="w-full flex items-center justify-between p-6 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-                            <Sliders className="w-5 h-5 text-blue-600" />
+                    {/* Knowledge Base Section */}
+                    <div className="space-y-3">
+                      <div className="p-4 sm:p-5 bg-white dark:bg-card border border-border/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+                        <div className="flex items-center gap-3.5">
+                          <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0 border border-violet-100">
+                            <BookOpen className="w-5 h-5" />
                           </div>
-                          <h3 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                            Advanced Settings
-                          </h3>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                              Knowledge Base
+                            </span>
+                            <InfoTooltip text={`Add reference documents, URLs, or FAQs tailored specifically to "${selectedProcessData.name}".`} size="sm" />
+                          </div>
                         </div>
-                        <ChevronDown
-                          className={`w-5 h-5 text-gray-500 transition-transform ${advancedSettingsExpanded ? 'rotate-180' : ''
-                            }`}
-                        />
-                      </button>
 
-                      {advancedSettingsExpanded && (
-                        <div className="px-6 pb-6 space-y-4 border-t border-gray-200 pt-6 bg-gray-50/50">
-                          {/* Detect Voicemail */}
-                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
-                            <button
-                              type="button"
-                              onClick={() => setDetectVoicemailExpanded(!detectVoicemailExpanded)}
-                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <Voicemail className="w-5 h-5 text-primary" />
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Detect Voicemail
-                                  </span>
-                                  <Tooltip text="This allows AI to detect if the caller is on leave voice mail and disconnect the call.">
-                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                  </Tooltip>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                                  {detectVoicemailEnabled ? 'On' : 'Off'}
-                                </span>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${detectVoicemailExpanded ? 'rotate-180' : ''}`} />
-                              </div>
-                            </button>
-
-                            {detectVoicemailExpanded && (
-                              <div className="border-t border-gray-100 px-5 py-4 bg-gray-50/40">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
-                                      Enable Voicemail Detection
-                                    </span>
-                                    <Tooltip text="This allows AI to detect if the caller is on leave voice mail and disconnect the call">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                                    </Tooltip>
-                                  </div>
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={detectVoicemailEnabled}
-                                      onChange={(e) => setDetectVoicemailEnabled(e.target.checked)}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-                                  </label>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Save & Apply Options */}
-                          <div className="mt-6 pt-4 border-t border-gray-200 flex flex-col gap-4">
-                            <div className="flex justify-end gap-3">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (applyAdvancedSettingsToAllStages) {
-                                    toast.success("Advanced settings saved and applied to all stages successfully!");
-                                  } else {
-                                    toast.success("Advanced settings saved successfully!");
-                                  }
-                                }}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm transition-colors"
-                                style={{ fontFamily: 'DM Sans, sans-serif' }}
-                              >
-                                Apply to All Stages
-                              </button>
-                            </div>
-                          </div>
-
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              navigate(`/knowledge-base?action=create&processId=${encodeURIComponent(selectedProcessData.id)}&processName=${encodeURIComponent(selectedProcessData.name)}`, {
+                                state: {
+                                  prefillProcess: {
+                                    id: selectedProcessData.id,
+                                    name: selectedProcessData.name,
+                                    stages: (selectedProcessData.stages || []).map((s) => ({ id: s.id, name: s.name })),
+                                  },
+                                },
+                              });
+                            }}
+                            className="flex items-center gap-1.5 text-xs font-semibold hover:bg-violet-50 hover:text-violet-700 hover:border-violet-200 transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add Knowledge Base</span>
+                            <ExternalLink className="w-3 h-3 text-muted-foreground ml-0.5" />
+                          </Button>
                         </div>
-                      )}
+                      </div>
                     </div>
 
+                    {/* Process-Level Calling & Chatbot Configuration */}
+                    <div className="space-y-3">
+                      {/* Enable Calling Card */}
+                      <div className="p-4 sm:p-5 bg-white dark:bg-card border border-border/80 rounded-2xl flex items-center justify-between shadow-xs">
+                        <div className="flex items-center gap-3.5">
+                          <PhoneCall className="w-5 h-5 text-emerald-600 shrink-0" />
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                              Enable Calling
+                            </span>
+                            <InfoTooltip text="Allow the AI agent to initiate or receive calls for leads in this workflow." size="sm" />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setShowCallTriggerDrawer(true)}
+                            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-lg transition-colors cursor-pointer"
+                            title="Process Call Trigger Settings"
+                          >
+                            <Settings className="w-4 h-4" />
+                          </button>
+
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <input
+                              type="checkbox"
+                              className="sr-only peer"
+                              checked={selectedProcessData.enableCalling ?? true}
+                              onChange={(e) => {
+                                const val = e.target.checked;
+                                handleUpdateProcess("enableCalling", val);
+                                toast.success(val ? "Calling enabled for this process" : "Calling disabled for this process");
+                              }}
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Enable Chatbot Card */}
+                      <div className="p-4 sm:p-5 bg-white dark:bg-card border border-border/80 rounded-2xl flex items-center justify-between shadow-xs">
+                        <div className="flex items-center gap-3.5">
+                          <Bot className="w-5 h-5 text-blue-600 shrink-0" />
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                              Enable Chatbot
+                            </span>
+                            <InfoTooltip text="Configure omnichannel conversational AI across WhatsApp, SMS, and Website." size="sm" />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setShowChatbotDrawer(true)}
+                            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-lg transition-colors cursor-pointer"
+                            title="Process Chatbot Settings"
+                          >
+                            <Settings className="w-4 h-4" />
+                          </button>
+
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <input
+                              type="checkbox"
+                              className="sr-only peer"
+                              checked={selectedProcessData.enableChatbot ?? true}
+                              onChange={(e) => {
+                                const val = e.target.checked;
+                                handleUpdateProcess("enableChatbot", val);
+                                toast.success(val ? "Chatbot enabled for this process" : "Chatbot disabled for this process");
+                              }}
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Client Portal & AI Receptionist Connection Section */}
+                    <div className="space-y-3">
+                      <div className="p-4 sm:p-5 bg-white dark:bg-card border border-border/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+                        <div className="flex items-center gap-3.5">
+                          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+                            <Radio className="w-5 h-5" />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                              Client Portal & AI Receptionist
+                            </span>
+                            <InfoTooltip text="Enable this pipeline for self-booking in Client Portal and real-time call triage in AI Receptionist." size="sm" />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <input
+                              type="checkbox"
+                              className="sr-only peer"
+                              checked={
+                                ((selectedProcessData.connectedToPatientPortal ?? true) &&
+                                (selectedProcessData.connectedToAiReceptionist ?? selectedProcessData.receptionEnabled ?? true))
+                              }
+                              onChange={(e) => {
+                                const val = e.target.checked;
+                                handleUpdateProcess("connectedToPatientPortal", val);
+                                handleUpdateProcess("connectedToAiReceptionist", val);
+                                handleUpdateProcess("receptionEnabled", val);
+                                toast.success(val ? "Connected pipeline to Client Portal & AI Receptionist" : "Disconnected pipeline from Client Portal & AI Receptionist");
+                              }}
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -4006,195 +4080,7 @@ export default function AdminProcessTemplates() {
                               )}
                             </div>
 
-                            {/* Unified Channel & Source Dropdown Selector - Only when stageType is "AI Receives Calls" */}
-                            {stageType === "AI Receives Calls" && (
-                              <div ref={channelDropdownRef} className="relative flex flex-col space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5">
-                                    <label className="block text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Through which channel client has reach out to us
-                                    </label>
-                                    <InfoTooltip text="Configure each channel (Calls, SMS, WhatsApp, Website) and its corresponding integrated source number or website link for this stage." />
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowHowToReceiveCallModal(true)}
-                                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors"
-                                    style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    How to Receive Call
-                                  </button>
-                                </div>
 
-                                {/* Dropdown Trigger Box */}
-                                <div
-                                  onClick={() => setShowChannelDropdown(!showChannelDropdown)}
-                                  className="flex items-center justify-between min-h-[44px] p-2.5 bg-input-background border border-input rounded-lg cursor-pointer hover:border-primary/50 transition-colors"
-                                >
-                                  <div className="flex flex-wrap gap-2 items-center flex-1">
-                                    {channelSources.length === 0 ? (
-                                      <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                        Select channel and source...
-                                      </span>
-                                    ) : (
-                                      channelSources.map((cs) => {
-                                        const channelLabel = cs.channel === "calls" ? "Calls" : cs.channel === "whatsapp" ? "WhatsApp" : cs.channel === "sms" ? "SMS" : "Website";
-                                        return (
-                                          <span
-                                            key={cs.id}
-                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 text-primary rounded-md text-xs font-medium"
-                                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                                          >
-                                            <span className="font-semibold">{channelLabel}:</span>
-                                            <span className="opacity-90">{cs.source || "(Not set)"}</span>
-                                          </span>
-                                        );
-                                      })
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-1.5 pl-2 text-muted-foreground">
-                                    <ChevronDown className={`w-4 h-4 transition-transform ${showChannelDropdown ? "rotate-180" : ""}`} />
-                                  </div>
-                                </div>
-
-                                {/* Dropdown Panel Popover */}
-                                {showChannelDropdown && (
-                                  <div className="absolute top-full mt-2 left-0 right-0 p-4 bg-card border border-border rounded-xl shadow-xl z-30 space-y-4 max-h-[380px] overflow-y-auto">
-                                    <div className="flex items-center justify-between pb-2 border-b border-border">
-                                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                        Configure Channels & Sources
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => setShowChannelDropdown(false)}
-                                        className="text-xs text-primary font-medium hover:underline"
-                                      >
-                                        Done
-                                      </button>
-                                    </div>
-
-                                    {/* Configured Channel-Source Rows */}
-                                    <div className="space-y-3">
-                                      {channelSources.map((cs, idx) => {
-                                        const isPhoneChannel = cs.channel === "calls" || cs.channel === "whatsapp" || cs.channel === "sms";
-                                        return (
-                                          <div key={cs.id || idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center bg-muted/30 p-3 rounded-lg border border-border">
-                                            {/* Field 1: Channel */}
-                                            <div className="sm:col-span-5 flex flex-col">
-                                              <label className="text-xs font-medium text-muted-foreground mb-1">Channel</label>
-                                              <Select
-                                                value={cs.channel}
-                                                onValueChange={(val: "calls" | "sms" | "whatsapp" | "website") => {
-                                                  const updated = [...channelSources];
-                                                  const newSource = val === "website" ? "" : (inboundNumbers[0] || "+1 (555) 123-4567");
-                                                  updated[idx] = { ...cs, channel: val, source: newSource };
-                                                  setChannelSources(updated);
-                                                  setSelectedStageChannels(updated.map((c) => c.channel));
-                                                  setSelectedInboundNumbers(updated.filter((c) => c.source).map((c) => c.source));
-                                                }}
-                                              >
-                                                <SelectTrigger className="w-full h-9 bg-white">
-                                                  <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                  <SelectItem value="calls">Calls</SelectItem>
-                                                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                                                  <SelectItem value="sms">SMS</SelectItem>
-                                                  <SelectItem value="website">Website</SelectItem>
-                                                </SelectContent>
-                                              </Select>
-                                            </div>
-
-                                            {/* Field 2: Source (Integrated Phone Number or Website Link) */}
-                                            <div className="sm:col-span-6 flex flex-col">
-                                              <label className="text-xs font-medium text-muted-foreground mb-1">
-                                                {isPhoneChannel ? "Integrated Number (Source)" : "Website Link (Optional Source)"}
-                                              </label>
-                                              {isPhoneChannel ? (
-                                                <Select
-                                                  value={cs.source || inboundNumbers[0] || ""}
-                                                  onValueChange={(val) => {
-                                                    const updated = [...channelSources];
-                                                    updated[idx] = { ...cs, source: val };
-                                                    setChannelSources(updated);
-                                                    setSelectedInboundNumbers(updated.filter((c) => c.source).map((c) => c.source));
-                                                  }}
-                                                >
-                                                  <SelectTrigger className="w-full h-9 bg-white">
-                                                    <SelectValue placeholder="Select integrated number" />
-                                                  </SelectTrigger>
-                                                  <SelectContent>
-                                                    {inboundNumbers.map((num) => (
-                                                      <SelectItem key={num} value={num}>
-                                                        {num}
-                                                      </SelectItem>
-                                                    ))}
-                                                  </SelectContent>
-                                                </Select>
-                                              ) : (
-                                                <Input
-                                                  type="text"
-                                                  placeholder="https://example.com/contact (optional)"
-                                                  value={cs.source}
-                                                  onChange={(e) => {
-                                                    const updated = [...channelSources];
-                                                    updated[idx] = { ...cs, source: e.target.value };
-                                                    setChannelSources(updated);
-                                                  }}
-                                                  className="h-9 text-sm bg-white"
-                                                />
-                                              )}
-                                            </div>
-
-                                            {/* Delete button */}
-                                            <div className="sm:col-span-1 flex items-center justify-end pt-5 sm:pt-0">
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  if (channelSources.length <= 1) {
-                                                    toast.error("At least one channel configuration is required.");
-                                                    return;
-                                                  }
-                                                  const updated = channelSources.filter((_, i) => i !== idx);
-                                                  setChannelSources(updated);
-                                                  setSelectedStageChannels(updated.map((c) => c.channel));
-                                                  setSelectedInboundNumbers(updated.filter((c) => c.source).map((c) => c.source));
-                                                }}
-                                                className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-muted rounded-md transition-colors"
-                                                title="Remove channel"
-                                              >
-                                                <X className="w-4 h-4" />
-                                              </button>
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-
-                                    {/* Add Channel Button */}
-                                    <div>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const defaultNum = inboundNumbers[0] || "+1 (555) 123-4567";
-                                          const updated = [
-                                            ...channelSources,
-                                            { id: `cs-${Date.now()}`, channel: "calls" as const, source: defaultNum }
-                                          ];
-                                          setChannelSources(updated);
-                                          setSelectedStageChannels(updated.map((c) => c.channel));
-                                          setSelectedInboundNumbers(updated.filter((c) => c.source).map((c) => c.source));
-                                        }}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-md transition-colors"
-                                      >
-                                        <Plus className="w-3.5 h-3.5" />
-                                        Add Channel
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
 
                             {/* When to move to this stage */}
                             <div className="rounded-lg border border-border overflow-hidden">
@@ -4232,25 +4118,14 @@ export default function AdminProcessTemplates() {
                             {/* Call Action - Hidden when Action is Handle By Human (Transfer to Human) or No Action (No Call Activity) */}
                             {stageType !== "Transfer to Human" && stageType !== "No Call Activity" && (
                               <div className="space-y-3 pt-2">
-                                <div>
-                                  <h4 className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Call Action
-                                  </h4>
-                                  <p className="text-xs mt-0.5" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                    What action triggers when a lead enters this stage?
-                                  </p>
-                                </div>
-
                                 <div className="p-4 sm:p-5 bg-white dark:bg-card border border-border/80 rounded-2xl flex items-center justify-between shadow-xs">
                                   <div className="flex items-center gap-3.5">
                                     <PhoneCall className="w-5 h-5 text-emerald-600 shrink-0" />
-                                    <div className="flex flex-col gap-0.5">
+                                    <div className="flex items-center gap-1.5">
                                       <span className="text-sm font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
                                         Enable Calling
                                       </span>
-                                      <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                        Allow the AI agent to initiate or receive calls for leads in this stage.
-                                      </span>
+                                      <InfoTooltip text="Allow the AI agent to initiate or receive calls for leads in this stage." size="sm" />
                                     </div>
                                   </div>
 
@@ -4294,224 +4169,65 @@ export default function AdminProcessTemplates() {
                                     </label>
                                   </div>
                                 </div>
+
+                                {/* Enable Chatbot Card */}
+                                <div className="p-4 sm:p-5 bg-white dark:bg-card border border-border/80 rounded-2xl flex items-center justify-between shadow-xs">
+                                  <div className="flex items-center gap-3.5">
+                                    <MessageSquare className="w-5 h-5 text-blue-600 shrink-0" />
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-sm font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Enable Chatbot
+                                      </span>
+                                      <InfoTooltip text="Configure omnichannel conversational AI across WhatsApp, SMS, and Website." size="sm" />
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-3 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowChatbotDrawer(true)}
+                                      className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-lg transition-colors cursor-pointer"
+                                      title="Chatbot Channel Settings"
+                                    >
+                                      <Settings className="w-4 h-4" />
+                                    </button>
+
+                                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                      <input
+                                        type="checkbox"
+                                        className="sr-only peer"
+                                        checked={enableChatbot}
+                                        onChange={(e) => {
+                                          const newVal = e.target.checked;
+                                          setEnableChatbot(newVal);
+                                          if (selectedProcess && expandedStage) {
+                                            setProcesses((prev) =>
+                                              prev.map((p) =>
+                                                p.id !== selectedProcess
+                                                  ? p
+                                                  : {
+                                                    ...p,
+                                                    stages: p.stages.map((s) =>
+                                                      s.id !== expandedStage
+                                                        ? s
+                                                        : { ...s, enableChatbot: newVal }
+                                                    ),
+                                                  }
+                                              )
+                                            );
+                                          }
+                                        }}
+                                      />
+                                      <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                  </div>
+                                </div>
                               </div>
                             )}
 
-                          </div>
-
-                          {/* 1. AI Model Settings Section */}
-                          <div className="space-y-3">
-                            <div>
-                              <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                AI Model Settings
-                              </h3>
-                              <p className="text-xs text-gray-500 mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Fine-tune the technical execution of the AI agent's voice and intelligence.
-                              </p>
                             </div>
 
-                            <div className="rounded-2xl border border-gray-200/80 bg-white p-6 md:p-7 shadow-xs space-y-6">
-                              {/* Row 1: AI Model & Speech Speed */}
-                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-                                {/* AI Model */}
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-blue-500 font-mono font-bold text-sm leading-none">&gt;_</span>
-                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                      AI Model
-                                    </span>
-                                    <Tooltip text="Select the underlying LLM that powers the conversational logic.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="relative">
-                                    <select
-                                      value={selectedAIModel}
-                                      onChange={(e) => {
-                                        if (e.target.value === "__view_more_models__") {
-                                          navigate('/settings?tab=voice-config&sub=models');
-                                          return;
-                                        }
-                                        setSelectedAIModel(e.target.value);
-                                        toast.success(`AI Model updated to ${e.target.value}`);
-                                      }}
-                                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-10 cursor-pointer shadow-2xs"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      {activeAIModels.map((m) => (
-                                        <option key={m.id} value={m.name}>
-                                          {m.name} ({m.provider})
-                                        </option>
-                                      ))}
-                                      <option disabled value="">──────────</option>
-                                      <option value="__view_more_models__" className="text-blue-600 font-semibold">
-                                        Choose from library →
-                                      </option>
-                                    </select>
-                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                  </div>
-                                </div>
-
-                                {/* Speech Speed */}
-                                <div className="space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-1.5">
-                                      <Volume2 className="w-4 h-4 text-amber-500" />
-                                      <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                        Speech Speed
-                                      </span>
-                                      <Tooltip text="Adjust how fast the AI speaks to ensure a natural conversational rhythm. Speech speed significantly affects naturalness — 1.0x (Natural) is highly recommended.">
-                                        <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
-                                      </Tooltip>
-                                    </div>
-                                    <span className="text-xs font-semibold text-gray-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                      {stageVoiceSpeed.toFixed(1)}x
-                                    </span>
-                                  </div>
-                                  <div className="space-y-2 pt-1">
-                                    <input
-                                      type="range"
-                                      min="0.5"
-                                      max="1.5"
-                                      step="0.1"
-                                      value={stageVoiceSpeed}
-                                      onChange={(e) => setStageVoiceSpeed(parseFloat(e.target.value))}
-                                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                                    />
-                                    <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 tracking-wider">
-                                      <span>SLOW</span>
-                                      <span>NATURAL</span>
-                                      <span>FAST</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Row 2: Voice Engine, Tone, Style in same row */}
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100 items-start">
-                                {/* Voice Engine */}
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <Mic className="w-4 h-4 text-emerald-500" />
-                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                      Voice Engine
-                                    </span>
-                                    <Tooltip text="Choose the vocal personality that best represents your brand's tone.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="relative flex-1">
-                                      <select
-                                        value={stageVoice}
-                                        onChange={(e) => {
-                                          if (e.target.value === "__view_more_voices__") {
-                                            navigate('/settings?tab=voice-config&sub=voices');
-                                            return;
-                                          }
-                                          setStageVoice(e.target.value);
-                                          toast.success(`Voice updated to ${e.target.value}`);
-                                        }}
-                                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-7 cursor-pointer shadow-2xs"
-                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                      >
-                                        {activeConfiguredVoices.map((v) => (
-                                          <option key={v.id || v.name} value={v.name}>
-                                            {v.name} ({v.country}, {v.gender})
-                                          </option>
-                                        ))}
-                                        <option disabled value="">──────────</option>
-                                        <option value="__view_more_voices__" className="text-blue-600 font-semibold">
-                                          Choose from library →
-                                        </option>
-                                      </select>
-                                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        toast.success(`Playing preview for ${stageVoice || activeConfiguredVoices[0]?.name || "Nova"}...`);
-                                        if ("speechSynthesis" in window) {
-                                          window.speechSynthesis.cancel();
-                                          const utterance = new SpeechSynthesisUtterance("Hello! This is how your AI voice sounds.");
-                                          utterance.rate = stageVoiceSpeed;
-                                          window.speechSynthesis.speak(utterance);
-                                        }
-                                      }}
-                                      className="flex items-center gap-1.5 px-3.5 py-2.5 border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/40 rounded-xl text-sm font-semibold text-gray-800 transition-all cursor-pointer shadow-2xs group flex-shrink-0"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      <Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
-                                      <span className="group-hover:text-emerald-700 text-xs">Test</span>
-                                    </button>
-                                  </div>
-                                </div>
-
-                                {/* Tone */}
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                      Tone
-                                    </span>
-                                    <Tooltip text="Set the emotional tone used by the AI assistant.">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="relative">
-                                    <select
-                                      value={stageTone}
-                                      onChange={(e) => {
-                                        setStageTone(e.target.value);
-                                        toast.success(`Tone updated to ${e.target.value}`);
-                                      }}
-                                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-8 cursor-pointer shadow-2xs"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      <option value="Professional">Professional</option>
-                                      <option value="Friendly">Friendly</option>
-                                      <option value="Empathetic">Empathetic</option>
-                                      <option value="Casual">Casual</option>
-                                      <option value="Persuasive">Persuasive</option>
-                                      <option value="Authoritative">Authoritative</option>
-                                    </select>
-                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                  </div>
-                                </div>
-
-                                {/* Style */}
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-sm font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                      Style
-                                    </span>
-                                    <Tooltip text="Select conversational phrasing style (concise vs detailed).">
-                                      <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600 cursor-help transition-colors" />
-                                    </Tooltip>
-                                  </div>
-                                  <div className="relative">
-                                    <select
-                                      value={stageStyle}
-                                      onChange={(e) => {
-                                        setStageStyle(e.target.value);
-                                        toast.success(`Style updated to ${e.target.value}`);
-                                      }}
-                                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl appearance-none text-sm font-medium text-gray-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-8 cursor-pointer shadow-2xs"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      <option value="Balanced">Balanced</option>
-                                      <option value="Concise">Concise</option>
-                                      <option value="Detailed">Detailed</option>
-                                      <option value="Warm">Warm</option>
-                                      <option value="Expressive">Expressive</option>
-                                    </select>
-                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* 2. Caller Pitch Card */}
+                          {/* AI Prompt Card */}
                           <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-xs">
                             {/* Collapsible Header */}
                             <button
@@ -4525,10 +4241,10 @@ export default function AdminProcessTemplates() {
                                 </div>
                                 <div className="flex flex-col items-start text-left">
                                   <span className="text-base font-semibold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                    Caller Pitch
+                                    AI Prompt
                                   </span>
                                   <span className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                    Script or instructions used by the AI agent when conversing on calls in this stage.
+                                    Script or instructions used by the AI agent when conversing on calls or chat in this stage.
                                   </span>
                                 </div>
                               </div>
@@ -4601,7 +4317,7 @@ export default function AdminProcessTemplates() {
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          toast.success("AI is generating optimized caller pitch...");
+                                          toast.success("AI is generating optimized AI prompt...");
                                           setCallerPitch("Hi {{name}}, this is your dedicated assistant from {{organization.name}}. I'm reaching out to follow up on your recent inquiry and help answer any questions you might have about our services. Do you have a quick moment to speak?");
                                         }}
                                         className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
@@ -5307,6 +5023,7 @@ export default function AdminProcessTemplates() {
                                           primaryLanguage,
                                           secondaryLanguages,
                                           enableCalling,
+                                          enableChatbot,
                                         }
                                     ),
                                   }
@@ -6959,9 +6676,14 @@ export default function AdminProcessTemplates() {
         <CallTriggerDrawer
           isOpen={showCallTriggerDrawer}
           onClose={() => setShowCallTriggerDrawer(false)}
-          stageName={processes.find((p) => p.id === selectedProcess)?.stages.find((s) => s.id === expandedStage)?.name}
+          stageName={viewMode === "stage" && expandedStage ? processes.find((p) => p.id === selectedProcess)?.stages.find((s) => s.id === expandedStage)?.name : undefined}
           processName={processes.find((p) => p.id === selectedProcess)?.name}
-          settings={processes.find((p) => p.id === selectedProcess)?.stages.find((s) => s.id === expandedStage)?.callTriggerSettings}
+          settings={
+            viewMode === "stage" && expandedStage
+              ? processes.find((p) => p.id === selectedProcess)?.stages.find((s) => s.id === expandedStage)?.callTriggerSettings
+              : (processes.find((p) => p.id === selectedProcess)?.callTriggerSettings || processes.find((p) => p.id === selectedProcess)?.stages[0]?.callTriggerSettings)
+          }
+          inboundNumbers={inboundNumbers}
           onSave={(updatedSettings, options) => {
             if (options?.setAsDefault) {
               // 1. Save global default for all future configured stages
@@ -6973,6 +6695,7 @@ export default function AdminProcessTemplates() {
                   stages: p.stages.map((s) => ({
                     ...s,
                     callTriggerSettings: { ...updatedSettings },
+                    aiSettings: updatedSettings.aiSettings || s.aiSettings,
                   })),
                 }))
               );
@@ -6989,11 +6712,30 @@ export default function AdminProcessTemplates() {
                       stages: p.stages.map((s) => ({
                         ...s,
                         callTriggerSettings: { ...updatedSettings },
+                        aiSettings: updatedSettings.aiSettings || s.aiSettings,
                       })),
                     }
                 )
               );
               toast.success(`Applied trigger settings to all stages in "${procName}"`);
+            } else if (selectedProcess && (!expandedStage || viewMode !== "stage")) {
+              const procName = processes.find((p) => p.id === selectedProcess)?.name || "this process";
+              setProcesses((prev) =>
+                prev.map((p) =>
+                  p.id !== selectedProcess
+                    ? p
+                    : {
+                      ...p,
+                      callTriggerSettings: { ...updatedSettings },
+                      stages: p.stages.map((s) => ({
+                        ...s,
+                        callTriggerSettings: { ...updatedSettings },
+                        aiSettings: updatedSettings.aiSettings || s.aiSettings,
+                      })),
+                    }
+                )
+              );
+              toast.success(`Saved calling settings for "${procName}"`);
             } else if (selectedProcess && expandedStage) {
               // Apply to this stage only
               setProcesses((prev) =>
@@ -7005,12 +6747,81 @@ export default function AdminProcessTemplates() {
                       stages: p.stages.map((s) =>
                         s.id !== expandedStage
                           ? s
-                          : { ...s, callTriggerSettings: updatedSettings }
+                          : {
+                            ...s,
+                            callTriggerSettings: updatedSettings,
+                            aiSettings: updatedSettings.aiSettings || s.aiSettings,
+                          }
                       ),
                     }
                 )
               );
               toast.success("Call trigger settings saved for this stage");
+            }
+          }}
+        />
+
+        <ChatbotChannelDrawer
+          isOpen={showChatbotDrawer}
+          onClose={() => setShowChatbotDrawer(false)}
+          stageName={viewMode === "stage" && expandedStage ? processes.find((p) => p.id === selectedProcess)?.stages.find((s) => s.id === expandedStage)?.name : undefined}
+          processName={processes.find((p) => p.id === selectedProcess)?.name}
+          settings={
+            viewMode === "stage" && expandedStage
+              ? processes.find((p) => p.id === selectedProcess)?.stages.find((s) => s.id === expandedStage)?.chatbotSettings
+              : (processes.find((p) => p.id === selectedProcess)?.chatbotSettings || processes.find((p) => p.id === selectedProcess)?.stages[0]?.chatbotSettings)
+          }
+          inboundNumbers={inboundNumbers}
+          onSave={(updatedChatbotSettings, options) => {
+            if (options?.applyToCurrentProcess && selectedProcess) {
+              const procName = processes.find((p) => p.id === selectedProcess)?.name || "this process";
+              setProcesses((prev) =>
+                prev.map((p) =>
+                  p.id !== selectedProcess
+                    ? p
+                    : {
+                      ...p,
+                      stages: p.stages.map((s) => ({
+                        ...s,
+                        chatbotSettings: { ...updatedChatbotSettings },
+                      })),
+                    }
+                )
+              );
+              toast.success(`Applied chatbot settings to all stages in "${procName}"`);
+            } else if (selectedProcess && (!expandedStage || viewMode !== "stage")) {
+              const procName = processes.find((p) => p.id === selectedProcess)?.name || "this process";
+              setProcesses((prev) =>
+                prev.map((p) =>
+                  p.id !== selectedProcess
+                    ? p
+                    : {
+                      ...p,
+                      chatbotSettings: { ...updatedChatbotSettings },
+                      stages: p.stages.map((s) => ({
+                        ...s,
+                        chatbotSettings: { ...updatedChatbotSettings },
+                      })),
+                    }
+                )
+              );
+              toast.success(`Saved chatbot settings for "${procName}"`);
+            } else if (selectedProcess && expandedStage) {
+              setProcesses((prev) =>
+                prev.map((p) =>
+                  p.id !== selectedProcess
+                    ? p
+                    : {
+                      ...p,
+                      stages: p.stages.map((s) =>
+                        s.id !== expandedStage
+                          ? s
+                          : { ...s, chatbotSettings: { ...updatedChatbotSettings } }
+                      ),
+                    }
+                )
+              );
+              toast.success("Chatbot channel settings saved for this stage");
             }
           }}
         />
