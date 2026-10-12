@@ -60,16 +60,16 @@ export default function PatientBookingScreen() {
         duration: 30,
         title: `${service} with ${selectedDoctor?.name || "Dr. John Smith"}`,
         notes,
-        source: "screen",
+        source: "MA-Client",
       },
       { force: true, createdBy: "user" }
     );
 
-    // Advance patient stage to "Book Appointment" in clientsStore
+    // Update patient stage in clientsStore
     const all = getStoredClients();
     const updated = all.map((c) =>
       c.id === activeClient.id
-        ? { ...c, stage: "Book Appointment", processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])) }
+        ? { ...c, stage: "Appointment Booked", processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])) }
         : c
     );
     saveStoredClients(updated);
@@ -80,31 +80,19 @@ export default function PatientBookingScreen() {
     setBookedSuccess(true);
   };
 
-  const handleContinueToPharmacy = () => {
-    // Advance stage to Move to Pharmacy
-    const all = getStoredClients();
-    const updated = all.map((c) =>
-      c.id === activeClient.id
-        ? { ...c, stage: "Move to Pharmacy", processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])) }
-        : c
-    );
-    saveStoredClients(updated);
-    navigate("/patient/pharmacy");
-  };
-
   return (
     <div className="max-w-3xl mx-auto space-y-8">
       {/* Header */}
       <div className="text-center space-y-2">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/80 text-blue-800 text-xs font-semibold">
           <Calendar className="w-3.5 h-3.5 text-blue-600" />
-          <span>Stage 2 of 5 • Book Appointment</span>
+          <span>Patient Portal • Book Consultation</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
           Book Clinic Consultation
         </h1>
         <p className="text-sm text-slate-500 max-w-lg mx-auto">
-          Schedule your clinical consultation. The booking writes directly to <code className="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">appointmentService.ts</code> and syncs across all views.
+          Schedule your clinical consultation. All bookings sync live into Mantra Assist and the central database.
         </p>
       </div>
 
@@ -123,7 +111,7 @@ export default function PatientBookingScreen() {
                 Booking Reference #{createdApptId || "102"}
               </h2>
               <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                Consultation confirmed with {selectedDoctor?.name || "Dr. John Smith"} on {date} at {time}. Client stage updated to <strong>Book Appointment</strong>.
+                Consultation confirmed with {selectedDoctor?.name || "Dr. John Smith"} on {date} at {time}. Recorded with source <strong>MA-Client</strong>.
               </p>
             </div>
 
@@ -141,9 +129,9 @@ export default function PatientBookingScreen() {
                 <span className="font-semibold text-slate-800">{date} at {time}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Current Client Stage:</span>
+                <span className="text-slate-400">Booking Source:</span>
                 <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
-                  Book Appointment
+                  MA-Client (Patient Portal)
                 </span>
               </div>
             </div>
@@ -151,18 +139,18 @@ export default function PatientBookingScreen() {
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 type="button"
-                onClick={handleContinueToPharmacy}
+                onClick={() => navigate("/patient")}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm transition-all"
               >
-                <span>Continue to Pharmacy (Stage 3)</span>
+                <span>View Care Overview</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
               <button
                 type="button"
-                onClick={() => navigate("/patient")}
+                onClick={() => navigate("/patient/bill")}
                 className="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-colors"
               >
-                View Care Status
+                View Bills & Invoices
               </button>
             </div>
           </div>
@@ -253,7 +241,7 @@ export default function PatientBookingScreen() {
                 className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-all active:scale-[0.98]"
               >
                 <Calendar className="w-4 h-4" />
-                <span>Confirm Booking & Advance to Stage 2</span>
+                <span>Confirm Consultation Booking</span>
               </button>
 
               <div className="text-center text-[11px] text-slate-400 flex items-center justify-center gap-1.5">

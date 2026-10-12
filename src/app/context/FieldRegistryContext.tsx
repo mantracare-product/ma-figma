@@ -624,7 +624,6 @@ const SYSTEM_FIELD_KEYS = new Set([
   "company", "role", "status", "processes", "stage",
   "responsible", "lastContact", "companyName", "jobPosition",
   "invoice_number", "issue_date", "due_date", "payment_mode",
-  "total_amount", "amount_paid", "balance_due", "client_credit",
   "product_name", "quantity", "unit_price", "tax_rate",
   "line_items_summary", "subtotal", "tax_amount", "discount_applied", "payment_url"
 ]);
@@ -1448,6 +1447,19 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
       ]
     },
     { key: "provider", label: "Provider", module: "appointment", inputType: "select", placeholder: "Unassigned", showAlways: true },
+    {
+      key: "source",
+      label: "Source",
+      module: "appointment",
+      inputType: "select",
+      placeholder: "Select source",
+      showAlways: true,
+      options: [
+        { id: 1, label: "MA-Client", value: "MA-Client" },
+        { id: 2, label: "Inbound Call", value: "Inbound Call" },
+        { id: 3, label: "Walked In", value: "Walked In" },
+      ],
+    },
   ],
   call: [
     { key: "status", label: "Call Status", module: "call", inputType: "text", placeholder: "Completed/Missed", showAlways: true },
@@ -1689,10 +1701,6 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
       ],
       showAlways: true,
     },
-    { key: "total_amount", label: "Total Amount", module: "invoice", sectionId: "sec-inv-details", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
-    { key: "amount_paid", label: "Amount Paid", module: "invoice", sectionId: "sec-inv-details", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
-    { key: "balance_due", label: "Balance Due", module: "invoice", sectionId: "sec-inv-details", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
-    { key: "client_credit", label: "Client Credit Available", module: "invoice", sectionId: "sec-inv-details", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
     {
       key: "product_name",
       label: "Product Name",

@@ -87,6 +87,17 @@ export interface ProcessTransitionTarget {
 
 export type EntityType = "client" | "appointment" | "invoice" | "insurance" | "claim";
 
+export interface StagePortalReceptionSettings {
+  enabled?: boolean;
+  enabledPortal?: boolean;
+  enabledReception?: boolean;
+  text?: string;
+  htmlContent?: string;
+  videos?: Array<{ id: string; title: string; url: string }>;
+  links?: Array<{ id: string; title: string; url: string }>;
+  images?: Array<{ id: string; title: string; url: string }>;
+}
+
 export interface Stage {
   id: string;
   name: string;
@@ -104,6 +115,9 @@ export interface Stage {
   callTriggerSettings?: CallTriggerSettings;
   enableChatbot?: boolean;
   chatbotSettings?: ChatbotSettings;
+  connectedToPatientPortal?: boolean;
+  connectedToAiReceptionist?: boolean;
+  portalReceptionSettings?: StagePortalReceptionSettings;
   receptionStationId?: string;
   receptionAutoAdvance?: boolean;
   receptionIsOptional?: boolean;

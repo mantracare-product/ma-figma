@@ -23,6 +23,7 @@ import GenerateDocumentDrawer from "./GenerateDocumentDrawer";
 import DocumentPreviewDrawer from "./DocumentPreviewDrawer";
 import AddDocumentTemplateDrawer from "./AddDocumentTemplateDrawer";
 import { TableComponent, TableColumn } from "../ui/TableComponent";
+import { invoiceService, findInvoiceDocumentAutomation, generateInvoiceDocument } from "../../../lib/invoiceService";
 
 export interface DocumentsTabProps {
   client: {
@@ -140,12 +141,66 @@ export default function DocumentsTab({
     const refreshDocs = () => {
       // 1. If scoped to an invoice, ONLY show documents for this invoice (NO client-level KYC/intake docs)
       if (entityType === "invoice" && entityId) {
+        const cleanEntityId = String(entityId).replace(/^#/, "").trim().toLowerCase();
+        const cleanInvDataId = invoiceData?.id ? String(invoiceData.id).replace(/^#/, "").trim().toLowerCase() : "";
+        const invClientName = (invoiceData?.clientName || client?.name || "").trim().toLowerCase();
         const allStored = getStoredClientDocuments();
-        const invoiceDocs = allStored.filter(
-          (d) =>
-            d.invoiceId === entityId ||
-            (d.entityType === "invoice" && d.entityId === entityId)
-        );
+
+        const invoiceDocs = allStored.filter((d) => {
+          const dInvId = (d.invoiceId || "").replace(/^#/, "").trim().toLowerCase();
+          const dEntId = (d.entityId || "").replace(/^#/, "").trim().toLowerCase();
+          const dNotes = (d.notes || "").toLowerCase();
+          const dName = (d.name || "").toLowerCase();
+
+          // 1. Direct Invoice ID match (normalized without #)
+          if (cleanEntityId && (dInvId === cleanEntityId || (d.entityType === "invoice" && dEntId === cleanEntityId))) {
+            return true;
+          }
+          if (cleanInvDataId && (dInvId === cleanInvDataId || (d.entityType === "invoice" && dEntId === cleanInvDataId))) {
+            return true;
+          }
+          if (cleanEntityId && dNotes.includes(cleanEntityId)) {
+            return true;
+          }
+
+          // 2. Appointment link match
+          if (invoiceData?.appointmentId) {
+            const cleanAppt = String(invoiceData.appointmentId).trim();
+            if (d.appointmentId === cleanAppt || dNotes.includes(cleanAppt)) {
+              return true;
+            }
+          }
+
+          // 3. Client ID or Client Name match with Invoice/Billing Category
+          const isInvoiceCategory = d.category === "Invoices" || d.category === "Billing" || dNotes.includes("invoice") || dName.includes("invoice");
+          if (isInvoiceCategory) {
+            if (client.id && d.clientId === client.id) {
+              return true;
+            }
+            if (invClientName && (dName.includes(invClientName) || dNotes.includes(invClientName))) {
+              return true;
+            }
+          }
+
+          return false;
+        });
+
+        if (invoiceDocs.length === 0) {
+          const invObj = invoiceData || (cleanEntityId ? invoiceService.getInvoiceById(cleanEntityId) : null);
+          if (invObj) {
+            try {
+              const docRule = findInvoiceDocumentAutomation(invObj.processId);
+              const autoDoc = generateInvoiceDocument(invObj, docRule?.params);
+              if (autoDoc) {
+                setDocuments([autoDoc]);
+                return;
+              }
+            } catch (err) {
+              console.warn("[DocumentsTab] Auto-heal document generation error:", err);
+            }
+          }
+        }
+
         setDocuments(invoiceDocs);
         return;
       }
@@ -223,8 +278,12 @@ export default function DocumentsTab({
 
     refreshDocs();
     window.addEventListener(CLIENT_DOCUMENTS_EVENT, refreshDocs);
-    return () => window.removeEventListener(CLIENT_DOCUMENTS_EVENT, refreshDocs);
-  }, [client?.id, client?.name, client?.responsible, processName, entityType, entityId, hideClientDefaultDocs]);
+    window.addEventListener("storage", refreshDocs);
+    return () => {
+      window.removeEventListener(CLIENT_DOCUMENTS_EVENT, refreshDocs);
+      window.removeEventListener("storage", refreshDocs);
+    };
+  }, [client?.id, client?.name, client?.responsible, processName, entityType, entityId, hideClientDefaultDocs, invoiceData?.id, invoiceData?.appointmentId]);
 
   const handleToggleDocStatus = (docId: string) => {
     setDocuments((prev) =>

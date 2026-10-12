@@ -330,9 +330,30 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     // Check overdue on mount
     invoiceService.checkOverdueInvoices();
-    return invoiceService.subscribe((updated) => {
+    const unsub = invoiceService.subscribe((updated) => {
       setInvoices(updated);
     });
+
+    const handleSyncPayments = () => {
+      try {
+        const raw = localStorage.getItem("mantra_payments_v1");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            setPayments(parsed);
+          }
+        }
+      } catch {}
+    };
+
+    window.addEventListener("mantra_payments_changed", handleSyncPayments);
+    window.addEventListener("storage", handleSyncPayments);
+
+    return () => {
+      unsub();
+      window.removeEventListener("mantra_payments_changed", handleSyncPayments);
+      window.removeEventListener("storage", handleSyncPayments);
+    };
   }, []);
 
   const [fieldRules, setFieldRules] = useState<InvoiceFieldRulesMap>(() => {
@@ -633,11 +654,29 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const getPaymentsByInvoice = (invoiceId: string) => {
-    return payments.filter((p) => p.invoiceId === invoiceId);
+    try {
+      const raw = localStorage.getItem("mantra_payments_v1");
+      const storedList: Payment[] = raw ? JSON.parse(raw) : [];
+      const map = new Map<string, Payment>();
+      payments.forEach((p) => map.set(p.id, p));
+      storedList.forEach((p) => map.set(p.id, p));
+      return Array.from(map.values()).filter((p) => p.invoiceId === invoiceId);
+    } catch {
+      return payments.filter((p) => p.invoiceId === invoiceId);
+    }
   };
 
   const getPaymentsByClient = (clientId: string) => {
-    return payments.filter((p) => p.clientId === clientId);
+    try {
+      const raw = localStorage.getItem("mantra_payments_v1");
+      const storedList: Payment[] = raw ? JSON.parse(raw) : [];
+      const map = new Map<string, Payment>();
+      payments.forEach((p) => map.set(p.id, p));
+      storedList.forEach((p) => map.set(p.id, p));
+      return Array.from(map.values()).filter((p) => p.clientId === clientId);
+    } catch {
+      return payments.filter((p) => p.clientId === clientId);
+    }
   };
 
   const voidInvoice = (invoiceId: string) => {

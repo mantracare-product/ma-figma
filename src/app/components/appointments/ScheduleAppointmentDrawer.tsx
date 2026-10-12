@@ -16,7 +16,7 @@ import {
   Check,
   AlertTriangle,
 } from "lucide-react";
-import { initialClients } from "../../pages/ClientProfile";
+import { getStoredClients } from "../../../lib/clientsStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import { CustomSideDrawer } from "../ui/drawer";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
@@ -71,6 +71,7 @@ export interface BookingFormValues {
   location?: string;
   primaryInsurance?: string;
   secondaryInsurance?: string;
+  source?: string;
 }
 
 export interface ScheduleAppointmentDrawerProps {
@@ -364,37 +365,44 @@ export default function ScheduleAppointmentDrawer({
   );
   const [secondaryInsurance, setSecondaryInsurance] = useState(values.secondaryInsurance || "Medicare Part B");
 
-  // ── Available clients ──
+  // ── Available clients (synced directly with clientsStore to match Clients page) ──
   const allAvailableClients: ClientOption[] = useMemo(() => {
     const list: ClientOption[] = [];
     const seenIds = new Set<string>();
 
-    if (clients?.length) {
-      clients.forEach((c) => {
-        if (!seenIds.has(String(c.id))) { seenIds.add(String(c.id)); list.push(c); }
+    const stored = getStoredClients();
+    if (stored?.length) {
+      stored.forEach((c) => {
+        const idStr = String(c.id);
+        if (!seenIds.has(idStr)) {
+          seenIds.add(idStr);
+          list.push({
+            id: c.id,
+            name: c.name,
+            email: c.email || "",
+            phone: c.phone || "",
+            status: c.status || "Active",
+            process: Array.isArray(c.processes) ? c.processes[0] : (c as any).process,
+          });
+        }
       });
     }
 
-    try {
-      const raw = sessionStorage.getItem("clients");
-      const loaded = raw ? JSON.parse(raw) : initialClients;
-      if (Array.isArray(loaded)) {
-        loaded.forEach((c: any) => {
-          if (!seenIds.has(String(c.id))) {
-            seenIds.add(String(c.id));
-            list.push({
-              id: c.id, name: c.name, email: c.email || "", phone: c.phone || "",
-              status: c.status,
-              process: Array.isArray(c.processes) ? c.processes[0] : c.processes,
-            });
-          }
-        });
-      }
-    } catch { /* ignore */ }
+    if (clients?.length) {
+      clients.forEach((c) => {
+        const idStr = String(c.id);
+        if (!seenIds.has(idStr)) {
+          seenIds.add(idStr);
+          list.push(c);
+        }
+      });
+    }
 
-    if (values.client && !seenIds.has(String(values.client.id))) list.unshift(values.client);
-    return list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [clients, values.client]);
+    if (values.client && !seenIds.has(String(values.client.id))) {
+      list.unshift(values.client);
+    }
+    return list;
+  }, [clients, values.client, isOpen]);
 
   const { teamMembers, bookableMembers } = useTeamMembers();
 
@@ -1137,6 +1145,18 @@ export default function ScheduleAppointmentDrawer({
                 options={stageOptions}
                 placeholder="Select a stage"
                 onChange={(val) => onChange({ stageId: val })}
+              />
+            </FieldRow>
+            <FieldRow label="Source">
+              <CustomDropdown
+                value={values.source || "Inbound Call"}
+                options={[
+                  { value: "MA-Client", label: "MA-Client (Patient Portal)" },
+                  { value: "Inbound Call", label: "Inbound Call" },
+                  { value: "Walked In", label: "Walked In (From AI Receptionist)" },
+                ]}
+                placeholder="Select source"
+                onChange={(val) => onChange({ source: val })}
               />
             </FieldRow>
           </div>

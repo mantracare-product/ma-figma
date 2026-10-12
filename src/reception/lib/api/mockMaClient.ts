@@ -13,6 +13,8 @@ import { getStoredClients, saveStoredClients, addOrUpdateClient, CLIENTS_STORE_E
 import { addProcessCallLog } from '../../../lib/processLogsStore';
 import { getStoredServices } from '../../../lib/servicesStore';
 import { getStoredTeamMembers } from '../../../lib/teamStore';
+import { appointmentService } from '../../../lib/appointmentService';
+import { invoiceService } from '../../../lib/invoiceService';
 import type {
   Station,
   DirectionCategory,
@@ -739,6 +741,7 @@ export class MockMaClient implements IMaClient {
       lastContact: todayStr,
       status: 'Active',
       location,
+      source: data.source || 'Walked In',
     });
 
     const newClientRecord: MantraClientRecord = {
@@ -752,7 +755,7 @@ export class MockMaClient implements IMaClient {
       faceConsentAt: data.consentAt || (data.faceEnrolled ? nowIso : undefined),
       faceTemplate: data.faceTemplate,
       createdVia: 'ai_receptionist',
-      source: 'ai_receptionist',
+      source: data.source || 'Walked In',
     };
 
     // Sync deal into Deals / Process pipeline in sessionStorage & localStorage
@@ -1115,7 +1118,7 @@ export class MockMaClient implements IMaClient {
         time: validTime,
         status: 'confirmed',
         receptionEnabled: true,
-        source: data.source || 'ai_receptionist',
+        source: data.source || 'Walked In',
         roomStationId: 'st-consult-1',
         roomName: dynamicRoomName,
         tokenNumber,
@@ -1124,32 +1127,29 @@ export class MockMaClient implements IMaClient {
       appointments.push(newApt);
       this.setStorage(STORAGE_KEYS.APPOINTMENTS, appointments);
 
-      // Sync with localStorage & sessionStorage appointments_v1 for MA Appointments page
+      // Sync through canonical appointmentService to trigger automation rules, stages & invoices
       try {
+        const apptSource = data.source === 'MA-Client' ? 'MA-Client' : 'Walked In';
+        const cleanTime = validTime.replace(/ AM| PM/i, '').trim();
+        appointmentService.createAppointment({
+          clientName,
+          clientEmail,
+          clientPhone,
+          employeeId: Number(prov?.id) || 1,
+          serviceId: Number(srv?.id) || 1,
+          date: data.date,
+          time: cleanTime,
+          duration: srv?.durationMin || 30,
+          notes: data.reason || 'Booked via AI Receptionist',
+          title: `${srv?.name || 'Consultation'} with ${doctorDisplayName}`,
+          clientId: data.clientId,
+          source: apptSource,
+          location: dynamicRoomName,
+          processId: defaultProcess,
+          stageId: 'Confirmed',
+        }, { force: true, createdBy: 'user' });
+
         if (typeof window !== 'undefined') {
-          const rawApts = window.localStorage?.getItem('appointments_v1') || window.sessionStorage?.getItem('appointments_v1');
-          const maApts = rawApts ? JSON.parse(rawApts) : [];
-          const numericId = Date.now();
-          maApts.unshift({
-            id: numericId,
-            clientName,
-            clientEmail,
-            clientPhone,
-            employeeId: Number(prov?.id) || 1,
-            serviceId: Number(srv?.id) || 1,
-            date: data.date,
-            time: validTime.replace(/ AM| PM/i, ''),
-            duration: srv?.durationMin || 30,
-            status: 'scheduled',
-            notes: data.reason || 'Booked via AI Receptionist',
-            source: 'ai_receptionist',
-            roomName: dynamicRoomName,
-            tokenNumber,
-            processId: defaultProcess,
-            stageId: 'Confirmed',
-          });
-          window.localStorage?.setItem('appointments_v1', JSON.stringify(maApts));
-          window.sessionStorage?.setItem('appointments_v1', JSON.stringify(maApts));
           window.dispatchEvent(new CustomEvent('mantra_appointments_updated'));
           try {
             const bc = new BroadcastChannel('mantra_appointments_broadcast_channel');
@@ -1158,7 +1158,7 @@ export class MockMaClient implements IMaClient {
           } catch {}
         }
       } catch (e) {
-        console.warn('Failed to sync appointment with MA sessionStore:', e);
+        console.warn('Failed to sync appointment with appointmentService:', e);
       }
 
       return newApt;
@@ -1685,9 +1685,67 @@ export class MockMaClient implements IMaClient {
   }
 
   async getPatientInvoices(clientId: string, _sessionToken?: string): Promise<PatientInvoiceSummary[]> {
-    return [
-      { id: 'inv_1', invoiceNumber: 'INV-2026-089', amount: 150, status: 'unpaid', dueDate: '2026-09-19' },
-    ];
+    const allInvoices = invoiceService.getInvoices();
+    const clients = this.getMantraClients();
+    const client = clients.find(
+      (c) => c.id === clientId || c.phone === clientId || c.email === clientId
+    );
+
+    const matched = allInvoices.filter((inv) => {
+      if (inv.clientId === clientId) return true;
+      if (client) {
+        if (inv.clientId === client.id) return true;
+        if (client.name && inv.clientName && inv.clientName.toLowerCase() === client.name.toLowerCase()) return true;
+        if (client.phone && inv.clientPhone && (inv.clientPhone === client.phone || client.phone.includes(inv.clientPhone) || inv.clientPhone.includes(client.phone))) return true;
+      }
+      return false;
+    });
+
+    // If matches found, return them. If clientId is 'all', return all invoices.
+    // If no invoices match this client directly, check if there are any invoices in the system and return those with balance due to assist kiosk checkout.
+    const listToFormat = matched.length > 0
+      ? matched
+      : (clientId === 'all'
+          ? allInvoices
+          : allInvoices.filter((inv) => (inv.total - (inv.amountPaid || 0)) > 0 && inv.status !== 'paid'));
+
+    return listToFormat.map((inv) => {
+      const balance = Math.max(0, (inv.total || 0) - (inv.amountPaid || 0));
+      let status: 'paid' | 'unpaid' | 'partially_paid' = 'unpaid';
+      if (inv.status === 'paid' || balance === 0) {
+        status = 'paid';
+      } else if (inv.status === 'partial' || (inv.amountPaid || 0) > 0) {
+        status = 'partially_paid';
+      }
+
+      return {
+        id: inv.id,
+        invoiceNumber: inv.id,
+        amount: inv.total,
+        amountPaid: inv.amountPaid || 0,
+        balanceDue: balance,
+        status,
+        dueDate: inv.dueDate,
+        issueDate: inv.issueDate,
+        items: (inv.lineItems || []).map((li) => ({
+          description: li.description,
+          quantity: li.quantity,
+          unitPrice: li.unitPrice,
+          total: li.quantity * li.unitPrice,
+        })),
+        clientName: inv.clientName,
+        clientId: inv.clientId,
+      };
+    });
+  }
+
+  async recordInvoicePayment(
+    invoiceId: string,
+    amount: number,
+    method: string = 'qr_code',
+    note: string = 'Paid via AI Receptionist QR Kiosk'
+  ): Promise<any> {
+    return invoiceService.recordPayment(invoiceId, amount, method, note);
   }
 
   // --- Biometrics & Face Matching (Synthetic Prototype with Vector Distance) ---

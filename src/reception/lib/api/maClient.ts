@@ -93,6 +93,7 @@ export interface IMaClient {
 
   // Invoices & Billing
   getPatientInvoices(clientId: string): Promise<PatientInvoiceSummary[]>;
+  recordInvoicePayment(invoiceId: string, amount: number, method?: string, note?: string): Promise<any>;
 }
 
 // Active singleton instance reference

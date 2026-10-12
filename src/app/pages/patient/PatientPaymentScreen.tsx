@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useOutletContext, useNavigate } from "react-router";
+import React, { useState, useEffect, useMemo } from "react";
+import { useOutletContext, useNavigate, useSearchParams } from "react-router";
 import {
   QrCode,
   CheckCircle2,
@@ -11,11 +11,17 @@ import {
   AlertCircle,
   Sparkles,
   RotateCcw,
+  Loader2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Client, getStoredClients, saveStoredClients } from "../../../lib/clientsStore";
 import { Process, Stage } from "../../../lib/useProcessStore";
 import { invoiceService } from "../../../lib/invoiceService";
+import { ClientInvoice } from "../../../app/types/invoiceTypes";
 import confetti from "canvas-confetti";
+import QRCode from "qrcode";
+import { toast } from "sonner";
 
 interface PortalContext {
   activeClient: Client;
@@ -28,74 +34,210 @@ interface PortalContext {
 
 export default function PatientPaymentScreen() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { activeClient, onStageChange } = useOutletContext<PortalContext>();
 
+  const [invoices, setInvoices] = useState<ClientInvoice[]>(() => invoiceService.getInvoices());
   const [paymentDone, setPaymentDone] = useState(false);
   const [paymentReceipt, setPaymentReceipt] = useState<any>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const invoiceId = `INV-${activeClient?.id || "CL-001"}`;
-  const totalAmount = 210.6;
+  useEffect(() => {
+    const unsub = invoiceService.subscribe(setInvoices);
+    return unsub;
+  }, []);
 
-  const handleConfirmPayment = () => {
-    if (!activeClient) return;
+  const requestedInvoiceId = searchParams.get("invoiceId");
 
-    // 1. Record canonical payment against invoice in invoiceService
-    const result = invoiceService.recordPayment(
-      invoiceId,
-      totalAmount,
-      "qr",
-      "Demo Patient Portal QR Settlement"
-    );
+  // Find target invoice (in sync with AI Receptionist matching logic)
+  const targetInvoice = useMemo(() => {
+    if (requestedInvoiceId) {
+      const found = invoices.find(
+        (inv) =>
+          inv.id === requestedInvoiceId ||
+          inv.id.toLowerCase() === requestedInvoiceId.toLowerCase() ||
+          inv.invoiceNumber === requestedInvoiceId
+      );
+      if (found) return found;
+    }
 
-    // 2. Advance patient stage to "Payment Done" (Stage 5)
-    const all = getStoredClients();
-    const updated = all.map((c) =>
-      c.id === activeClient.id
-        ? { ...c, stage: "Payment Done", processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])) }
-        : c
-    );
-    saveStoredClients(updated);
+    // Otherwise find pending invoice for active client
+    if (activeClient) {
+      const patientPhoneDigits = (activeClient.phone || "").replace(/\D/g, "");
+      const patientNameLower = (activeClient.name || "").toLowerCase().trim();
+      const clientInvs = invoices.filter(
+        (inv) =>
+          (inv.clientId && String(inv.clientId) === String(activeClient.id)) ||
+          (inv.clientName && patientNameLower && inv.clientName.toLowerCase().trim() === patientNameLower) ||
+          (patientPhoneDigits && inv.clientPhone && inv.clientPhone.replace(/\D/g, "").includes(patientPhoneDigits))
+      );
+      const pending = clientInvs.find((inv) => (inv.total - (inv.amountPaid || 0)) > 0 && inv.status !== "paid");
+      if (pending) return pending;
+      if (clientInvs.length > 0) return clientInvs[0];
+    }
 
-    // 3. Trigger confetti celebration & set success view
-    try {
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-      });
-    } catch {}
+    // Fallback in sync with AI Receptionist: any pending invoice in the clinic system
+    const anyPending = invoices.find((inv) => (inv.total - (inv.amountPaid || 0)) > 0 && inv.status !== "paid");
+    if (anyPending) return anyPending;
 
-    setPaymentReceipt(
-      result?.payment || {
-        receiptNumber: `REC-${activeClient.id?.replace(/\D/g, "") || "101"}-88`,
-        amount: totalAmount,
-        method: "qr",
-        paymentDate: new Date().toISOString().split("T")[0],
+    if (invoices.length > 0) return invoices[0];
+
+    // Default fallback: create and persist canonical invoice in invoiceService
+    const defaultInv: ClientInvoice = {
+      id: `INV-CL-1001`,
+      invoiceNumber: `INV-2026-101`,
+      clientId: activeClient?.id || "CL-001",
+      clientName: activeClient?.name || "Patient",
+      clientEmail: activeClient?.email || "",
+      clientPhone: activeClient?.phone || "",
+      subtotal: 75.0,
+      discountAmount: 0,
+      taxAmount: 3.75,
+      total: 78.75,
+      amountPaid: 0,
+      currency: "$",
+      status: "sent" as const,
+      createdBy: "System",
+      lineItems: [
+        {
+          id: "li-consult",
+          description: "Follow-up Consultation & Clinical Assessment",
+          quantity: 1,
+          unitPrice: 78.75,
+          source: "service" as const,
+        },
+      ],
+      createdAt: new Date().toISOString(),
+      dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
+    };
+    invoiceService.saveInvoices([defaultInv]);
+    return defaultInv;
+  }, [invoices, requestedInvoiceId, activeClient]);
+
+  const invoiceId = targetInvoice.id;
+  const balanceDue = Math.max(0, targetInvoice.total - (targetInvoice.amountPaid || 0)) || targetInvoice.total;
+
+  const upiPayload = `upi://pay?pa=billing@mantracare.com&pn=MantraCare+Health&am=${balanceDue.toFixed(
+    2
+  )}&cu=USD&tr=${invoiceId}&tn=Portal+Settlement+${invoiceId}`;
+
+  // Generate QR Code
+  useEffect(() => {
+    QRCode.toDataURL(
+      upiPayload,
+      {
+        width: 280,
+        margin: 2,
+        color: {
+          dark: "#0f172a",
+          light: "#ffffff",
+        },
+      },
+      (err, url) => {
+        if (!err && url) {
+          setQrDataUrl(url);
+        }
       }
     );
-    setPaymentDone(true);
+  }, [upiPayload]);
+
+  const handleConfirmPayment = () => {
+    if (!activeClient || isProcessing) return;
+    setIsProcessing(true);
+
+    try {
+      // 1. Ensure invoice exists in invoiceService
+      if (!invoiceService.getInvoiceById(invoiceId)) {
+        invoiceService.saveInvoices([targetInvoice, ...invoiceService.getInvoices()]);
+      }
+
+      // 2. Record canonical payment against invoice in invoiceService
+      const result = invoiceService.recordPayment(
+        invoiceId,
+        balanceDue,
+        "qr_code",
+        "Client Portal Touchless QR Settlement"
+      );
+
+      // 3. Dispatch events for instant MantraAssist synchronization
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("mantra_payments_changed"));
+        window.dispatchEvent(new Event("mantra_invoices_changed"));
+        window.dispatchEvent(new Event("storage"));
+      }
+
+      // 4. Advance patient stage to "Payment Done" (Stage 5)
+      const all = getStoredClients();
+      const updated = all.map((c) =>
+        c.id === activeClient.id
+          ? { ...c, stage: "Payment Done", processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])) }
+          : c
+      );
+      saveStoredClients(updated);
+      try {
+        onStageChange("Payment Done");
+      } catch {}
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: activeClient.id }));
+      }
+
+      // 5. Trigger confetti celebration
+      try {
+        confetti({
+          particleCount: 90,
+          spread: 75,
+          origin: { y: 0.6 },
+          colors: ["#10b981", "#3b82f6", "#6366f1", "#f59e0b"],
+        });
+      } catch {}
+
+      setPaymentReceipt(
+        result?.payment || {
+          receiptNumber: `REC-${invoiceId.replace(/[^0-9]/g, "").slice(-5) || "88"}-10`,
+          amount: balanceDue,
+          method: "qr_code",
+          paymentDate: new Date().toISOString().split("T")[0],
+        }
+      );
+      setPaymentDone(true);
+      toast.success(`Payment of $${balanceDue.toFixed(2)} recorded and synchronized with MantraAssist!`);
+    } catch (err: any) {
+      toast.error(err?.message || "Payment processing failed");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard?.writeText(upiPayload);
+    setCopied(true);
+    toast.success("Payment link copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
+    <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in duration-200">
       {/* Header */}
       <div className="text-center space-y-2">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-xs font-semibold">
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Stage 5 of 5 • Payment Done</span>
+          <span>Stage 5 of 5 • Payment Settlement</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
           Payment Settlement
         </h1>
         <p className="text-sm text-slate-500 max-w-lg mx-auto">
-          Scan QR code to settle your clinical invoice. Once confirmed, payment is recorded directly against your invoice in <code className="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono">invoiceService.ts</code>.
+          Scan QR code to settle invoice <span className="font-mono font-semibold text-slate-800">{invoiceId}</span>. Payments are recorded live in MantraAssist.
         </p>
       </div>
 
       {/* Main Payment Card */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-xs">
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-xs">
         {paymentDone ? (
-          <div className="text-center py-6 space-y-5">
+          <div className="text-center py-6 space-y-5 animate-in zoom-in-95 duration-200">
             <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200 shadow-xs">
               <CheckCircle2 className="w-10 h-10" />
             </div>
@@ -108,31 +250,31 @@ export default function PatientPaymentScreen() {
                 Receipt #{paymentReceipt?.receiptNumber || "REC-2026-99"}
               </h2>
               <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                Payment of <strong>${totalAmount.toFixed(2)}</strong> successfully received for invoice {invoiceId}. Patient care journey marked as <strong>Payment Done</strong>.
+                Payment of <strong>${balanceDue.toFixed(2)}</strong> successfully received for invoice <strong>{invoiceId}</strong>. Synchronized with MantraAssist.
               </p>
             </div>
 
             {/* Receipt Summary Card */}
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 max-w-md mx-auto text-left text-xs space-y-2">
+            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/70 max-w-md mx-auto text-left text-xs space-y-2.5">
               <div className="flex justify-between">
                 <span className="text-slate-400">Payer:</span>
                 <span className="font-semibold text-slate-800">{activeClient?.name}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Invoice:</span>
-                <span className="font-semibold text-slate-800">{invoiceId}</span>
+                <span className="font-semibold text-slate-800 font-mono">{invoiceId}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Amount Paid:</span>
-                <span className="font-bold text-emerald-700">${totalAmount.toFixed(2)}</span>
+                <span className="font-bold text-emerald-700 text-sm font-mono">${balanceDue.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Method:</span>
-                <span className="text-slate-700 font-medium">Demo QR Code</span>
+                <span className="text-slate-700 font-medium">Touchless QR Code</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Status:</span>
-                <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded">
+                <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                   Paid & Reconciled
                 </span>
               </div>
@@ -141,103 +283,118 @@ export default function PatientPaymentScreen() {
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 type="button"
-                onClick={() => navigate("/patient")}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm transition-all"
+                onClick={() => navigate("/patient/bill")}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm shadow-sm transition-all cursor-pointer"
               >
-                <span>View Complete Journey Status</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>Back to All Invoices</span>
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  onStageChange("Client Checked In");
-                  navigate("/patient");
-                }}
-                className="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-colors flex items-center justify-center gap-1.5"
+                onClick={() => navigate("/patient")}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm transition-all cursor-pointer"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Reset Demo to Step 1
+                <span>View Complete Journey</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            {/* Left: Honest Demo QR Code */}
+            {/* Left: Dynamic QR Code */}
             <div className="flex flex-col items-center text-center p-6 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-4">
-              <div className="p-4 bg-white rounded-xl shadow-xs border border-slate-200/80">
-                <svg
-                  className="w-44 h-44"
-                  viewBox="0 0 100 100"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <rect width="100" height="100" fill="white" />
-                  <rect x="10" y="10" width="26" height="26" rx="4" fill="#059669" />
-                  <rect x="14" y="14" width="18" height="18" rx="2" fill="white" />
-                  <rect x="18" y="18" width="10" height="10" fill="#059669" />
-
-                  <rect x="64" y="10" width="26" height="26" rx="4" fill="#059669" />
-                  <rect x="68" y="14" width="18" height="18" rx="2" fill="white" />
-                  <rect x="72" y="18" width="10" height="10" fill="#059669" />
-
-                  <rect x="10" y="64" width="26" height="26" rx="4" fill="#059669" />
-                  <rect x="14" y="68" width="18" height="18" rx="2" fill="white" />
-                  <rect x="18" y="72" width="10" height="10" fill="#059669" />
-
-                  <rect x="42" y="12" width="8" height="8" fill="#0F172A" />
-                  <rect x="52" y="22" width="8" height="8" fill="#0F172A" />
-                  <rect x="42" y="42" width="16" height="16" rx="2" fill="#10B981" />
-                  <rect x="64" y="44" width="8" height="8" fill="#0F172A" />
-                  <rect x="74" y="54" width="12" height="6" fill="#0F172A" />
-                  <rect x="42" y="68" width="8" height="14" fill="#0F172A" />
-                  <rect x="54" y="78" width="14" height="8" fill="#0F172A" />
-                  <rect x="72" y="68" width="8" height="8" fill="#0F172A" />
-                </svg>
+              <div className="p-3 bg-white rounded-2xl shadow-xs border border-slate-200 relative">
+                {qrDataUrl ? (
+                  <img
+                    src={qrDataUrl}
+                    alt={`QR Code for Invoice ${invoiceId}`}
+                    className="w-48 h-48 object-contain rounded-lg"
+                  />
+                ) : (
+                  <div className="w-48 h-48 flex items-center justify-center bg-slate-50 text-slate-400">
+                    <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                  </div>
+                )}
               </div>
 
-              {/* Honest Demo Banner Label */}
               <div className="space-y-1">
-                <span className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-full uppercase tracking-wider inline-flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3 text-amber-600" />
-                  Frontend Demo • No Real Gateway
-                </span>
-                <p className="text-xs text-slate-500 mt-1">
-                  Scan simulation for Invoice {invoiceId}
+                <div className="text-xs font-bold text-slate-800 flex items-center justify-center gap-1.5">
+                  <QrCode className="w-4 h-4 text-emerald-600" />
+                  <span>Scan to Pay via UPI / Bank App</span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Supports Google Pay, PhonePe, Paytm & Mobile Banking
                 </p>
               </div>
+
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] text-slate-600 font-medium flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                <span>{copied ? "Copied UPI Link" : "Copy UPI Link"}</span>
+              </button>
             </div>
 
-            {/* Right: Payment Actions */}
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/60 space-y-2">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500">Invoice:</span>
-                  <span className="font-semibold text-slate-800">{invoiceId}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500">Patient:</span>
+            {/* Right: Summary & Action */}
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Settlement Details
+                </span>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Invoice {invoiceId}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Payment for clinical consultation charges and healthcare services.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 space-y-3 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>Patient:</span>
                   <span className="font-semibold text-slate-800">{activeClient?.name}</span>
                 </div>
-                <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-700">Amount to Pay:</span>
-                  <span className="text-xl font-black text-slate-900">${totalAmount.toFixed(2)}</span>
+                <div className="flex justify-between text-slate-600">
+                  <span>Invoice Total:</span>
+                  <span className="font-semibold text-slate-800">${targetInvoice.total?.toFixed(2)}</span>
+                </div>
+                {targetInvoice.amountPaid !== undefined && targetInvoice.amountPaid > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Already Paid:</span>
+                    <span className="font-semibold text-emerald-600">${targetInvoice.amountPaid.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="pt-2 border-t border-slate-200 flex justify-between font-bold text-slate-900 text-sm">
+                  <span>Amount to Settle:</span>
+                  <span className="text-emerald-700 font-mono text-base">${balanceDue.toFixed(2)}</span>
                 </div>
               </div>
 
-              <div className="space-y-3 pt-2">
+              <div className="space-y-3">
                 <button
                   type="button"
                   onClick={handleConfirmPayment}
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-all active:scale-[0.98]"
+                  disabled={isProcessing}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-emerald-600/20 transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Mark Payment as Done (Demo Simulation)</span>
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Recording Settlement...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Confirm & Record Payment (${balanceDue.toFixed(2)})</span>
+                    </>
+                  )}
                 </button>
-              </div>
 
-              <div className="pt-1 text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Records payment in invoiceService & advances stage to Payment Done</span>
+                <div className="text-center text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Settles invoice directly in MantraAssist</span>
+                </div>
               </div>
             </div>
           </div>

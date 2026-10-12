@@ -18,6 +18,8 @@ import { logStageMove, getStoredRules } from "./useAutomationStore";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, getActiveOrganizationSync, isProcessMatchingOrg } from "./useProcessStore";
 import { invoiceService, hasInvoiceAutomation, hasAppointmentInvoiceAutomation, SAMPLE_CLIENT_NAMES } from "./invoiceService";
 import { appendActivity } from "./activityEngine";
+import { flattenRuleSteps } from "./automationTree";
+import { getClientList } from "./getClientList";
 
 export function hasAppointmentAutomation(processId?: string): boolean {
   try {
@@ -26,9 +28,9 @@ export function hasAppointmentAutomation(processId?: string): boolean {
       if (!r.enabled) return false;
       if (r.entityType === "appointment") return true;
       if (r.trigger?.event && (r.trigger.event.startsWith("appointment.") || r.trigger.event.includes("appointment") || r.trigger.event.includes("booking"))) return true;
+      const allActions = flattenRuleSteps(r.actions || []);
       if (
-        r.actions &&
-        r.actions.some((a) => {
+        allActions.some((a) => {
           const key = (a.stepKey || (a as any).type || (a as any).name || "").toLowerCase();
           if (
             [
@@ -83,7 +85,7 @@ export function hasAppointmentAutomation(processId?: string): boolean {
           r.enabled &&
           (r.action?.processId === proc.id ||
             r.action?.processName === proc.name ||
-            r.actions?.some(
+            flattenRuleSteps(r.actions || []).some(
               (a) =>
                 a.params?.processId === proc.id ||
                 a.params?.processName === proc.name ||
@@ -164,7 +166,7 @@ export interface CreateAppointmentPayload {
   generateInvoice?: boolean;
   lineItems?: any[];
   discountAmount?: number;
-  source?: "screen" | "call" | "webhook" | "import" | "ai";
+  source?: "MA-Client" | "Inbound Call" | "Walked In" | "screen" | "call" | "webhook" | "import" | "ai" | string;
 }
 
 export interface CreateAppointmentOptions {
@@ -223,6 +225,26 @@ function evaluateAppointmentCondition(condition: any, data: Record<string, any> 
 
   const op = (condition.op || condition.operator || "equals").toLowerCase();
   const targetValue = condition.value ?? condition.filterValue ?? condition.targetValue ?? "";
+
+  const normSource = (v: any) => {
+    const s = String(v ?? "").trim().toLowerCase().replace(/[_\s-]+/g, " ");
+    if (s.includes("walk") || s.includes("reception")) return "walked in";
+    if (s.includes("ma client") || s.includes("patient portal") || s.includes("client portal")) return "ma-client";
+    if (s.includes("inbound") || s.includes("call")) return "inbound call";
+    return s;
+  };
+
+  const isSourceField = fieldKey.toLowerCase().includes("source");
+  if (isSourceField) {
+    const nsActual = normSource(actualValue);
+    const nsTarget = normSource(targetValue);
+    if (op === "equals" || op === "equal_to" || op === "is") {
+      return nsActual === nsTarget || String(actualValue ?? "").trim().toLowerCase() === String(targetValue ?? "").trim().toLowerCase();
+    }
+    if (op === "not_equals" || op === "not_equal_to" || op === "is_not") {
+      return nsActual !== nsTarget && String(actualValue ?? "").trim().toLowerCase() !== String(targetValue ?? "").trim().toLowerCase();
+    }
+  }
 
   switch (op) {
     case "equals":
@@ -294,7 +316,7 @@ export function findMatchingAppointmentBookingRule(appointmentData: Record<strin
       let targetStageId = rule.action?.stageId;
 
       if (!targetProcessId || !targetStageId) {
-        const allActions = rule.actions || [];
+        const allActions = flattenRuleSteps(rule.actions || []);
         for (const act of allActions) {
           const stepKey = (act.stepKey || (act as any).type || "").toLowerCase();
           if (
@@ -509,6 +531,22 @@ class AppointmentService {
     const initialStageId = initialStage?.id || "";
     const initialStageName = initialStage?.name || "";
 
+    let resolvedClientId = payload.clientId;
+    if (!resolvedClientId) {
+      try {
+        const clientList = getClientList();
+        const found = clientList.find(
+          (c) =>
+            (payload.clientEmail && c.email?.toLowerCase() === payload.clientEmail.toLowerCase()) ||
+            (payload.clientName && c.name?.toLowerCase() === payload.clientName.toLowerCase()) ||
+            (payload.clientPhone && c.phoneNumber && c.phoneNumber.replace(/\D/g, "") === payload.clientPhone.replace(/\D/g, ""))
+        );
+        if (found) {
+          resolvedClientId = String(found.id);
+        }
+      } catch {}
+    }
+
     const newAppointment: Appointment = {
       id: nextId,
       clientName: payload.clientName,
@@ -527,7 +565,7 @@ class AppointmentService {
       currentStageId: initialStageId,
       statusLabel: initialStageName,
       processId: proc.id,
-      clientId: payload.clientId,
+      clientId: resolvedClientId,
       location: payload.location,
       sessionType: payload.sessionType || "video",
       createdAt: new Date().toISOString(),
@@ -578,13 +616,7 @@ class AppointmentService {
       });
     }
 
-    // 2. Emit appointment.booked event via eventBus (triggers automations for stage move / invoicing)
-    eventBus.emit("appointment.booked", "appointment", String(newAppointment.id), {
-      ...newAppointment,
-      source: payload.source || "screen",
-    });
-
-    // 3. Invoice Generation (ONLY if explicitly enabled by user OR active appointment-to-invoice automation rule exists)
+    // 2. Invoice Generation (ONLY if explicitly enabled by user OR active appointment-to-invoice automation rule exists)
     const hasApptInvRule = hasAppointmentInvoiceAutomation(proc.id);
     const shouldGenerateInvoice =
       payload.generateInvoice === true ||
@@ -618,6 +650,13 @@ class AppointmentService {
         }
       }
     }
+
+    // 3. Emit appointment.booked event via eventBus (triggers automations for stage move / invoicing / documents)
+    eventBus.emit("appointment.booked", "appointment", String(newAppointment.id), {
+      ...newAppointment,
+      invoiceId: createdInvoiceId || newAppointment.invoiceId,
+      source: payload.source || "screen",
+    });
 
     // 4. Confirmation notification signal
     const confirmationSent = true;

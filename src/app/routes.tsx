@@ -48,6 +48,9 @@ import PatientBookingScreen from "./pages/patient/PatientBookingScreen";
 import PatientPharmacyScreen from "./pages/patient/PatientPharmacyScreen";
 import PatientBillScreen from "./pages/patient/PatientBillScreen";
 import PatientPaymentScreen from "./pages/patient/PatientPaymentScreen";
+import PatientLoginScreen from "./pages/patient/PatientLoginScreen";
+import PatientRegisterScreen from "./pages/patient/PatientRegisterScreen";
+import PatientDocumentsScreen from "./pages/patient/PatientDocumentsScreen";
 import AdminAIVoicesModels from "./pages/admin/AdminAIVoicesModels";
 
 export const router = createBrowserRouter([
@@ -100,12 +103,16 @@ export const router = createBrowserRouter([
     Component: PatientPortalLayout,
     children: [
       { index: true, Component: PatientStatusScreen },
+      { path: "login", Component: PatientLoginScreen },
+      { path: "register", Component: PatientRegisterScreen },
       { path: "status", Component: PatientStatusScreen },
       { path: "checkin", Component: PatientCheckinScreen },
       { path: "book", Component: PatientBookingScreen },
+      { path: "documents", Component: PatientDocumentsScreen },
       { path: "pharmacy", Component: PatientPharmacyScreen },
       { path: "bill", Component: PatientBillScreen },
       { path: "pay", Component: PatientPaymentScreen },
+      { path: ":clientId", Component: PatientStatusScreen },
     ],
   },
   {

@@ -34,6 +34,7 @@ import { assignNumberToStage } from "../../lib/useStageNumberRouting";
 import TestProcessChatDrawer from "../components/process/TestProcessChatDrawer";
 import CallTriggerDrawer from "../components/process/CallTriggerDrawer";
 import ChatbotChannelDrawer from "../components/process/ChatbotChannelDrawer";
+import StagePortalReceptionSettingsModal from "../components/process/StagePortalReceptionSettingsModal";
 import { ChatbotSettings } from "../../lib/useProcessStore";
 import { useProcessTemplates } from "../context/ProcessTemplateContext";
 import { useOrganization } from "../context/OrganizationContext";
@@ -110,6 +111,9 @@ export interface Stage {
   callTriggerSettings?: CallTriggerSettings;
   enableChatbot?: boolean;
   chatbotSettings?: ChatbotSettings;
+  connectedToPatientPortal?: boolean;
+  connectedToAiReceptionist?: boolean;
+  portalReceptionSettings?: any;
 }
 
 export interface Process {
@@ -2212,6 +2216,7 @@ export default function Process() {
   const [showCallTriggerDrawer, setShowCallTriggerDrawer] = useState(false);
   const [enableChatbot, setEnableChatbot] = useState<boolean>(true);
   const [showChatbotDrawer, setShowChatbotDrawer] = useState(false);
+  const [showStagePortalModal, setShowStagePortalModal] = useState(false);
   const [pitchFieldPickerTarget, setPitchFieldPickerTarget] = useState<"callerPitch" | "greetingIntro" | "objective" | null>(null);
 
   const handleInsertPitchFields = (keys: string[]) => {
@@ -4560,6 +4565,69 @@ export default function Process() {
                                         }}
                                       />
                                       <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                  </div>
+                                </div>
+
+                                {/* Stage Client Portal & AI Receptionist Card */}
+                                <div className="p-4 sm:p-5 bg-white dark:bg-card border border-border/80 rounded-2xl flex items-center justify-between shadow-xs">
+                                  <div className="flex items-center gap-3.5">
+                                    <Radio className="w-5 h-5 text-indigo-600 shrink-0" />
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-sm font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Client Portal & AI Receptionist
+                                      </span>
+                                      <InfoTooltip text="Enable this stage in the Client Portal and AI Receptionist, with custom guidance, video, links, and media." size="sm" />
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-3 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowStagePortalModal(true)}
+                                      className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-lg transition-colors cursor-pointer"
+                                      title="Stage Portal & Reception Settings"
+                                    >
+                                      <Settings className="w-4 h-4" />
+                                    </button>
+
+                                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                      <input
+                                        type="checkbox"
+                                        className="sr-only peer"
+                                        checked={(stage.connectedToPatientPortal ?? true) && (stage.connectedToAiReceptionist ?? true)}
+                                        onChange={(e) => {
+                                          const newVal = e.target.checked;
+                                          if (selectedProcess && expandedStage) {
+                                            setProcesses((prev) =>
+                                              prev.map((p) =>
+                                                p.id !== selectedProcess
+                                                  ? p
+                                                  : {
+                                                    ...p,
+                                                    stages: p.stages.map((s) =>
+                                                      s.id !== expandedStage
+                                                        ? s
+                                                        : {
+                                                          ...s,
+                                                          connectedToPatientPortal: newVal,
+                                                          connectedToAiReceptionist: newVal,
+                                                          portalReceptionSettings: {
+                                                            ...(s.portalReceptionSettings || {}),
+                                                            enabled: newVal,
+                                                            enabledPortal: newVal,
+                                                            enabledReception: newVal,
+                                                          },
+                                                        }
+                                                    ),
+                                                  }
+                                              )
+                                            );
+                                            toast.success(newVal ? "Stage connected to Portal & AI Receptionist" : "Stage disconnected from Portal & AI Receptionist");
+                                          }
+                                        }}
+                                      />
+                                      <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                                     </label>
                                   </div>
                                 </div>
@@ -7563,6 +7631,44 @@ export default function Process() {
             }
           }}
         />
+
+        {showStagePortalModal && selectedProcess && expandedStage && (
+          <StagePortalReceptionSettingsModal
+            isOpen={showStagePortalModal}
+            onClose={() => setShowStagePortalModal(false)}
+            stageName={
+              processes.find((p) => p.id === selectedProcess)?.stages.find((s) => s.id === expandedStage)?.name || "Stage"
+            }
+            activeProcessId={selectedProcess}
+            processName={processes.find((p) => p.id === selectedProcess)?.name}
+            initialSettings={
+              processes.find((p) => p.id === selectedProcess)?.stages.find((s) => s.id === expandedStage)?.portalReceptionSettings
+            }
+            onSave={(updatedSettings) => {
+              if (selectedProcess && expandedStage) {
+                setProcesses((prev) =>
+                  prev.map((p) =>
+                    p.id !== selectedProcess
+                      ? p
+                      : {
+                        ...p,
+                        stages: p.stages.map((s) =>
+                          s.id !== expandedStage
+                            ? s
+                            : {
+                              ...s,
+                              connectedToPatientPortal: updatedSettings.enabledPortal,
+                              connectedToAiReceptionist: updatedSettings.enabledReception,
+                              portalReceptionSettings: updatedSettings,
+                            }
+                        ),
+                      }
+                  )
+                );
+              }
+            }}
+          />
+        )}
 
         <FlowBuilderDrawer
           isOpen={isFlowBuilderDrawerOpen}

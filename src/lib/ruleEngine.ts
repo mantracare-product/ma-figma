@@ -9,7 +9,7 @@ import {
 } from "./useAutomationStore";
 import { getStoredProcesses, Process } from "./useProcessStore";
 import { appointmentService } from "./appointmentService";
-import { invoiceService } from "./invoiceService";
+import { invoiceService, generateInvoiceDocument } from "./invoiceService";
 import { getClientProducts } from "./servicesStore";
 import { saveClientDocument, StoredClientDocument } from "./clientDocumentsStore";
 import { appendActivity } from "./activityEngine";
@@ -63,6 +63,26 @@ export function evaluateCondition(condition: any, data: Record<string, any> = {}
     }
     if (dynActual !== undefined) {
       targetValue = dynActual;
+    }
+  }
+
+  const normSource = (v: any) => {
+    const s = String(v ?? "").trim().toLowerCase().replace(/[_\s-]+/g, " ");
+    if (s.includes("walk") || s.includes("reception")) return "walked in";
+    if (s.includes("ma client") || s.includes("patient portal") || s.includes("client portal")) return "ma-client";
+    if (s.includes("inbound") || s.includes("call")) return "inbound call";
+    return s;
+  };
+
+  const isSourceField = fieldKey.toLowerCase().includes("source");
+  if (isSourceField) {
+    const nsActual = normSource(actualValue);
+    const nsTarget = normSource(targetValue);
+    if (op === "equals" || op === "equal_to" || op === "is") {
+      return nsActual === nsTarget || String(actualValue ?? "").trim().toLowerCase() === String(targetValue ?? "").trim().toLowerCase();
+    }
+    if (op === "not_equals" || op === "not_equal_to" || op === "is_not") {
+      return nsActual !== nsTarget && String(actualValue ?? "").trim().toLowerCase() !== String(targetValue ?? "").trim().toLowerCase();
     }
   }
 
@@ -377,7 +397,7 @@ export async function executeRulesForEvent(
     }
 
     // 7. Execute Rule's Step Actions Chain (from FlowBuilderTab / Canvas / Library)
-    const allActions = flattenRuleSteps(rule.actions || []);
+    const allActions = flattenRuleSteps(rule.actions && rule.actions.length > 0 ? rule.actions : (rule as any).steps || []);
     for (const act of allActions) {
       const stepKey = (act.stepKey || "").toLowerCase();
 
@@ -637,9 +657,27 @@ export async function executeRulesForEvent(
       if (stepKey === "generate_document" || stepKey === "generate-document") {
         try {
           const targetEntity = act.params?.entity || event.recordType || "client";
-          const targetClientId = event.recordType === "client"
+          let targetClientId = event.recordType === "client"
             ? String(event.recordId)
-            : (event.data?.clientId ? String(event.data.clientId) : "c-1");
+            : (event.data?.clientId ? String(event.data.clientId) : "");
+
+          if (!targetClientId) {
+            const clientList = getClientList();
+            const clientName = event.data?.clientName || event.data?.name;
+            const clientEmail = event.data?.email || event.data?.clientEmail;
+            const clientPhone = event.data?.phone || event.data?.clientPhone;
+            const foundClient = clientList.find(
+              (c) =>
+                (clientEmail && c.email?.toLowerCase() === clientEmail.toLowerCase()) ||
+                (clientName && c.name?.toLowerCase() === clientName.toLowerCase()) ||
+                (clientPhone && c.phoneNumber && c.phoneNumber.replace(/\D/g, "") === clientPhone.replace(/\D/g, ""))
+            );
+            if (foundClient) {
+              targetClientId = String(foundClient.id);
+            } else {
+              targetClientId = "c-1";
+            }
+          }
 
           // Find template if templateId or template name was selected
           const storedTemplates = getStoredDocumentTemplates();
@@ -713,17 +751,82 @@ export async function executeRulesForEvent(
             invoice: "Billing",
           };
 
+          const isExplicitInvoice = targetEntity === "invoice" || event.recordType === "invoice";
+          const isInvoiceTemplate =
+            (matchedTemplate?.category || "").toLowerCase() === "invoices" ||
+            templateName.toLowerCase().includes("invoice") ||
+            templateName.toLowerCase().includes("billing");
+          const isInvoiceTarget = isExplicitInvoice || (targetEntity !== "client" && targetEntity !== "appointment" && isInvoiceTemplate);
+
+          let targetInvoiceId: string | undefined = undefined;
+          if (isInvoiceTarget) {
+            targetInvoiceId =
+              event.data?.invoiceId ||
+              (event.recordType === "invoice" ? String(event.recordId) : act.params?.invoiceId) ||
+              (event.recordType === "appointment" ? appointmentService.getAppointmentById(event.recordId)?.invoiceId : undefined);
+
+            if (!targetInvoiceId) {
+              const allInvoices = invoiceService.getInvoices();
+              const clientNameClean = (clientName || "").trim().toLowerCase();
+              const matchingInv = allInvoices.find(
+                (inv) =>
+                  (event.recordType === "appointment" && inv.appointmentId === String(event.recordId)) ||
+                  (targetClientId && inv.clientId === targetClientId && Math.abs(Date.now() - new Date(inv.createdAt).getTime()) < 600000) ||
+                  (clientNameClean && inv.clientName.toLowerCase() === clientNameClean && Math.abs(Date.now() - new Date(inv.createdAt).getTime()) < 600000)
+              );
+              if (matchingInv) {
+                targetInvoiceId = matchingInv.id;
+              }
+            }
+          }
+
+          const targetApptId =
+            event.recordType === "appointment"
+              ? String(event.recordId)
+              : (event.data?.appointmentId || act.params?.appointmentId);
+
+          if (isInvoiceTarget && targetInvoiceId) {
+            const invObj = invoiceService.getInvoiceById(targetInvoiceId);
+            if (invObj) {
+              const invDoc = generateInvoiceDocument(invObj, act.params);
+              appendActivity({
+                type: "field_update",
+                clientId: targetClientId,
+                processId: "billing",
+                processName: "Billing & Invoicing",
+                timestamp: new Date().toISOString(),
+                fieldLabel: "Generated Document",
+                newValue: invDoc.name,
+                details: {
+                  primary: `Document generated: ${invDoc.name}`,
+                  secondary: `Entity: INVOICE #${invObj.id} · Template: ${templateName}`,
+                },
+              });
+              console.log(`[RuleEngine] Generated invoice document "${invDoc.name}" (${invDoc.id}) for invoice #${invObj.id}`);
+              continue;
+            }
+          }
+
+          const effectiveCategory = isInvoiceTarget
+            ? "Invoices"
+            : (matchedTemplate?.category || categoryByEntity[targetEntity] || "General");
+
           const newDoc: StoredClientDocument = {
             id: docId,
             clientId: targetClientId,
+            invoiceId: targetInvoiceId || undefined,
+            appointmentId: targetApptId || undefined,
+            entityId: targetInvoiceId || (event.recordType === "invoice" ? String(event.recordId) : String(event.recordId)),
+            entityType: (targetInvoiceId ? "invoice" : targetEntity) as any,
             name: resolvedDocName.endsWith(".pdf") ? resolvedDocName : `${resolvedDocName}.pdf`,
-            category: matchedTemplate?.category || categoryByEntity[targetEntity] || "General",
+            category: effectiveCategory,
+            valueBy: targetInvoiceId || targetEntity === "invoice" ? "Invoice Record Data" : "Client Profile Data",
             fileType: "pdf",
-            fileSize: "148 KB",
-            uploadedDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-            uploadedBy: "Automation Engine",
+            fileSize: "1.4 MB",
+            uploadedDate: new Date().toISOString().replace("T", " ").substring(0, 16),
+            uploadedBy: "System Admin",
             status: "Verified",
-            notes: `Generated automatically via rule "${rule.name}" for ${targetEntity} #${event.recordId}`,
+            notes: `Generated automatically via rule "${rule.name}" for ${targetEntity} #${event.recordId}${targetInvoiceId ? ` · Invoice #${targetInvoiceId}` : ""}`,
             templateId: matchedTemplate?.id || act.params?.templateId,
             generatedContent: resolvedContent,
           };

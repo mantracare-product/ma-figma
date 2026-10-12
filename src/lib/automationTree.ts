@@ -424,3 +424,23 @@ export function getAllStepIdsInTree(steps: WorkflowStep[]): string[] {
   collect(steps);
   return ids;
 }
+
+/**
+ * Recursively flattens workflow steps and all nested parallel branch steps into a flat array.
+ */
+export function flattenRuleSteps(steps: any[]): any[] {
+  const flattened: any[] = [];
+  if (!Array.isArray(steps)) return flattened;
+  for (const step of steps) {
+    if (!step) continue;
+    flattened.push(step);
+    if (Array.isArray(step.branches)) {
+      for (const branch of step.branches) {
+        if (Array.isArray(branch?.steps)) {
+          flattened.push(...flattenRuleSteps(branch.steps));
+        }
+      }
+    }
+  }
+  return flattened;
+}

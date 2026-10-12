@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Outlet, NavLink, useNavigate, useLocation } from "react-router";
+import { Outlet, NavLink, useNavigate, useLocation, useParams } from "react-router";
 import {
   QrCode,
   Calendar,
@@ -15,7 +15,10 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
+  FileText,
+  LogOut,
 } from "lucide-react";
+import { toast } from "sonner";
 import maLogo from "../../../imports/ma_logo-1.png";
 import symbolLogo from "../../../imports/Ma-symbol-mark.png";
 import { useClients, getStoredClients, saveStoredClients, Client, CLIENTS_STORE_EVENT } from "../../../lib/clientsStore";
@@ -27,6 +30,7 @@ import {
   PROCESS_STORE_EVENT,
 } from "../../../lib/useProcessStore";
 import { useOrganization } from "../../context/OrganizationContext";
+import DevPatientSwitcherModal from "./components/DevPatientSwitcherModal";
 
 export const STAGE_ROUTES: Record<string, string> = {
   "Client Checked In": "/patient/book",
@@ -39,24 +43,41 @@ export const STAGE_ROUTES: Record<string, string> = {
 export default function PatientPortalLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { clientId: routeClientId } = useParams<{ clientId?: string }>();
   const { clients } = useClients();
   const { organizations, activeOrganization, setActiveOrganization } = useOrganization();
 
+  // If on login or register screen, render without portal wrapper/sidebar
+  const isAuthPage = location.pathname === "/patient/login" || location.pathname === "/patient/register";
+
+  const [isDevSwitcherOpen, setIsDevSwitcherOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [showOrgDropdown, setShowOrgDropdown] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const orgMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close org dropdown when clicking outside
+  // Close org dropdown or user menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (orgMenuRef.current && !orgMenuRef.current.contains(e.target as Node)) {
         setShowOrgDropdown(false);
       }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleLogout = () => {
+    sessionStorage.removeItem("patient_portal_active_client_id");
+    localStorage.removeItem("patient_portal_active_client_id");
+    toast.success("Logged out successfully");
+    navigate("/patient/login");
+  };
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -85,24 +106,62 @@ export default function PatientPortalLayout() {
 
   // Selected patient state (persisted in sessionStorage)
   const [selectedClientId, setSelectedClientId] = useState<string>(() => {
+    if (routeClientId) return routeClientId;
+    const pathParts = window.location.pathname.split("/patient/");
+    if (pathParts[1] && !["login", "register", "checkin", "book", "documents", "pharmacy", "bill", "pay", "status"].includes(pathParts[1])) {
+      return pathParts[1];
+    }
     const params = new URLSearchParams(window.location.search);
     const paramId = params.get("clientId") || params.get("id");
     if (paramId) return paramId;
     return sessionStorage.getItem("patient_portal_active_client_id") || "CL-001";
   });
 
-  // Watch URL params for client ID
+  // Watch URL params / path for client ID
   useEffect(() => {
+    if (routeClientId && routeClientId !== selectedClientId) {
+      setSelectedClientId(routeClientId);
+      sessionStorage.setItem("patient_portal_active_client_id", routeClientId);
+    } else {
+      const pathParts = location.pathname.split("/patient/");
+      if (pathParts[1] && !["login", "register", "checkin", "book", "documents", "pharmacy", "bill", "pay", "status"].includes(pathParts[1])) {
+        if (pathParts[1] !== selectedClientId) {
+          setSelectedClientId(pathParts[1]);
+          sessionStorage.setItem("patient_portal_active_client_id", pathParts[1]);
+        }
+      }
+    }
     const params = new URLSearchParams(location.search);
     const paramId = params.get("clientId") || params.get("id");
     if (paramId && paramId !== selectedClientId) {
       setSelectedClientId(paramId);
       sessionStorage.setItem("patient_portal_active_client_id", paramId);
     }
-  }, [location.search, selectedClientId]);
+  }, [routeClientId, location.pathname, location.search, selectedClientId]);
+
+  // Listen for patient_portal_client_changed events (fired when user registers or switches patient)
+  useEffect(() => {
+    const handlePortalClientChange = (e?: any) => {
+      const targetId = e?.detail || sessionStorage.getItem("patient_portal_active_client_id") || localStorage.getItem("patient_portal_active_client_id");
+      if (targetId) {
+        setSelectedClientId(targetId);
+      }
+    };
+    window.addEventListener("patient_portal_client_changed", handlePortalClientChange);
+    window.addEventListener("storage", handlePortalClientChange);
+    return () => {
+      window.removeEventListener("patient_portal_client_changed", handlePortalClientChange);
+      window.removeEventListener("storage", handlePortalClientChange);
+    };
+  }, []);
+
+  const normalizedSelectedId = (selectedClientId || "").trim().toLowerCase().replace(/^#/, "");
 
   const activeClient: Client =
-    clients.find((c) => c.id === selectedClientId) ||
+    clients.find((c) => {
+      const cId = (c.id || "").trim().toLowerCase().replace(/^#/, "");
+      return cId === normalizedSelectedId;
+    }) ||
     clients[0] || {
       id: "CL-001",
       name: "Sarah Johnson",
@@ -121,11 +180,7 @@ export default function PatientPortalLayout() {
   const handleSelectClient = (id: string) => {
     setSelectedClientId(id);
     sessionStorage.setItem("patient_portal_active_client_id", id);
-    const params = new URLSearchParams(location.search);
-    if (params.has("clientId") || params.has("id")) {
-      params.set("clientId", id);
-      navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
-    }
+    navigate(`/patient/${id}`);
   };
 
   const stages = activeProcess?.stages || DEMO_PATIENT_PORTAL_PROCESS.stages;
@@ -135,46 +190,22 @@ export default function PatientPortalLayout() {
   );
   const activeIdx = currentStageIndex >= 0 ? currentStageIndex : 0;
 
-  const isSubPage = location.pathname !== "/patient" && location.pathname !== "/patient/";
+  // If on login or register screen, render without portal wrapper/sidebar
+  if (isAuthPage) {
+    return <Outlet />;
+  }
 
-  // Primary action button in the sidebar based on where the patient is
-  const getSidebarQuickAction = () => {
-    switch (currentStageName) {
-      case "Client Checked In":
-        return { label: "Book Appointment", icon: Calendar, to: "/patient/book" };
-      case "Book Appointment":
-        return { label: "Go to Pharmacy", icon: Pill, to: "/patient/pharmacy" };
-      case "Move to Pharmacy":
-        return { label: "Review Bill", icon: Receipt, to: "/patient/bill" };
-      case "Pay Bill":
-        return { label: "Complete Payment", icon: CheckCircle2, to: "/patient/pay" };
-      case "Payment Done":
-        return { label: "View Receipt", icon: Receipt, to: "/patient/pay" };
-      default:
-        return { label: "Book Appointment", icon: Calendar, to: "/patient/book" };
-    }
-  };
+  const isOverviewPage = location.pathname === "/patient" || location.pathname === "/patient/" || (routeClientId && location.pathname === `/patient/${routeClientId}`);
+  const isSubPage = !isOverviewPage;
 
-  const quickAction = getSidebarQuickAction();
-  const QuickActionIcon = quickAction.icon;
+  const overviewPath = activeClient?.id ? `/patient/${activeClient.id}` : "/patient";
 
   const navItems = [
-    { to: "/patient", label: "Care Status", icon: LayoutDashboard, exact: true },
-    {
-      to: "/patient/checkin",
-      label: "Check-In Pass",
-      icon: QrCode,
-      badge: "✓ Done",
-    },
-    {
-      to: "/patient/book",
-      label: "Book Appointment",
-      icon: Calendar,
-      badge: currentStageName === "Client Checked In" ? "Next" : undefined,
-    },
-    { to: "/patient/pharmacy", label: "Pharmacy", icon: Pill },
-    { to: "/patient/bill", label: "Pay Bill", icon: Receipt },
-    { to: "/patient/pay", label: "Payment Done", icon: CheckCircle2 },
+    { to: overviewPath, label: "Overview", icon: LayoutDashboard, exact: true },
+    { to: "/patient/checkin", label: "Check In", icon: QrCode },
+    { to: "/patient/book", label: "Appointments", icon: Calendar },
+    { to: "/patient/documents", label: "Documents", icon: FileText },
+    { to: "/patient/bill", label: "Billing", icon: Receipt },
   ];
 
   return (
@@ -218,14 +249,15 @@ export default function PatientPortalLayout() {
               />
             </button>
           ) : (
-            <NavLink to="/patient" className="flex items-center gap-2.5 group">
+            <NavLink to={overviewPath} className="flex items-center gap-2 group">
               <img
                 src={maLogo}
                 alt="MantraAssist"
-                className="h-7 w-auto object-contain transition-transform group-hover:scale-102"
+                className="h-6 w-auto object-contain transition-transform group-hover:scale-102"
               />
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60 uppercase tracking-wide">
-                Portal
+              <div className="h-4 w-px bg-slate-300" />
+              <span className="text-xs font-bold text-slate-600 tracking-tight" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Client Portal
               </span>
             </NavLink>
           )}
@@ -306,30 +338,8 @@ export default function PatientPortalLayout() {
           </div>
         )}
 
-        {/* Dynamic Action Button (Book Appointment / Next Action) */}
-        <div className={collapsed ? "px-3 pb-3 flex justify-center" : "px-3 pb-3"}>
-          <button
-            type="button"
-            onClick={() => navigate(quickAction.to)}
-            className={`flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs hover:shadow-sm transition-all active:scale-[0.98] cursor-pointer ${
-              collapsed
-                ? "w-10 h-10 p-0"
-                : "w-full py-2.5 px-3"
-            }`}
-            title={quickAction.label}
-          >
-            <QuickActionIcon className="w-4 h-4 shrink-0" />
-            {!collapsed && <span>{quickAction.label}</span>}
-          </button>
-        </div>
-
-        {/* Care Protocol Navigation Items */}
-        <div className={`flex-1 overflow-y-auto py-1 space-y-1 ${collapsed ? "px-2 flex flex-col items-center" : "px-3"}`}>
-          {!collapsed && (
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2.5 py-1">
-              Care Protocol
-            </div>
-          )}
+        {/* Portal Services Navigation Items */}
+        <div className={`flex-1 overflow-y-auto py-3 space-y-1 ${collapsed ? "px-2 flex flex-col items-center" : "px-3"}`}>
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -341,7 +351,7 @@ export default function PatientPortalLayout() {
                   `flex items-center rounded-xl text-xs font-semibold transition-all relative ${
                     collapsed
                       ? "w-10 h-10 justify-center"
-                      : "justify-between px-3 py-2"
+                      : "justify-between px-3 py-2.5"
                   } ${
                     isActive
                       ? "bg-slate-900 text-white shadow-xs"
@@ -354,103 +364,81 @@ export default function PatientPortalLayout() {
                   <Icon className="w-4 h-4 shrink-0" />
                   {!collapsed && <span className="truncate">{item.label}</span>}
                 </div>
-                {!collapsed && item.badge && (
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${
-                      item.badge.includes("Done")
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
-                        : "bg-blue-50 text-blue-700 border border-blue-200/60"
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
-                {collapsed && item.badge && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" />
-                )}
               </NavLink>
             );
           })}
         </div>
 
-        {/* Bottom Patient Profile Section */}
-        {collapsed ? (
-          <div className="p-3 border-t border-slate-200/80 bg-slate-50/60 flex flex-col items-center gap-2">
+        {/* ── Bottom Profile Footer (Matching Mantra Assist Admin) ── */}
+        <div className="p-2.5 border-t border-slate-200/80 bg-white relative" ref={userMenuRef}>
+          {/* Upward Dropdown Menu */}
+          {showUserMenu && (
+            <div className="absolute bottom-full left-2 right-2 mb-2 bg-white/95 backdrop-blur-xl border border-slate-200/90 rounded-2xl shadow-xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUserMenu(false);
+                  navigate(overviewPath);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <User className="w-4 h-4 text-slate-500" />
+                <span>Profile</span>
+              </button>
+
+              <div className="border-t border-slate-100 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    handleLogout();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4 text-red-500" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* User Card Trigger Button */}
+          {collapsed ? (
             <button
               type="button"
-              onClick={() => setCollapsed(false)}
-              className="w-10 h-10 rounded-xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-center text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors"
-              title={`Active Patient: ${activeClient.name} (${activeClient.id})`}
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="w-10 h-10 mx-auto rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-2xs hover:bg-slate-800 transition-all cursor-pointer"
+              title={`${activeClient.name} — Click for options`}
             >
-              <User className="w-4 h-4" />
+              {(activeClient.name || "P").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
             </button>
-            <span
-              className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
-              title="Store Live Sync Active"
-            />
-          </div>
-        ) : (
-          <div className="p-3 border-t border-slate-200/80 bg-slate-50/60 space-y-2">
-            {/* Patient Selector */}
-            <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 shadow-2xs">
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
-                  <User className="w-3.5 h-3.5" />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-100/80 transition-all cursor-pointer group"
+              aria-label="Patient user menu"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                  {(activeClient.name || "P").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
                 </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">
-                    Active Patient
-                  </span>
-                  <span className="text-xs font-bold text-slate-900 truncate">
+                <div className="flex flex-col text-left min-w-0">
+                  <span
+                    className="text-xs font-bold text-slate-900 truncate group-hover:text-black"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
                     {activeClient.name}
                   </span>
+                  <span className="text-[11px] text-slate-400 font-mono truncate">
+                    #{activeClient.id}
+                  </span>
                 </div>
               </div>
-
-              <select
-                value={activeClient?.id}
-                onChange={(e) => handleSelectClient(e.target.value)}
-                className="w-full text-[11px] font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-1 px-2 outline-none cursor-pointer"
-                aria-label="Select Patient"
-              >
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.id})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Live Sync Status & Reception Links */}
-            <div className="flex items-center justify-between text-[11px] px-1 text-slate-500">
-              <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span>Live Sync</span>
-              </div>
-              <div className="flex items-center gap-2 text-slate-400">
-                <button
-                  type="button"
-                  onClick={() => navigate("/reception")}
-                  className="hover:text-slate-800 transition-colors"
-                  title="AI Receptionist"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate("/clients")}
-                  className="hover:text-slate-800 transition-colors"
-                  title="Staff Dashboard"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+              <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 shrink-0" />
+            </button>
+          )}
+        </div>
       </aside>
 
       {/* ── Mobile Drawer Sidebar ── */}
@@ -463,16 +451,17 @@ export default function PatientPortalLayout() {
           <aside className="relative flex flex-col w-72 max-w-[80vw] bg-white border-r border-slate-200 h-full shadow-2xl z-50">
             {/* Top Logo & Close */}
             <div className="h-14 px-4 flex items-center justify-between border-b border-slate-200">
-              <NavLink to="/patient" className="flex items-center gap-2">
-                <img src={maLogo} alt="MantraAssist" className="h-7 w-auto object-contain" />
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60 uppercase">
-                  Portal
+              <NavLink to={overviewPath} className="flex items-center gap-2">
+                <img src={maLogo} alt="MantraAssist" className="h-6 w-auto object-contain" />
+                <div className="h-4 w-px bg-slate-300" />
+                <span className="text-xs font-bold text-slate-600 tracking-tight" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Client Portal
                 </span>
               </NavLink>
               <button
                 type="button"
                 onClick={() => setIsMobileSidebarOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -488,30 +477,15 @@ export default function PatientPortalLayout() {
                   <span className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider leading-none">
                     Organization
                   </span>
-                  <span className="text-xs font-bold text-slate-900 truncate mt-0.5">
+                  <span className="text-xs font-bold text-slate-900 truncate mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
                     {activeOrganization?.name || "Demo Mantra Care"}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Mobile Next Step Button */}
-            <div className="px-3 pb-3">
-              <button
-                type="button"
-                onClick={() => {
-                  navigate(quickAction.to);
-                  setIsMobileSidebarOpen(false);
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs"
-              >
-                <QuickActionIcon className="w-4 h-4 shrink-0" />
-                <span>{quickAction.label}</span>
-              </button>
-            </div>
-
             {/* Mobile Nav Items */}
-            <div className="flex-1 overflow-y-auto px-3 py-1 space-y-1">
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -521,7 +495,7 @@ export default function PatientPortalLayout() {
                     end={item.exact}
                     onClick={() => setIsMobileSidebarOpen(false)}
                     className={({ isActive }) =>
-                      `flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                      `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                         isActive
                           ? "bg-slate-900 text-white shadow-xs"
                           : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
@@ -532,38 +506,37 @@ export default function PatientPortalLayout() {
                       <Icon className="w-4 h-4 shrink-0" />
                       <span className="truncate">{item.label}</span>
                     </div>
-                    {item.badge && (
-                      <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                          item.badge.includes("Done")
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
-                            : "bg-blue-50 text-blue-700 border border-blue-200/60"
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
                   </NavLink>
                 );
               })}
             </div>
 
-            {/* Mobile Patient Switcher */}
-            <div className="p-3 border-t border-slate-200 bg-slate-50">
-              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">
-                Active Patient
+            {/* Mobile Bottom Profile & Logout */}
+            <div className="p-3 border-t border-slate-200 bg-slate-50/60 space-y-2">
+              <div className="flex items-center gap-2.5 px-1 py-1">
+                <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                  {(activeClient.name || "P").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-bold text-slate-900 truncate">
+                    {activeClient.name}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono truncate">
+                    #{activeClient.id}
+                  </span>
+                </div>
               </div>
-              <select
-                value={activeClient?.id}
-                onChange={(e) => handleSelectClient(e.target.value)}
-                className="w-full text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg p-1.5 px-2 outline-none cursor-pointer"
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileSidebarOpen(false);
+                  handleLogout();
+                }}
+                className="w-full py-2 px-3 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.id})
-                  </option>
-                ))}
-              </select>
+                <LogOut className="w-4 h-4 text-red-500" />
+                <span>Logout</span>
+              </button>
             </div>
           </aside>
         </div>
@@ -578,7 +551,7 @@ export default function PatientPortalLayout() {
             <button
               type="button"
               onClick={() => setIsMobileSidebarOpen(true)}
-              className="md:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
+              className="md:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
               aria-label="Open menu"
             >
               <Menu className="w-5 h-5" />
@@ -594,21 +567,35 @@ export default function PatientPortalLayout() {
               <span className="text-slate-400 font-medium">Patient Portal</span>
               <span className="text-slate-300">/</span>
               <span className="font-semibold text-slate-800">
-                {isSubPage ? currentStageName : "Care Status Overview"}
+                {isSubPage
+                  ? location.pathname.includes("book")
+                    ? "Appointments"
+                    : location.pathname.includes("bill")
+                    ? "Billing"
+                    : location.pathname.includes("checkin")
+                    ? "Check In"
+                    : location.pathname.includes("documents")
+                    ? "Documents"
+                    : location.pathname.includes("pharmacy")
+                    ? "Pharmacy"
+                    : "Overview"
+                  : "Overview"}
               </span>
             </div>
           </div>
 
-          {/* Sub-page back navigation */}
-          {isSubPage && (
-            <NavLink
-              to="/patient"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              <span>Back to Overview</span>
-            </NavLink>
-          )}
+          {/* Right Header: Sub-page back navigation only (Dev Switcher & patient button removed) */}
+          <div className="flex items-center gap-2">
+            {isSubPage && (
+              <NavLink
+                to={overviewPath}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors pl-1"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Overview</span>
+              </NavLink>
+            )}
+          </div>
         </header>
 
         {/* ── Main Scrollable Content ── */}
@@ -640,6 +627,14 @@ export default function PatientPortalLayout() {
           </div>
         </main>
       </div>
+
+      {/* Dev Patient Switcher Modal */}
+      <DevPatientSwitcherModal
+        isOpen={isDevSwitcherOpen}
+        onClose={() => setIsDevSwitcherOpen(false)}
+        onSelectPatient={(id) => handleSelectClient(id)}
+        activePatientId={activeClient.id}
+      />
     </div>
   );
 }

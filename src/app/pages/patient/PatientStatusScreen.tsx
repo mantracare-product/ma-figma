@@ -1,713 +1,465 @@
-import React, { useState, useRef, useEffect } from "react";
-import { useOutletContext, useNavigate } from "react-router";
+import React, { useState, useEffect } from "react";
+import { useOutletContext, useNavigate, Link } from "react-router";
 import {
+  Calendar,
+  Clock,
+  User,
+  CheckCircle2,
+  AlertCircle,
   FileText,
   CreditCard,
-  MapPin,
-  Stethoscope,
-  Calendar,
-  ArrowRight,
-  CheckCircle2,
   QrCode,
-  Pill,
-  Receipt,
-  RotateCcw,
-  ExternalLink,
-  X,
-  Phone,
-  Clock,
-  Download,
-  Check,
-  ChevronRight,
+  MapPin,
   Sparkles,
+  ArrowRight,
+  Plus,
+  Stethoscope,
+  Pill,
+  ExternalLink,
+  ChevronRight,
+  RefreshCw,
+  Phone,
+  Mail,
+  ShieldCheck,
+  Building,
 } from "lucide-react";
-import { Client } from "../../../lib/clientsStore";
-import { Process, Stage } from "../../../lib/useProcessStore";
+import { Client, useClients } from "../../../lib/clientsStore";
+import { appointmentService, Appointment } from "../../../lib/appointmentService";
+import { invoiceService } from "../../../lib/invoiceService";
+import { ClientInvoice } from "../../types/invoiceTypes";
 
 interface PortalContext {
   activeClient: Client;
-  activeProcess: Process;
-  currentStageName: string;
-  currentStageIndex: number;
-  stages: Stage[];
-  onStageChange: (newStageName: string) => void;
+  onOpenDevSwitcher?: () => void;
 }
 
 export default function PatientStatusScreen() {
   const navigate = useNavigate();
-  const {
-    activeClient,
-    currentStageName,
-    stages,
-    onStageChange,
-  } = useOutletContext<PortalContext>();
+  const context = useOutletContext<PortalContext>();
+  const activeClient = context?.activeClient;
+  const onOpenDevSwitcher = context?.onOpenDevSwitcher;
 
-  const [activeModal, setActiveModal] = useState<"docs" | "directions" | "services" | null>(null);
+  // Real Appointments for this client from appointmentService
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  // Real Invoices for this client from invoiceService
+  const [invoices, setInvoices] = useState<ClientInvoice[]>([]);
+  const [showQrModal, setShowQrModal] = useState(false);
 
-  // Compute Previous, Current, Next triad depending on the active stage
-  const getCareJourneyTriad = () => {
-    switch (currentStageName) {
-      case "Client Checked In":
-        return {
-          previous: {
-            stepNumber: "Step 1",
-            title: "Check-In Confirmed",
-            statusLine: "Arrival verified at reception kiosk",
-            icon: CheckCircle2,
-            linkText: "View Check-In Pass",
-            linkRoute: "/patient/checkin",
-          },
-          current: {
-            stepNumber: "Step 2 of 5",
-            title: "Book Doctor Appointment",
-            description: "Select your physician, clinical specialty, and consultation slot to proceed with your visit.",
-            icon: Calendar,
-            actionLabel: "Book Appointment Now",
-            actionRoute: "/patient/book",
-            advanceStage: "Book Appointment",
-          },
-          next: {
-            stepNumber: "Step 3 of 5",
-            title: "Clinical Pharmacy",
-            previewLine: "Prescription fulfillment and medication pickup at dispensary counter.",
-            icon: Pill,
-          },
-        };
-      case "Book Appointment":
-        return {
-          previous: {
-            stepNumber: "Step 2",
-            title: "Appointment Booked",
-            statusLine: "Consultation scheduled with physician",
-            icon: CheckCircle2,
-            linkText: "View Appointment Slip",
-            linkRoute: "/patient/book",
-          },
-          current: {
-            stepNumber: "Step 3 of 5",
-            title: "Clinical Pharmacy",
-            description: "Your doctor's prescription has been transmitted to the dispensary counter. Pick up medications.",
-            icon: Pill,
-            actionLabel: "Go to Pharmacy",
-            actionRoute: "/patient/pharmacy",
-            advanceStage: "Move to Pharmacy",
-          },
-          next: {
-            stepNumber: "Step 4 of 5",
-            title: "Review Bill & Insurance",
-            previewLine: "Itemized clinical invoice and insurance co-pay calculation.",
-            icon: Receipt,
-          },
-        };
-      case "Move to Pharmacy":
-        return {
-          previous: {
-            stepNumber: "Step 3",
-            title: "Prescriptions Prepared",
-            statusLine: "Medications packaged and verified",
-            icon: CheckCircle2,
-            linkText: "View Pharmacy Slip",
-            linkRoute: "/patient/pharmacy",
-          },
-          current: {
-            stepNumber: "Step 4 of 5",
-            title: "Review Bill & Insurance",
-            description: "Review your itemized clinical charges, doctor consultation fee, and insurance breakdown.",
-            icon: Receipt,
-            actionLabel: "Review & Pay Bill",
-            actionRoute: "/patient/bill",
-            advanceStage: "Pay Bill",
-          },
-          next: {
-            stepNumber: "Step 5 of 5",
-            title: "Complete Payment",
-            previewLine: "Instant settlement via payment QR or card terminal.",
-            icon: CheckCircle2,
-          },
-        };
-      case "Pay Bill":
-        return {
-          previous: {
-            stepNumber: "Step 4",
-            title: "Bill Reviewed",
-            statusLine: "Invoice and insurance verified",
-            icon: CheckCircle2,
-            linkText: "View Invoice Details",
-            linkRoute: "/patient/bill",
-          },
-          current: {
-            stepNumber: "Step 5 of 5",
-            title: "Complete Payment",
-            description: "Scan your personalized invoice payment QR code or select digital payment to complete transaction.",
-            icon: CheckCircle2,
-            actionLabel: "Proceed to Payment QR",
-            actionRoute: "/patient/pay",
-            advanceStage: "Payment Done",
-          },
-          next: {
-            stepNumber: "Final",
-            title: "Visit Receipt & Discharge",
-            previewLine: "Clinical discharge paperwork and payment verification summary.",
-            icon: CheckCircle2,
-          },
-        };
-      case "Payment Done":
-      default:
-        return {
-          previous: {
-            stepNumber: "Step 4",
-            title: "Payment Settled",
-            statusLine: "Invoice balance paid and confirmed",
-            icon: CheckCircle2,
-            linkText: "View Payment Record",
-            linkRoute: "/patient/pay",
-          },
-          current: {
-            stepNumber: "Care Complete",
-            title: "Visit Completed & Settle Finalized",
-            description: "All clinical protocol stages have been successfully completed. Your receipt and visit summary are ready.",
-            icon: CheckCircle2,
-            actionLabel: "View Payment Receipt",
-            actionRoute: "/patient/pay",
-            advanceStage: null,
-          },
-          next: {
-            stepNumber: "Complete",
-            title: "Care Protocol Concluded",
-            previewLine: "All records synchronized to clinic electronic medical record.",
-            icon: CheckCircle2,
-          },
-        };
-    }
-  };
-
-  const triad = getCareJourneyTriad();
-  const CurrentIcon = triad.current.icon;
-  const NextIcon = triad.next.icon;
-
-  const currentCardRef = useRef<HTMLDivElement>(null);
-  const previousCardRef = useRef<HTMLDivElement>(null);
-  const nextCardRef = useRef<HTMLDivElement>(null);
-  const sliderRef = useRef<HTMLDivElement>(null);
-
-  // In mobile view, ensure the Current Step card is opened and centered in the slide by default
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (currentCardRef.current && typeof window !== "undefined" && window.innerWidth < 768) {
-        currentCardRef.current.scrollIntoView({
-          behavior: "smooth",
-          inline: "center",
-          block: "nearest",
-        });
-      }
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [currentStageName]);
+    if (!activeClient) return;
 
-  // Plain-language one-line status string for the welcome banner
-  const getPlainLanguageStatus = (): string => {
-    switch (currentStageName) {
-      case "Client Checked In":
-        return "You're checked in — next: Book Appointment";
-      case "Book Appointment":
-        return "Appointment scheduled — next: Move to Pharmacy";
-      case "Move to Pharmacy":
-        return "Prescriptions ready — next: Review & Pay Bill";
-      case "Pay Bill":
-        return "Bill generated — next: Complete Payment";
-      case "Payment Done":
-        return "All set — your visit and payment are complete";
-      default:
-        return `Current status: ${currentStageName}`;
-    }
-  };
+    const loadData = () => {
+      // 1. Fetch live appointments from appointmentService
+      const allAppts = appointmentService.getAppointments();
+      const patientPhoneDigits = (activeClient.phone || "").replace(/\D/g, "");
+      const patientNameLower = (activeClient.name || "").toLowerCase().trim();
+
+      const clientAppts = allAppts.filter((a) => {
+        if (a.clientId && String(a.clientId) === String(activeClient.id)) return true;
+        const aPhoneDigits = (a.clientPhone || "").replace(/\D/g, "");
+        if (patientPhoneDigits && aPhoneDigits && (patientPhoneDigits === aPhoneDigits || patientPhoneDigits.slice(-10) === aPhoneDigits.slice(-10))) {
+          return true;
+        }
+        if (a.clientName && patientNameLower && a.clientName.toLowerCase().trim() === patientNameLower) {
+          return true;
+        }
+        return false;
+      });
+      setAppointments(clientAppts);
+
+      // 2. Fetch live invoices from invoiceService (synchronized with AI Receptionist & PatientBillScreen)
+      const allInvoices = invoiceService.getInvoices();
+      const clientInvoices = allInvoices.filter((inv) => {
+        if (inv.clientId && String(inv.clientId) === String(activeClient.id)) return true;
+        if (inv.clientName && patientNameLower && inv.clientName.toLowerCase().trim() === patientNameLower) return true;
+        const invPhoneDigits = (inv.clientPhone || "").replace(/\D/g, "");
+        if (patientPhoneDigits && invPhoneDigits && (patientPhoneDigits === invPhoneDigits || patientPhoneDigits.slice(-10) === invPhoneDigits.slice(-10))) {
+          return true;
+        }
+        return false;
+      });
+
+      const matchedOrPending = clientInvoices.length > 0
+        ? clientInvoices
+        : allInvoices.filter((inv) => (inv.total - (inv.amountPaid || 0)) > 0 && inv.status !== "paid");
+
+      setInvoices(matchedOrPending.length > 0 ? matchedOrPending : allInvoices);
+    };
+
+    loadData();
+
+    window.addEventListener("mantra_appointments_changed", loadData);
+    window.addEventListener("mantra_appointments_updated", loadData);
+    window.addEventListener("mantra_invoices_changed", loadData);
+    window.addEventListener("mantra_payments_changed", loadData);
+    window.addEventListener("patient_portal_client_changed", loadData);
+    window.addEventListener("storage", loadData);
+
+    return () => {
+      window.removeEventListener("mantra_appointments_changed", loadData);
+      window.removeEventListener("mantra_appointments_updated", loadData);
+      window.removeEventListener("mantra_invoices_changed", loadData);
+      window.removeEventListener("mantra_payments_changed", loadData);
+      window.removeEventListener("patient_portal_client_changed", loadData);
+      window.removeEventListener("storage", loadData);
+    };
+  }, [activeClient]);
+
+  if (!activeClient) {
+    return (
+      <div className="max-w-xl mx-auto py-16 text-center space-y-4">
+        <User className="w-12 h-12 text-slate-300 mx-auto" />
+        <h2 className="text-xl font-bold text-slate-800">No Patient Profile Active</h2>
+        <p className="text-sm text-slate-500">Please sign in or select a patient to continue.</p>
+        <Link
+          to="/patient/login"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold text-sm rounded-xl"
+        >
+          <span>Go to Sign In</span>
+          <ArrowRight className="w-4 h-4" />
+        </Link>
+      </div>
+    );
+  }
+
+  // Calculate stats
+  const scheduledCount = appointments.filter((a) => a.status === "scheduled" || a.status === "pending-accept").length;
+  const pendingInvoices = invoices.filter((i) => i.status !== "paid" && i.status !== "void");
+  const totalBalanceDue = pendingInvoices.reduce((sum, inv) => sum + (inv.total || inv.subtotal || 0), 0);
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      {/* 1. Welcome Banner */}
-      <section className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-xs">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-          Welcome, {activeClient.name}
-        </h1>
-        <p className="mt-2 text-sm sm:text-base text-slate-500 font-medium">
-          {getPlainLanguageStatus()}
-        </p>
-      </section>
-
-      {/* 2. Three Distinct Steps Section: Previous | Current | Next */}
-      <section className="space-y-2.5">
-        {/* Mobile Slide Quick Nav Indicators */}
-        <div className="flex md:hidden items-center justify-between px-1 text-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Care Steps
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => previousCardRef.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" })}
-              className="px-2.5 py-1 rounded-full text-[10px] font-medium text-slate-500 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-            >
-              1. Previous
-            </button>
-            <button
-              type="button"
-              onClick={() => currentCardRef.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" })}
-              className="px-2.5 py-1 rounded-full text-[10px] font-bold text-white bg-blue-600 shadow-2xs transition-colors cursor-pointer"
-            >
-              2. Current (Active)
-            </button>
-            <button
-              type="button"
-              onClick={() => nextCardRef.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" })}
-              className="px-2.5 py-1 rounded-full text-[10px] font-medium text-slate-500 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-            >
-              3. Next
-            </button>
+    <div className="max-w-6xl mx-auto space-y-6 pb-12">
+      {/* ── Metric Snapshot Cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Active Appointments
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                {scheduledCount}
+              </span>
+              <span className="text-xs text-slate-500 font-medium">scheduled</span>
+            </div>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center">
+            <Calendar className="w-6 h-6 text-blue-600" />
           </div>
         </div>
 
-        {/* Desktop: 3-column equal grid. Mobile: Horizontal snap-slider in same row */}
-        <div
-          ref={sliderRef}
-          className="flex md:grid md:grid-cols-3 gap-4 items-stretch overflow-x-auto md:overflow-visible snap-x snap-mandatory pb-3 md:pb-0 scroll-smooth px-1 md:px-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          {/* Previous Step */}
-          <div
-            ref={previousCardRef}
-            className="w-[85vw] sm:w-[350px] md:w-auto shrink-0 md:shrink snap-center bg-slate-50/90 border border-slate-200/80 rounded-2xl p-5 sm:p-6 flex flex-col justify-between h-full"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Previous
-                </span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                  Completed
-                </span>
-              </div>
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Pending Invoices
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                {pendingInvoices.length}
+              </span>
+              <span className="text-xs text-slate-500 font-medium">unpaid</span>
+            </div>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
+            <CreditCard className="w-6 h-6 text-amber-600" />
+          </div>
+        </div>
 
-              <div className="flex items-start gap-3 mt-2">
-                <div className="w-8 h-8 rounded-lg bg-emerald-100/70 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
-                  <CheckCircle2 className="w-4 h-4" />
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Clinic Status
+            </span>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-sm font-bold text-emerald-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                Connected Live
+              </span>
+            </div>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center">
+            <ShieldCheck className="w-6 h-6 text-emerald-600" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Main Content Grid: Appointments & Invoices ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column (8 cols): Appointments List */}
+        <div className="lg:col-span-8 space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <Calendar className="w-4 h-4" />
                 </div>
-                <div className="min-w-0">
-                  <h3 className="font-bold text-base text-slate-900 leading-snug">
-                    {triad.previous.title}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    {triad.previous.statusLine}
+                <div>
+                  <h2 className="text-base font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    My Clinic Appointments
+                  </h2>
+                  <p className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Live appointments synchronized with Mantra Assist
                   </p>
                 </div>
               </div>
-            </div>
 
-            {/* "View Check-In Pass" sits cleanly under Previous */}
-            {triad.previous.linkText && triad.previous.linkRoute && (
-              <div className="pt-3 mt-4 border-t border-slate-200/60">
-                <button
-                  type="button"
-                  onClick={() => navigate(triad.previous.linkRoute)}
-                  className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-semibold transition-colors group cursor-pointer"
-                >
-                  <QrCode className="w-3.5 h-3.5 text-blue-500 group-hover:scale-110 transition-transform" />
-                  <span>{triad.previous.linkText}</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Current Step (Opened/Centered by default) */}
-          <div
-            ref={currentCardRef}
-            className="w-[85vw] sm:w-[350px] md:w-auto shrink-0 md:shrink snap-center bg-white border-2 border-blue-500/40 rounded-2xl p-5 sm:p-6 shadow-xs relative overflow-hidden flex flex-col justify-between h-full"
-          >
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
-                  Current Step • {triad.current.stepNumber}
-                </span>
-              </div>
-
-              <div>
-                <h2 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2.5">
-                  <span className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                    <CurrentIcon className="w-4 h-4" />
-                  </span>
-                  <span>{triad.current.title}</span>
-                </h2>
-                <p className="mt-1.5 text-xs text-slate-600 leading-relaxed line-clamp-3">
-                  {triad.current.description}
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-4 mt-4 border-t border-slate-100 flex flex-col gap-2">
               <button
                 type="button"
-                onClick={() => navigate(triad.current.actionRoute)}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-sm shadow-blue-600/20 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer"
+                onClick={() => navigate("/patient/book")}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <span>{triad.current.actionLabel}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5" />
+                <span>Book Slot</span>
               </button>
+            </div>
 
-              {triad.current.advanceStage ? (
-                <button
-                  type="button"
-                  onClick={() => onStageChange(triad.current.advanceStage!)}
-                  className="text-[11px] text-slate-400 hover:text-slate-700 font-medium transition-colors text-center cursor-pointer"
-                  title="Demo fast-forward"
-                >
-                  Skip to {triad.current.advanceStage} →
-                </button>
+            <div className="p-5">
+              {appointments.length === 0 ? (
+                <div className="text-center py-12 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto border border-blue-100">
+                    <Calendar className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800">No Appointments Scheduled</h3>
+                    <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                      You do not have any active appointments yet. Book a consultation with our doctors to begin.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/patient/book")}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Book Your First Appointment</span>
+                  </button>
+                </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => onStageChange("Client Checked In")}
-                  className="inline-flex items-center justify-center gap-1 text-[11px] text-slate-400 hover:text-slate-700 font-medium transition-colors cursor-pointer"
-                  title="Reset demo journey"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  Reset to Step 1
-                </button>
+                <div className="space-y-3">
+                  {appointments.map((apt) => {
+                    const isUpcoming = apt.status === "scheduled" || apt.status === "pending-accept";
+                    return (
+                      <div
+                        key={apt.id}
+                        className="p-4 rounded-xl border border-slate-200/90 hover:border-blue-300 hover:bg-slate-50/50 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
+                      >
+                        <div className="flex items-start gap-3.5">
+                          <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex flex-col items-center justify-center shrink-0">
+                            <span className="text-[10px] font-bold uppercase leading-none text-blue-700">
+                              {apt.date ? new Date(apt.date).toLocaleDateString("en-US", { month: "short" }) : "APR"}
+                            </span>
+                            <span className="text-sm font-bold leading-none mt-0.5 text-blue-900 font-mono">
+                              {apt.date ? new Date(apt.date).getDate() : "12"}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                {apt.title || apt.serviceName || "Clinical Consultation"}
+                              </h3>
+
+                              {/* Source Badge */}
+                              {apt.source && (
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  apt.source.toLowerCase().includes("walk")
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : apt.source.toLowerCase().includes("ma-client")
+                                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                    : "bg-sky-50 text-sky-700 border-sky-200"
+                                }`}>
+                                  Source: {apt.source}
+                                </span>
+                              )}
+
+                              {/* Status Badge */}
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                                apt.status === "completed"
+                                  ? "bg-slate-100 text-slate-700"
+                                  : apt.status === "cancelled"
+                                  ? "bg-red-50 text-red-700 border border-red-200"
+                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              }`}>
+                                {apt.status}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-x-4 text-xs text-slate-500 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                {apt.time || "10:00 AM"} ({apt.duration || 30} mins)
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Stethoscope className="w-3.5 h-3.5 text-slate-400" />
+                                {apt.employeeName || "Assigned Physician"}
+                              </span>
+                              {apt.location && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                                  {apt.location}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right Quick Actions */}
+                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                          {isUpcoming && (
+                            <button
+                              type="button"
+                              onClick={() => setShowQrModal(true)}
+                              className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              <QrCode className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Check-In Pass</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column (4 cols): Billing & Invoices */}
+        <div className="lg:col-span-4 space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-slate-600" />
+                <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  Bills & Invoices
+                </h3>
+              </div>
+              <span className="text-xs font-bold text-slate-500 font-mono">
+                {invoices.length} total
+              </span>
+            </div>
+
+            <div className="p-5 space-y-3">
+              {invoices.length === 0 ? (
+                <div className="text-center py-8 space-y-2">
+                  <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center mx-auto">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <p className="text-xs font-semibold text-slate-600">No Invoices on File</p>
+                  <p className="text-[11px] text-slate-400">
+                    Clinical bills generated during or after your appointment will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {invoices.map((inv) => {
+                    const isPaid = inv.status === "paid";
+                    return (
+                      <div
+                        key={inv.id}
+                        className="p-3.5 rounded-xl border border-slate-200/80 hover:border-blue-200 bg-slate-50/50 flex items-center justify-between gap-3"
+                      >
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-900 font-mono truncate">
+                              #{inv.invoiceNumber || inv.id}
+                            </span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                              isPaid
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-amber-100 text-amber-800"
+                            }`}>
+                              {inv.status}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            {inv.createdAt || inv.dueDate || "Recent"}
+                          </p>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-sm font-bold text-slate-900 font-mono block">
+                            ${inv.total || inv.subtotal || 150}
+                          </span>
+                          {!isPaid ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate("/patient/bill")}
+                              className="text-[11px] font-bold text-blue-600 hover:underline mt-0.5"
+                            >
+                              Pay Now →
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-emerald-600 font-semibold flex items-center justify-end gap-0.5">
+                              <CheckCircle2 className="w-3 h-3" /> Paid
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
 
-          {/* Next Step */}
-          <div
-            ref={nextCardRef}
-            className="w-[85vw] sm:w-[350px] md:w-auto shrink-0 md:shrink snap-center bg-slate-50/90 border border-slate-200/80 rounded-2xl p-5 sm:p-6 flex flex-col justify-between h-full"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Next
-                </span>
-                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/60 px-2 py-0.5 rounded-full">
-                  {triad.next.stepNumber}
-                </span>
-              </div>
-
-              <div className="flex items-start gap-3 mt-2">
-                <div className="w-8 h-8 rounded-lg bg-slate-200/70 text-slate-500 flex items-center justify-center shrink-0 mt-0.5">
-                  <NextIcon className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-semibold text-base text-slate-800 leading-snug">
-                    {triad.next.title}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    {triad.next.previewLine}
-                  </p>
-                </div>
-              </div>
+          {/* Quick Help Card */}
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-200/80 space-y-2.5">
+            <div className="flex items-center gap-2 text-blue-900 font-bold text-xs" style={{ fontFamily: "DM Sans, sans-serif" }}>
+              <Sparkles className="w-4 h-4 text-blue-600" />
+              <span>Patient Assistance</span>
             </div>
-
-            <div className="pt-3 mt-4 border-t border-slate-200/60 text-[11px] text-slate-400 italic">
-              Unlocks after Current step
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. Quick Action Square Buttons */}
-      <section className="space-y-3">
-        <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">
-          Quick Actions
-        </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
-          {/* 1. Docs */}
-          <button
-            type="button"
-            onClick={() => setActiveModal("docs")}
-            className="bg-white border border-slate-200/80 hover:border-blue-400/80 hover:shadow-md rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center text-center aspect-square transition-all group active:scale-[0.98]"
-          >
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-50 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center mb-2.5 transition-colors">
-              <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <span className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-              Docs
-            </span>
-            <span className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
-              Records & PDFs
-            </span>
-          </button>
-
-          {/* 2. Payments */}
-          <button
-            type="button"
-            onClick={() => navigate("/patient/bill")}
-            className="bg-white border border-slate-200/80 hover:border-blue-400/80 hover:shadow-md rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center text-center aspect-square transition-all group active:scale-[0.98]"
-          >
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-50 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center mb-2.5 transition-colors">
-              <CreditCard className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <span className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-              Payments
-            </span>
-            <span className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
-              Bills & receipts
-            </span>
-          </button>
-
-          {/* 3. Directions */}
-          <button
-            type="button"
-            onClick={() => setActiveModal("directions")}
-            className="bg-white border border-slate-200/80 hover:border-blue-400/80 hover:shadow-md rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center text-center aspect-square transition-all group active:scale-[0.98]"
-          >
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-50 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center mb-2.5 transition-colors">
-              <MapPin className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <span className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-              Directions
-            </span>
-            <span className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
-              Clinic & parking
-            </span>
-          </button>
-
-          {/* 4. Services */}
-          <button
-            type="button"
-            onClick={() => setActiveModal("services")}
-            className="bg-white border border-slate-200/80 hover:border-blue-400/80 hover:shadow-md rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center text-center aspect-square transition-all group active:scale-[0.98]"
-          >
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-50 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center mb-2.5 transition-colors">
-              <Stethoscope className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <span className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-              Services
-            </span>
-            <span className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
-              Specialties
-            </span>
-          </button>
-
-          {/* 5. Appointments */}
-          <button
-            type="button"
-            onClick={() => navigate("/patient/book")}
-            className="bg-white border border-slate-200/80 hover:border-blue-400/80 hover:shadow-md rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center text-center aspect-square transition-all group active:scale-[0.98]"
-          >
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-50 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center mb-2.5 transition-colors">
-              <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <span className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-              Appointments
-            </span>
-            <span className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
-              Schedule visit
-            </span>
-          </button>
-        </div>
-      </section>
-
-      {/* Docs Modal */}
-      {activeModal === "docs" && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                  <FileText className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Patient Documents</h3>
-                  <p className="text-[11px] text-slate-400">Available medical files for {activeClient.name}</p>
-                </div>
-              </div>
+            <p className="text-xs text-slate-600 leading-relaxed font-['Outfit']">
+              Need assistance with your booking or prescription? You can reach our front desk kiosk or book with your doctor directly online.
+            </p>
+            <div className="flex items-center gap-2 pt-1">
               <button
                 type="button"
-                onClick={() => setActiveModal(null)}
-                className="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center"
+                onClick={() => navigate("/reception")}
+                className="text-xs font-bold text-blue-700 hover:text-blue-900 flex items-center gap-1 cursor-pointer"
               >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              {[
-                { title: "Clinical Care Plan Summary", date: "Today", size: "142 KB" },
-                { title: "Patient Intake & Consent Form", date: "Verified", size: "98 KB" },
-                { title: "Prescription & Pharmacy Slip", date: "Ready", size: "84 KB" },
-                { title: "Itemized Consultation Invoice", date: "Generated", size: "115 KB" },
-              ].map((doc, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-blue-50/40 hover:border-blue-200 transition-colors text-xs"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <FileText className="w-4 h-4 text-blue-600 shrink-0" />
-                    <div>
-                      <div className="font-semibold text-slate-800">{doc.title}</div>
-                      <div className="text-[10px] text-slate-400">{doc.date} • {doc.size}</div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => alert(`Downloading ${doc.title}...`)}
-                    className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-white rounded-md transition-colors"
-                    title="Download document"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Directions Modal */}
-      {activeModal === "directions" && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <MapPin className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Clinic Directions & Location</h3>
-                  <p className="text-[11px] text-slate-400">MantraCare Medical Center</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs text-slate-600">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="font-semibold text-slate-900 mb-1">Clinic Address</div>
-                <p>742 Evergreen Health Plaza, Suite 400</p>
-                <p className="text-slate-400 text-[11px] mt-0.5">San Francisco, CA 94107</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                  <div className="font-semibold text-slate-900 flex items-center gap-1.5 mb-1">
-                    <Clock className="w-3.5 h-3.5 text-blue-600" /> Hours
-                  </div>
-                  <p className="text-[11px]">Mon–Sat: 8:00 AM – 8:00 PM</p>
-                  <p className="text-[11px] text-slate-400">Emergency 24/7</p>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-                  <div className="font-semibold text-slate-900 flex items-center gap-1.5 mb-1">
-                    <Phone className="w-3.5 h-3.5 text-emerald-600" /> Contact
-                  </div>
-                  <p className="text-[11px]">+1 (555) 019-2834</p>
-                  <p className="text-[11px] text-slate-400">help@mantracare.app</p>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-100 text-blue-900 text-[11px]">
-                <strong className="block mb-0.5 font-semibold">Parking Information</strong>
-                Complimentary patient parking available at Level P1 & P2 with ticket validation at Reception.
-              </div>
-            </div>
-
-            <div className="pt-2 flex items-center justify-between">
-              <a
-                href="https://maps.google.com"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-blue-600 font-semibold hover:underline"
-              >
-                Open in Google Maps
+                <span>AI Receptionist Kiosk</span>
                 <ExternalLink className="w-3 h-3" />
-              </a>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
-              >
-                Close
               </button>
             </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Services Modal */}
-      {activeModal === "services" && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-                  <Stethoscope className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Clinical Services & Departments</h3>
-                  <p className="text-[11px] text-slate-400">Available care specialties at MantraCare</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center"
-              >
-                <X className="w-4 h-4" />
-              </button>
+      {/* ── QR Check-In Pass Modal ── */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center space-y-5 animate-in zoom-in-95 duration-150">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
+                Digital Kiosk Pass
+              </span>
+              <h3 className="text-xl font-bold text-slate-900 mt-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                {activeClient.name}
+              </h3>
+              <p className="text-xs text-slate-500 font-mono mt-0.5">
+                Patient #{activeClient.id}
+              </p>
             </div>
 
-            <div className="space-y-2">
-              {[
-                { name: "General Medicine & Checkup", desc: "Routine health screening, vitals check, consultations" },
-                { name: "Specialized Cardiology", desc: "Cardiac evaluations, ECG, lipid health management" },
-                { name: "In-House Clinical Pharmacy", desc: "Prescription fulfillment, dosage guidance, pickup" },
-                { name: "Diagnostic Laboratory", desc: "Comprehensive blood tests, imaging referrals" },
-              ].map((svc, i) => (
-                <div
-                  key={i}
-                  className="p-3 rounded-xl border border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3 text-xs"
-                >
-                  <div>
-                    <div className="font-semibold text-slate-900">{svc.name}</div>
-                    <div className="text-[11px] text-slate-500">{svc.desc}</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveModal(null);
-                      navigate("/patient/book");
-                    }}
-                    className="shrink-0 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-[11px] transition-colors"
-                  >
-                    Book
-                  </button>
-                </div>
-              ))}
+            {/* QR Code Graphic */}
+            <div className="w-48 h-48 mx-auto p-3 bg-white border-2 border-slate-200 rounded-2xl shadow-sm flex items-center justify-center">
+              <QrCode className="w-36 h-36 text-slate-900" />
             </div>
 
-            <div className="pt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors"
-              >
-                Close
-              </button>
-            </div>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Scan this QR code at the AI Receptionist kiosk at the clinic entrance to verify identity and check in automatically.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setShowQrModal(false)}
+              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
+            >
+              Done
+            </button>
           </div>
         </div>
       )}

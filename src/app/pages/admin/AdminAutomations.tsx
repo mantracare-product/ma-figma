@@ -156,20 +156,23 @@ export default function AdminAutomations() {
         event: activeRule.trigger.event,
       },
       steps: (activeRule.actions || []).map((s, idx) => ({
+        ...s,
         id: s.id,
         name: s.name,
         stepKey: s.stepKey,
         iconKey: s.iconKey,
-        kind: "wait" as const,
+        kind: (s.kind || (s.executionType === "parallel" ? "parallel" : "wait")) as any,
+        executionType: s.executionType || "wait",
+        branches: s.branches,
         delay:
           (s.delayValue ?? 0) > 0
             ? { value: s.delayValue!, unit: (s.delayUnit as any) || "minutes" }
             : undefined,
         params: s.params || {},
         order: idx + 1,
-      })),
+      })) as any,
       updatedAt: activeRule.updatedAt || "",
-    };
+    } as any;
   }, [isCreatingNewRule, activeRule]);
 
   const handleCreateNewRule = () => {

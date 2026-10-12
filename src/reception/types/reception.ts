@@ -246,7 +246,7 @@ export interface VisitSummary {
     date: string;
     time: string;
     status: string;
-    source?: 'ai_receptionist' | 'call' | 'web';
+    source?: 'ai_receptionist' | 'call' | 'web' | 'Walked In' | 'MA-Client' | 'Inbound Call' | string;
   };
   room: {
     stationId: string;
@@ -292,6 +292,7 @@ export interface CreatePatientPayload {
   consentGiven?: boolean;
   consentAt?: string;
   createdVia?: 'ai_receptionist' | 'call' | 'web';
+  source?: 'Walked In' | 'MA-Client' | 'Inbound Call' | string;
 }
 
 export interface ServiceItem {
@@ -343,7 +344,7 @@ export interface AppointmentSummary {
   receptionEnabled?: boolean;
   checkedInAt?: string;
   journeyId?: string;
-  source?: 'ai_receptionist' | 'call' | 'web';
+  source?: 'ai_receptionist' | 'call' | 'web' | 'Walked In' | 'MA-Client' | 'Inbound Call' | string;
   roomStationId?: string;
   roomName?: string;
   tokenNumber?: string;
@@ -360,15 +361,21 @@ export interface BookAppointmentPayload {
   time: string;
   reason?: string;
   isImmediateQueue?: boolean;
-  source?: 'ai_receptionist' | 'call' | 'web';
+  source?: 'ai_receptionist' | 'call' | 'web' | 'Walked In' | 'MA-Client' | 'Inbound Call' | string;
 }
 
 export interface PatientInvoiceSummary {
   id: string;
   invoiceNumber: string;
   amount: number;
+  amountPaid?: number;
+  balanceDue?: number;
   status: 'paid' | 'unpaid' | 'partially_paid';
   dueDate?: string;
+  issueDate?: string;
+  items?: Array<{ description: string; quantity: number; unitPrice: number; total: number }>;
+  clientName?: string;
+  clientId?: string;
 }
 
 export type QueueEventType = 

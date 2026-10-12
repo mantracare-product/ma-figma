@@ -9,9 +9,11 @@ import { toast } from "sonner";
 import { hasInvoiceAutomation } from "../../../lib/invoiceService";
 import { Link } from "react-router";
 import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
+import { useClients } from "../../../lib/clientsStore";
 import {
   Receipt,
   Send,
+  User,
 } from "lucide-react";
 
 interface CreateInvoiceDrawerProps {
@@ -120,7 +122,15 @@ export default function CreateInvoiceDrawer({
     createInvoiceFromAppointment,
     updateInvoice,
   } = useInvoices();
-  const clientsList = getClientList();
+  const { clients: storedClients } = useClients();
+  const clientsList = useMemo(() => {
+    return storedClients.map((c) => ({
+      id: c.id,
+      name: c.name,
+      phoneNumber: c.phone || "",
+      email: c.email || "",
+    }));
+  }, [storedClients]);
 
   // Selected Client
   const [selectedClientId, setSelectedClientId] = useState<string>(() => {
@@ -452,6 +462,46 @@ export default function CreateInvoiceDrawer({
       )}
 
       <div className="space-y-5">
+        {/* Quick Client Selector */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center font-bold text-xs shrink-0">
+              <User className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Select Client
+              </span>
+              <p className="text-[11px] text-slate-500">Pick client from live database to auto-fill details</p>
+            </div>
+          </div>
+          <select
+            value={selectedClientId}
+            onChange={(e) => {
+              const cid = e.target.value;
+              setSelectedClientId(cid);
+              const found = clientsList.find((c) => c.id === cid);
+              if (found) {
+                setFieldValues((prev) => ({
+                  ...prev,
+                  client_name: found.name,
+                  client_email: found.email || "",
+                  client_phone: found.phoneNumber || "",
+                }));
+              }
+            }}
+            className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs cursor-pointer min-w-[240px]"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <option value="">-- Choose Client --</option>
+            {clientsList.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} {c.phoneNumber ? `(${c.phoneNumber})` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* ── Only 2 Sections: Client Detail and Product ── */}
         <DraggableOverviewSections
           mode="invoice"

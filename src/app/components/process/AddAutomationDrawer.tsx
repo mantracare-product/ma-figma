@@ -764,15 +764,15 @@ export default function AddAutomationDrawer({
       steps: finalSteps.map((s) => ({
         ...s,
         id: s.id,
-        kind: s.stepKey === "wait" ? "wait" : s.stepKey === "condition" ? "condition" : "action",
-        stepKey: s.stepKey || "action",
+        kind: s.kind || (s.stepKey === "parallel" || (s as any).branches?.length > 0 ? "parallel" : s.stepKey === "wait" ? "wait" : s.stepKey === "condition" ? "condition" : "action"),
+        stepKey: s.stepKey || (s.kind === "parallel" || (s as any).branches?.length > 0 ? "parallel" : "action"),
         name: s.name,
         description: s.description,
         iconKey: s.iconKey,
         params: s.params || {},
         outputAlias: (s as any).outputAlias,
         branches: (s as any).branches,
-        executionType: s.executionType || "wait",
+        executionType: s.executionType || ((s as any).branches?.length > 0 ? "parallel" : "wait"),
         delay:
           s.delayValue && s.delayValue > 0
             ? { value: s.delayValue, unit: (s.delayUnit as any) || "minutes" }

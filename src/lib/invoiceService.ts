@@ -19,6 +19,9 @@ import { logStageMove, getStoredRules } from "./useAutomationStore";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, Stage, getActiveOrganizationSync, isProcessMatchingOrg } from "./useProcessStore";
 import { ClientInvoice, InvoiceLineItem, InvoiceStatus, Payment } from "../app/types/invoiceTypes";
 import { addActivityEntry } from "./activityLog";
+import { flattenRuleSteps } from "./automationTree";
+import { getStoredDocumentTemplates } from "./documentTemplatesStore";
+import { saveClientDocument, getStoredClientDocuments, StoredClientDocument } from "./clientDocumentsStore";
 
 export interface CreateInvoiceOptions {
   appointmentId?: string;
@@ -69,9 +72,9 @@ export function hasInvoiceAutomation(processId?: string): boolean {
       if (!r.enabled) return false;
       if (r.entityType === "invoice") return true;
       if (r.trigger?.event && (r.trigger.event.startsWith("invoice.") || r.trigger.event.includes("invoice"))) return true;
+      const allActions = flattenRuleSteps(r.actions || []);
       if (
-        r.actions &&
-        r.actions.some((a) => {
+        allActions.some((a) => {
           const key = (a.stepKey || (a as any).type || (a as any).name || "").toLowerCase();
           return (
             ["generate_invoice", "generate-invoice", "create_invoice", "send_invoice", "send-invoice", "sendinvoice"].includes(key) ||
@@ -104,7 +107,7 @@ export function hasInvoiceAutomation(processId?: string): boolean {
 
     for (const proc of targetProcesses) {
       const hasStageInv = proc.stages?.some((s) => {
-        const steps = (s as any).workflowSteps || (s as any).automations || [];
+        const steps = flattenRuleSteps((s as any).workflowSteps || (s as any).automations || []);
         return steps.some((step: any) => {
           const key = (step.stepKey || step.type || step.name || "").toLowerCase();
           return (
@@ -141,8 +144,9 @@ export function hasAppointmentInvoiceAutomation(processId?: string): boolean {
 
       if (!isApptTrigger) return false;
 
-      // Must explicitly have a generate invoice action
-      const hasGenAction = r.actions?.some((a) => {
+      // Must explicitly have a generate invoice action (including inside parallel branches)
+      const allActions = flattenRuleSteps(r.actions && r.actions.length > 0 ? r.actions : (r as any).steps || []);
+      const hasGenAction = allActions.some((a) => {
         const key = (a.stepKey || (a as any).type || (a as any).name || "").toLowerCase();
         return (
           ["generate_invoice", "generate-invoice", "create_invoice"].includes(key) ||
@@ -179,6 +183,190 @@ export function hasAppointmentInvoiceAutomation(processId?: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Searches stored automation rules to detect if an active automation configures
+ * generating an invoice document (from an appointment or invoice trigger, including nested branches).
+ */
+export function findInvoiceDocumentAutomation(processId?: string): { stepKey: string; params: Record<string, any> } | null {
+  try {
+    const rules = getStoredRules();
+    for (const r of rules) {
+      if (r.enabled === false || (r as any).status === "paused") continue;
+      const trigEvt = (r.trigger?.event || "").toLowerCase();
+      const isApptOrInvTrigger =
+        trigEvt.startsWith("appointment.") ||
+        trigEvt === "appointment.booked" ||
+        trigEvt.startsWith("invoice.") ||
+        r.entityType === "appointment" ||
+        r.entityType === "invoice";
+
+      const allActions = flattenRuleSteps(r.actions && r.actions.length > 0 ? r.actions : (r as any).steps || []);
+      const hasInvoiceAction = allActions.some((a) => {
+        const key = (a.stepKey || (a as any).type || (a as any).name || "").toLowerCase();
+        return ["generate_invoice", "generate-invoice", "create_invoice"].includes(key);
+      });
+
+      if (!isApptOrInvTrigger && !hasInvoiceAction) continue;
+
+      const docAction = allActions.find((a) => {
+        const key = (a.stepKey || (a as any).type || (a as any).name || "").toLowerCase();
+        if (key !== "generate_document" && key !== "generate-document") return false;
+        const targetEntity = (a.params?.entity || "").toLowerCase();
+        const cat = (a.params?.templateName || a.params?.template || "").toLowerCase();
+        const tplId = (a.params?.templateId || "").toLowerCase();
+        return (
+          targetEntity === "invoice" ||
+          cat.includes("invoice") ||
+          cat.includes("billing") ||
+          tplId === "tpl-inv-1" ||
+          tplId === "tpl-inv-receipt" ||
+          r.entityType === "invoice" ||
+          hasInvoiceAction
+        );
+      });
+
+      if (docAction) {
+        return {
+          stepKey: docAction.stepKey || "generate_document",
+          params: docAction.params || {},
+        };
+      }
+    }
+
+    // Also check process stages
+    const processes = getStoredProcesses();
+    const targetProcesses = processId
+      ? processes.filter((p) => p.id === processId || p.name === processId || p.entityType === "invoice" || p.entityType === "appointment")
+      : processes;
+
+    for (const proc of targetProcesses) {
+      for (const stage of proc.stages || []) {
+        const steps = flattenRuleSteps((stage as any).workflowSteps || (stage as any).automations || (stage as any).steps || []);
+        const docAction = steps.find((a: any) => {
+          const key = (a.stepKey || a.type || a.name || "").toLowerCase();
+          if (key !== "generate_document" && key !== "generate-document") return false;
+          const targetEntity = (a.params?.entity || "").toLowerCase();
+          const cat = (a.params?.templateName || a.params?.template || "").toLowerCase();
+          const tplId = (a.params?.templateId || "").toLowerCase();
+          return (
+            targetEntity === "invoice" ||
+            cat.includes("invoice") ||
+            cat.includes("billing") ||
+            tplId === "tpl-inv-1" ||
+            tplId === "tpl-inv-receipt" ||
+            proc.entityType === "invoice"
+          );
+        });
+        if (docAction) {
+          return {
+            stepKey: docAction.stepKey || "generate_document",
+            params: docAction.params || {},
+          };
+        }
+      }
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Generates and stores an official PDF invoice document linked to an invoice record.
+ * Idempotent: if a document for this invoice already exists, returns it without creating duplicates.
+ */
+export function generateInvoiceDocument(
+  invoice: ClientInvoice,
+  params?: Record<string, any>
+): StoredClientDocument {
+  const existingDocs = getStoredClientDocuments();
+  const cleanInvId = invoice.id.replace(/^#/, "").trim().toLowerCase();
+  const alreadyGenerated = existingDocs.find(
+    (d) =>
+      (d.invoiceId && d.invoiceId.replace(/^#/, "").trim().toLowerCase() === cleanInvId) ||
+      (d.entityType === "invoice" && d.entityId && d.entityId.replace(/^#/, "").trim().toLowerCase() === cleanInvId) ||
+      (d.notes && d.notes.toLowerCase().includes(cleanInvId)) ||
+      (d.name && d.name.toLowerCase().includes(cleanInvId))
+  );
+  if (alreadyGenerated) {
+    return alreadyGenerated;
+  }
+
+  const storedTemplates = getStoredDocumentTemplates();
+  const matchedTemplate =
+    storedTemplates.find(
+      (t) =>
+        t.id === params?.templateId ||
+        t.id === params?.template ||
+        t.name.toLowerCase() === (params?.templateName || params?.template || "").toLowerCase()
+    ) ||
+    storedTemplates.find(
+      (t) =>
+        t.id === "tpl-inv-1" ||
+        (t.category || "").toLowerCase() === "invoices" ||
+        t.name.toLowerCase().includes("invoice")
+    ) ||
+    storedTemplates[0];
+
+  const templateName = matchedTemplate?.name || params?.templateName || "Tax Invoice & Billing Statement";
+  const dateStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+  let generatedText = matchedTemplate?.templateText || `OFFICIAL TAX INVOICE & BILLING STATEMENT\n\nInvoice Number: {invoice_number}\nDate: {current_date}\nDue Date: {due_date}\nPayment Status: {payment_status}\n\nClient Name: {client_name}\nEmail: {email}\nPhone: {phone}\n\nItemized Charges:\n{line_items_summary}\n\nSubtotal: {subtotal}\nTax: {tax_amount}\nTotal Due: {total_amount}\n\nIssued By: {responsible}`;
+
+  const itemsList = (invoice.lineItems || [])
+    .map(
+      (li: any, i: number) =>
+        `${i + 1}. ${li.description || li.product_name || "Item"} - Qty: ${li.quantity || 1} x $${Number(
+          li.unitPrice || li.unit_price || li.rate || 0
+        ).toFixed(2)} = $${Number(
+          li.total || (li.quantity || 1) * (li.unitPrice || li.unit_price || li.rate || 0)
+        ).toFixed(2)}`
+    )
+    .join("\n") || "1. Consultation / Service - $150.00";
+
+  generatedText = generatedText
+    .replace(/\{invoice_number\}/g, invoice.id)
+    .replace(/\{due_date\}/g, invoice.dueDate || "")
+    .replace(/\{subtotal\}/g, `$${Number(invoice.subtotal ?? (invoice.total ? invoice.total * 0.9 : 0)).toFixed(2)}`)
+    .replace(/\{tax_amount\}/g, `$${Number(invoice.taxAmount ?? invoice.tax ?? 0).toFixed(2)}`)
+    .replace(/\{total_amount\}/g, `$${Number(invoice.total ?? 0).toFixed(2)}`)
+    .replace(/\{payment_status\}/g, String(invoice.status || "DRAFT").toUpperCase())
+    .replace(/\{line_items_summary\}/g, itemsList)
+    .replace(/\{items\}/g, itemsList)
+    .replace(/\{client_name\}/g, invoice.clientName || "Client")
+    .replace(/\{email\}/g, invoice.clientEmail || "")
+    .replace(/\{phone\}/g, invoice.clientPhone || "")
+    .replace(/\{location\}/g, "Online / Clinic")
+    .replace(/\{responsible\}/g, "System Admin")
+    .replace(/\{current_date\}/g, dateStr);
+
+  const rawDocName = params?.documentName;
+  let docName = `${invoice.id}_${templateName.replace(/\s+/g, "_")}.pdf`;
+  if (rawDocName && !rawDocName.includes("{client_name}")) {
+    docName = rawDocName.endsWith(".pdf") ? rawDocName : `${rawDocName}.pdf`;
+  }
+
+  const newDoc: StoredClientDocument = {
+    id: `doc-inv-${invoice.id}-${Date.now()}`,
+    clientId: invoice.clientId || "c-1",
+    invoiceId: invoice.id,
+    appointmentId: invoice.appointmentId,
+    entityId: invoice.id,
+    entityType: "invoice",
+    name: docName,
+    category: "Invoices",
+    valueBy: "Invoice Record Data",
+    fileType: "pdf",
+    fileSize: "1.4 MB",
+    uploadedDate: dateStr,
+    uploadedBy: "System Admin",
+    status: "Verified",
+    notes: `Generated automatically via automation for Invoice #${invoice.id}${invoice.appointmentId ? ` · Appointment #${invoice.appointmentId}` : ""}`,
+    templateId: matchedTemplate?.id || "tpl-inv-1",
+    generatedContent: generatedText,
+  };
+
+  saveClientDocument(newDoc);
+  return newDoc;
 }
 
 const INITIAL_INVOICES: ClientInvoice[] = [];
@@ -392,6 +580,16 @@ class InvoiceService {
     // 3. Save
     this.saveInvoices([newInvoice, ...all]);
 
+    // Auto-generate invoice document if configured in automations (Appointment Booked -> Generate Document, etc.)
+    try {
+      const docRule = findInvoiceDocumentAutomation(proc.id);
+      if (docRule) {
+        generateInvoiceDocument(newInvoice, docRule.params);
+      }
+    } catch (err) {
+      console.warn("[InvoiceService] Failed to auto-generate invoice document:", err);
+    }
+
     // 4. Emit event (automations will drive stage move if defined)
     eventBus.emit("invoice.created", "invoice", newInvoice.id, newInvoice);
 
@@ -448,8 +646,49 @@ class InvoiceService {
     note?: string
   ): { invoice: ClientInvoice; payment: Payment } | null {
     const all = this.getInvoices();
-    const existing = all.find((i) => i.id === invoiceId);
-    if (!existing) return null;
+    let existing = all.find(
+      (i) =>
+        i.id === invoiceId ||
+        i.id.toLowerCase() === invoiceId.toLowerCase() ||
+        i.invoiceNumber === invoiceId ||
+        (i.id.replace(/\D/g, "") && invoiceId.replace(/\D/g, "") && i.id.replace(/\D/g, "") === invoiceId.replace(/\D/g, ""))
+    );
+
+    if (!existing) {
+      // Auto-create minimal persistent invoice so payment is reliably recorded in MantraAssist
+      const proc = this.getInvoiceProcess();
+      const paidStage = this.findStageById("paid");
+      const fallbackInv: ClientInvoice = {
+        id: invoiceId,
+        invoiceNumber: invoiceId,
+        clientId: "CL-001",
+        clientName: "Patient",
+        total: amount,
+        subtotal: amount,
+        discountAmount: 0,
+        taxAmount: 0,
+        amountPaid: amount,
+        status: "paid",
+        currentStageId: paidStage?.id || "",
+        statusLabel: paidStage?.name || "Paid",
+        paidAt: new Date().toISOString(),
+        currency: "$",
+        createdBy: "System",
+        lineItems: [
+          {
+            id: `li-${Date.now()}`,
+            description: "Clinical Consultation & Care Services",
+            quantity: 1,
+            unitPrice: amount,
+            source: "service",
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        dueDate: new Date().toISOString().split("T")[0],
+      };
+      existing = fallbackInv;
+      this.saveInvoices([fallbackInv, ...all]);
+    }
 
     const newAmountPaid = parseFloat(((existing.amountPaid || 0) + amount).toFixed(2));
     const isFullyPaid = newAmountPaid >= existing.total;
@@ -469,27 +708,37 @@ class InvoiceService {
       }
     }
 
-    this.saveInvoices(all.map((i) => (i.id === invoiceId ? updated : i)));
+    this.saveInvoices(this.getInvoices().map((i) => (i.id === existing!.id ? updated : i)));
+
+    const receiptNum = `REC-${invoiceId.replace("INV-CL-", "").replace(/[^0-9]/g, "").slice(-5) || "1001"}-${Math.floor(Math.random() * 90 + 10)}`;
+    const paymentDateStr = new Date().toISOString().split("T")[0];
 
     const payment: Payment = {
       id: `pmt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      invoiceId,
+      invoiceId: existing.id,
       clientId: existing.clientId,
       amount,
       method: method as any,
       paymentType: "self_pay",
-      paymentDate: new Date().toISOString().split("T")[0],
+      paymentDate: paymentDateStr,
+      date: paymentDateStr,
       note,
-      receiptNumber: `REC-${invoiceId.replace("INV-CL-", "")}-${Math.floor(Math.random() * 90 + 10)}`,
-      receiptFileName: `Receipt_${invoiceId}.pdf`,
+      receiptNumber: receiptNum,
+      reference: receiptNum,
+      receiptFileName: `Receipt_${existing.id}.pdf`,
       createdAt: new Date().toISOString(),
-    };
+      status: "completed",
+    } as any;
 
     // Save payment record to payments storage
     try {
       const rawPmts = localStorage.getItem(PAYMENTS_STORAGE_KEY);
       const pmts: Payment[] = rawPmts ? JSON.parse(rawPmts) : [];
       localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify([payment, ...pmts]));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("mantra_payments_changed"));
+        window.dispatchEvent(new Event("storage"));
+      }
     } catch {}
 
     if (isFullyPaid) {

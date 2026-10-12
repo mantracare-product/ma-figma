@@ -366,6 +366,7 @@ export default function Appointments() {
   const [bookingLineItems, setBookingLineItems] = useState<any[]>([]);
   const [bookingDiscountAmount, setBookingDiscountAmount] = useState(0);
   const [bookingLocation, setBookingLocation] = useState("Main Clinic — Suite 400");
+  const [bookingSource, setBookingSource] = useState<string>("Inbound Call");
 
   // Client search and filter state
   const [clientSearchQuery, setClientSearchQuery] = useState("");
@@ -593,6 +594,7 @@ export default function Appointments() {
     } else {
       setSessionType("video");
     }
+    setBookingSource(apt.source || "Inbound Call");
 
     setShowAddModal(true);
   };
@@ -651,7 +653,7 @@ export default function Appointments() {
         stageId: targetStage?.id || bookingStageId || undefined,
         generateInvoice: bookingGenerateInvoice ?? false,
         lineItems: bookingLineItems && bookingLineItems.length > 0 ? bookingLineItems : undefined,
-        source: "screen",
+        source: bookingSource || "Inbound Call",
       });
 
       if (res.appointment) {
@@ -1539,6 +1541,7 @@ export default function Appointments() {
           lineItems: bookingLineItems,
           discountAmount: bookingDiscountAmount,
           location: bookingLocation,
+          source: bookingSource,
         }}
         onChange={(patch) => {
           if (patch.title !== undefined) setBookingTitle(patch.title);
@@ -1558,6 +1561,7 @@ export default function Appointments() {
           if (patch.generateInvoice !== undefined) setBookingGenerateInvoice(patch.generateInvoice);
           if (patch.lineItems !== undefined) setBookingLineItems(patch.lineItems);
           if (patch.discountAmount !== undefined) setBookingDiscountAmount(patch.discountAmount);
+          if (patch.source !== undefined) setBookingSource(patch.source);
         }}
         onSave={handleBookingComplete}
         employees={employees}

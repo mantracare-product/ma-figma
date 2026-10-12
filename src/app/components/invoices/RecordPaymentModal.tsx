@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { CustomSideDrawer } from "../ui/drawer";
 import { ClientInvoice, Payment } from "../../types/invoiceTypes";
 import { useInvoices } from "../../context/InvoiceContext";
 import { getClientList } from "../../../lib/getClientList";
+import { useClients } from "../../../lib/clientsStore";
 import { toast } from "sonner";
 import {
   DollarSign,
@@ -53,7 +54,15 @@ export default function RecordPaymentModal({
   preSelectedInvoiceId,
 }: RecordPaymentModalProps) {
   const { invoices, recordPayment, sendInvoice, getPaymentsByClient, getClientCredit, addClientCredit } = useInvoices();
-  const clientsList = getClientList();
+  const { clients: storedClients } = useClients();
+  const clientsList = useMemo(() => {
+    return storedClients.map((c) => ({
+      id: c.id,
+      name: c.name,
+      phoneNumber: c.phone || "",
+      email: c.email || "",
+    }));
+  }, [storedClients]);
   const [selectedClientId, setSelectedClientId] = useState<string>(
     clientId || ""
   );
@@ -63,6 +72,8 @@ export default function RecordPaymentModal({
     availableClients.unshift({
       id: selectedClientId,
       name: clientName || "Client",
+      phoneNumber: "",
+      email: "",
     });
   }
 
@@ -70,6 +81,8 @@ export default function RecordPaymentModal({
     ? availableClients.find((c) => c.id === selectedClientId) || {
         id: selectedClientId,
         name: clientName || "Client",
+        phoneNumber: "",
+        email: "",
       }
     : null;
 

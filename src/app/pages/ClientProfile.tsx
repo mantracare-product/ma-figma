@@ -42,7 +42,7 @@ import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appo
 import { appendActivity } from "../../lib/activityEngine";
 import { getActivityForProcess, getActivityForClient } from "../../lib/activityLog";
 import { CLIENTS_STORE_EVENT, ClientProcessStage } from "../../lib/clientProcessState";
-import { useClients } from "../../lib/clientsStore";
+import { useClients, getStoredClients } from "../../lib/clientsStore";
 import { useInvoices } from "../context/InvoiceContext";
 import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
 import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
@@ -83,6 +83,7 @@ import {
 } from "../../lib/servicesStore";
 import { eventBus } from "../../lib/eventBus";
 import { MOCK_SERVICES } from "../../lib/mockServicesData";
+import SendInviteModal from "../components/clients/SendInviteModal";
 
 const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
 
@@ -395,7 +396,20 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   // Reactive client store hook (synced with localStorage, sessionStorage, and BroadcastChannel)
   const { clients, setClients } = useClients();
   const isNewClient = id === "new";
-  const initialTarget = isNewClient ? null : (clients.find((c) => c.id === id) ?? null);
+  const initialTarget = isNewClient
+    ? null
+    : (clients.find((c) => {
+        const cleanId = String(id || "").trim().toLowerCase().replace(/^#/, "");
+        const cId = String(c.id || "").trim().toLowerCase().replace(/^#/, "");
+        return cId === cleanId;
+      }) ??
+      getStoredClients().find((c) => {
+        const cleanId = String(id || "").trim().toLowerCase().replace(/^#/, "");
+        const cId = String(c.id || "").trim().toLowerCase().replace(/^#/, "");
+        return cId === cleanId;
+      }) ??
+      null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   // Custom field and section definitions from shared context (same ones Settings.tsx & Admin manage)
   const { getAllFields, addCustomField, getCustomSections, getAllSections } = useFieldRegistry();
@@ -548,16 +562,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   // Keep form fields synced whenever id route changes or client is selected
   useEffect(() => {
     if (id && id !== "new") {
-      let target = clients.find((c) => String(c.id) === String(id));
-      if (!target) {
-        try {
-          const saved = sessionStorage.getItem("clients");
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            target = parsed.find((c: any) => String(c.id) === String(id));
-          }
-        } catch {}
-      }
+      const cleanId = String(id).trim().toLowerCase().replace(/^#/, "");
+      const all = [...clients, ...getStoredClients()];
+      const target = all.find((c) => {
+        const cId = String(c.id || "").trim().toLowerCase().replace(/^#/, "");
+        return cId === cleanId;
+      });
       if (target) {
         setClientName(target.name || "");
         setClientEmail(target.email || "");
@@ -602,8 +612,17 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         jobPosition: clientRole || "",
       };
     }
-    return initialTarget;
-  }, [id, isNewClient, initialTarget, clientName, clientEmail, clientPhone, clientCountry, selectedProcesses, clientStatus, clientLocation, clientCompany, clientRole]);
+
+    if (!id) return null;
+    const cleanId = String(id).trim().toLowerCase().replace(/^#/, "");
+    const all = [...clients, ...getStoredClients()];
+    const matched = all.find((c) => {
+      const cId = String(c.id || "").trim().toLowerCase().replace(/^#/, "");
+      return cId === cleanId;
+    });
+
+    return matched || initialTarget || null;
+  }, [id, isNewClient, clients, initialTarget, clientName, clientEmail, clientPhone, clientCountry, selectedProcesses, clientStatus, clientLocation, clientCompany, clientRole]);
 
   const [clientSections, setClientSections] = useState<OverviewSection[]>(() => {
     let savedSections = (initialTarget as any)?.customSections;
@@ -2017,6 +2036,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
       {/* Drawer panel */}
       <div className="fixed right-0 top-0 h-full w-[92vw] lg:w-[84vw] xl:w-[76vw] max-w-[1340px] min-w-[780px] bg-[#F8FAFC] z-50 shadow-2xl flex flex-col overflow-hidden">
+        {/* Send Invite Modal */}
+        <SendInviteModal
+          isOpen={showInviteModal}
+          onClose={() => setShowInviteModal(false)}
+          client={client}
+        />
 
         {/* Hero: client identity */}
         <div className="p-6 border-b border-border flex-shrink-0 bg-white">
@@ -2056,6 +2081,17 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 >
                   <Check className="w-4 h-4" />
                   Save Client
+                </button>
+              )}
+              {!isNewClient && (
+                <button
+                  type="button"
+                  onClick={() => setShowInviteModal(true)}
+                  className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-semibold text-xs rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <Send className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Send Invite</span>
                 </button>
               )}
               <button

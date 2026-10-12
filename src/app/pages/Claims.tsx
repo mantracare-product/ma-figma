@@ -341,13 +341,13 @@ export default function Claims() {
           allFields={[
             { key: "claimNumber", label: "Claim #", getValue: (c) => c.claimNumber },
             { key: "patientName", label: "Client / Patient", getValue: (c) => c.patientName },
-            { key: "insurancePayer", label: "Insurance Payer", getValue: (c) => c.insurancePayer },
-            { key: "policyNumber", label: "Policy #", getValue: (c) => c.policyNumber },
+            { key: "insurancePayer", label: "Insurance Payer", getValue: (c) => c.payer?.name || "" },
+            { key: "policyNumber", label: "Policy #", getValue: (c) => c.insuredId || "" },
             { key: "serviceDate", label: "Service Date", getValue: (c) => c.serviceDate },
-            { key: "totalAmount", label: "Total Billed", getValue: (c) => `$${c.totalAmount.toFixed(2)}` },
+            { key: "totalAmount", label: "Total Billed", getValue: (c) => `$${(c.totalCharge || 0).toFixed(2)}` },
             { key: "status", label: "Status", getValue: (c) => c.status },
-            { key: "cptCodes", label: "CPT Codes", getValue: (c) => (c.cptCodes || []).map((x) => x.code).join("; ") },
-            { key: "icd10Codes", label: "ICD-10 Diagnoses", getValue: (c) => (c.icd10Codes || []).map((x) => x.code).join("; ") },
+            { key: "cptCodes", label: "CPT Codes", getValue: (c) => (c.lines || []).map((x) => x.cptCode).join("; ") },
+            { key: "icd10Codes", label: "ICD-10 Diagnoses", getValue: (c) => (c.diagnosisCodes || []).map((x) => x.code).join("; ") },
           ]}
         />
 

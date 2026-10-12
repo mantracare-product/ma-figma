@@ -75,6 +75,28 @@ export function getStoredClients(): Client[] {
           }
           return c;
         });
+        // Sanitize any client with invalid, empty, or 'new' ID
+        let maxExisting = 30;
+        parsed.forEach((c: Client) => {
+          const m = c.id?.match(/^CL-(\d+)$/i);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (n > maxExisting) maxExisting = n;
+          }
+        });
+
+        parsed = parsed.map((c: Client) => {
+          if (!c.id || c.id === "new" || c.id.trim() === "") {
+            changed = true;
+            maxExisting++;
+            return {
+              ...c,
+              id: `CL-${String(maxExisting).padStart(3, "0")}`,
+            };
+          }
+          return c;
+        });
+
         if (changed) {
           try {
             window.localStorage?.setItem(CLIENTS_STORAGE_KEY, JSON.stringify(parsed));
@@ -179,7 +201,7 @@ export function addOrUpdateClient(data: Partial<Client> & { name: string }): Cli
     }
     return max;
   }, 30);
-  const newId = data.id || `CL-${String(maxNumericId + 1).padStart(3, "0")}`;
+  const newId = (data.id && data.id !== "new" && data.id.trim() !== "") ? data.id : `CL-${String(maxNumericId + 1).padStart(3, "0")}`;
 
   const newClient: Client = {
     id: newId,

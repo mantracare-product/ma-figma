@@ -630,6 +630,18 @@ export default function AppointmentDetailDrawer({
               </h1>
               <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
                 <span className="font-mono font-semibold text-slate-700">#{formattedApptId}</span>
+                {effectiveAppt.source && (
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    effectiveAppt.source.toLowerCase().includes("walk") || effectiveAppt.source === "ai_receptionist"
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : effectiveAppt.source.toLowerCase().includes("ma-client") || effectiveAppt.source.toLowerCase().includes("portal")
+                      ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                      : "bg-sky-50 text-sky-700 border border-sky-200"
+                  }`}>
+                    <Sparkles className="w-2.5 h-2.5 opacity-75" />
+                    Source: {effectiveAppt.source === "ai_receptionist" ? "Walked In" : effectiveAppt.source}
+                  </span>
+                )}
               </div>
             </div>
           </div>

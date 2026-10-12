@@ -22,6 +22,7 @@ import { saveStoredRules, AutomationRule } from "../lib/useAutomationStore";
 import { invoiceService } from "../lib/invoiceService";
 import { assignProductToClient, getClientProducts, addService } from "../lib/servicesStore";
 import { getStoredClientDocuments } from "../lib/clientDocumentsStore";
+import { appointmentService } from "../lib/appointmentService";
 
 async function runTests() {
   console.log("=== Testing Trigger Categorization, Assign Product Trigger & Generate Document Automation ===");
@@ -280,7 +281,79 @@ async function runTests() {
   if (!generatedRxDoc.generatedContent?.includes("Hypertension Stage 1") || !generatedRxDoc.generatedContent?.includes("Alex Turner")) {
     throw new Error(`Expected generated content to contain updated field values, got: ${generatedRxDoc.generatedContent}`);
   }
-  console.log("  ✓ Document title and content successfully populated with latest field values!");
+  // ── TEST 5: Appointment Booking -> Generate Invoice & Document Automation Linked to Invoice View
+  console.log("\n[Test 5] Testing Appointment Booking -> Invoice & Document Automation Linkage...");
+
+  const apptBookingDocRule: AutomationRule = {
+    id: "rule-appt-booked-doc",
+    orgId: "default",
+    name: "On Appointment Booked Generate Intake Document",
+    entityType: "appointment",
+    enabled: true,
+    action: { type: "moveToStage", processId: "", stageId: "" },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    trigger: {
+      event: "appointment.booked",
+    },
+    actions: [
+      {
+        id: "act-appt-doc",
+        stepKey: "generate_document",
+        name: "Generate Appointment Intake Document",
+        description: "Generate document on booking",
+        iconKey: "filecheck",
+        params: {
+          entity: "appointment",
+          templateId: "tpl-client-onboarding",
+          templateName: "Appointment Intake & Clinical Consent",
+          documentName: "{client_name} - Intake Consent",
+          fileType: "pdf",
+        },
+      },
+    ],
+  };
+
+  saveStoredRules([assignProductRule, docRule, stageEnteredRule, fieldUpdateDocRule, apptBookingDocRule]);
+
+  // Book appointment for Kritika Jain with invoice generation
+  const apptResult = appointmentService.createAppointment({
+    clientName: "Kritika Jain",
+    clientEmail: "kritika@gmail.com",
+    clientPhone: "+1 8595473503",
+    clientId: "CL-032",
+    employeeId: 1,
+    serviceId: 1,
+    date: "2026-10-15",
+    time: "10:00",
+    generateInvoice: true,
+    title: "Initial Consultation",
+  });
+
+  if (!apptResult.invoiceId) {
+    throw new Error("Expected invoiceId to be created on appointment booking!");
+  }
+  console.log(`  ✓ Appointment created (ID=${apptResult.appointment.id}) with generated Invoice ID: ${apptResult.invoiceId}`);
+
+  // Fetch documents for client and verify invoice matching query
+  const allClientDocs = getStoredClientDocuments();
+  const matchedInvoiceDoc = allClientDocs.find(
+    (d) =>
+      d.invoiceId === apptResult.invoiceId ||
+      (d.entityType === "invoice" && d.entityId === apptResult.invoiceId) ||
+      (apptResult.appointment.id &&
+        (d.appointmentId === String(apptResult.appointment.id) ||
+         d.notes?.includes(String(apptResult.appointment.id))))
+  );
+
+  if (!matchedInvoiceDoc) {
+    throw new Error(`Expected generated document to be linked to invoice ${apptResult.invoiceId} or appointment ${apptResult.appointment.id}, but none found!`);
+  }
+  console.log(`  ✓ Matched Invoice Document verified: "${matchedInvoiceDoc.name}"`);
+  console.log(`    → Document ID: ${matchedInvoiceDoc.id}`);
+  console.log(`    → Invoice ID: ${matchedInvoiceDoc.invoiceId}`);
+  console.log(`    → Appointment ID: ${matchedInvoiceDoc.appointmentId}`);
+  console.log(`    → Notes: "${matchedInvoiceDoc.notes}"`);
 
   console.log("\n🎉 ALL UNIT & INTEGRATION TESTS PASSED! 🎉\n");
 }

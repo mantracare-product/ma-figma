@@ -57,11 +57,12 @@ import {
 } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES, Process, Stage } from "../../../lib/useProcessStore";
-import { invoiceService } from "../../../lib/invoiceService";
+import { invoiceService, findInvoiceDocumentAutomation, generateInvoiceDocument } from "../../../lib/invoiceService";
 import { appendActivity, getActivity, subscribeToActivity } from "../../../lib/activityEngine";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import { AdminSectionDrawer } from "../../pages/admin/components/AdminSectionDrawer";
 import { getStoredAdvanceListById } from "../../../lib/advanceListStore";
+import { getStoredClientDocuments, CLIENT_DOCUMENTS_EVENT } from "../../../lib/clientDocumentsStore";
 
 export interface InvoiceDetailDrawerProps {
   isOpen: boolean;
@@ -74,7 +75,7 @@ const DEFAULT_INVOICE_SECTIONS: OverviewSection[] = [
   {
     id: "sec-inv-details",
     title: "Invoice Details",
-    description: "Issue date, due date, payment mode, totals, and balance",
+    description: "Issue date, due date, and payment mode",
     iconName: "file-text",
     source: "system",
     module: "invoice",
@@ -83,10 +84,6 @@ const DEFAULT_INVOICE_SECTIONS: OverviewSection[] = [
       "issue_date",
       "due_date",
       "payment_mode",
-      "total_amount",
-      "amount_paid",
-      "balance_due",
-      "client_credit",
     ],
   },
   {
@@ -197,7 +194,80 @@ export default function InvoiceDetailDrawer({
     return getClientCredit(liveInvoice.clientId);
   }, [liveInvoice, getClientCredit]);
 
+  // Dynamic invoice documents count
+  const [invoiceDocsCount, setInvoiceDocsCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (!liveInvoice) {
+      setInvoiceDocsCount(0);
+      return;
+    }
+    const updateCount = () => {
+      const allDocs = getStoredClientDocuments();
+      const cleanInvId = (liveInvoice.id || "").replace(/^#/, "").trim().toLowerCase();
+      const invClientName = (liveInvoice.clientName || "").trim().toLowerCase();
+
+      const count = allDocs.filter((d) => {
+        const dInvId = (d.invoiceId || "").replace(/^#/, "").trim().toLowerCase();
+        const dEntId = (d.entityId || "").replace(/^#/, "").trim().toLowerCase();
+        const dNotes = (d.notes || "").toLowerCase();
+        const dName = (d.name || "").toLowerCase();
+
+        // 1. Direct Invoice ID match
+        if (cleanInvId && (dInvId === cleanInvId || (d.entityType === "invoice" && dEntId === cleanInvId) || dNotes.includes(cleanInvId))) {
+          return true;
+        }
+
+        // 2. Appointment link match
+        if (liveInvoice.appointmentId) {
+          const cleanAppt = String(liveInvoice.appointmentId).trim();
+          if (d.appointmentId === cleanAppt || dNotes.includes(cleanAppt)) {
+            return true;
+          }
+        }
+
+        // 3. Client ID or Client Name match with Invoice/Billing Category
+        const isInvoiceCategory = d.category === "Invoices" || d.category === "Billing" || dNotes.includes("invoice") || dName.includes("invoice");
+        if (isInvoiceCategory) {
+          if (effectiveClientId && d.clientId === effectiveClientId) {
+            return true;
+          }
+          if (invClientName && (dName.includes(invClientName) || dNotes.includes(invClientName))) {
+            return true;
+          }
+        }
+
+        return false;
+      }).length;
+
+      if (count === 0 && liveInvoice) {
+        try {
+          const docRule = findInvoiceDocumentAutomation(liveInvoice.processId);
+          const autoDoc = generateInvoiceDocument(liveInvoice, docRule?.params);
+          if (autoDoc) {
+            setInvoiceDocsCount(1);
+            return;
+          }
+        } catch (err) {
+          console.warn("[InvoiceDetailDrawer] Auto-heal document generation error:", err);
+        }
+      }
+
+      setInvoiceDocsCount(count);
+    };
+
+    updateCount();
+    window.addEventListener(CLIENT_DOCUMENTS_EVENT, updateCount);
+    window.addEventListener("storage", updateCount);
+    return () => {
+      window.removeEventListener(CLIENT_DOCUMENTS_EVENT, updateCount);
+      window.removeEventListener("storage", updateCount);
+    };
+  }, [liveInvoice?.id, liveInvoice?.appointmentId, effectiveClientId]);
+
   // Overview Sections & Fields State
+  const REMOVED_INVOICE_FIELDS = new Set(["total_amount", "amount_paid", "balance_due", "client_credit"]);
+
   const storageSectionKey = `mantra_inv_sections_layout`;
   const [invoiceSections, setInvoiceSections] = useState<OverviewSection[]>(() => {
     try {
@@ -205,8 +275,13 @@ export default function InvoiceDetailDrawer({
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          const filtered = parsed.filter((s: OverviewSection) => s.id !== "sec-inv-client");
-          return filtered.length > 0 ? filtered : DEFAULT_INVOICE_SECTIONS;
+          const cleaned = parsed
+            .filter((s: OverviewSection) => s.id !== "sec-inv-client")
+            .map((s) => ({
+              ...s,
+              fieldKeys: (s.fieldKeys || []).filter((k) => !REMOVED_INVOICE_FIELDS.has(k)),
+            }));
+          return cleaned.length > 0 ? cleaned : DEFAULT_INVOICE_SECTIONS;
         }
       }
     } catch {}
@@ -214,12 +289,37 @@ export default function InvoiceDetailDrawer({
   });
 
   const handleSectionsChange = (newSections: OverviewSection[]) => {
-    const filtered = newSections.filter((s) => s.id !== "sec-inv-client");
-    setInvoiceSections(filtered);
+    const cleaned = newSections
+      .filter((s) => s.id !== "sec-inv-client")
+      .map((s) => ({
+        ...s,
+        fieldKeys: (s.fieldKeys || []).filter((k) => !REMOVED_INVOICE_FIELDS.has(k)),
+      }));
+    setInvoiceSections(cleaned);
     try {
-      localStorage.setItem(storageSectionKey, JSON.stringify(filtered));
+      localStorage.setItem(storageSectionKey, JSON.stringify(cleaned));
     } catch {}
   };
+
+  // Ensure any persisted layout in localStorage is sanitized of the 4 removed fields
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageSectionKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed
+            .filter((s: OverviewSection) => s.id !== "sec-inv-client")
+            .map((s) => ({
+              ...s,
+              fieldKeys: (s.fieldKeys || []).filter((k) => !REMOVED_INVOICE_FIELDS.has(k)),
+            }));
+          localStorage.setItem(storageSectionKey, JSON.stringify(cleaned));
+          setInvoiceSections(cleaned);
+        }
+      }
+    } catch {}
+  }, []);
 
   // Field values mapping
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
@@ -751,7 +851,7 @@ export default function InvoiceDetailDrawer({
           {(
             [
               { id: "overview", label: "Overview", icon: <FileText className="w-3.5 h-3.5" /> },
-              { id: "documents", label: "Documents", icon: <FileCheck className="w-3.5 h-3.5" />, count: 1 },
+              { id: "documents", label: "Documents", icon: <FileCheck className="w-3.5 h-3.5" />, count: invoiceDocsCount },
               { id: "payments", label: "Payments", icon: <Wallet className="w-3.5 h-3.5" />, count: settledPayments.length },
             ] as const
           ).map((tab) => {
