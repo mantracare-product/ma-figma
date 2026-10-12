@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
+import { DataExportModal } from "../components/common/DataExportModal";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
@@ -3846,222 +3847,30 @@ export default function Clients() {
             </>
           )}
 
-          {/* Export Clients Modal (matching Screenshot 2) */}
-          {showExportModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              {/* Backdrop */}
-              <div
-                className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-fade-in"
-                onClick={() => setShowExportModal(false)}
-              />
-
-              {/* Modal Box */}
-              <div className="relative bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 space-y-6 z-10 animate-scale-up">
-                {/* Header */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold text-slate-900 leading-tight">Export Clients</h2>
-                    <p className="text-xs text-slate-500 mt-1">Choose your preferred export format:</p>
-                  </div>
-                  <button
-                    onClick={() => setShowExportModal(false)}
-                    className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Format selection cards */}
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Excel (.xlsx) Card */}
-                  <div
-                    onClick={() => setExportFormat("xlsx")}
-                    className={`p-4 rounded-2xl cursor-pointer transition-all ${
-                      exportFormat === "xlsx"
-                        ? "border-2 border-blue-500 bg-blue-50/20 shadow-xs"
-                        : "border border-slate-200 bg-white hover:border-slate-300 shadow-2xs"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileSpreadsheet className="w-5 h-5 text-blue-600 shrink-0" />
-                      <span className="font-bold text-sm text-slate-900">Excel (.xlsx)</span>
-                    </div>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      Batch export with live progress, ETA, and pause controls.
-                    </p>
-                  </div>
-
-                  {/* CSV (.csv) Card */}
-                  <div
-                    onClick={() => setExportFormat("csv")}
-                    className={`p-4 rounded-2xl cursor-pointer transition-all ${
-                      exportFormat === "csv"
-                        ? "border-2 border-blue-500 bg-blue-50/20 shadow-xs"
-                        : "border border-slate-200 bg-white hover:border-slate-300 shadow-2xs"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileText className="w-5 h-5 text-slate-600 shrink-0" />
-                      <span className="font-bold text-sm text-slate-900">CSV (.csv)</span>
-                    </div>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      Download entire dataset in one single file.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Export Fields Selection */}
-                <div className="space-y-3 pt-2 border-t border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                      Export Data Fields
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="exportFieldsMode"
-                          checked={exportFieldsMode === "all"}
-                          onChange={() => setExportFieldsMode("all")}
-                          className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="font-medium">All Fields</span>
-                      </label>
-                      <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="exportFieldsMode"
-                          checked={exportFieldsMode === "selected"}
-                          onChange={() => setExportFieldsMode("selected")}
-                          className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span className="font-medium">Select Specific Fields</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* If specific fields selected */}
-                  {exportFieldsMode === "selected" && (
-                    <div className="p-3 bg-slate-50/70 border border-slate-200 rounded-xl space-y-2 max-h-48 overflow-y-auto animate-fade-in">
-                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 text-xs">
-                        <span className="text-slate-500 font-medium">
-                          {exportSelectedFields.length} of {allExportableFields.length} selected
-                        </span>
-                        <div className="flex items-center gap-2 text-xs">
-                          <button
-                            type="button"
-                            onClick={() => setExportSelectedFields([...allExportableFields])}
-                            className="text-blue-600 hover:underline font-semibold text-[11px]"
-                          >
-                            Select All
-                          </button>
-                          <span className="text-slate-300">|</span>
-                          <button
-                            type="button"
-                            onClick={() => setExportSelectedFields([])}
-                            className="text-blue-600 hover:underline font-semibold text-[11px]"
-                          >
-                            Clear
-                          </button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        {allExportableFields.map((field) => {
-                          const isChecked = exportSelectedFields.includes(field);
-                          return (
-                            <label
-                              key={field}
-                              className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-white cursor-pointer transition-colors"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setExportSelectedFields([...exportSelectedFields, field]);
-                                  } else {
-                                    setExportSelectedFields(exportSelectedFields.filter(f => f !== field));
-                                  }
-                                }}
-                                className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="text-slate-700 font-medium">{field}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer Buttons */}
-                <div className="flex items-center justify-end gap-3 pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowExportModal(false)}
-                    className="rounded-xl px-5 py-2.5 text-xs font-semibold"
-                  >
-                    Cancel
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const fieldsToExport = exportFieldsMode === "all" ? allExportableFields : exportSelectedFields;
-                      if (fieldsToExport.length === 0) {
-                        toast.error("Please select at least one field to export");
-                        return;
-                      }
-
-                      // Create CSV or format download
-                      const headers = fieldsToExport.join(",");
-                      const rows = clients.map(c => {
-                        return fieldsToExport.map(field => {
-                          let val = "";
-                          switch (field) {
-                            case "Name": val = c.name; break;
-                            case "Email": val = c.email; break;
-                            case "Phone": val = c.phone; break;
-                            case "Status": val = c.status; break;
-                            case "Processes": val = (c.processes || []).join("; "); break;
-                            case "Stage": val = c.stage; break;
-                            case "Responsible": val = c.responsible; break;
-                            case "Last Contact": val = c.lastContact; break;
-                            case "Created On": val = "2024-04-01"; break;
-                            case "Location": val = c.location || ""; break;
-                            case "Company": val = c.companyName || ""; break;
-                            case "Job Position": val = c.jobPosition || ""; break;
-                            default: val = "";
-                          }
-                          return `"${(val || "").replace(/"/g, '""')}"`;
-                        }).join(",");
-                      });
-
-                      const csvContent = [headers, ...rows].join("\n");
-                      const blob = new Blob([csvContent], {
-                        type: exportFormat === "xlsx"
-                          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                          : "text/csv;charset=utf-8;",
-                      });
-                      const url = URL.createObjectURL(blob);
-                      const link = document.createElement("a");
-                      link.setAttribute("href", url);
-                      link.setAttribute("download", `clients_export_${new Date().toISOString().split("T")[0]}.${exportFormat}`);
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      URL.revokeObjectURL(url);
-
-                      toast.success(`Clients exported successfully as ${exportFormat.toUpperCase()}`);
-                      setShowExportModal(false);
-                    }}
-                    className="bg-[#1E293B] hover:bg-[#0F172A] text-white px-6 py-2.5 rounded-xl font-semibold text-xs transition-colors shadow-sm"
-                  >
-                    Start Export
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Unified DataExportModal */}
+          <DataExportModal
+            isOpen={showExportModal}
+            onClose={() => setShowExportModal(false)}
+            title="Export Clients"
+            subtitle="Export client database records with selected fields"
+            data={clients}
+            filenamePrefix="clients"
+            dateFieldKey="lastContact"
+            allFields={[
+              { key: "name", label: "Name", getValue: (c) => c.name },
+              { key: "email", label: "Email", getValue: (c) => c.email },
+              { key: "phone", label: "Phone", getValue: (c) => c.phone },
+              { key: "status", label: "Status", getValue: (c) => c.status },
+              { key: "processes", label: "Processes", getValue: (c) => (c.processes || []).join("; ") },
+              { key: "stage", label: "Stage", getValue: (c) => c.stage },
+              { key: "responsible", label: "Responsible", getValue: (c) => c.responsible || "" },
+              { key: "lastContact", label: "Last Contact", getValue: (c) => c.lastContact || "" },
+              { key: "location", label: "Location", getValue: (c) => c.location || "" },
+              { key: "companyName", label: "Company", getValue: (c) => c.companyName || "" },
+              { key: "jobPosition", label: "Job Position", getValue: (c) => c.jobPosition || "" },
+              { key: "country", label: "Country", getValue: (c) => c.country || "" },
+            ]}
+          />
 
           {/* Schedule Call Drawer */}
           {showScheduleCallModal && (

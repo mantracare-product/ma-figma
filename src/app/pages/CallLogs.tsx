@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
+import { DataExportModal } from "../components/common/DataExportModal";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
@@ -558,6 +559,7 @@ export default function CallLogs() {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showColumnToggle, setShowColumnToggle] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [selectedProcessFilter, setSelectedProcessFilter] = useState<string | null>(null);
   const [showProcessesDropdown, setShowProcessesDropdown] = useState(false);
@@ -1298,6 +1300,7 @@ export default function CallLogs() {
           searchPlaceholder="Search call logs..."
           showSearchModal={showSearchModal}
           onSearchModalToggle={setShowSearchModal}
+          onExport={() => setShowExportModal(true)}
           primaryAction={{
             label: "Schedule Call",
             icon: <CalendarClock className="w-3.5 h-3.5" />,
@@ -1678,6 +1681,35 @@ export default function CallLogs() {
                       </div>
             </div>
           }
+        />
+
+        {/* Unified DataExportModal */}
+        <DataExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          title="Export Call Logs"
+          subtitle="Export inbound & outbound calls, recordings, stages, and metrics"
+          data={callLogs}
+          filenamePrefix="call_logs"
+          dateFieldKey="date"
+          dateLabel="Call Date"
+          statusFieldKey="status"
+          statusLabel="Call Status"
+          statusOptions={[
+            { label: "Completed", value: "Completed" },
+            { label: "Failed", value: "Failed" },
+            { label: "Pending", value: "Pending" },
+          ]}
+          allFields={[
+            { key: "id", label: "Call ID", getValue: (c) => c.id },
+            { key: "client", label: "Client Name", getValue: (c) => c.client },
+            { key: "type", label: "Call Type", getValue: (c) => c.type },
+            { key: "status", label: "Status", getValue: (c) => c.status },
+            { key: "process", label: "Process", getValue: (c) => c.process },
+            { key: "currentStage", label: "Stage", getValue: (c) => c.currentStage },
+            { key: "duration", label: "Duration", getValue: (c) => c.duration },
+            { key: "date", label: "Date & Time", getValue: (c) => c.date },
+          ]}
         />
 
         {/* Add Field Modal */}

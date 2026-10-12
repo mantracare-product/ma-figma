@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
+import { DataExportModal } from "../components/common/DataExportModal";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import DrawerShell from "../components/ui/DrawerShell";
@@ -90,6 +91,7 @@ export default function Services() {
   const [showHelp, setShowHelp] = useState(false);
   const [showAddDrawer, setShowAddDrawer] = useState(false);
   const [showEditDrawer, setShowEditDrawer] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [form, setForm] = useState({ ...INIT_FORM, category: "General" });
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
@@ -516,11 +518,33 @@ export default function Services() {
               ],
             },
           ]}
+          onExport={() => setShowExportModal(true)}
           primaryAction={{
             label: "Add Product",
             icon: <Plus className="w-4 h-4" />,
             onClick: openAdd,
           }}
+        />
+
+        {/* Unified DataExportModal */}
+        <DataExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          title="Export Products & Services"
+          subtitle="Export catalog items, pricing, CPT codes, and categories"
+          data={services}
+          filenamePrefix="products_services"
+          allFields={[
+            { key: "name", label: "Product / Service Name", getValue: (s) => s.name },
+            { key: "category", label: "Category", getValue: (s) => s.category },
+            { key: "price", label: "Price", getValue: (s) => `${getCurrencySymbol(s.currency)}${s.price.toFixed(2)}` },
+            { key: "duration", label: "Duration (mins)", getValue: (s) => `${s.duration} mins` },
+            { key: "cptCode", label: "CPT Code", getValue: (s) => s.cptCode || "" },
+            { key: "description", label: "Description", getValue: (s) => s.description || "" },
+            { key: "tax", label: "Tax (%)", getValue: (s) => (s.tax ? `${s.tax}%` : "0%") },
+            { key: "active", label: "Status", getValue: (s) => (s.isActive !== false ? "Active" : "Inactive") },
+            { key: "color", label: "Color Tag", getValue: (s) => s.color || "" },
+          ]}
         />
 
 

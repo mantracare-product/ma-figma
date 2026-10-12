@@ -14,6 +14,7 @@ import { TelephonyIntegrationPanel } from "../components/telephony/TelephonyInte
 import { getStoredWhatsAppNumbers, saveStoredWhatsAppNumbers, WHATSAPP_NUMBERS_EVENT, WhatsAppNumberEntry } from "../../lib/useWhatsAppNumbers";
 import { SelectFieldsModal } from "../components/help/FieldManager";
 import PageTopBar from "../components/layout/PageTopBar";
+import { DataExportModal } from "../components/common/DataExportModal";
 import { AdminFieldDrawer } from "./admin/components/AdminFieldDrawer";
 import { AdminSectionDrawer } from "./admin/components/AdminSectionDrawer";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
@@ -22,8 +23,8 @@ import MemberLocationScheduleTab from "../components/settings/MemberLocationSche
 import ReceptionSettingsTab from "../components/reception/ReceptionSettingsTab";
 import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
 import { getStoredServices, updateService, onServicesChanged, Service } from "../../lib/servicesStore";
-import { getStoredVoices, saveStoredVoices, VoiceConfigItem, VOICE_STORE_EVENT } from "../../lib/useVoiceStore";
-import { getStoredAIModels, toggleAIModelActive, AI_MODELS_STORE_EVENT, AIModelConfig } from "../../lib/aiModelsStore";
+import { getStoredVoices, saveStoredVoices, toggleClientVoiceStatus, VoiceConfigItem, VOICE_STORE_EVENT } from "../../lib/useVoiceStore";
+import { getStoredAIModels, toggleClientAIModelActive, AI_MODELS_STORE_EVENT, AIModelConfig } from "../../lib/aiModelsStore";
 import {
   Save,
   Square,
@@ -102,6 +103,7 @@ import {
   ArrowRight,
   PenTool,
   Eraser,
+  RotateCcw,
 } from "lucide-react";
 import { useOrganization } from "../context/OrganizationContext";
 import {
@@ -940,6 +942,7 @@ export default function Settings() {
   const [auditLogPage, setAuditLogPage] = useState(1);
   const [auditLogSearchQuery, setAuditLogSearchQuery] = useState("");
   const [showRequestBodyModal, setShowRequestBodyModal] = useState(false);
+  const [showAuditExportModal, setShowAuditExportModal] = useState(false);
   const [selectedAuditLog, setSelectedAuditLog] = useState<any>(null);
 
   // Security State
@@ -3225,14 +3228,13 @@ export default function Settings() {
   };
 
   const handleToggleVoice = (voiceId: number, voiceName: string) => {
-    updateVoiceTableData((prev) =>
-      prev.map((v) => (v.id === voiceId ? { ...v, status: !v.status } : v))
-    );
-    const target = voiceTableData.find((v) => v.id === voiceId);
-    if (!target?.status) {
-      toast.success(`${voiceName} voice activated`);
+    const updated = toggleClientVoiceStatus(voiceId);
+    setVoiceTableData(updated);
+    const target = updated.find((v) => v.id === voiceId);
+    if (target?.clientEnabled !== false) {
+      toast.success(`${voiceName} voice activated (now default in Process Automations)`);
     } else {
-      toast.info(`${voiceName} voice deactivated`);
+      toast.info(`${voiceName} voice deactivated (disabled in Process Automations)`);
     }
   };
 
@@ -3249,13 +3251,13 @@ export default function Settings() {
   }, []);
 
   const handleToggleModel = (id: string, name: string) => {
-    const updated = toggleAIModelActive(id);
+    const updated = toggleClientAIModelActive(id);
     setAiModels(updated);
     const target = updated.find((m) => m.id === id);
-    if (target?.isActive) {
-      toast.success(`${name} activated (now visible in Process AI Agent settings)`);
+    if (target?.clientEnabled !== false) {
+      toast.success(`${name} activated (now default in Process Automations)`);
     } else {
-      toast.info(`${name} deactivated (hidden from Process AI Agent settings)`);
+      toast.info(`${name} deactivated (disabled in Process Automations)`);
     }
   };
 
@@ -3317,31 +3319,57 @@ export default function Settings() {
 
   const filteredAIModels = useMemo(() => {
     return aiModels.filter((m) => {
+      // Only display models activated by Admin
+      if (!m.isActive) return false;
       const q = voiceSearchQuery.trim().toLowerCase();
-      const matchesSearch = !q || m.name.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q);
+      const matchesSearch = !q || m.name.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q) || m.description.toLowerCase().includes(q);
       const matchesProvider = modelProviderFilter === "All Providers" || m.provider.toLowerCase() === modelProviderFilter.toLowerCase();
-      const matchesStatus = modelStatusFilter === "All Status" || (modelStatusFilter === "Active" ? m.isActive : !m.isActive);
+      const matchesStatus =
+        modelStatusFilter === "All Status" ||
+        (modelStatusFilter === "Active" ? m.clientEnabled !== false : m.clientEnabled === false);
       return matchesSearch && matchesProvider && matchesStatus;
     });
   }, [aiModels, voiceSearchQuery, modelProviderFilter, modelStatusFilter]);
 
   const filteredVoiceTableData = useMemo(() => {
     return voiceTableData.filter((voice) => {
+      // Only display voices activated by Admin
+      if (!voice.status) return false;
       const q = voiceSearchQuery.trim().toLowerCase();
       const role = VOICE_ROLES[voice.name] || "";
       const matchesSearch =
         !q ||
         voice.name.toLowerCase().includes(q) ||
         role.toLowerCase().includes(q) ||
+        (voice.language && voice.language.toLowerCase().includes(q)) ||
+        (voice.accent && voice.accent.toLowerCase().includes(q)) ||
         voice.gender.toLowerCase().includes(q) ||
         voice.country.toLowerCase().includes(q) ||
         voice.tone.toLowerCase().includes(q);
 
-      const matchesGender = voiceFilters.gender === "All Genders" || voice.gender.toLowerCase() === voiceFilters.gender.toLowerCase();
-      const matchesCountry = voiceFilters.country === "All Countries" || voice.country.toLowerCase() === voiceFilters.country.toLowerCase();
-      const matchesTone = voiceFilters.tone === "All Tones" || voice.tone.toLowerCase() === voiceFilters.tone.toLowerCase();
+      const matchesLanguage =
+        !voiceFilters.language ||
+        voiceFilters.language === "All Languages" ||
+        (voice.language && voice.language.toLowerCase() === voiceFilters.language.toLowerCase());
 
-      return matchesSearch && matchesGender && matchesCountry && matchesTone;
+      const matchesGender =
+        !voiceFilters.gender ||
+        voiceFilters.gender === "All Genders" ||
+        voice.gender.toLowerCase() === voiceFilters.gender.toLowerCase();
+
+      const matchesAccent =
+        !voiceFilters.country ||
+        voiceFilters.country === "All Accents" ||
+        voiceFilters.country === "All Countries" ||
+        (voice.accent && voice.accent.toLowerCase() === voiceFilters.country.toLowerCase()) ||
+        voice.country.toLowerCase() === voiceFilters.country.toLowerCase();
+
+      const matchesTone =
+        !voiceFilters.tone ||
+        voiceFilters.tone === "All Tones" ||
+        voice.tone.toLowerCase() === voiceFilters.tone.toLowerCase();
+
+      return matchesSearch && matchesLanguage && matchesGender && matchesAccent && matchesTone;
     });
   }, [voiceTableData, voiceSearchQuery, voiceFilters]);
 
@@ -3406,6 +3434,8 @@ export default function Settings() {
         id: newId,
         name: voice.name,
         gender: voice.gender,
+        language: "English",
+        accent: getNationality(voice.country) || "American",
         country: voice.country,
         tone: voice.tone,
         age: voice.age,
@@ -6411,6 +6441,125 @@ export default function Settings() {
                   ]}
                   activeMode={voiceConfigSubTab}
                   onModeChange={(mode) => setVoiceConfigSubTab(mode as "models" | "voices")}
+                  secondaryActions={
+                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                      {voiceConfigSubTab === "voices" ? (
+                        <>
+                          {/* Gender Filter */}
+                          <div className="relative">
+                            <select
+                              value={voiceFilters.gender}
+                              onChange={(e) => setVoiceFilters((prev) => ({ ...prev, gender: e.target.value }))}
+                              className="h-[36px] pl-3 pr-7 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer shadow-2xs transition-colors"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <option value="All Genders">Gender: All</option>
+                              <option value="Female">Female</option>
+                              <option value="Male">Male</option>
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+
+                          {/* Accent Filter */}
+                          <div className="relative">
+                            <select
+                              value={voiceFilters.country}
+                              onChange={(e) => setVoiceFilters((prev) => ({ ...prev, country: e.target.value }))}
+                              className="h-[36px] pl-3 pr-7 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer shadow-2xs transition-colors"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <option value="All Accents">Accent: All</option>
+                              <option value="American">American</option>
+                              <option value="British">British</option>
+                              <option value="Australian">Australian</option>
+                              <option value="Canadian">Canadian</option>
+                              <option value="Irish">Irish</option>
+                              <option value="European">European</option>
+                              <option value="Latin American">Latin American</option>
+                              <option value="Indian">Indian</option>
+                              <option value="East Asian">East Asian</option>
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+
+                          {/* Language Filter */}
+                          <div className="relative">
+                            <select
+                              value={voiceFilters.language}
+                              onChange={(e) => setVoiceFilters((prev) => ({ ...prev, language: e.target.value }))}
+                              className="h-[36px] pl-3 pr-7 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer shadow-2xs transition-colors"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <option value="All Languages">Language: All</option>
+                              <option value="English">English</option>
+                              <option value="Spanish">Spanish</option>
+                              <option value="French">French</option>
+                              <option value="German">German</option>
+                              <option value="Japanese">Japanese</option>
+                              <option value="Hindi">Hindi</option>
+                              <option value="Portuguese">Portuguese</option>
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* Model Provider Filter */}
+                          <div className="relative">
+                            <select
+                              value={modelProviderFilter}
+                              onChange={(e) => setModelProviderFilter(e.target.value)}
+                              className="h-[36px] pl-3 pr-7 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer shadow-2xs transition-colors"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <option value="All Providers">Provider: All</option>
+                              <option value="Google">Google</option>
+                              <option value="OpenAI">OpenAI</option>
+                              <option value="Anthropic">Anthropic</option>
+                              <option value="DeepSeek">DeepSeek</option>
+                              <option value="Meta">Meta</option>
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+
+                          {/* Model Status Filter */}
+                          <div className="relative">
+                            <select
+                              value={modelStatusFilter}
+                              onChange={(e) => setModelStatusFilter(e.target.value)}
+                              className="h-[36px] pl-3 pr-7 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer shadow-2xs transition-colors"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <option value="All Status">Status: All</option>
+                              <option value="Active">Active</option>
+                              <option value="Inactive">Inactive</option>
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          </div>
+                        </>
+                      )}
+
+                      {/* Reset Filters button if any filter is active */}
+                      {((voiceConfigSubTab === "voices" && (voiceFilters.gender !== "All Genders" || (voiceFilters.country !== "All Accents" && voiceFilters.country !== "All Countries") || voiceFilters.language !== "All Languages" || voiceSearchQuery)) ||
+                        (voiceConfigSubTab === "models" && (modelProviderFilter !== "All Providers" || modelStatusFilter !== "All Status" || voiceSearchQuery))) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVoiceSearchQuery("");
+                            setModelProviderFilter("All Providers");
+                            setModelStatusFilter("All Status");
+                            setVoiceFilters({ language: "All Languages", tone: "All Tones", gender: "All Genders", age: "All Ages", country: "All Accents" });
+                          }}
+                          className="h-[36px] px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 shadow-2xs"
+                          title="Reset all filters"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Reset</span>
+                        </button>
+                      )}
+                    </div>
+                  }
                   filterFields={[
                     ...(voiceConfigSubTab === "models"
                       ? [
@@ -6444,6 +6593,23 @@ export default function Settings() {
                         ]
                       : [
                           {
+                            id: "language",
+                            label: "Language",
+                            type: "select" as const,
+                            value: voiceFilters.language,
+                            onChange: (val: any) => setVoiceFilters((prev) => ({ ...prev, language: val || "All Languages" })),
+                            options: [
+                              { label: "All Languages", value: "All Languages" },
+                              { label: "English", value: "English" },
+                              { label: "Spanish", value: "Spanish" },
+                              { label: "French", value: "French" },
+                              { label: "German", value: "German" },
+                              { label: "Japanese", value: "Japanese" },
+                              { label: "Hindi", value: "Hindi" },
+                              { label: "Portuguese", value: "Portuguese" },
+                            ],
+                          },
+                          {
                             id: "gender",
                             label: "Gender",
                             type: "select" as const,
@@ -6456,18 +6622,22 @@ export default function Settings() {
                             ],
                           },
                           {
-                            id: "country",
+                            id: "accent",
                             label: "Accent",
                             type: "select" as const,
                             value: voiceFilters.country,
-                            onChange: (val: any) => setVoiceFilters((prev) => ({ ...prev, country: val || "All Countries" })),
+                            onChange: (val: any) => setVoiceFilters((prev) => ({ ...prev, country: val || "All Accents" })),
                             options: [
-                              { label: "All Accents", value: "All Countries" },
-                              { label: "USA", value: "USA" },
-                              { label: "UK", value: "UK" },
-                              { label: "Australia", value: "Australia" },
-                              { label: "Canada", value: "Canada" },
-                              { label: "Ireland", value: "Ireland" },
+                              { label: "All Accents", value: "All Accents" },
+                              { label: "American", value: "American" },
+                              { label: "British", value: "British" },
+                              { label: "Australian", value: "Australian" },
+                              { label: "Canadian", value: "Canadian" },
+                              { label: "Irish", value: "Irish" },
+                              { label: "European", value: "European" },
+                              { label: "Latin American", value: "Latin American" },
+                              { label: "Indian", value: "Indian" },
+                              { label: "East Asian", value: "East Asian" },
                             ],
                           },
                           {
@@ -6492,7 +6662,7 @@ export default function Settings() {
                     setVoiceSearchQuery("");
                     setModelProviderFilter("All Providers");
                     setModelStatusFilter("All Status");
-                    setVoiceFilters({ language: "All Languages", tone: "All Tones", gender: "All Genders", age: "All Ages", country: "All Countries" });
+                    setVoiceFilters({ language: "All Languages", tone: "All Tones", gender: "All Genders", age: "All Ages", country: "All Accents" });
                   }}
                 />
 
@@ -6509,11 +6679,7 @@ export default function Settings() {
                       {filteredAIModels.map((model) => (
                         <div
                           key={model.id}
-                          className={`bg-white rounded-2xl border transition-all duration-200 p-4 flex items-center justify-between gap-3 shadow-2xs ${
-                            model.isActive
-                              ? "border-[#E2E8F0] hover:border-slate-300 hover:shadow-xs"
-                              : "border-gray-200/70 opacity-70"
-                          }`}
+                          className="bg-white rounded-2xl border border-[#E2E8F0] hover:border-slate-300 hover:shadow-xs transition-all duration-200 p-4 flex items-center justify-between gap-3 shadow-2xs"
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             {renderProviderLogo(model.provider)}
@@ -6529,18 +6695,18 @@ export default function Settings() {
                                 className="text-xs text-gray-500 font-medium truncate mt-0.5"
                                 style={{ fontFamily: 'DM Sans, sans-serif' }}
                               >
-                                {model.provider}
+                                {model.provider} · {model.contextWindow}
                               </p>
                             </div>
                           </div>
 
-                          {/* Clean Active Toggle Switch */}
+                          {/* Client Process Active Toggle Switch */}
                           <div className="flex items-center shrink-0">
                             <label className="relative inline-flex items-center cursor-pointer">
                               <input
                                 type="checkbox"
                                 className="sr-only peer"
-                                checked={model.isActive}
+                                checked={model.clientEnabled !== false}
                                 onChange={() => handleToggleModel(model.id, model.name)}
                               />
                               <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
@@ -6553,7 +6719,7 @@ export default function Settings() {
                 )}
 
                 {/* ======================================================== */}
-                {/* SECTION 2: AI VOICES (20 Voices, Direct Cards with Toggle) */}
+                {/* SECTION 2: AI VOICES (Direct Cards with Audio Preview & Toggle) */}
                 {/* ======================================================== */}
                 {voiceConfigSubTab === "voices" && (
                   filteredVoiceTableData.length === 0 ? (
@@ -6570,9 +6736,7 @@ export default function Settings() {
                             className={`bg-white rounded-2xl border transition-all duration-200 p-3.5 sm:p-4 flex items-center justify-between gap-3 group shadow-2xs ${
                               isPlaying
                                 ? "border-blue-500 shadow-xs ring-2 ring-blue-100"
-                                : voice.status
-                                ? "border-[#E2E8F0] hover:border-slate-300 hover:shadow-xs"
-                                : "border-gray-200/70 opacity-70"
+                                : "border-[#E2E8F0] hover:border-slate-300 hover:shadow-xs"
                             }`}
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -6594,46 +6758,46 @@ export default function Settings() {
                               </button>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <h4
-                                    className="text-sm font-bold text-gray-900 truncate"
-                                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                                  >
-                                    {voice.name} - {VOICE_ROLES[voice.name] || `${voice.tone} Assistant`}
-                                  </h4>
-                                  {isPlaying && (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 shrink-0">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
-                                      Playing
-                                    </span>
-                                  )}
-                                </div>
-                                <p
-                                  className="text-xs text-gray-500 font-medium truncate mt-0.5"
-                                  style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                <h4
+                                  className="text-sm font-bold text-gray-900 truncate"
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
-                                  {getNationality(voice.country)} · {voice.gender} · English
-                                </p>
+                                  {voice.name} - {VOICE_ROLES[voice.name] || `${voice.tone} Assistant`}
+                                </h4>
+                                {isPlaying && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 shrink-0">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
+                                    Playing
+                                  </span>
+                                )}
                               </div>
-                            </div>
-
-                            {/* Active Toggle Switch for Voice */}
-                            <div className="flex items-center shrink-0 pl-1">
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  className="sr-only peer"
-                                  checked={voice.status}
-                                  onChange={() => handleToggleVoice(voice.id, voice.name)}
-                                />
-                                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                              </label>
+                              <p
+                                className="text-xs text-gray-500 font-medium truncate mt-0.5"
+                                style={{ fontFamily: 'DM Sans, sans-serif' }}
+                              >
+                                {voice.language || "English"} · {voice.accent || getNationality(voice.country)} · {voice.gender} · {voice.tone}
+                              </p>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )
-                )}
+
+                          {/* Client Process Active Toggle Switch */}
+                          <div className="flex items-center shrink-0 pl-1">
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={voice.clientEnabled !== false}
+                                onChange={() => handleToggleVoice(voice.id, voice.name)}
+                              />
+                              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              )}
               </div>
             )}
 
@@ -7159,7 +7323,7 @@ export default function Settings() {
                   onSearchChange={setAuditLogSearchQuery}
                   searchPlaceholder="Search audit logs..."
                   showFilterToggle={true}
-                  onExport={() => toast.success("Exporting audit logs...")}
+                  onExport={() => setShowAuditExportModal(true)}
                   primaryAction={{
                     label: "Refresh",
                     icon: (
@@ -7169,6 +7333,29 @@ export default function Settings() {
                     ),
                     onClick: () => toast.success("Audit logs refreshed"),
                   }}
+                />
+
+                {/* Unified DataExportModal for Audit Logs */}
+                <DataExportModal
+                  isOpen={showAuditExportModal}
+                  onClose={() => setShowAuditExportModal(false)}
+                  title="Export Audit Logs"
+                  subtitle="Export user actions, security events, and system audit trail"
+                  data={auditLogs}
+                  filenamePrefix="audit_logs"
+                  dateFieldKey="time"
+                  dateLabel="Event Time"
+                  statusFieldKey="event"
+                  statusLabel="Event"
+                  allFields={[
+                    { key: "id", label: "ID", getValue: (l) => l.id },
+                    { key: "time", label: "Timestamp", getValue: (l) => l.time },
+                    { key: "event", label: "Event / Action", getValue: (l) => l.event },
+                    { key: "method", label: "Method", getValue: (l) => l.method },
+                    { key: "user", label: "User", getValue: (l) => l.user },
+                    { key: "agent", label: "Agent / Target", getValue: (l) => l.agent },
+                    { key: "ip", label: "IP Address", getValue: (l) => l.requestBody?.IPAddress || "" },
+                  ]}
                 />
 
                 {/* Audit Logs Table */}

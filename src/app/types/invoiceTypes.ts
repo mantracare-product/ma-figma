@@ -14,6 +14,7 @@ export interface InvoiceLineItem {
 
 export interface ClientInvoice {
   id: string;                 // e.g. "INV-CL-1042"
+  invoiceNumber?: string;     // alias/display identifier if provided
   clientId: string;
   clientName: string;         // denormalized for easy display
   clientEmail?: string;

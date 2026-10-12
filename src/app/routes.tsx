@@ -48,6 +48,7 @@ import PatientBookingScreen from "./pages/patient/PatientBookingScreen";
 import PatientPharmacyScreen from "./pages/patient/PatientPharmacyScreen";
 import PatientBillScreen from "./pages/patient/PatientBillScreen";
 import PatientPaymentScreen from "./pages/patient/PatientPaymentScreen";
+import AdminAIVoicesModels from "./pages/admin/AdminAIVoicesModels";
 
 export const router = createBrowserRouter([
   {
@@ -182,6 +183,9 @@ export const router = createBrowserRouter([
           { path: "process-template", Component: AdminProcessTemplates },
           { path: "automations", Component: AdminAutomations },
           { path: "automation", Component: AdminAutomations },
+          { path: "ai-voices-models", Component: AdminAIVoicesModels },
+          { path: "ai-voices", Component: AdminAIVoicesModels },
+          { path: "voice-config", Component: AdminAIVoicesModels },
           { path: "document-templates", Component: AdminDocumentTemplates },
           { path: "document-template", Component: AdminDocumentTemplates },
           { path: "users", Component: UserManagement },

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
+import { DataExportModal } from "../components/common/DataExportModal";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import { useInvoices } from "../context/InvoiceContext";
 import { ClientInvoice, InvoiceStatus } from "../types/invoiceTypes";
@@ -73,6 +74,7 @@ export default function Invoices() {
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [paymentModalInvoice, setPaymentModalInvoice] = useState<ClientInvoice | null>(null);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   
   // Selection state (matching Deals.tsx)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -392,6 +394,7 @@ export default function Invoices() {
               </button>
             </div>
           }
+          onExport={() => setShowExportModal(true)}
           primaryAction={{
             label: "Create Invoice",
             icon: <Plus className="w-3.5 h-3.5" />,
@@ -411,6 +414,39 @@ export default function Invoices() {
               <SettingsIcon className="w-4 h-4" />
             </button>
           }
+        />
+
+        {/* Unified DataExportModal */}
+        <DataExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          title="Export Invoices"
+          subtitle="Export your billing and payment records with date range and status filters"
+          data={invoices}
+          filenamePrefix="invoices"
+          dateFieldKey="createdAt"
+          dateLabel="Invoice Date"
+          statusFieldKey="status"
+          statusLabel="Payment Status"
+          statusOptions={[
+            { label: "Paid", value: "paid" },
+            { label: "Overdue", value: "overdue" },
+            { label: "Sent", value: "sent" },
+            { label: "Draft", value: "draft" },
+            { label: "Partial", value: "partial" },
+          ]}
+          allFields={[
+            { key: "invoiceNumber", label: "Invoice Number", getValue: (i) => i.invoiceNumber || i.id },
+            { key: "clientName", label: "Client Name", getValue: (i) => i.clientName },
+            { key: "clientEmail", label: "Client Email", getValue: (i) => i.clientEmail || "" },
+            { key: "status", label: "Status", getValue: (i) => i.status },
+            { key: "total", label: "Total Amount", getValue: (i) => `$${i.total.toFixed(2)}` },
+            { key: "amountPaid", label: "Amount Paid", getValue: (i) => `$${(i.amountPaid || 0).toFixed(2)}` },
+            { key: "balance", label: "Balance Due", getValue: (i) => `$${(i.total - (i.amountPaid || 0)).toFixed(2)}` },
+            { key: "dueDate", label: "Due Date", getValue: (i) => i.dueDate || "" },
+            { key: "createdAt", label: "Created Date", getValue: (i) => (i.createdAt ? i.createdAt.split("T")[0] : "") },
+            { key: "paidAt", label: "Paid Date", getValue: (i) => (i.paidAt ? i.paidAt.split("T")[0] : "") },
+          ]}
         />
 
         {/* View Mode: List View (Connected seamlessly to Toolbar) */}

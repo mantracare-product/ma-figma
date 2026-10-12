@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import DrawerShell from "../ui/DrawerShell";
 import { useNavigate } from "react-router";
 import {
@@ -158,6 +158,12 @@ export default function CallTriggerDrawer({
   const [activeAIModels, setActiveAIModels] = useState<AIModelConfig[]>(getActiveAIModels);
   const [configuredVoices, setConfiguredVoices] = useState<VoiceConfigItem[]>(getStoredVoices);
 
+  const activeConfiguredVoices = useMemo(() => {
+    return configuredVoices.filter(
+      (v) => (v.status === true || (v as any).status === "active") && v.clientEnabled !== false
+    );
+  }, [configuredVoices]);
+
   useEffect(() => {
     const handleVoiceUpdate = () => setConfiguredVoices(getStoredVoices());
     const handleModelUpdate = () => setActiveAIModels(getActiveAIModels());
@@ -172,6 +178,13 @@ export default function CallTriggerDrawer({
       window.removeEventListener("storage", handleModelUpdate);
     };
   }, []);
+
+  // Ensure stageVoice stays pointing to an enabled voice
+  useEffect(() => {
+    if (activeConfiguredVoices.length > 0 && !activeConfiguredVoices.some((v) => v.name === stageVoice)) {
+      setStageVoice(activeConfiguredVoices[0].name);
+    }
+  }, [activeConfiguredVoices, stageVoice]);
 
   // Transfer Call states
   const [transferCallEnabled, setTransferCallEnabled] = useState<boolean>(false);
@@ -208,7 +221,11 @@ export default function CallTriggerDrawer({
       setDetectVoicemail(current.detectVoicemail !== undefined ? current.detectVoicemail : true);
       setSelectedAIModel(current.aiModel || current.aiSettings?.platform || "Gemini 2.5 Flash");
       setStageVoiceSpeed(current.aiVoiceSpeed ?? current.aiSettings?.voiceSpeed ?? 1.0);
-      setStageVoice(current.aiVoice || current.aiSettings?.voice || "Nova");
+      const chosenVoice = current.aiVoice || current.aiSettings?.voice;
+      const validVoice = chosenVoice && activeConfiguredVoices.some((v) => v.name === chosenVoice)
+        ? chosenVoice
+        : (activeConfiguredVoices[0]?.name || chosenVoice || "Atlas");
+      setStageVoice(validVoice);
       setStageTone(current.aiTone || current.aiSettings?.tone || "Professional");
       setStageStyle(current.aiStyle || current.aiSettings?.style || "Balanced");
       setRetryRulesEnabled(current.retryRulesEnabled ?? false);
@@ -394,7 +411,11 @@ export default function CallTriggerDrawer({
     setDetectVoicemail(defaults.detectVoicemail !== undefined ? defaults.detectVoicemail : true);
     setSelectedAIModel(defaults.aiModel || defaults.aiSettings?.platform || "Gemini 2.5 Flash");
     setStageVoiceSpeed(defaults.aiVoiceSpeed ?? defaults.aiSettings?.voiceSpeed ?? 1.0);
-    setStageVoice(defaults.aiVoice || defaults.aiSettings?.voice || "Nova");
+    const chosenDefaultVoice = defaults.aiVoice || defaults.aiSettings?.voice;
+    const validDefault = chosenDefaultVoice && activeConfiguredVoices.some((v) => v.name === chosenDefaultVoice)
+      ? chosenDefaultVoice
+      : (activeConfiguredVoices[0]?.name || chosenDefaultVoice || "Atlas");
+    setStageVoice(validDefault);
     setStageTone(defaults.aiTone || defaults.aiSettings?.tone || "Professional");
     setStageStyle(defaults.aiStyle || defaults.aiSettings?.style || "Balanced");
     setRetryRulesEnabled(defaults.retryRulesEnabled ?? false);
@@ -1153,7 +1174,7 @@ export default function CallTriggerDrawer({
                         className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl appearance-none text-xs font-medium text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-6 cursor-pointer shadow-2xs"
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       >
-                        {configuredVoices.filter((v) => v.status === true || (v as any).status === "active").map((v) => (
+                        {activeConfiguredVoices.map((v) => (
                           <option key={v.id || v.name} value={v.name}>
                             {v.name} ({v.country}, {v.gender})
                           </option>

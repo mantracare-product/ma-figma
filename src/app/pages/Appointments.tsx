@@ -39,6 +39,7 @@ import { appendActivity } from "../../lib/activityEngine";
 import { logStageMove } from "../../lib/useAutomationStore";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
+import { DataExportModal } from "../components/common/DataExportModal";
 
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import AppointmentDetailDrawer from "../components/appointments/AppointmentDetailDrawer";
@@ -379,6 +380,7 @@ export default function Appointments() {
   const [providerAvailabilityFilter, setProviderAvailabilityFilter] = useState<string>("all");
   const [providerSpecialtyFilter, setProviderSpecialtyFilter] = useState<string>("all");
   const [providerLocationFilter, setProviderLocationFilter] = useState<string>("all");
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const { clients: liveClients } = useClients();
 
@@ -1112,6 +1114,7 @@ export default function Appointments() {
                 ]
               : []),
           ]}
+          onExport={() => setShowExportModal(true)}
           primaryAction={{
             label: "Book Appointment",
             onClick: () => {
@@ -1139,6 +1142,41 @@ export default function Appointments() {
               <Settings className="w-4 h-4" />
             </button>
           }
+        />
+
+        {/* Unified DataExportModal */}
+        <DataExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          title="Export Appointments"
+          subtitle="Export scheduled, completed, and pending appointments with custom filters"
+          data={appointments}
+          filenamePrefix="appointments"
+          dateFieldKey="date"
+          dateLabel="Appointment Date"
+          statusFieldKey="status"
+          statusLabel="Appointment Status"
+          statusOptions={[
+            { label: "Scheduled", value: "scheduled" },
+            { label: "Completed", value: "completed" },
+            { label: "Cancelled", value: "cancelled" },
+            { label: "No-Show", value: "no-show" },
+            { label: "Pending Accept", value: "pending-accept" },
+          ]}
+          allFields={[
+            { key: "id", label: "Appointment ID", getValue: (a) => `apt-${a.id}` },
+            { key: "clientName", label: "Client Name", getValue: (a) => a.clientName },
+            { key: "clientEmail", label: "Client Email", getValue: (a) => a.clientEmail || "" },
+            { key: "clientPhone", label: "Client Phone", getValue: (a) => a.clientPhone || "" },
+            { key: "date", label: "Date", getValue: (a) => a.date },
+            { key: "time", label: "Time", getValue: (a) => a.time },
+            { key: "duration", label: "Duration (mins)", getValue: (a) => a.duration || 30 },
+            { key: "status", label: "Status", getValue: (a) => a.status },
+            { key: "title", label: "Title / Service", getValue: (a) => a.title || a.serviceName || "" },
+            { key: "employeeName", label: "Provider / Specialist", getValue: (a) => a.employeeName || "" },
+            { key: "location", label: "Location", getValue: (a) => a.location || "" },
+            { key: "notes", label: "Notes", getValue: (a) => a.notes || "" },
+          ]}
         />
 
         {/* Calendar View */}
