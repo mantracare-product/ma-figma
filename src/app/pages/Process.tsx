@@ -1211,8 +1211,8 @@ export default function Process() {
   }, [selectedAIModel]);
 
   const activeConfiguredVoices = useMemo(() => {
-    const active = configuredVoices.filter((v) => v.status === true);
-    return active.length > 0 ? active : configuredVoices;
+    const active = configuredVoices.filter((v) => v.status === true && v.clientEnabled !== false);
+    return active.length > 0 ? active : configuredVoices.filter((v) => v.status === true);
   }, [configuredVoices]);
 
   useEffect(() => {

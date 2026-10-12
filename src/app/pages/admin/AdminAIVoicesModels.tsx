@@ -25,6 +25,7 @@ import {
   Radio,
   Globe,
   Info,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "../../components/layout/PageHeader";
@@ -86,8 +87,9 @@ export default function AdminAIVoicesModels() {
   const [modelProviderFilter, setModelProviderFilter] = useState("All Providers");
   const [modelStatusFilter, setModelStatusFilter] = useState("All Status");
 
-  // Voice Filters: Language, Gender, Accent
+  // Voice Filters: Provider, Language, Gender, Accent
   const [voiceFilters, setVoiceFilters] = useState({
+    provider: "All Providers",
     language: "All Languages",
     gender: "All Genders",
     accent: "All Accents",
@@ -154,10 +156,15 @@ export default function AdminAIVoicesModels() {
         !q ||
         voice.name.toLowerCase().includes(q) ||
         role.toLowerCase().includes(q) ||
+        (voice.provider && voice.provider.toLowerCase().includes(q)) ||
         voice.language.toLowerCase().includes(q) ||
         voice.accent.toLowerCase().includes(q) ||
         voice.country.toLowerCase().includes(q) ||
         voice.gender.toLowerCase().includes(q);
+
+      const matchesProvider =
+        voiceFilters.provider === "All Providers" ||
+        (voice.provider && voice.provider.toLowerCase() === voiceFilters.provider.toLowerCase());
 
       const matchesLanguage =
         voiceFilters.language === "All Languages" ||
@@ -172,11 +179,16 @@ export default function AdminAIVoicesModels() {
         voice.accent.toLowerCase() === voiceFilters.accent.toLowerCase() ||
         voice.country.toLowerCase() === voiceFilters.accent.toLowerCase();
 
-      return matchesSearch && matchesLanguage && matchesGender && matchesAccent;
+      return matchesSearch && matchesProvider && matchesLanguage && matchesGender && matchesAccent;
     });
   }, [voices, searchQuery, voiceFilters]);
 
   // Derived options for filters
+  const providerOptions = useMemo(() => {
+    const set = new Set(voices.map((v) => v.provider).filter(Boolean));
+    return ["All Providers", ...Array.from(set)];
+  }, [voices]);
+
   const languageOptions = useMemo(() => {
     const set = new Set(voices.map((v) => v.language).filter(Boolean));
     return ["All Languages", ...Array.from(set)];
@@ -350,6 +362,139 @@ export default function AdminAIVoicesModels() {
             setActiveMode(mode as "models" | "voices");
             setSearchQuery("");
           }}
+          secondaryActions={
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              {activeMode === "voices" ? (
+                <>
+                  {/* Provider Filter (Admin Only) */}
+                  <div className="relative">
+                    <select
+                      value={voiceFilters.provider}
+                      onChange={(e) => setVoiceFilters((prev) => ({ ...prev, provider: e.target.value }))}
+                      className="h-[36px] pl-3 pr-7 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer shadow-2xs transition-colors"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {providerOptions.map((prov) => (
+                        <option key={prov} value={prov}>
+                          {prov === "All Providers" ? "Provider: All" : prov}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+
+                  {/* Gender Filter */}
+                  <div className="relative">
+                    <select
+                      value={voiceFilters.gender}
+                      onChange={(e) => setVoiceFilters((prev) => ({ ...prev, gender: e.target.value }))}
+                      className="h-[36px] pl-3 pr-7 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer shadow-2xs transition-colors"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="All Genders">Gender: All</option>
+                      <option value="Female">Female</option>
+                      <option value="Male">Male</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+
+                  {/* Accent Filter */}
+                  <div className="relative">
+                    <select
+                      value={voiceFilters.accent}
+                      onChange={(e) => setVoiceFilters((prev) => ({ ...prev, accent: e.target.value }))}
+                      className="h-[36px] pl-3 pr-7 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer shadow-2xs transition-colors"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {accentOptions.map((acc) => (
+                        <option key={acc} value={acc}>
+                          {acc === "All Accents" ? "Accent: All" : acc}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+
+                  {/* Language Filter */}
+                  <div className="relative">
+                    <select
+                      value={voiceFilters.language}
+                      onChange={(e) => setVoiceFilters((prev) => ({ ...prev, language: e.target.value }))}
+                      className="h-[36px] pl-3 pr-7 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer shadow-2xs transition-colors"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {languageOptions.map((lang) => (
+                        <option key={lang} value={lang}>
+                          {lang === "All Languages" ? "Language: All" : lang}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Model Provider Filter */}
+                  <div className="relative">
+                    <select
+                      value={modelProviderFilter}
+                      onChange={(e) => setModelProviderFilter(e.target.value)}
+                      className="h-[36px] pl-3 pr-7 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer shadow-2xs transition-colors"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="All Providers">Provider: All</option>
+                      <option value="Google">Google</option>
+                      <option value="OpenAI">OpenAI</option>
+                      <option value="Anthropic">Anthropic</option>
+                      <option value="DeepSeek">DeepSeek</option>
+                      <option value="Meta">Meta</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+
+                  {/* Model Status Filter */}
+                  <div className="relative">
+                    <select
+                      value={modelStatusFilter}
+                      onChange={(e) => setModelStatusFilter(e.target.value)}
+                      className="h-[36px] pl-3 pr-7 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer shadow-2xs transition-colors"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="All Status">Status: All</option>
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </>
+              )}
+
+              {/* Reset Filters button if any filter is active */}
+              {((activeMode === "voices" && (voiceFilters.provider !== "All Providers" || voiceFilters.gender !== "All Genders" || voiceFilters.accent !== "All Accents" || voiceFilters.language !== "All Languages" || searchQuery)) ||
+                (activeMode === "models" && (modelProviderFilter !== "All Providers" || modelStatusFilter !== "All Status" || searchQuery))) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setModelProviderFilter("All Providers");
+                    setModelStatusFilter("All Status");
+                    setVoiceFilters({
+                      provider: "All Providers",
+                      language: "All Languages",
+                      gender: "All Genders",
+                      accent: "All Accents",
+                    });
+                  }}
+                  className="h-[36px] px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 shadow-2xs"
+                  title="Reset all filters"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset</span>
+                </button>
+              )}
+            </div>
+          }
           filterFields={
             activeMode === "models"
               ? [
@@ -383,13 +528,13 @@ export default function AdminAIVoicesModels() {
                 ]
               : [
                   {
-                    id: "language",
-                    label: "Language",
+                    id: "provider",
+                    label: "Provider",
                     type: "select" as const,
-                    value: voiceFilters.language,
+                    value: voiceFilters.provider,
                     onChange: (val: any) =>
-                      setVoiceFilters((prev) => ({ ...prev, language: val || "All Languages" })),
-                    options: languageOptions.map((lang) => ({ label: lang, value: lang })),
+                      setVoiceFilters((prev) => ({ ...prev, provider: val || "All Providers" })),
+                    options: providerOptions.map((prov) => ({ label: prov, value: prov })),
                   },
                   {
                     id: "gender",
@@ -402,7 +547,6 @@ export default function AdminAIVoicesModels() {
                       { label: "All Genders", value: "All Genders" },
                       { label: "Female", value: "Female" },
                       { label: "Male", value: "Male" },
-                      { label: "Neutral", value: "Neutral" },
                     ],
                   },
                   {
@@ -414,6 +558,15 @@ export default function AdminAIVoicesModels() {
                       setVoiceFilters((prev) => ({ ...prev, accent: val || "All Accents" })),
                     options: accentOptions.map((acc) => ({ label: acc, value: acc })),
                   },
+                  {
+                    id: "language",
+                    label: "Language",
+                    type: "select" as const,
+                    value: voiceFilters.language,
+                    onChange: (val: any) =>
+                      setVoiceFilters((prev) => ({ ...prev, language: val || "All Languages" })),
+                    options: languageOptions.map((lang) => ({ label: lang, value: lang })),
+                  },
                 ]
           }
           onClearAllFilters={() => {
@@ -421,6 +574,7 @@ export default function AdminAIVoicesModels() {
             setModelProviderFilter("All Providers");
             setModelStatusFilter("All Status");
             setVoiceFilters({
+              provider: "All Providers",
               language: "All Languages",
               gender: "All Genders",
               accent: "All Accents",
@@ -465,22 +619,8 @@ export default function AdminAIVoicesModels() {
                       </div>
                     </div>
 
-                    {/* Active Status Badge + Admin Toggle Switch */}
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-2xs ${
-                          model.isActive
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
-                            : "bg-slate-100 text-slate-500 border border-slate-200"
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            model.isActive ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
-                          }`}
-                        />
-                        {model.isActive ? "Active" : "Inactive"}
-                      </span>
+                    {/* Admin Toggle Switch */}
+                    <div className="flex items-center shrink-0">
                       <label className="relative inline-flex items-center cursor-pointer shrink-0">
                         <input
                           type="checkbox"
@@ -558,27 +698,13 @@ export default function AdminAIVoicesModels() {
                             className="text-xs text-gray-500 font-medium truncate mt-0.5"
                             style={{ fontFamily: "DM Sans, sans-serif" }}
                           >
-                            {voice.language || "English"} · {voice.accent || voice.country} · {voice.gender} · {voice.tone}
+                            <span className="font-semibold text-slate-700">{voice.provider || "ElevenLabs"}</span> · {voice.language || "English"} · {voice.accent || voice.country} · {voice.gender} · {voice.tone}
                           </p>
                         </div>
                       </div>
 
-                      {/* Active Toggle Switch + Status Badge */}
-                      <div className="flex items-center gap-2.5 shrink-0 pl-1">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold shadow-2xs ${
-                            voice.status
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
-                              : "bg-slate-100 text-slate-500 border border-slate-200"
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              voice.status ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
-                            }`}
-                          />
-                          {voice.status ? "Active" : "Inactive"}
-                        </span>
+                      {/* Active Toggle Switch */}
+                      <div className="flex items-center shrink-0 pl-1">
                         <label className="relative inline-flex items-center cursor-pointer">
                           <input
                             type="checkbox"
