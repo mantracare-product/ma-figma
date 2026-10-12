@@ -18,6 +18,7 @@ import { useAIProviders } from "../context/AIProviderContext";
 import { useSidebar } from "../context/SidebarContext";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
+import { DataExportModal } from "../components/common/DataExportModal";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { useDrag, useDrop } from "react-dnd";
@@ -1019,6 +1020,7 @@ export default function Process() {
   const [showEntityDropdown, setShowEntityDropdown] = useState(false);
   const entityDropdownRef = useRef<HTMLDivElement>(null);
   const [newStageCategory, setNewStageCategory] = useState<"in_progress" | "success" | "lost">("in_progress");
+  const [showExportModal, setShowExportModal] = useState(false);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -3467,6 +3469,7 @@ export default function Process() {
               onChange: (val) => setSearchQuery(val || ""),
             },
           ]}
+          onExport={() => setShowExportModal(true)}
           primaryAction={
             selectedEntity === "client" || selectedEntity === "appointment"
               ? {
@@ -3479,6 +3482,32 @@ export default function Process() {
               }
               : undefined
           }
+        />
+
+        {/* Unified DataExportModal */}
+        <DataExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          title="Export Processes"
+          subtitle="Export workflow processes, stages, and automation blueprints"
+          data={processes}
+          filenamePrefix="processes"
+          statusFieldKey="entityType"
+          statusLabel="Entity Type"
+          statusOptions={[
+            { label: "Client", value: "client" },
+            { label: "Appointment", value: "appointment" },
+            { label: "Invoice", value: "invoice" },
+            { label: "WebForm", value: "webform" },
+          ]}
+          allFields={[
+            { key: "name", label: "Process Name", getValue: (p) => p.name },
+            { key: "description", label: "Description", getValue: (p) => p.description || "" },
+            { key: "entityType", label: "Entity Type", getValue: (p) => p.entityType || "client" },
+            { key: "stageCount", label: "Stage Count", getValue: (p) => (p.stages || []).length },
+            { key: "stages", label: "Stages List", getValue: (p) => (p.stages || []).map((s: any) => s.name).join(" -> ") },
+            { key: "draft", label: "Draft Status", getValue: (p) => (p.draft ? "Draft" : "Published") },
+          ]}
         />
 
         <div className="flex gap-6 min-h-[calc(100vh-270px)]">

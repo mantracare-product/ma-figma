@@ -14,6 +14,7 @@ import { TelephonyIntegrationPanel } from "../components/telephony/TelephonyInte
 import { getStoredWhatsAppNumbers, saveStoredWhatsAppNumbers, WHATSAPP_NUMBERS_EVENT, WhatsAppNumberEntry } from "../../lib/useWhatsAppNumbers";
 import { SelectFieldsModal } from "../components/help/FieldManager";
 import PageTopBar from "../components/layout/PageTopBar";
+import { DataExportModal } from "../components/common/DataExportModal";
 import { AdminFieldDrawer } from "./admin/components/AdminFieldDrawer";
 import { AdminSectionDrawer } from "./admin/components/AdminSectionDrawer";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
@@ -939,6 +940,7 @@ export default function Settings() {
   const [auditLogPage, setAuditLogPage] = useState(1);
   const [auditLogSearchQuery, setAuditLogSearchQuery] = useState("");
   const [showRequestBodyModal, setShowRequestBodyModal] = useState(false);
+  const [showAuditExportModal, setShowAuditExportModal] = useState(false);
   const [selectedAuditLog, setSelectedAuditLog] = useState<any>(null);
 
   // Security State
@@ -7157,7 +7159,7 @@ export default function Settings() {
                   onSearchChange={setAuditLogSearchQuery}
                   searchPlaceholder="Search audit logs..."
                   showFilterToggle={true}
-                  onExport={() => toast.success("Exporting audit logs...")}
+                  onExport={() => setShowAuditExportModal(true)}
                   primaryAction={{
                     label: "Refresh",
                     icon: (
@@ -7167,6 +7169,28 @@ export default function Settings() {
                     ),
                     onClick: () => toast.success("Audit logs refreshed"),
                   }}
+                />
+
+                {/* Unified DataExportModal for Audit Logs */}
+                <DataExportModal
+                  isOpen={showAuditExportModal}
+                  onClose={() => setShowAuditExportModal(false)}
+                  title="Export Audit Logs"
+                  subtitle="Export user actions, security events, and system audit trail"
+                  data={auditLogs}
+                  filenamePrefix="audit_logs"
+                  dateFieldKey="time"
+                  dateLabel="Event Time"
+                  statusFieldKey="action"
+                  statusLabel="Action"
+                  allFields={[
+                    { key: "id", label: "ID", getValue: (l) => l.id },
+                    { key: "time", label: "Timestamp", getValue: (l) => l.time },
+                    { key: "user", label: "User", getValue: (l) => l.user },
+                    { key: "action", label: "Action", getValue: (l) => l.action },
+                    { key: "target", label: "Target / Entity", getValue: (l) => l.target },
+                    { key: "ip", label: "IP Address", getValue: (l) => l.ip },
+                  ]}
                 />
 
                 {/* Audit Logs Table */}
