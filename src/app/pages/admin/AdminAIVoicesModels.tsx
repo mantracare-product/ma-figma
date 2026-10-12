@@ -328,61 +328,6 @@ export default function AdminAIVoicesModels() {
           subtitle="Configure global AI foundation models and voice catalog. Active items are instantly available in client organizations."
         />
 
-        {/* Global Synchronization Info Banner */}
-        <div className="bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 border border-blue-200/70 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-2xs">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <h4 className="text-xs font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Global Client Synchronization
-              </h4>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Active models ({activeModelCount}/{aiModels.length}) and active voices ({activeVoiceCount}/{voices.length}) are directly exposed in Client Settings, Process Automation, and AI Receptionist.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {activeMode === "models" ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => handleSetAllModels(true)}
-                  className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-100/70 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer"
-                >
-                  Activate All
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSetAllModels(false)}
-                  className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
-                >
-                  Deactivate All
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => handleSetAllVoices(true)}
-                  className="px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-100/70 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer"
-                >
-                  Activate All
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSetAllVoices(false)}
-                  className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
-                >
-                  Deactivate All
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
         {/* Unified TopBar with Mode Switcher & Filter Controls */}
         <PageTopBar
           searchQuery={searchQuery}
