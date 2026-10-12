@@ -148,7 +148,7 @@ export default function Appointments() {
   const [selectedAppointmentForDrawer, setSelectedAppointmentForDrawer] = useState<Appointment | null>(null);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
 
-  // Process filter state for topbar - starts from the process directly, no "all"
+  // Process filter state: selected specific appointment process (strictly specific processes, no "all processes")
   const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>("");
   const [showProcessesDropdown, setShowProcessesDropdown] = useState<boolean>(false);
 
@@ -163,18 +163,18 @@ export default function Appointments() {
     return apptProcs.length > 0 ? apptProcs : [DEFAULT_ENTITY_PROCESSES.appointment];
   }, [activeOrganization]);
 
-  // Auto-select first process if none selected or invalid (unless explicitly "all")
+  // Keep selectedProcessFilter pointing to a specific appointment process
   useEffect(() => {
     if (appointmentProcesses.length > 0) {
-      if (!selectedProcessFilter || (selectedProcessFilter !== "all" && !appointmentProcesses.some((p) => p.id === selectedProcessFilter))) {
+      if (!selectedProcessFilter || !appointmentProcesses.some((p) => p.id === selectedProcessFilter)) {
         setSelectedProcessFilter(appointmentProcesses[0].id);
       }
     }
   }, [appointmentProcesses, selectedProcessFilter]);
 
-  // Active appointment process (or selected process) for stages and execution
+  // Active appointment process for stages and execution
   const appointmentProcess: Process = useMemo(() => {
-    if (selectedProcessFilter && selectedProcessFilter !== "all") {
+    if (selectedProcessFilter) {
       const found = appointmentProcesses.find((p) => p.id === selectedProcessFilter);
       if (found) return found;
     }
@@ -936,7 +936,7 @@ export default function Appointments() {
           </div>
         </PageHeader>
 
-        {!hasAppointmentAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined) && (
+        {!hasAppointmentAutomation(selectedProcessFilter) && (
           <div className="flex items-center justify-between px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 shadow-2xs">
             <span className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
@@ -952,19 +952,17 @@ export default function Appointments() {
         <PageTopBar
           leftElement={
             <div className="flex items-center gap-1.5">
-              {/* Process Filter Dropdown */}
+              {/* Specific Appointment Process Selector (Only specific appointment processes, no "All Processes") */}
               <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors cursor-pointer"
                   style={{ fontFamily: 'Outfit, sans-serif' }}
-                  title="Select Process"
+                  title="Select Appointment Process"
                 >
                   <span className="truncate max-w-[160px] font-semibold text-gray-800">
-                    {selectedProcessFilter === "all"
-                      ? "All Processes"
-                      : appointmentProcesses.find((p) => p.id === selectedProcessFilter)?.name || appointmentProcesses[0]?.name || "Select Process"}
+                    {appointmentProcesses.find((p) => p.id === selectedProcessFilter)?.name || appointmentProcesses[0]?.name || "Appointment Flow"}
                   </span>
                   <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 </button>
@@ -976,23 +974,6 @@ export default function Appointments() {
                       onClick={() => setShowProcessesDropdown(false)}
                     />
                     <div className="absolute top-full left-0 mt-1.5 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedProcessFilter("all");
-                          setStageFilter("all");
-                          setShowProcessesDropdown(false);
-                        }}
-                        className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                          selectedProcessFilter === "all" ? "bg-blue-50/80 text-blue-600 font-semibold" : "text-gray-700 hover:bg-gray-50"
-                        }`}
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      >
-                        <span className="truncate">All Processes</span>
-                        {selectedProcessFilter === "all" && (
-                          <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
-                        )}
-                      </button>
                       {appointmentProcesses.map((proc) => (
                         <button
                           key={proc.id}
@@ -1066,7 +1047,7 @@ export default function Appointments() {
           primaryAction={{
             label: "Book Appointment",
             onClick: () => {
-              if (!hasAppointmentAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined)) {
+              if (!hasAppointmentAutomation(selectedProcessFilter)) {
                 toast.error("Please build an automation first before booking appointments. Navigate to Automation to configure workflow rules.");
                 navigate("/automation");
                 return;
@@ -1079,7 +1060,7 @@ export default function Appointments() {
             <button
               type="button"
               onClick={() => {
-                const targetProcId = selectedProcessFilter !== "all" ? selectedProcessFilter : appointmentProcess.id;
+                const targetProcId = selectedProcessFilter || appointmentProcess.id;
                 navigate(`/process?entity=appointment&processId=${targetProcId}`, {
                   state: { processId: targetProcId, processName: appointmentProcess.name },
                 });
@@ -1120,8 +1101,8 @@ export default function Appointments() {
             { key: "time", label: "Time", getValue: (a) => a.time },
             { key: "duration", label: "Duration (mins)", getValue: (a) => a.duration || 30 },
             { key: "status", label: "Status", getValue: (a) => a.status },
-            { key: "title", label: "Title / Service", getValue: (a) => a.title || a.serviceName || "" },
-            { key: "employeeName", label: "Provider / Specialist", getValue: (a) => a.employeeName || "" },
+            { key: "title", label: "Title / Service", getValue: (a) => a.title || a.serviceName || services.find((s) => s.id === a.serviceId)?.name || "" },
+            { key: "employeeName", label: "Provider / Specialist", getValue: (a) => a.employeeName || employees.find((e) => String(e.id) === String(a.employeeId))?.name || "" },
             { key: "location", label: "Location", getValue: (a) => a.location || "" },
             { key: "notes", label: "Notes", getValue: (a) => a.notes || "" },
           ]}

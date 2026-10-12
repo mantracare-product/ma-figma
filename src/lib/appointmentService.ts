@@ -123,6 +123,8 @@ export interface Appointment {
   notes?: string;
   rating?: number;
   title?: string;
+  serviceName?: string;
+  employeeName?: string;
   description?: string;
   tags?: string[];
   processId?: string;
