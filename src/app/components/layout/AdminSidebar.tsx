@@ -35,6 +35,7 @@ import {
   LogOut,
   ArrowUpRight,
   Zap,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useSidebar } from "../../context/SidebarContext";
@@ -104,6 +105,7 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
         { id: "industry-category", label: "Industries", icon: FolderTree, path: "/admin/industry-category" },
         { id: "workflows", label: "Workflows", icon: LayoutTemplate, path: "/admin/workflows" },
         { id: "automations", label: "Automations", icon: Zap, path: "/admin/automations" },
+        { id: "ai-voices-models", label: "AI Voices & Models", icon: Sparkles, path: "/admin/ai-voices-models" },
         { id: "forms", label: "Forms", icon: CheckSquare, path: "/admin/forms" },
         { id: "document-templates", label: "Document Templates", icon: FileCode, path: "/admin/document-templates" },
         { id: "custom-fields", label: "Sections/Fields", icon: SlidersHorizontal, path: "/admin/custom-fields" },
@@ -153,6 +155,13 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
       return (
         location.pathname === "/admin/automations" ||
         location.pathname === "/admin/automation"
+      );
+    }
+    if (itemPath === "/admin/ai-voices-models") {
+      return (
+        location.pathname === "/admin/ai-voices-models" ||
+        location.pathname === "/admin/ai-voices" ||
+        location.pathname === "/admin/voice-config"
       );
     }
     if (itemPath === "/admin/document-templates") {

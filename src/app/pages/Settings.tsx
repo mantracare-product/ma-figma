@@ -3318,31 +3318,54 @@ export default function Settings() {
 
   const filteredAIModels = useMemo(() => {
     return aiModels.filter((m) => {
+      // Only display models activated by Admin
+      if (!m.isActive) return false;
       const q = voiceSearchQuery.trim().toLowerCase();
-      const matchesSearch = !q || m.name.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q);
+      const matchesSearch = !q || m.name.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q) || m.description.toLowerCase().includes(q);
       const matchesProvider = modelProviderFilter === "All Providers" || m.provider.toLowerCase() === modelProviderFilter.toLowerCase();
-      const matchesStatus = modelStatusFilter === "All Status" || (modelStatusFilter === "Active" ? m.isActive : !m.isActive);
-      return matchesSearch && matchesProvider && matchesStatus;
+      return matchesSearch && matchesProvider;
     });
-  }, [aiModels, voiceSearchQuery, modelProviderFilter, modelStatusFilter]);
+  }, [aiModels, voiceSearchQuery, modelProviderFilter]);
 
   const filteredVoiceTableData = useMemo(() => {
     return voiceTableData.filter((voice) => {
+      // Only display voices activated by Admin
+      if (!voice.status) return false;
       const q = voiceSearchQuery.trim().toLowerCase();
       const role = VOICE_ROLES[voice.name] || "";
       const matchesSearch =
         !q ||
         voice.name.toLowerCase().includes(q) ||
         role.toLowerCase().includes(q) ||
+        (voice.language && voice.language.toLowerCase().includes(q)) ||
+        (voice.accent && voice.accent.toLowerCase().includes(q)) ||
         voice.gender.toLowerCase().includes(q) ||
         voice.country.toLowerCase().includes(q) ||
         voice.tone.toLowerCase().includes(q);
 
-      const matchesGender = voiceFilters.gender === "All Genders" || voice.gender.toLowerCase() === voiceFilters.gender.toLowerCase();
-      const matchesCountry = voiceFilters.country === "All Countries" || voice.country.toLowerCase() === voiceFilters.country.toLowerCase();
-      const matchesTone = voiceFilters.tone === "All Tones" || voice.tone.toLowerCase() === voiceFilters.tone.toLowerCase();
+      const matchesLanguage =
+        !voiceFilters.language ||
+        voiceFilters.language === "All Languages" ||
+        (voice.language && voice.language.toLowerCase() === voiceFilters.language.toLowerCase());
 
-      return matchesSearch && matchesGender && matchesCountry && matchesTone;
+      const matchesGender =
+        !voiceFilters.gender ||
+        voiceFilters.gender === "All Genders" ||
+        voice.gender.toLowerCase() === voiceFilters.gender.toLowerCase();
+
+      const matchesAccent =
+        !voiceFilters.country ||
+        voiceFilters.country === "All Accents" ||
+        voiceFilters.country === "All Countries" ||
+        (voice.accent && voice.accent.toLowerCase() === voiceFilters.country.toLowerCase()) ||
+        voice.country.toLowerCase() === voiceFilters.country.toLowerCase();
+
+      const matchesTone =
+        !voiceFilters.tone ||
+        voiceFilters.tone === "All Tones" ||
+        voice.tone.toLowerCase() === voiceFilters.tone.toLowerCase();
+
+      return matchesSearch && matchesLanguage && matchesGender && matchesAccent && matchesTone;
     });
   }, [voiceTableData, voiceSearchQuery, voiceFilters]);
 
@@ -3407,6 +3430,8 @@ export default function Settings() {
         id: newId,
         name: voice.name,
         gender: voice.gender,
+        language: "English",
+        accent: getNationality(voice.country) || "American",
         country: voice.country,
         tone: voice.tone,
         age: voice.age,
@@ -6444,6 +6469,23 @@ export default function Settings() {
                         ]
                       : [
                           {
+                            id: "language",
+                            label: "Language",
+                            type: "select" as const,
+                            value: voiceFilters.language,
+                            onChange: (val: any) => setVoiceFilters((prev) => ({ ...prev, language: val || "All Languages" })),
+                            options: [
+                              { label: "All Languages", value: "All Languages" },
+                              { label: "English", value: "English" },
+                              { label: "Spanish", value: "Spanish" },
+                              { label: "French", value: "French" },
+                              { label: "German", value: "German" },
+                              { label: "Japanese", value: "Japanese" },
+                              { label: "Hindi", value: "Hindi" },
+                              { label: "Portuguese", value: "Portuguese" },
+                            ],
+                          },
+                          {
                             id: "gender",
                             label: "Gender",
                             type: "select" as const,
@@ -6456,18 +6498,22 @@ export default function Settings() {
                             ],
                           },
                           {
-                            id: "country",
+                            id: "accent",
                             label: "Accent",
                             type: "select" as const,
                             value: voiceFilters.country,
-                            onChange: (val: any) => setVoiceFilters((prev) => ({ ...prev, country: val || "All Countries" })),
+                            onChange: (val: any) => setVoiceFilters((prev) => ({ ...prev, country: val || "All Accents" })),
                             options: [
-                              { label: "All Accents", value: "All Countries" },
-                              { label: "USA", value: "USA" },
-                              { label: "UK", value: "UK" },
-                              { label: "Australia", value: "Australia" },
-                              { label: "Canada", value: "Canada" },
-                              { label: "Ireland", value: "Ireland" },
+                              { label: "All Accents", value: "All Accents" },
+                              { label: "American", value: "American" },
+                              { label: "British", value: "British" },
+                              { label: "Australian", value: "Australian" },
+                              { label: "Canadian", value: "Canadian" },
+                              { label: "Irish", value: "Irish" },
+                              { label: "European", value: "European" },
+                              { label: "Latin American", value: "Latin American" },
+                              { label: "Indian", value: "Indian" },
+                              { label: "East Asian", value: "East Asian" },
                             ],
                           },
                           {
@@ -6492,7 +6538,7 @@ export default function Settings() {
                     setVoiceSearchQuery("");
                     setModelProviderFilter("All Providers");
                     setModelStatusFilter("All Status");
-                    setVoiceFilters({ language: "All Languages", tone: "All Tones", gender: "All Genders", age: "All Ages", country: "All Countries" });
+                    setVoiceFilters({ language: "All Languages", tone: "All Tones", gender: "All Genders", age: "All Ages", country: "All Accents" });
                   }}
                 />
 
@@ -6509,11 +6555,7 @@ export default function Settings() {
                       {filteredAIModels.map((model) => (
                         <div
                           key={model.id}
-                          className={`bg-white rounded-2xl border transition-all duration-200 p-4 flex items-center justify-between gap-3 shadow-2xs ${
-                            model.isActive
-                              ? "border-[#E2E8F0] hover:border-slate-300 hover:shadow-xs"
-                              : "border-gray-200/70 opacity-70"
-                          }`}
+                          className="bg-white rounded-2xl border border-[#E2E8F0] hover:border-slate-300 hover:shadow-xs transition-all duration-200 p-4 flex items-center justify-between gap-3 shadow-2xs"
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             {renderProviderLogo(model.provider)}
@@ -6529,22 +6571,17 @@ export default function Settings() {
                                 className="text-xs text-gray-500 font-medium truncate mt-0.5"
                                 style={{ fontFamily: 'DM Sans, sans-serif' }}
                               >
-                                {model.provider}
+                                {model.provider} · {model.contextWindow}
                               </p>
                             </div>
                           </div>
 
-                          {/* Clean Active Toggle Switch */}
+                          {/* Active Status Badge */}
                           <div className="flex items-center shrink-0">
-                            <label className="relative inline-flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                className="sr-only peer"
-                                checked={model.isActive}
-                                onChange={() => handleToggleModel(model.id, model.name)}
-                              />
-                              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                            </label>
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              Active
+                            </span>
                           </div>
                         </div>
                       ))}
@@ -6553,7 +6590,7 @@ export default function Settings() {
                 )}
 
                 {/* ======================================================== */}
-                {/* SECTION 2: AI VOICES (20 Voices, Direct Cards with Toggle) */}
+                {/* SECTION 2: AI VOICES (Direct Cards with Audio Preview & Active Indicator) */}
                 {/* ======================================================== */}
                 {voiceConfigSubTab === "voices" && (
                   filteredVoiceTableData.length === 0 ? (
@@ -6570,9 +6607,7 @@ export default function Settings() {
                             className={`bg-white rounded-2xl border transition-all duration-200 p-3.5 sm:p-4 flex items-center justify-between gap-3 group shadow-2xs ${
                               isPlaying
                                 ? "border-blue-500 shadow-xs ring-2 ring-blue-100"
-                                : voice.status
-                                ? "border-[#E2E8F0] hover:border-slate-300 hover:shadow-xs"
-                                : "border-gray-200/70 opacity-70"
+                                : "border-[#E2E8F0] hover:border-slate-300 hover:shadow-xs"
                             }`}
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -6594,46 +6629,41 @@ export default function Settings() {
                               </button>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <h4
-                                    className="text-sm font-bold text-gray-900 truncate"
-                                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                                  >
-                                    {voice.name} - {VOICE_ROLES[voice.name] || `${voice.tone} Assistant`}
-                                  </h4>
-                                  {isPlaying && (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 shrink-0">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
-                                      Playing
-                                    </span>
-                                  )}
-                                </div>
-                                <p
-                                  className="text-xs text-gray-500 font-medium truncate mt-0.5"
-                                  style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                <h4
+                                  className="text-sm font-bold text-gray-900 truncate"
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
-                                  {getNationality(voice.country)} · {voice.gender} · English
-                                </p>
+                                  {voice.name} - {VOICE_ROLES[voice.name] || `${voice.tone} Assistant`}
+                                </h4>
+                                {isPlaying && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 shrink-0">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
+                                    Playing
+                                  </span>
+                                )}
                               </div>
-                            </div>
-
-                            {/* Active Toggle Switch for Voice */}
-                            <div className="flex items-center shrink-0 pl-1">
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  className="sr-only peer"
-                                  checked={voice.status}
-                                  onChange={() => handleToggleVoice(voice.id, voice.name)}
-                                />
-                                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                              </label>
+                              <p
+                                className="text-xs text-gray-500 font-medium truncate mt-0.5"
+                                style={{ fontFamily: 'DM Sans, sans-serif' }}
+                              >
+                                {voice.language || "English"} · {voice.accent || getNationality(voice.country)} · {voice.gender} · {voice.tone}
+                              </p>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )
-                )}
+
+                          {/* Active Status Badge */}
+                          <div className="flex items-center shrink-0 pl-1">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              Active
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              )}
               </div>
             )}
 
@@ -7181,15 +7211,16 @@ export default function Settings() {
                   filenamePrefix="audit_logs"
                   dateFieldKey="time"
                   dateLabel="Event Time"
-                  statusFieldKey="action"
-                  statusLabel="Action"
+                  statusFieldKey="event"
+                  statusLabel="Event"
                   allFields={[
                     { key: "id", label: "ID", getValue: (l) => l.id },
                     { key: "time", label: "Timestamp", getValue: (l) => l.time },
+                    { key: "event", label: "Event / Action", getValue: (l) => l.event },
+                    { key: "method", label: "Method", getValue: (l) => l.method },
                     { key: "user", label: "User", getValue: (l) => l.user },
-                    { key: "action", label: "Action", getValue: (l) => l.action },
-                    { key: "target", label: "Target / Entity", getValue: (l) => l.target },
-                    { key: "ip", label: "IP Address", getValue: (l) => l.ip },
+                    { key: "agent", label: "Agent / Target", getValue: (l) => l.agent },
+                    { key: "ip", label: "IP Address", getValue: (l) => l.requestBody?.IPAddress || "" },
                   ]}
                 />
 
