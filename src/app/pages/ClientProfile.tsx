@@ -1045,10 +1045,15 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   }, []);
 
   const handleUpdateApptStatus = (apptId: any, newStatus: string) => {
-    const stored = sessionStorage.getItem("appointments_v1");
-    const all: any[] = stored ? JSON.parse(stored) : [];
-    const updated = all.map((a: any) => (String(a.id) === String(apptId) ? { ...a, status: newStatus } : a));
-    sessionStorage.setItem("appointments_v1", JSON.stringify(updated));
+    try {
+      if (newStatus === "completed") {
+        appointmentService.completeAppointment(apptId);
+      } else if (newStatus === "cancelled") {
+        appointmentService.cancelAppointment(apptId);
+      } else {
+        appointmentService.updateAppointment(apptId, { status: newStatus as any });
+      }
+    } catch {}
     setAppointmentRefreshKey((k) => k + 1);
     toast.success(`Appointment marked as ${newStatus}`);
   };
@@ -2332,12 +2337,13 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                             if (isActive) {
                               // Active stage
                             } else if (isCurrentFinal) {
-                              if (isThisInProgress) isCompleted = true;
+                              if (isThisInProgress && activeIdx >= 0 && segIdx < activeIdx) isCompleted = true;
                               else isDeactivated = true;
                             } else {
                               if (isThisInProgress && segIdx < activeIdx) isCompleted = true;
                             }
 
+                            const isLocked = Boolean(isCurrentFinal);
                             const lightBg = lightenHex(stageColor, 78);
                             const lightBorder = lightenHex(stageColor, 40);
 
@@ -2351,15 +2357,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                             } else if (isCompleted) {
                               bg = stageColor;
                               border = `1px solid ${stageColor}`;
-                              opacity = 0.85;
-                            } else if (isDeactivated) {
-                              bg = lightBg;
-                              border = `1px solid ${lightBorder}`;
-                              opacity = 0.95;
+                              opacity = 0.9;
                             } else {
-                              bg = "transparent";
+                              // Inactive / unreached / deactivated stages: light grey to show inactive
+                              bg = "#E2E8F0";
                               border = "1px solid #CBD5E1";
-                              opacity = 0.45;
+                              opacity = 0.9;
                             }
 
                             const isHovered = hoveredDealStageSegment?.logId === log.id && hoveredDealStageSegment?.segIdx === segIdx;
@@ -2944,12 +2947,13 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                           if (isActive) {
                             // active
                           } else if (isStgFinal) {
-                            if (isStgInProgress) isCompleted = true;
+                            if (isStgInProgress && activeIdx >= 0 && i < activeIdx) isCompleted = true;
                             else isDeactivated = true;
                           } else {
                             if (isStgInProgress && activeIdx >= 0 && i < activeIdx) isCompleted = true;
                           }
 
+                          const isLocked = Boolean(isStgFinal);
                           const stgColor = stg.color || "#1E88E5";
                           const lightBg = lightenHex(stgColor, 78);
                           const lightBorder = lightenHex(stgColor, 40);
@@ -2964,15 +2968,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                           } else if (isCompleted) {
                             bg = stgColor;
                             border = `1px solid ${stgColor}`;
-                            opacity = 0.85;
-                          } else if (isDeactivated) {
-                            bg = lightBg;
-                            border = `1px solid ${lightBorder}`;
-                            opacity = 0.95;
+                            opacity = 0.9;
                           } else {
-                            bg = "transparent";
+                            // Inactive / unreached / deactivated stages: light grey to show inactive
+                            bg = "#E2E8F0";
                             border = "1px solid #CBD5E1";
-                            opacity = 0.45;
+                            opacity = 0.9;
                           }
 
                           const isHovered = hoveredApptStageBox?.aptId === apt.id && hoveredApptStageBox?.stageIdx === i;
@@ -3201,8 +3202,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       },
                     },
                     {
-                      label: "Mark Done",
+                      label: "Mark as Complete",
                       icon: <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />,
+                      hidden: (apt: any) => apt.status === "completed",
                       onClick: (apt) => {
                         handleUpdateApptStatus(apt.id, "completed");
                       },

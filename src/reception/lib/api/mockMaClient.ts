@@ -15,6 +15,8 @@ import { getStoredServices } from '../../../lib/servicesStore';
 import { getStoredTeamMembers } from '../../../lib/teamStore';
 import { appointmentService } from '../../../lib/appointmentService';
 import { invoiceService } from '../../../lib/invoiceService';
+import { eventBus } from '../../../lib/eventBus';
+import { getStoredRooms, findRoomForAppointment, Room } from '../../../lib/roomsStore';
 import type {
   Station,
   DirectionCategory,
@@ -495,42 +497,52 @@ export class MockMaClient implements IMaClient {
     this.seedInitialDataIfEmpty();
     let stations = this.getStorage<Station[]>(STORAGE_KEYS.STATIONS, []);
 
-    // Dynamically ensure all active team members from teamStore have a matching station
+    // Dynamically ensure all active rooms from roomsStore have a matching live station
     try {
-      const team = getStoredTeamMembers();
-      const activeDoctors = team.filter((m) => m.status !== false && m.canBookAppointments !== false);
+      const storedRooms = getStoredRooms();
       let changed = false;
 
-      for (const [idx, doc] of activeDoctors.entries()) {
-        const stationId = `st-consult-${doc.id}`;
-        const docDisplay = doc.name.startsWith('Dr.') ? doc.name : `Dr. ${doc.name}`;
-        const existingIdx = stations.findIndex((s) => s.id === stationId || s.providerId === String(doc.id));
+      for (const rm of storedRooms) {
+        const stationId = rm.id;
+        const existingIdx = stations.findIndex(
+          (s) => s.id === stationId || s.roomNumber === rm.roomNumber
+        );
+
+        const stationData: Station = {
+          id: rm.id,
+          orgId: DEFAULT_ORG_ID,
+          name: rm.name,
+          type: 'doctor_room',
+          providerId: rm.responsibleId ? String(rm.responsibleId) : undefined,
+          providerName: rm.responsibleName,
+          roomNumber: rm.roomNumber,
+          floorWing: rm.location ? `Room ${rm.roomNumber} · ${rm.location}` : `Room ${rm.roomNumber}`,
+          directions: rm.direction || `Room ${rm.roomNumber} is located at ${rm.location || 'the clinic'}. Please follow hallway signs.`,
+          categoryId: rm.serviceName?.toLowerCase().includes('dental')
+            ? 'cat_dental'
+            : rm.serviceName?.toLowerCase().includes('x-ray') || rm.serviceName?.toLowerCase().includes('imaging')
+            ? 'cat_diagnostics'
+            : 'cat_clinical',
+          active: rm.isActive !== false,
+          createdAt: rm.createdAt || new Date().toISOString(),
+        };
 
         if (existingIdx !== -1) {
-          // Update doctor name / room title if team member was updated
-          if (stations[existingIdx].providerName !== docDisplay || stations[existingIdx].name !== `${docDisplay}'s Consultation Room`) {
+          if (
+            stations[existingIdx].name !== stationData.name ||
+            stations[existingIdx].directions !== stationData.directions ||
+            stations[existingIdx].roomNumber !== stationData.roomNumber ||
+            stations[existingIdx].active !== stationData.active ||
+            stations[existingIdx].providerName !== stationData.providerName
+          ) {
             stations[existingIdx] = {
               ...stations[existingIdx],
-              providerName: docDisplay,
-              name: `${docDisplay}'s Consultation Room`,
+              ...stationData,
             };
             changed = true;
           }
         } else {
-          stations.unshift({
-            id: stationId,
-            orgId: DEFAULT_ORG_ID,
-            name: `${docDisplay}'s Consultation Room`,
-            type: 'doctor_room',
-            providerId: String(doc.id),
-            providerName: docDisplay,
-            roomNumber: `${101 + idx}`,
-            floorWing: idx % 2 === 0 ? 'Ground Floor, Clinical Wing A' : '1st Floor, Specialty Wing',
-            directions: `Proceed down the hallway, Room ${101 + idx} is on the right.`,
-            categoryId: 'cat_clinical',
-            active: true,
-            createdAt: new Date().toISOString(),
-          });
+          stations.push(stationData);
           changed = true;
         }
       }
@@ -539,7 +551,7 @@ export class MockMaClient implements IMaClient {
         this.setStorage(STORAGE_KEYS.STATIONS, stations);
       }
     } catch (e) {
-      console.warn('Error syncing doctor stations with teamStore:', e);
+      console.warn('Error syncing rooms with reception stations:', e);
     }
 
     return stations.filter((s) => !orgId || s.orgId === orgId);
@@ -548,47 +560,57 @@ export class MockMaClient implements IMaClient {
   async getDirectionCategories(orgId: string = DEFAULT_ORG_ID): Promise<DirectionCategory[]> {
     this.seedInitialDataIfEmpty();
     const stations = await this.getStations(orgId);
-    const storedCategories = this.getStorage<Array<{ id: string; name: string; icon?: string }>>(
-      STORAGE_KEYS.CATEGORIES,
-      []
-    );
+    const roomsFromStore = getStoredRooms().filter((r) => r.isActive !== false);
 
+    // Group categories dynamically by department or service
     const categoriesMap = new Map<string, DirectionCategory>();
 
-    // Register known categories
-    for (const cat of storedCategories) {
-      categoriesMap.set(cat.id, {
-        id: cat.id,
-        name: cat.name,
-        icon: cat.icon || 'MapPin',
-        rooms: [],
-      });
-    }
-
-    // Default "Other" category for unassigned/unknown categories
-    const otherCategory: DirectionCategory = {
+    categoriesMap.set('cat_clinical', {
+      id: 'cat_clinical',
+      name: 'Consultation & Clinics',
+      icon: 'Stethoscope',
+      rooms: [],
+    });
+    categoriesMap.set('cat_dental', {
+      id: 'cat_dental',
+      name: 'Dental Department',
+      icon: 'Smile',
+      rooms: [],
+    });
+    categoriesMap.set('cat_diagnostics', {
+      id: 'cat_diagnostics',
+      name: 'Diagnostics & Imaging',
+      icon: 'Activity',
+      rooms: [],
+    });
+    categoriesMap.set('cat_other', {
       id: 'cat_other',
-      name: 'Other Locations',
+      name: 'Other Clinic Rooms',
       icon: 'MapPin',
       rooms: [],
-    };
+    });
 
-    // Group active stations with directions into their category
-    for (const station of stations) {
-      if (!station.active) continue;
-      const room: DirectionRoom = {
-        id: station.id,
-        name: station.name,
-        floorWing: station.floorWing || (station.roomNumber ? `Room ${station.roomNumber}` : undefined),
-        directions: station.directions || `Located at room ${station.roomNumber || station.name}. Please ask reception for assistance.`,
-        stationId: station.id,
-        categoryId: station.categoryId,
+    for (const rm of roomsFromStore) {
+      const dirRoom: DirectionRoom = {
+        id: rm.id,
+        name: rm.name,
+        floorWing: `Room ${rm.roomNumber} · ${rm.location}`,
+        directions: rm.direction || `Room ${rm.roomNumber} is located at ${rm.location}. Please follow hallway signs.`,
+        stationId: rm.id,
+        categoryId: rm.serviceName?.toLowerCase().includes('dental')
+          ? 'cat_dental'
+          : rm.serviceName?.toLowerCase().includes('x-ray') || rm.serviceName?.toLowerCase().includes('imaging')
+          ? 'cat_diagnostics'
+          : rm.serviceName?.toLowerCase().includes('consult')
+          ? 'cat_clinical'
+          : 'cat_other',
       };
 
-      if (station.categoryId && categoriesMap.has(station.categoryId)) {
-        categoriesMap.get(station.categoryId)!.rooms.push(room);
+      const targetCatId = dirRoom.categoryId || 'cat_clinical';
+      if (categoriesMap.has(targetCatId)) {
+        categoriesMap.get(targetCatId)!.rooms.push(dirRoom);
       } else {
-        otherCategory.rooms.push(room);
+        categoriesMap.get('cat_other')!.rooms.push(dirRoom);
       }
     }
 
@@ -598,11 +620,21 @@ export class MockMaClient implements IMaClient {
         result.push(cat);
       }
     }
-    if (otherCategory.rooms.length > 0) {
-      result.push(otherCategory);
-    }
 
-    return result;
+    return result.length > 0 ? result : [
+      {
+        id: 'cat_clinical',
+        name: 'Consultation Rooms',
+        icon: 'Stethoscope',
+        rooms: stations.filter((s) => s.active).map((s) => ({
+          id: s.id,
+          name: s.name,
+          floorWing: s.floorWing,
+          directions: s.directions || 'Please follow clinic signs.',
+          stationId: s.id,
+        })),
+      },
+    ];
   }
 
   // --- OTP & Identity ---
@@ -1105,6 +1137,11 @@ export class MockMaClient implements IMaClient {
 
       const tokenNumber = `D-${String(appointments.length + 1).padStart(3, '0')}`;
 
+      const resolvedRoom = findRoomForAppointment({
+        serviceId: srv?.id,
+        employeeId: prov?.id,
+      });
+
       const newApt: AppointmentSummary = {
         id: `apt_${Date.now()}`,
         clientId: data.clientId,
@@ -1119,8 +1156,8 @@ export class MockMaClient implements IMaClient {
         status: 'confirmed',
         receptionEnabled: true,
         source: data.source || 'Walked In',
-        roomStationId: 'st-consult-1',
-        roomName: dynamicRoomName,
+        roomStationId: resolvedRoom?.id || 'st-consult-1',
+        roomName: resolvedRoom?.name || dynamicRoomName,
         tokenNumber,
       };
 
@@ -1325,6 +1362,29 @@ export class MockMaClient implements IMaClient {
         metadata: { tokenLabel, stationId: targetStation.id },
         timestamp: new Date().toISOString(),
       });
+
+      // Emit check-in automation events across both client and appointment scopes
+      try {
+        eventBus.emit('client.checked_in', 'client', patient.id, {
+          clientId: patient.id,
+          clientName: patient.name,
+          clientPhone: patient.phone,
+          appointmentId: apt?.id,
+          ticketNumber: tokenLabel,
+        });
+        if (apt?.id) {
+          eventBus.emit('appointment.checked_in', 'appointment', apt.id, {
+            appointmentId: apt.id,
+            clientId: patient.id,
+            clientName: patient.name,
+          });
+          try {
+            appointmentService.checkInAppointment(apt.id);
+          } catch {}
+        }
+      } catch (err) {
+        console.warn('[MockMaClient] Failed to emit check-in events:', err);
+      }
 
       return { journey, ticket };
     });
@@ -1856,13 +1916,12 @@ export class MockMaClient implements IMaClient {
       };
     }
 
-    // Prototype fallback if demo vector matches Priya Sharma
     if (!bestMatch.client && template.length > 0) {
-      const priya = mappedPatients.find((p) => p.id === 'CL-013') || mappedPatients[0];
-      if (priya) {
+      const enrolled = mappedPatients.find((p) => p.faceEnrolled);
+      if (enrolled) {
         return {
           matched: true,
-          client: priya,
+          client: enrolled,
           confidence: 0.94,
           multipleMatches: false,
         };

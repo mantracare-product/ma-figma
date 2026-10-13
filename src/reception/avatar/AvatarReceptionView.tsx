@@ -55,6 +55,8 @@ import {
   Receipt,
   QrCode,
   Copy,
+  Activity,
+  FileText,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
@@ -75,7 +77,11 @@ import {
 } from '../types/reception';
 import { toast } from 'sonner';
 import { getStoredClients } from '../../lib/clientsStore';
-import { getProcessesForAiReceptionist, DEMO_PATIENT_PORTAL_PROCESS } from '../../lib/useProcessStore';
+import {
+  getProcessesForAiReceptionist,
+  isStageEnabledForAiReceptionist,
+  type Stage,
+} from '../../lib/useProcessStore';
 import '../styles/navodyaTokens.css';
 import '../styles/avatarStage.css';
 
@@ -98,6 +104,8 @@ export type ScreenState =
   | 'BOOKING_CONFIRM'
   | 'TOKEN_ISSUED'
   | 'MY_VISIT'
+  | 'NEXT_STEP'
+  | 'NEXT_STEP_DETAILS'
   | 'DIRECTIONS_CATEGORIES'
   | 'DIRECTIONS_ROOMS'
   | 'DIRECTIONS_RESULT'
@@ -107,7 +115,7 @@ export type AmbientPhase = 'dormant' | 'engaged' | 'greeting' | 'listening' | 'r
 export type FaceScanPhase = 'idle' | 'starting' | 'scanning' | 'success' | 'no_match' | 'denied';
 export type FaceRegistrationPhase = 'intro' | 'capturing' | 'duplicate_found' | 'success' | 'denied';
 
-export type FlowType = 'SCHEDULED' | 'WALK_IN' | 'PAYMENT' | 'MY_VISIT' | null;
+export type FlowType = 'SCHEDULED' | 'WALK_IN' | 'PAYMENT' | 'MY_VISIT' | 'NEXT_STEP' | null;
 
 const INACTIVITY_TIMEOUT_SECONDS = 60;
 
@@ -516,7 +524,7 @@ export const AvatarReceptionView: React.FC = () => {
   const [liveHint, setLiveHint] = useState<string>("Tap Start scanning when you're ready");
   const [faceConfidence, setFaceConfidence] = useState<number>(0);
   const [faceAttempts, setFaceAttempts] = useState<number>(0);
-  const [matchedCandidateName, setMatchedCandidateName] = useState<string>('Priya');
+  const [matchedCandidateName, setMatchedCandidateName] = useState<string>('');
 
   // Face Registration State Machine (Walk-in onboarding flow)
   const [faceRegPhase, setFaceRegPhase] = useState<FaceRegistrationPhase>('intro');
@@ -529,6 +537,11 @@ export const AvatarReceptionView: React.FC = () => {
   // Toast message state (in-panel glass notification)
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Next Step & Stage Guidance States
+  const [nextStepStage, setNextStepStage] = useState<Stage | null>(null);
+  const [nextStepClient, setNextStepClient] = useState<any>(null);
+  const [nextStepProcess, setNextStepProcess] = useState<any>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -1670,35 +1683,47 @@ export const AvatarReceptionView: React.FC = () => {
             const firstName = matchedClient.name.split(' ')[0] || 'Patient';
             setMatchedCandidateName(firstName);
 
-            let summary: VisitSummary | null = null;
-            try {
-              summary = await maClient.getVisitSummary(matchedClient.id);
-            } catch {}
-
-            if (summary && summary.appointment && summary.appointment.status === 'confirmed') {
-              // Case 1: Recognized with scheduled appointment today
+            if (flowType === 'NEXT_STEP') {
               setBranchCase('CASE_1');
-              setVisitSummary(summary);
               setFacePhase('success');
-              setLiveHint('Appointment verified!');
+              setLiveHint('Identity verified!');
               speak(
                 currentLanguage === 'hi'
-                  ? `नमस्ते ${firstName}! क्या आप यही हैं?`
-                  : `Hi ${firstName}! Is this you? Please confirm to view your visit summary.`,
+                  ? `नमस्ते ${firstName}! क्या आप यही हैं? अपने अगले चरण का विवरण देखने के लिए पुष्टि करें।`
+                  : `Hi ${firstName}! Is this you? Please confirm to view your next step guidance.`,
                 'success'
               );
             } else {
-              // Case 2: Recognized existing patient without appointment today
-              setBranchCase('CASE_2');
-              setVisitSummary(null);
-              setFacePhase('success');
-              setLiveHint('Profile verified!');
-              speak(
-                currentLanguage === 'hi'
-                  ? `नमस्ते ${firstName}! आपका स्वागत है। आइए आपका वॉक-इन परामर्श बुक करें।`
-                  : `Hi ${firstName}! Welcome back. Let's get you registered for a walk-in consultation.`,
-                'success'
-              );
+              let summary: VisitSummary | null = null;
+              try {
+                summary = await maClient.getVisitSummary(matchedClient.id);
+              } catch {}
+
+              if (summary && summary.appointment && summary.appointment.status === 'confirmed') {
+                // Case 1: Recognized with scheduled appointment today
+                setBranchCase('CASE_1');
+                setVisitSummary(summary);
+                setFacePhase('success');
+                setLiveHint('Appointment verified!');
+                speak(
+                  currentLanguage === 'hi'
+                    ? `नमस्ते ${firstName}! क्या आप यही हैं?`
+                    : `Hi ${firstName}! Is this you? Please confirm to view your visit summary.`,
+                  'success'
+                );
+              } else {
+                // Case 2: Recognized existing patient without appointment today
+                setBranchCase('CASE_2');
+                setVisitSummary(null);
+                setFacePhase('success');
+                setLiveHint('Profile verified!');
+                speak(
+                  currentLanguage === 'hi'
+                    ? `नमस्ते ${firstName}! आपका स्वागत है। आइए आपका वॉक-इन परामर्श बुक करें।`
+                    : `Hi ${firstName}! Welcome back. Let's get you registered for a walk-in consultation.`,
+                  'success'
+                );
+              }
             }
           } else {
             // Case 3: Not recognized (new patient walk-in)
@@ -1814,19 +1839,24 @@ export const AvatarReceptionView: React.FC = () => {
   }, [handleUserActivity]);
 
   // Unified Appointment & Walk-in Entry Point (PRD Section 3.1 & Global Principles 1 & 2)
-  const enterAppointmentFlow = useCallback(() => {
+  const enterAppointmentFlow = useCallback((targetFlow?: FlowType | unknown) => {
     handleUserActivity();
     stopCameraStream();
-    setFlowType('SCHEDULED');
+    const effectiveFlow: FlowType = typeof targetFlow === 'string' ? (targetFlow as FlowType) : 'SCHEDULED';
+    setFlowType(effectiveFlow);
     setBranchCase(null);
     setScreen('FACE_SCAN');
     if (location.pathname !== '/reception/appointment') {
       navigate('/reception/appointment');
     }
     speak(
-      currentLanguage === 'hi'
-        ? 'कृपया चेक इन करने के लिए कैमरे में देखें या फोन नंबर दर्ज करें।'
-        : 'Please look into the camera to check in, or use your phone number below.'
+      effectiveFlow === 'NEXT_STEP'
+        ? (currentLanguage === 'hi'
+            ? 'अपनी स्थिति और अगला कदम जानने के लिए, कृपया कैमरे में देखें या नीचे फ़ोन नंबर दर्ज करें।'
+            : 'To check your current status and next step, please look into the camera or use your phone number below.')
+        : (currentLanguage === 'hi'
+            ? 'कृपया चेक इन करने के लिए कैमरे में देखें या फोन नंबर दर्ज करें।'
+            : 'Please look into the camera to check in, or use your phone number below.')
     );
   }, [handleUserActivity, stopCameraStream, currentLanguage, location.pathname, navigate, speak]);
 
@@ -1893,7 +1923,49 @@ export const AvatarReceptionView: React.FC = () => {
     handleUserActivity();
     if (!selectedPatient) return;
 
-    if (flowType === 'PAYMENT') {
+    if (flowType === 'NEXT_STEP') {
+      const allClients = getStoredClients();
+      const clientRecord = allClients.find((c) =>
+        c.id === selectedPatient.id ||
+        (c.phone && selectedPatient.phone && c.phone.replace(/\D/g, '') === selectedPatient.phone.replace(/\D/g, '')) ||
+        c.name.toLowerCase() === selectedPatient.name.toLowerCase()
+      ) || selectedPatient;
+
+      const aiProcesses = getProcessesForAiReceptionist();
+      const targetProcess = aiProcesses.find(
+        (p) =>
+          (clientRecord as any)?.processes?.some(
+            (pNameOrId: string) => pNameOrId === p.name || pNameOrId === p.id
+          )
+      ) || aiProcesses[0];
+
+      const stages = targetProcess?.stages || [];
+      const currentStageName = (clientRecord as any).stage;
+      const currentIndex = currentStageName
+        ? stages.findIndex(
+            (s) => s.name.toLowerCase() === currentStageName.toLowerCase() || s.id.toLowerCase() === currentStageName.toLowerCase()
+          )
+        : -1;
+
+      const currentStage = currentIndex >= 0 ? stages[currentIndex] : stages[0];
+      const nextStage = currentIndex >= 0
+        ? stages.slice(currentIndex + 1).find((s) => isStageEnabledForAiReceptionist(s)) || currentStage
+        : currentStage;
+
+      if (nextStage) {
+        setNextStepStage(nextStage);
+        setNextStepClient(clientRecord);
+        setNextStepProcess(targetProcess);
+        setScreen('NEXT_STEP');
+        speak(
+          currentLanguage === 'hi'
+            ? `नमस्ते ${(clientRecord.name || '').split(' ')[0]}! आपका अगला चरण ${nextStage.name} है।`
+            : `Hi ${(clientRecord.name || '').split(' ')[0]}! Here is your upcoming step: ${nextStage.name}. You can touch View Details for guidance.`,
+          'success'
+        );
+      }
+      return;
+    } else if (flowType === 'PAYMENT') {
       speak('Loading your billing records...', 'thinking', 'Retrieving pending invoices...');
       const invs = await loadPatientInvoices(selectedPatient.id);
       setScreen('BILLING');
@@ -2100,6 +2172,58 @@ export const AvatarReceptionView: React.FC = () => {
           setPatients(found);
           setScreen('PATIENT_PICK');
           speak('Multiple profiles are registered under this number. Whose bill would you like to view?');
+        }
+        return;
+      }
+
+      // flowType === 'NEXT_STEP'
+      if (flowType === 'NEXT_STEP') {
+        if (!found || found.length === 0) {
+          speak("We couldn't find a patient profile with this phone number. Please check with the front desk.", 'apologetic');
+          return;
+        }
+
+        const pat = found[0];
+        setSelectedPatient(pat);
+        const allClients = getStoredClients();
+        const clientRecord = allClients.find((c) =>
+          c.id === pat.id ||
+          (c.phone && pat.phone && c.phone.replace(/\D/g, '') === pat.phone.replace(/\D/g, '')) ||
+          c.name.toLowerCase() === pat.name.toLowerCase()
+        ) || pat;
+
+        const aiProcesses = getProcessesForAiReceptionist();
+        const targetProcess = aiProcesses.find(
+          (p) =>
+            (clientRecord as any)?.processes?.some(
+              (pNameOrId: string) => pNameOrId === p.name || pNameOrId === p.id
+            )
+        ) || aiProcesses[0];
+
+        const stages = targetProcess?.stages || [];
+        const currentStageName = (clientRecord as any).stage;
+        const currentIndex = currentStageName
+          ? stages.findIndex(
+              (s) => s.name.toLowerCase() === currentStageName.toLowerCase() || s.id.toLowerCase() === currentStageName.toLowerCase()
+            )
+          : -1;
+
+        const currentStage = currentIndex >= 0 ? stages[currentIndex] : stages[0];
+        const nextStage = currentIndex >= 0
+          ? stages.slice(currentIndex + 1).find((s) => isStageEnabledForAiReceptionist(s)) || currentStage
+          : currentStage;
+
+        if (nextStage) {
+          setNextStepStage(nextStage);
+          setNextStepClient(clientRecord);
+          setNextStepProcess(targetProcess);
+          setScreen('NEXT_STEP');
+          speak(
+            currentLanguage === 'hi'
+              ? `नमस्ते ${(clientRecord.name || '').split(' ')[0]}! आपका अगला चरण ${nextStage.name} है।`
+              : `Hi ${(clientRecord.name || '').split(' ')[0]}! Here is your upcoming step: ${nextStage.name}. You can touch View Details on the screen.`,
+            'success'
+          );
         }
         return;
       }
@@ -2839,12 +2963,121 @@ export const AvatarReceptionView: React.FC = () => {
         return true;
       }
 
-      // Priority 2.5: "What's Next" / "What's My Status" Query (Patient Journey Lookup)
+      // Priority 2.4: Explicit Details Request for Next Step / Stage Guidance
+      const DETAILS_QUERY_WORDS = [
+        "view detail",
+        "view details",
+        "show detail",
+        "show details",
+        "tell me detail",
+        "tell me details",
+        "what are the details",
+        "stage detail",
+        "stage details",
+        "next step detail",
+        "next step details",
+        "explain next step",
+        "detail of next step",
+        "details of next step",
+        "अगला विवरण",
+        "विवरण",
+      ];
+      const isDetailsQuery = DETAILS_QUERY_WORDS.some((w) => normalized.includes(w));
+
+      if (isDetailsQuery) {
+        unrecognizedAttemptsRef.current = 0;
+        console.log(`[Voice Intent Resolver] 🎯 PRIORITY 2.4 MATCH: "Next Step Details" query for "${normalized}"`);
+        handleUserActivity();
+
+        let recognizedPatient = selectedPatient;
+        if (!recognizedPatient && matchedCandidateName) {
+          const allClients = getStoredClients();
+          recognizedPatient = (allClients.find((c) =>
+            c.name.toLowerCase().includes(matchedCandidateName.toLowerCase())
+          ) as any) || null;
+        }
+
+        const allClients = getStoredClients();
+        const clientRecord = recognizedPatient ? (allClients.find((c) =>
+          c.id === recognizedPatient!.id ||
+          (c.phone && recognizedPatient!.phone && c.phone.replace(/\D/g, '') === recognizedPatient!.phone.replace(/\D/g, '')) ||
+          c.name.toLowerCase() === recognizedPatient!.name.toLowerCase()
+        ) || recognizedPatient) : null;
+
+        if (!clientRecord) {
+          speak(
+            currentLanguage === 'hi'
+              ? 'कृपया पहले कैमरे में देखें या फ़ोन नंबर दर्ज करें ताकि मैं आपको पहचान सकूँ।'
+              : 'Please look into the camera or enter your phone number first so I can identify you.',
+            'speaking'
+          );
+          return true;
+        }
+
+        const aiProcesses = getProcessesForAiReceptionist();
+        const targetProcess = aiProcesses.find(
+          (p) =>
+            (clientRecord as any)?.processes?.some(
+              (pNameOrId: string) => pNameOrId === p.name || pNameOrId === p.id
+            )
+        );
+
+        if (!targetProcess) {
+          speak(
+            currentLanguage === 'hi'
+              ? 'वर्तमान में आपके लिए कोई सक्रिय क्लिनिक प्रक्रिया निर्धारित नहीं है।'
+              : 'You do not have an active clinic journey assigned currently. Please visit our reception desk.',
+            'speaking'
+          );
+          return true;
+        }
+
+        const stages = targetProcess.stages || [];
+        const currentStageName = (clientRecord as any)?.stage;
+        const currentIndex = currentStageName
+          ? stages.findIndex(
+              (s) => s.name.toLowerCase() === currentStageName.toLowerCase() || s.id.toLowerCase() === currentStageName.toLowerCase()
+            )
+          : -1;
+        const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+        const nextStage = nextStepStage ||
+                          stages.slice(safeIndex + 1).find((s) => isStageEnabledForAiReceptionist(s)) ||
+                          stages.find((s) => isStageEnabledForAiReceptionist(s));
+
+        if (nextStage) {
+          setNextStepStage(nextStage);
+          setNextStepClient(clientRecord);
+          setNextStepProcess(targetProcess);
+          setScreen('NEXT_STEP_DETAILS');
+
+          speak(
+            currentLanguage === 'hi'
+              ? `${nextStage.name} का संपूर्ण विवरण स्क्रीन पर प्रदर्शित किया गया है।`
+              : `Here are the complete guidance details for ${nextStage.name}.`,
+            'speaking'
+          );
+          return true;
+        } else {
+          speak(
+            currentLanguage === 'hi'
+              ? 'इस प्रक्रिया के लिए कोई अतिरिक्त विवरण कॉन्फ़िगर नहीं किया गया है।'
+              : 'No additional stage details have been configured for your journey.',
+            'speaking'
+          );
+          return true;
+        }
+      }
+
+      // Priority 2.5: "What's Next" / Status Queries ("Where do I go next?", "What is my status?")
       const STATUS_QUERY_WORDS = [
         "what's next",
         "whats next",
-        "what is next",
         "what next",
+        "what is next",
+        "what do i do next",
+        "what's my next step",
+        "whats my next step",
+        "what is my next step",
         "what's my status",
         "whats my status",
         "what is my status",
@@ -2877,15 +3110,7 @@ export const AvatarReceptionView: React.FC = () => {
         }
 
         if (!recognizedPatient) {
-          speak(
-            currentLanguage === 'hi'
-              ? 'आपकी स्थिति जानने के लिए, कृपया कैमरे में देखें या अपना फ़ोन नंबर दर्ज करें।'
-              : 'To check what is next in your journey, please look into the camera or enter your phone number so I can recognize you.',
-            'speaking'
-          );
-          if (screenRef.current === 'AMBIENT' || screenRef.current === 'IDLE') {
-            enterAppointmentFlow();
-          }
+          enterAppointmentFlow('NEXT_STEP');
           return true;
         }
 
@@ -2897,48 +3122,89 @@ export const AvatarReceptionView: React.FC = () => {
           c.name.toLowerCase() === recognizedPatient!.name.toLowerCase()
         ) || recognizedPatient;
 
-        // 3. Process-based visibility: only processes with connectedToAiReceptionist === true
+        // 3. Process-based visibility: only processes with connectedToAiReceptionist === true assigned to this client
         const aiProcesses = getProcessesForAiReceptionist();
-        const targetProcess =
-          aiProcesses.find((p) => p.name === 'Patient Care Journey' || ((clientRecord as any).processes && (clientRecord as any).processes.includes(p.name))) ||
-          aiProcesses[0] ||
-          DEMO_PATIENT_PORTAL_PROCESS;
-
-        const stages = targetProcess.stages || [];
-        const currentStageName = (clientRecord as any).stage || 'Client Checked In';
-        const currentIndex = stages.findIndex(
-          (s) => s.name.toLowerCase() === currentStageName.toLowerCase() || s.id.toLowerCase() === currentStageName.toLowerCase()
+        const targetProcess = aiProcesses.find(
+          (p) =>
+            (clientRecord as any)?.processes?.some(
+              (pNameOrId: string) => pNameOrId === p.name || pNameOrId === p.id
+            )
         );
 
-        const safeIndex = currentIndex >= 0 ? currentIndex : 0;
-        const currentStage = stages[safeIndex];
-        const completedStages = stages.slice(0, safeIndex);
-        const nextStage = safeIndex < stages.length - 1 ? stages[safeIndex + 1] : null;
+        const patientFirstName = (clientRecord.name || 'Patient').split(' ')[0];
+
+        if (!targetProcess) {
+          speak(
+            currentLanguage === 'hi'
+              ? `नमस्ते ${patientFirstName}, वर्तमान में आपके लिए कोई सक्रिय क्लिनिक प्रक्रिया निर्धारित नहीं है। सहायता के लिए कृपया रिसेप्शन डेस्क से संपर्क करें।`
+              : `Hello ${patientFirstName}, you do not have an active clinic process assigned currently. Please visit our front desk for assistance.`,
+            'speaking'
+          );
+          return true;
+        }
+
+        const stages = targetProcess.stages || [];
+        const currentStageName = (clientRecord as any).stage;
+        const currentIndex = currentStageName
+          ? stages.findIndex(
+              (s) => s.name.toLowerCase() === currentStageName.toLowerCase() || s.id.toLowerCase() === currentStageName.toLowerCase()
+            )
+          : -1;
+
+        if (currentIndex < 0) {
+          speak(
+            currentLanguage === 'hi'
+              ? `नमस्ते ${patientFirstName}, आपका क्लिनिक चरण अभी शुरू नहीं हुआ है। कृपया रिसेप्शन काउंटर पर संपर्क करें।`
+              : `Hello ${patientFirstName}, you are not currently assigned to an active stage in this journey. Please visit our reception counter.`,
+            'speaking'
+          );
+          return true;
+        }
+
+        const currentStage = stages[currentIndex];
+        const completedStages = stages.slice(0, currentIndex);
+
+        // Next stage must be one enabled AND configured for AI Receptionist!
+        const nextStage = stages.slice(currentIndex + 1).find((s) => isStageEnabledForAiReceptionist(s)) || null;
 
         const completedText = completedStages.length > 0
           ? completedStages.map((s) => s.name).join(', ')
           : 'none yet';
 
-        const patientFirstName = (clientRecord.name || 'Patient').split(' ')[0];
-
         let spokenReply = '';
         if (nextStage) {
+          // Store for UI display on the right panel
+          setNextStepStage(nextStage);
+          setNextStepClient(clientRecord);
+          setNextStepProcess(targetProcess);
+          setScreen('NEXT_STEP');
+
           if (completedStages.length > 0) {
             spokenReply = currentLanguage === 'hi'
-              ? `नमस्ते ${patientFirstName}, आपने ${completedText} पूरा कर लिया है। आपका वर्तमान चरण ${currentStage.name} है, और अगला चरण ${nextStage.name} है।`
-              : `Hi ${patientFirstName}! You have already completed ${completedText}. Your current step is ${currentStage.name}, and your next step is ${nextStage.name}.`;
+              ? `नमस्ते ${patientFirstName}, आपने ${completedText} पूरा कर लिया है। आपका वर्तमान चरण ${currentStage.name} है, और अगला चरण ${nextStage.name} है। विवरण देखने के लिए स्क्रीन पर व्यू डिटेल स्पर्श करें।`
+              : `Hi ${patientFirstName}! You have completed ${completedText}. Your current step is ${currentStage.name}, and your upcoming next step is ${nextStage.name}. You can touch View Details on the screen or ask me for details.`;
           } else {
             spokenReply = currentLanguage === 'hi'
-              ? `नमस्ते ${patientFirstName}, आपका वर्तमान चरण ${currentStage.name} है। आपका अगला चरण ${nextStage.name} है।`
-              : `Hi ${patientFirstName}! Your current step is ${currentStage.name}. Your upcoming next step is ${nextStage.name}.`;
+              ? `नमस्ते ${patientFirstName}, आपका वर्तमान चरण ${currentStage.name} है, और अगला चरण ${nextStage.name} है। विवरण देखने के लिए स्क्रीन पर व्यू डिटेल स्पर्श करें।`
+              : `Hi ${patientFirstName}! Your current step is ${currentStage.name}. Your upcoming next step is ${nextStage.name}. You can touch View Details on the screen or ask me for details.`;
           }
+          showToast(`Next Step: ${nextStage.name}`);
+        } else if (isStageEnabledForAiReceptionist(currentStage)) {
+          setNextStepStage(currentStage);
+          setNextStepClient(clientRecord);
+          setNextStepProcess(targetProcess);
+          setScreen('NEXT_STEP');
+
+          spokenReply = currentLanguage === 'hi'
+            ? `नमस्ते ${patientFirstName}, आप वर्तमान में ${currentStage.name} चरण में हैं। आप विवरण देखने के लिए स्क्रीन देख सकते हैं।`
+            : `Hi ${patientFirstName}! You are currently at ${currentStage.name}. You can view the details on the screen.`;
+          showToast(`Current Step: ${currentStage.name}`);
         } else {
           spokenReply = currentLanguage === 'hi'
-            ? `नमस्ते ${patientFirstName}, आपने अपने सभी चरण पूरे कर लिए हैं! आपकी देखभाल यात्रा संपन्न हो चुकी है।`
-            : `Hi ${patientFirstName}! You have completed all steps in your care journey, including ${currentStage.name}. You are all set!`;
+            ? `नमस्ते ${patientFirstName}, आप वर्तमान में ${currentStage.name} चरण में हैं। आगे के चरण अभी कॉन्फ़िगर नहीं किए गए हैं।`
+            : `Hi ${patientFirstName}! You are currently at ${currentStage.name}. No subsequent configured steps are active for this journey.`;
         }
 
-        showToast(`Status: ${currentStage.name} → Next: ${nextStage ? nextStage.name : 'Completed'}`);
         speak(spokenReply, 'success', undefined, () => {
           if (screenRef.current === 'AMBIENT') {
             setAmbientPhase('listening');
@@ -3308,6 +3574,19 @@ export const AvatarReceptionView: React.FC = () => {
           handleResetSession();
           return;
         }
+      } else if (screen === 'NEXT_STEP') {
+        if (text.includes('detail') || text.includes('view') || text.includes('more') || text.includes('open')) {
+          setScreen('NEXT_STEP_DETAILS');
+          return;
+        } else if (text.includes('close') || text.includes('home') || text.includes('done') || text.includes('back')) {
+          handleResetSession();
+          return;
+        }
+      } else if (screen === 'NEXT_STEP_DETAILS') {
+        if (text.includes('back') || text.includes('step') || text.includes('close') || text.includes('done')) {
+          setScreen('NEXT_STEP');
+          return;
+        }
       } else if (screen === 'DIRECTIONS_CATEGORIES') {
         if (text.includes('back') || text.includes('home') || text.includes('cancel')) {
           handleResetSession();
@@ -3413,6 +3692,41 @@ export const AvatarReceptionView: React.FC = () => {
   };
 
   const stepProgress = getStepProgress();
+
+  // Render HTML content for Next Step Details (synchronized with Stage Portal & Reception Settings)
+  const renderNextStepHtml = (stage: Stage) => {
+    const rawHtml =
+      stage.portalReceptionSettings?.htmlContent ||
+      stage.portalReceptionSettings?.text ||
+      `<div class="stage-guide"><h3>${stage.portalReceptionSettings?.cardTitle || stage.name}</h3><p>${stage.description}</p></div>`;
+
+    const sampleValues: Record<string, string> = {
+      'client.name': nextStepClient?.name || selectedPatient?.name || 'Patient',
+      'client.firstName': (nextStepClient?.name || selectedPatient?.name || 'Patient').split(' ')[0],
+      'client.phone': nextStepClient?.phone || selectedPatient?.phone || '',
+      'client.email': nextStepClient?.email || selectedPatient?.email || '',
+      'client.id': nextStepClient?.id || selectedPatient?.id || '',
+      'appointment.date': 'Today',
+      'appointment.time': '11:30 AM',
+      'appointment.service': 'Clinical Consultation',
+      'appointment.provider': 'Dr. Rajesh Patel',
+      'appointment.room': 'Consultation Room 3',
+      'invoice.id': 'INV-CL-1056',
+      'invoice.total': '$78.75',
+      'invoice.balanceDue': '$78.75',
+      'stage.name': stage.name,
+      'process.name': nextStepProcess?.name || 'Patient Care Journey',
+      'clinic.name': DEFAULT_ORGANIZATION_NAME,
+    };
+
+    let rendered = rawHtml;
+    Object.entries(sampleValues).forEach(([key, val]) => {
+      rendered = rendered.split(`{{${key}}}`).join(val);
+      rendered = rendered.split(`{${key}}`).join(val);
+    });
+
+    return rendered;
+  };
 
   if (screen === 'AMBIENT') {
     return (
@@ -3938,6 +4252,18 @@ export const AvatarReceptionView: React.FC = () => {
                 {screen === 'SERVICE_DOCTOR' && 'Select Service & Provider'}
                 {screen === 'TOKEN_ISSUED' && 'Queue Token Issued'}
                 {screen === 'MY_VISIT' && 'Active Visit Tracker'}
+                {screen === 'NEXT_STEP' && (
+                  <>
+                    <Activity className="w-5 h-5 text-[#1456f0]" />
+                    <span>Next Step in Care Journey</span>
+                  </>
+                )}
+                {screen === 'NEXT_STEP_DETAILS' && (
+                  <>
+                    <FileText className="w-5 h-5 text-[#1456f0]" />
+                    <span>Stage Guidance & Next Step Details</span>
+                  </>
+                )}
                 {screen === 'DIRECTIONS_CATEGORIES' && (
                   <>
                     <Navigation className="w-5 h-5 text-[#1456f0]" />
@@ -3983,6 +4309,8 @@ export const AvatarReceptionView: React.FC = () => {
                     : 'Pending bills synchronized live with MantraAssist. Scan QR to pay.')}
                 {screen === 'ONBOARDING_FACE' && 'Next time, check in with just a look.'}
                 {screen === 'ONBOARDING_REVIEW' && 'Review details before registering.'}
+                {screen === 'NEXT_STEP' && 'Your assigned next step in the clinical workflow.'}
+                {screen === 'NEXT_STEP_DETAILS' && 'Detailed instructions and guidance configured for this stage.'}
                 {screen === 'DIRECTIONS_CATEGORIES' && 'Select a department to view available rooms and directions.'}
                 {screen === 'DIRECTIONS_ROOMS' && 'Select a room or station to view walking directions.'}
                 {screen === 'DIRECTIONS_RESULT' && 'Step-by-step navigation from reception.'}
@@ -5743,6 +6071,123 @@ export const AvatarReceptionView: React.FC = () => {
               handleOpenDirections();
             }}
           />
+        )}
+
+        {/* ===================================================================== */}
+        {/* NEXT STEP STAGE CARD (Shown when user asks "what's next step")        */}
+        {/* ===================================================================== */}
+        {screen === 'NEXT_STEP' && nextStepStage && (
+          <div className="flex-1 flex flex-col justify-center items-center py-4 max-w-lg mx-auto w-full animate-in fade-in duration-200">
+            <div className="w-full bg-white rounded-3xl border-2 border-blue-200 p-6 sm:p-7 shadow-lg space-y-5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="w-3.5 h-3.5 rounded-full"
+                    style={{ backgroundColor: nextStepStage.color || '#3B82F6' }}
+                  />
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-700 font-display">
+                    Upcoming Next Step
+                  </span>
+                </div>
+                <span className="font-mono text-[11px] font-bold bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
+                  {nextStepStage.name}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-xl sm:text-2xl font-bold text-slate-900 font-display">
+                  {nextStepStage.portalReceptionSettings?.cardTitle || nextStepStage.name}
+                </h3>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  {nextStepStage.portalReceptionSettings?.cardDescription || nextStepStage.description}
+                </p>
+              </div>
+
+              {/* Patient context badge */}
+              {nextStepClient && (
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600 flex items-center justify-between">
+                  <span>Patient: <strong className="text-slate-900">{nextStepClient.name}</strong></span>
+                  <span className="font-mono text-slate-500">#{nextStepClient.id}</span>
+                </div>
+              )}
+
+              {/* View Details CTA Button */}
+              <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => {
+                    setScreen('NEXT_STEP_DETAILS');
+                    speak(
+                      currentLanguage === 'hi'
+                        ? `${nextStepStage.name} का संपूर्ण विवरण स्क्रीन पर प्रदर्शित किया गया है।`
+                        : `Here are the complete details for ${nextStepStage.name}.`,
+                      'speaking'
+                    );
+                  }}
+                  className="flex-1 py-3.5 px-5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[48px]"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>View Details</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+
+                <button
+                  onClick={handleResetSession}
+                  className="py-3.5 px-5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-all cursor-pointer min-h-[48px]"
+                >
+                  Back to Home
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================== */}
+        {/* NEXT STEP DETAILS SCREEN (Rendered HTML Block)                         */}
+        {/* ===================================================================== */}
+        {screen === 'NEXT_STEP_DETAILS' && nextStepStage && (
+          <div className="flex-1 flex flex-col justify-between max-w-xl mx-auto w-full py-2 animate-in fade-in duration-200 min-h-0">
+            <div className="w-full bg-white rounded-3xl border-2 border-blue-200 p-6 shadow-lg space-y-4 overflow-y-auto max-h-[500px]">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-3.5 h-3.5 rounded-full"
+                    style={{ backgroundColor: nextStepStage.color || '#3B82F6' }}
+                  />
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-700 font-display">
+                    Stage Guidance Details
+                  </span>
+                </div>
+                <span className="font-mono text-[11px] font-bold bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
+                  {nextStepStage.name}
+                </span>
+              </div>
+
+              {/* Rendered HTML content from html block */}
+              <div className="prose prose-slate max-w-none text-sm text-slate-700 leading-relaxed p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 [&_h3]:text-base [&_h3]:font-bold [&_h3]:text-slate-900 [&_h3]:mb-2 [&_p]:mb-2 [&_strong]:text-slate-900">
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: renderNextStepHtml(nextStepStage),
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="pt-3 shrink-0 flex items-center gap-3">
+              <button
+                onClick={() => setScreen('NEXT_STEP')}
+                className="flex-1 h-12 rounded-full bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Next Step Card</span>
+              </button>
+              <button
+                onClick={handleResetSession}
+                className="px-6 h-12 rounded-full bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+              >
+                Done
+              </button>
+            </div>
+          </div>
         )}
 
         {/* ===================================================================== */}

@@ -1842,11 +1842,11 @@ export default function Deals() {
               if (isActive) {
                 // Active stage
               } else if (isCurrentFinal) {
-                if (isThisInProgress) {
-                  // Keep in-progress stages active/completed when lost or final stage is updated
+                if (isThisInProgress && activeIdx >= 0 && segIdx < activeIdx) {
+                  // Keep reached in-progress stages completed with full color when lost or final stage is marked
                   isCompleted = true;
                 } else {
-                  // Deactivate won stage and other alternate last/outcome stages
+                  // Deactivate alternate outcome stages
                   isDeactivated = true;
                 }
               } else {
@@ -1856,6 +1856,7 @@ export default function Deals() {
                 }
               }
 
+              const isLocked = Boolean(isCurrentFinal);
               const lightBg = lightenHex(stageColor, 78);
               const lightBorder = lightenHex(stageColor, 40);
 
@@ -1870,17 +1871,12 @@ export default function Deals() {
               } else if (isCompleted) {
                 bg = stageColor;
                 border = `1px solid ${stageColor}`;
-                opacity = 0.85;
-              } else if (isDeactivated) {
-                // In deactivated form, show the colors of respective stage but light to maintain the UI
-                bg = lightBg;
-                border = `1px solid ${lightBorder}`;
-                opacity = 0.95;
+                opacity = 0.9;
               } else {
-                // Upcoming unfilled stage
-                bg = "transparent";
+                // Inactive / unreached / deactivated stages: light grey to show inactive
+                bg = "#E2E8F0";
                 border = "1px solid #CBD5E1";
-                opacity = 0.45;
+                opacity = 0.9;
               }
 
               const isHovered = hoveredStageSegment?.logId === log.id && hoveredStageSegment?.segIdx === segIdx;

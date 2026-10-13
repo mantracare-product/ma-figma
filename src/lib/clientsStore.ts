@@ -9,6 +9,7 @@
 import { useState, useEffect } from "react";
 import { initialClients as canonicalClients, type Client } from "../data/canonicalClients";
 import { updateProcessCallLogStage } from "./processLogsStore";
+import { getStoredProcesses, DEMO_PATIENT_PORTAL_PROCESS_ID } from "./useProcessStore";
 
 export type { Client };
 export const CLIENTS_STORE_EVENT = "clientsStore_updated";
@@ -231,6 +232,86 @@ export function deleteStoredClient(id: string): void {
   const currentClients = getStoredClients();
   const filtered = currentClients.filter((c) => c.id !== id);
   saveStoredClients(filtered);
+}
+
+/**
+ * Move a client to a target stage in a process (e.g. "Patient Care Journey")
+ * and notifies all listeners, patient portal views, and call logs.
+ */
+export function moveClientToStage(
+  clientId: string,
+  targetStageIdOrName: string,
+  processIdOrName?: string
+): Client | null {
+  if (!clientId || !targetStageIdOrName) return null;
+  const currentClients = getStoredClients();
+  const index = currentClients.findIndex(
+    (c) => c.id === clientId || c.name?.toLowerCase() === clientId.toLowerCase()
+  );
+  if (index === -1) {
+    console.warn(`[clientsStore] moveClientToStage: Client "${clientId}" not found.`);
+    return null;
+  }
+
+  const client = currentClients[index];
+
+  // Dynamically resolve target process and stage name
+  let targetProcessName = "Patient Care Journey";
+  let targetStageName = targetStageIdOrName;
+
+  try {
+    const allProcesses = getStoredProcesses();
+    const targetProcess = allProcesses.find(
+      (p: any) =>
+        p.id === processIdOrName ||
+        p.name === processIdOrName ||
+        p.id === DEMO_PATIENT_PORTAL_PROCESS_ID ||
+        p.name === "Patient Care Journey"
+    );
+
+    if (targetProcess) {
+      targetProcessName = targetProcess.name || "Patient Care Journey";
+      if (Array.isArray(targetProcess.stages)) {
+        const q = targetStageIdOrName.trim().toLowerCase();
+        const matched = targetProcess.stages.find(
+          (s: any) =>
+            s.id?.toLowerCase() === q ||
+            s.name?.toLowerCase() === q ||
+            s.name?.toLowerCase().includes(q) ||
+            q.includes(s.name?.toLowerCase())
+        );
+        if (matched) {
+          targetStageName = matched.name;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[clientsStore] Could not load process definitions for stage resolution:", err);
+  }
+
+  const existingProcesses = Array.isArray(client.processes) ? [...client.processes] : [];
+  if (targetProcessName && !existingProcesses.includes(targetProcessName)) {
+    existingProcesses.push(targetProcessName);
+  }
+
+  const updatedClient: Client = {
+    ...client,
+    stage: targetStageName,
+    processes: existingProcesses,
+  };
+
+  currentClients[index] = updatedClient;
+  saveStoredClients(currentClients);
+
+  if (typeof window !== "undefined") {
+    try {
+      window.dispatchEvent(
+        new CustomEvent("patient_portal_client_changed", { detail: updatedClient.id })
+      );
+    } catch {}
+  }
+
+  return updatedClient;
 }
 
 /**

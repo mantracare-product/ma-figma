@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from "react";
 import { useOutletContext, useNavigate, useSearchParams } from "react-router";
 import {
-  QrCode,
+  Scan,
   CheckCircle2,
   ArrowRight,
   ShieldCheck,
   User,
-  Copy,
-  Check,
-  ExternalLink,
   Sparkles,
   Camera,
-  RotateCw,
+  RefreshCw,
+  LayoutDashboard,
+  Check,
+  Zap,
 } from "lucide-react";
-import { Client, getStoredClients, saveStoredClients, CLIENTS_STORE_EVENT } from "../../../lib/clientsStore";
+import { Client, getStoredClients, saveStoredClients, moveClientToStage } from "../../../lib/clientsStore";
 import { Process, Stage } from "../../../lib/useProcessStore";
+import { eventBus } from "../../../lib/eventBus";
+import { appointmentService } from "../../../lib/appointmentService";
+import { getStoredRules } from "../../../lib/useAutomationStore";
 
 interface PortalContext {
   activeClient: Client;
@@ -28,103 +31,202 @@ interface PortalContext {
 export default function PatientCheckinScreen() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { activeClient, onStageChange } = useOutletContext<PortalContext>();
+  const { activeClient } = useOutletContext<PortalContext>();
 
-  const [copied, setCopied] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [isScanningActive, setIsScanningActive] = useState(false);
+  const [scanFlash, setScanFlash] = useState(false);
 
   const queryClientId = searchParams.get("clientId") || searchParams.get("id");
 
-  // Check URL param: if arrived via QR code containing clientId, auto confirm Stage 1
+  // Helper to determine the target stage and process from active automation rules
+  const getTargetStageAndProcess = () => {
+    try {
+      const rules = getStoredRules();
+      const checkinRule = rules.find(
+        (r) =>
+          r.enabled &&
+          (r.trigger?.event === "client.checked_in" ||
+            r.trigger?.event === "checked_in" ||
+            r.trigger?.label?.toLowerCase().includes("checked in"))
+      );
+      const targetProcName =
+        checkinRule?.action?.processName ||
+        checkinRule?.actions?.[0]?.params?.processName ||
+        "Patient Care Journey";
+      const targetStageName =
+        checkinRule?.action?.stageName ||
+        checkinRule?.actions?.[0]?.params?.stageName ||
+        "Client Checked In";
+      return { targetProcName, targetStageName };
+    } catch {
+      return { targetProcName: "Patient Care Journey", targetStageName: "Client Checked In" };
+    }
+  };
+
+  // Check URL param: if arrived via QR code containing clientId, trigger check-in
   useEffect(() => {
     if (queryClientId) {
       const all = getStoredClients();
       const target = all.find((c) => c.id === queryClientId);
       if (target) {
-        const updated = all.map((c) =>
-          c.id === queryClientId
-            ? { ...c, stage: "Client Checked In", processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])) }
+        const { targetProcName, targetStageName } = getTargetStageAndProcess();
+        moveClientToStage(target.id, targetStageName, targetProcName);
+
+        eventBus.emit("client.checked_in", "client", target.id, {
+          clientId: target.id,
+          clientName: target.name,
+          clientPhone: target.phone,
+        });
+
+        try {
+          const appts = appointmentService.getAppointments();
+          const userAppt = appts.find(
+            (a) => String(a.clientId) === String(target.id) || a.clientName === target.name
+          );
+          if (userAppt) {
+            appointmentService.checkInAppointment(userAppt.id);
+          }
+        } catch {}
+
+        const updatedClients = getStoredClients().map((c) =>
+          c.id === target.id
+            ? {
+                ...c,
+                status: "Checked In",
+                checkedInAt: new Date().toISOString(),
+                stage: targetStageName,
+                processes: Array.from(new Set([targetProcName, ...(c.processes || [])])),
+              }
             : c
         );
-        saveStoredClients(updated);
+        saveStoredClients(updatedClients);
         setConfirmed(true);
       }
-    } else if (activeClient?.stage === "Client Checked In") {
+    } else if (
+      activeClient?.stage &&
+      activeClient.stage !== "Confirmed" &&
+      activeClient.stage !== "Not Assigned" &&
+      activeClient.stage !== "Unregistered" &&
+      activeClient.processes?.includes("Patient Care Journey")
+    ) {
       setConfirmed(true);
     }
-  }, [queryClientId, activeClient?.id, activeClient?.stage]);
+  }, [queryClientId, activeClient?.id, activeClient?.stage, activeClient?.processes]);
 
-  const qrScanUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/patient/checkin?clientId=${activeClient?.id || "CL-001"}`
-    : `https://mantracare.app/patient/checkin?clientId=${activeClient?.id || "CL-001"}`;
-
-  const handleCopyLink = () => {
-    navigator.clipboard?.writeText(qrScanUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handlePerformCheckIn = () => {
+  const handlePerformCheckIn = async () => {
     if (!activeClient) return;
-    const all = getStoredClients();
-    const updated = all.map((c) =>
-      c.id === activeClient.id
-        ? { ...c, stage: "Client Checked In", processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])) }
-        : c
-    );
-    saveStoredClients(updated);
-    setConfirmed(true);
+
+    setIsScanningActive(true);
+    setScanFlash(true);
+
+    setTimeout(async () => {
+      setScanFlash(false);
+
+      const { targetProcName, targetStageName } = getTargetStageAndProcess();
+
+      // 1. Move client to automation stage immediately in store and process logs
+      moveClientToStage(activeClient.id, targetStageName, targetProcName);
+
+      // 2. Trigger automation pipeline on check-in
+      await eventBus.emit("client.checked_in", "client", activeClient.id, {
+        clientId: activeClient.id,
+        clientName: activeClient.name,
+        clientPhone: activeClient.phone,
+      });
+
+      // 3. Mark appointment checked-in if exists
+      try {
+        const appts = appointmentService.getAppointments();
+        const userAppt = appts.find(
+          (a) => String(a.clientId) === String(activeClient.id) || a.clientName === activeClient.name
+        );
+        if (userAppt) {
+          appointmentService.checkInAppointment(userAppt.id);
+        }
+      } catch {}
+
+      // 4. Update client record with Checked In status and timestamp
+      const freshClients = getStoredClients();
+      const updated = freshClients.map((c) =>
+        c.id === activeClient.id
+          ? {
+              ...c,
+              status: "Checked In",
+              checkedInAt: new Date().toISOString(),
+              stage: targetStageName,
+              processes: Array.from(new Set([targetProcName, ...(c.processes || [])])),
+            }
+          : c
+      );
+      saveStoredClients(updated);
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("patient_portal_client_changed", { detail: activeClient.id })
+        );
+      }
+
+      setIsScanningActive(false);
+      setConfirmed(true);
+    }, 700);
   };
+
+  const overviewPath = activeClient?.id ? `/patient/${activeClient.id}` : "/patient";
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
+    <div className="max-w-2xl mx-auto space-y-6 pb-12">
       {/* Header */}
       <div className="text-center space-y-2">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-50 border border-cyan-200/80 text-cyan-800 text-xs font-semibold">
-          <QrCode className="w-3.5 h-3.5 text-cyan-600" />
-          <span>Stage 1 of 5 • Client Checked In</span>
+          <Scan className="w-3.5 h-3.5 text-cyan-600" />
+          <span>Hospital Arrival Check-In</span>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-          Patient Self-Service Check-In
+        <h1
+          className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900"
+          style={{ fontFamily: "DM Sans, sans-serif" }}
+        >
+          Check-In QR Scanner
         </h1>
-        <p className="text-sm text-slate-500 max-w-lg mx-auto">
-          Scan your clinic arrival QR code or confirm check-in below to mark your status in the shared data layer.
+        <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto" style={{ fontFamily: "Outfit, sans-serif" }}>
+          Scan the QR code displayed at the clinic reception desk or kiosk to verify your arrival.
         </p>
       </div>
 
-      {/* Main Check-In Card */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-xs space-y-6">
+      {/* Main Scanner Container Card */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs space-y-6">
         {confirmed ? (
-          <div className="text-center py-6 space-y-5">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-inner border border-emerald-200">
-              <CheckCircle2 className="w-10 h-10" />
+          /* Confirmed State: shows success and button to return to overview (no next step buttons) */
+          <div className="text-center py-6 space-y-6">
+            <div className="w-20 h-20 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-inner border border-emerald-200">
+              <CheckCircle2 className="w-12 h-12" />
             </div>
 
-            <div>
+            <div className="space-y-1.5">
               <span className="text-xs font-bold uppercase tracking-wider text-emerald-600">
-                Check-in Confirmed
+                Arrival Verified
               </span>
-              <h2 className="text-xl font-bold text-slate-900 mt-1">
+              <h2 className="text-2xl font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
                 Welcome, {activeClient?.name}!
               </h2>
-              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                Your check-in has been recorded in the canonical client record (ID: {activeClient?.id}) and is visible across the AI Receptionist and MantraAssist dashboard.
+              <p className="text-xs text-slate-500 max-w-md mx-auto" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Your check-in has been recorded and synchronized with MantraAssist. You are now active in the care journey.
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 max-w-md mx-auto text-left text-xs space-y-1.5">
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 max-w-sm mx-auto text-left text-xs space-y-2">
               <div className="flex justify-between">
                 <span className="text-slate-400">Patient:</span>
                 <span className="font-semibold text-slate-800">{activeClient?.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Current Stage:</span>
+                <span className="text-slate-400">Status:</span>
                 <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                  Client Checked In
+                  Checked In
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Timestamp:</span>
+                <span className="text-slate-400">Time:</span>
                 <span className="text-slate-600">{new Date().toLocaleTimeString()}</span>
               </div>
             </div>
@@ -132,134 +234,125 @@ export default function PatientCheckinScreen() {
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 type="button"
-                onClick={() => navigate("/patient/book")}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-sm transition-all"
+                onClick={() => navigate(overviewPath)}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-sm transition-all cursor-pointer active:scale-98"
+                style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <span>Continue to Book Appointment (Stage 2)</span>
-                <ArrowRight className="w-4 h-4" />
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Go to Overview</span>
               </button>
+
               <button
                 type="button"
-                onClick={() => navigate("/patient")}
-                className="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-colors"
+                onClick={() => setConfirmed(false)}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-colors cursor-pointer"
               >
-                View Journey Status
+                <RefreshCw className="w-4 h-4" />
+                <span>Scan Again</span>
               </button>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            {/* Left: QR Code Display */}
-            <div className="flex flex-col items-center text-center p-6 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-4">
-              <div className="p-3 bg-white rounded-xl shadow-xs border border-slate-200/80">
-                {/* SVG QR Code Representation */}
-                <svg
-                  className="w-44 h-44"
-                  viewBox="0 0 100 100"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <rect width="100" height="100" fill="white" />
-                  {/* Top-left locator */}
-                  <rect x="10" y="10" width="26" height="26" rx="4" fill="#0F172A" />
-                  <rect x="14" y="14" width="18" height="18" rx="2" fill="white" />
-                  <rect x="18" y="18" width="10" height="10" fill="#0F172A" />
+          /* Live Scanner Viewfinder */
+          <div className="space-y-6">
+            {/* Camera Viewfinder Viewport */}
+            <div className="relative aspect-[4/3] sm:aspect-[16/10] w-full bg-slate-950 rounded-2xl overflow-hidden shadow-inner flex flex-col items-center justify-center border border-slate-800">
+              {/* Flash effect on scan complete */}
+              {scanFlash && (
+                <div className="absolute inset-0 bg-white z-50 animate-out fade-out duration-300 pointer-events-none" />
+              )}
 
-                  {/* Top-right locator */}
-                  <rect x="64" y="10" width="26" height="26" rx="4" fill="#0F172A" />
-                  <rect x="68" y="14" width="18" height="18" rx="2" fill="white" />
-                  <rect x="72" y="18" width="10" height="10" fill="#0F172A" />
+              {/* Subtle camera lens glare simulation */}
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(15,23,42,0.6)_0%,rgba(2,6,23,0.95)_100%)] pointer-events-none" />
 
-                  {/* Bottom-left locator */}
-                  <rect x="10" y="64" width="26" height="26" rx="4" fill="#0F172A" />
-                  <rect x="14" y="68" width="18" height="18" rx="2" fill="white" />
-                  <rect x="18" y="72" width="10" height="10" fill="#0F172A" />
-
-                  {/* Data patterns */}
-                  <rect x="42" y="12" width="6" height="6" fill="#0F172A" />
-                  <rect x="52" y="12" width="6" height="6" fill="#0F172A" />
-                  <rect x="42" y="24" width="6" height="12" fill="#0F172A" />
-                  <rect x="52" y="30" width="6" height="6" fill="#0F172A" />
-
-                  <rect x="12" y="44" width="6" height="6" fill="#0F172A" />
-                  <rect x="24" y="44" width="12" height="6" fill="#0F172A" />
-                  <rect x="42" y="44" width="16" height="16" rx="2" fill="#2563EB" />
-                  <rect x="64" y="44" width="6" height="6" fill="#0F172A" />
-                  <rect x="76" y="44" width="12" height="6" fill="#0F172A" />
-
-                  <rect x="12" y="54" width="6" height="6" fill="#0F172A" />
-                  <rect x="24" y="54" width="6" height="6" fill="#0F172A" />
-                  <rect x="64" y="54" width="12" height="6" fill="#0F172A" />
-                  <rect x="82" y="54" width="6" height="6" fill="#0F172A" />
-
-                  <rect x="42" y="68" width="6" height="12" fill="#0F172A" />
-                  <rect x="52" y="68" width="12" height="6" fill="#0F172A" />
-                  <rect x="52" y="80" width="6" height="10" fill="#0F172A" />
-                  <rect x="68" y="68" width="8" height="8" fill="#0F172A" />
-                  <rect x="80" y="76" width="10" height="14" fill="#0F172A" />
-                </svg>
-              </div>
-
-              <div>
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                  Arrival QR Code
-                </span>
-                <div className="text-xs font-semibold text-slate-800 mt-0.5">
-                  Encodes Patient ID: {activeClient?.id}
+              {/* HUD Header Bar */}
+              <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-700/80 text-[11px] font-semibold text-slate-300">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>CAMERA LIVE</span>
+                </div>
+                <div className="px-2.5 py-1 rounded-md bg-slate-900/70 border border-slate-800 text-[10px] font-mono text-slate-400">
+                  HD 1080P
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleCopyLink}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? "Link Copied!" : "Copy Check-in URL"}</span>
-              </button>
+              {/* Central Target Square with Scanning Crosshairs & Laser Beam */}
+              <div className="relative w-56 h-56 sm:w-64 sm:h-64 rounded-3xl border border-dashed border-emerald-400/40 flex items-center justify-center z-10">
+                {/* 4 Corner Targeting Brackets */}
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-400 rounded-tl-2xl" />
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-2xl" />
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-2xl" />
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald-400 rounded-br-2xl" />
+
+                {/* Vertical Scanning Animated Laser */}
+                <div
+                  className="absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_12px_#34d399] z-20"
+                  style={{
+                    animation: "scannerLaser 2.2s ease-in-out infinite alternate",
+                  }}
+                />
+
+                {/* Center Camera / Target Focus Reticle */}
+                <div className="w-16 h-16 rounded-full border border-emerald-400/30 flex items-center justify-center bg-emerald-500/5">
+                  <Camera className="w-7 h-7 text-emerald-400/80" />
+                </div>
+              </div>
+
+              {/* Bottom Instructions inside Viewfinder */}
+              <div className="absolute bottom-4 left-4 right-4 text-center z-20">
+                <span className="inline-block px-3 py-1 rounded-full bg-slate-900/80 backdrop-blur-md text-[11px] font-medium text-slate-300 border border-slate-700/60">
+                  Align clinic reception QR code within the frame
+                </span>
+              </div>
             </div>
 
-            {/* Right: Check-in Actions */}
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200/60 text-xs text-blue-900 space-y-1">
-                <div className="font-semibold flex items-center gap-1.5 text-blue-800">
-                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                  Simulate QR Scan Flow
-                </div>
-                <p className="text-blue-700/90 leading-relaxed text-[11px]">
-                  When scanned with a mobile camera, this QR loads this page with <code className="font-mono bg-white/70 px-1 py-0.5 rounded text-blue-950">?clientId={activeClient?.id}</code> and instantly updates the canonical client record to Stage 1.
-                </p>
-              </div>
+            {/* Inline CSS Animation for Laser */}
+            <style>{`
+              @keyframes scannerLaser {
+                0% {
+                  top: 10%;
+                  opacity: 0.6;
+                }
+                50% {
+                  top: 90%;
+                  opacity: 1;
+                }
+                100% {
+                  top: 10%;
+                  opacity: 0.6;
+                }
+              }
+            `}</style>
 
-              <div className="space-y-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handlePerformCheckIn}
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-all active:scale-[0.98]"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Confirm Check-In for {activeClient?.name}</span>
-                </button>
+            {/* Action CTA: "Done (QR Scanned)" */}
+            <div className="space-y-3 pt-2">
+              <button
+                type="button"
+                onClick={handlePerformCheckIn}
+                disabled={isScanningActive}
+                className={`w-full flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl text-sm font-bold shadow-md transition-all cursor-pointer ${
+                  isScanningActive
+                    ? "bg-emerald-600 text-white animate-pulse"
+                    : "bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white hover:shadow-blue-500/25"
+                }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {isScanningActive ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    <span>Verifying QR Code...</span>
+                  </>
+                ) : (
+                  <>
+                    <Scan className="w-5 h-5" />
+                    <span>Done (QR Scanned) — Check In Now</span>
+                  </>
+                )}
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const params = new URLSearchParams(window.location.search);
-                    params.set("clientId", activeClient?.id || "CL-001");
-                    navigate({ pathname: "/patient/checkin", search: params.toString() });
-                    handlePerformCheckIn();
-                  }}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold transition-colors"
-                >
-                  <Camera className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Simulate Mobile QR Scan Action</span>
-                </button>
-              </div>
-
-              <div className="pt-2 text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Writes stage "Client Checked In" to clientsStore.ts</span>
-              </div>
+              <p className="text-[11px] text-slate-400 text-center leading-relaxed">
+                Clicking <span className="font-semibold text-slate-600">Done (QR Scanned)</span> records your hospital arrival, runs the check-in automation, and moves you into the active care stage.
+              </p>
             </div>
           </div>
         )}

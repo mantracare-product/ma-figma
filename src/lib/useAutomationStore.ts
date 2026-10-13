@@ -192,6 +192,7 @@ export const EVENT_CATALOG: Record<
 > = {
   client: [
     { event: "client.created", label: "Client created", description: "Fires when a new client record is added (manual, import, webhook, or call)" },
+    { event: "client.checked_in", label: "Checked in", description: "Patient or client arrives / checks in at AI Receptionist or Patient Portal" },
     { event: "client.intent_matched", label: "Intent matched", description: "AI receptionist identifies caller intent matching process keywords" },
     { event: "client.call_ended", label: "Call ended", description: "Phone conversation concludes with transcript and summary" },
     { event: "client.entered_stage", label: "Entered stage", description: "Client transitions into an intake or custom process stage" },
@@ -227,7 +228,56 @@ export const EVENT_CATALOG: Record<
   ],
 };
 
-const DEFAULT_GLOBAL_RULES: AutomationRule[] = [];
+export const DEFAULT_CHECKIN_CARE_JOURNEY_RULE: AutomationRule = {
+  id: "rule-patient-checkin-care-journey",
+  orgId: "default",
+  name: "Patient Check-In -> Care Journey",
+  description: "When patient checks in via AI Receptionist or Patient Portal, advance to configured stage in Patient Care Journey.",
+  entityType: "client",
+  trigger: {
+    event: "client.checked_in",
+    label: "Checked in",
+    source: "any",
+  },
+  action: {
+    type: "moveToStage",
+    processId: "demo-patient-care-journey",
+    processName: "Patient Care Journey",
+    stageId: "stage-client-checked-in",
+    stageName: "Client Checked In",
+  },
+  actions: [
+    {
+      id: "step-checkin-update-stage",
+      name: "Update to stage",
+      description: "Update the stage for a process, appointment, or invoice.",
+      iconKey: "gitbranch",
+      stepKey: "update_to_stage",
+      trigger: "client.checked_in",
+      executionType: "wait",
+      delayValue: 0,
+      delayUnit: "minutes",
+      params: {
+        stageEntity: "processes",
+        entityType: "processes",
+        processId: "demo-patient-care-journey",
+        processName: "Patient Care Journey",
+        stepDetailProcess: "demo-patient-care-journey",
+        stageId: "stage-client-checked-in",
+        stageName: "Client Checked In",
+        stepDetailStage: "stage-client-checked-in",
+      },
+    },
+  ],
+  enabled: true,
+  health: "ok",
+  isClientCustomization: true,
+  createdIn: "client",
+  createdAt: "2026-10-13T10:00:00.000Z",
+  updatedAt: "2026-10-13T10:00:00.000Z",
+};
+
+const DEFAULT_GLOBAL_RULES: AutomationRule[] = [DEFAULT_CHECKIN_CARE_JOURNEY_RULE];
 
 /**
  * Validate that moveToStage targets a process and stage of the EXACT SAME entityType (if configured)
@@ -257,7 +307,11 @@ export function validateRuleEntityTarget(
     }
 
     const targetEntityType = targetProcess.entityType || "client";
-    if (effectiveEntity && targetEntityType !== effectiveEntity) {
+    const isCheckinCrossMove =
+      (effectiveEntity === "appointment" && (targetEntityType === "client" || targetProcess.name === "Patient Care Journey")) ||
+      (effectiveEntity === "client" && (targetEntityType === "appointment" || targetProcess.name === "Patient Care Journey"));
+
+    if (effectiveEntity && targetEntityType !== effectiveEntity && !isCheckinCrossMove) {
       return {
         valid: false,
         error: `Entity mismatch: ${effectiveEntity} rule cannot move records to ${targetEntityType} process.`,
@@ -310,7 +364,8 @@ export function getStoredRules(orgId?: string): AutomationRule[] {
   try {
     const raw = localStorage.getItem(AUTOMATION_RULES_STORAGE_KEY);
     if (!raw) {
-      return [];
+      localStorage.setItem(AUTOMATION_RULES_STORAGE_KEY, JSON.stringify([DEFAULT_CHECKIN_CARE_JOURNEY_RULE]));
+      return [DEFAULT_CHECKIN_CARE_JOURNEY_RULE];
     }
     const parsed: AutomationRule[] = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
@@ -324,8 +379,17 @@ export function getStoredRules(orgId?: string): AutomationRule[] {
       "rule-inv-sent-auto",
       "rule-inv-paid-auto",
     ]);
-    const filtered = parsed.filter((r) => !legacyMockIds.has(r.id));
-    if (filtered.length !== parsed.length) {
+    let filtered = parsed.filter((r) => !legacyMockIds.has(r.id));
+    const hasCheckinRule = filtered.some(
+      (r) =>
+        r.id === DEFAULT_CHECKIN_CARE_JOURNEY_RULE.id ||
+        r.trigger?.event === "client.checked_in" ||
+        r.trigger?.event === "checked_in"
+    );
+    if (!hasCheckinRule) {
+      filtered = [DEFAULT_CHECKIN_CARE_JOURNEY_RULE, ...filtered];
+      localStorage.setItem(AUTOMATION_RULES_STORAGE_KEY, JSON.stringify(filtered));
+    } else if (filtered.length !== parsed.length) {
       localStorage.setItem(AUTOMATION_RULES_STORAGE_KEY, JSON.stringify(filtered));
     }
     if (orgId && orgId !== "all") {

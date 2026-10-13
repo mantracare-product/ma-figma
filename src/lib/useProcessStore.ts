@@ -91,6 +91,8 @@ export interface StagePortalReceptionSettings {
   enabled?: boolean;
   enabledPortal?: boolean;
   enabledReception?: boolean;
+  cardTitle?: string;
+  cardDescription?: string;
   text?: string;
   htmlContent?: string;
   videos?: Array<{ id: string; title: string; url: string }>;
@@ -548,6 +550,16 @@ export const DEMO_PATIENT_PORTAL_PROCESS: Process = {
       isInitial: true,
       stagePosition: "initial",
       stageCategory: "in_progress",
+      connectedToPatientPortal: true,
+      connectedToAiReceptionist: true,
+      portalReceptionSettings: {
+        enabled: true,
+        enabledPortal: true,
+        enabledReception: true,
+        cardTitle: "Client Checked In",
+        cardDescription: "Your hospital arrival and token have been verified. Welcome to Mantra Care!",
+        htmlContent: "<h3>Check-in Verified</h3><p>Welcome to Mantra Care! Your arrival has been recorded. Please wait in the lounge for your appointment.</p><p><strong>Patient:</strong> {{client.name}}<br/><strong>Client ID:</strong> {{client.id}}</p>",
+      },
     },
     {
       id: "stage-book-appointment",
@@ -557,6 +569,16 @@ export const DEMO_PATIENT_PORTAL_PROCESS: Process = {
       color: "#3B82F6",
       stagePosition: "intermediate",
       stageCategory: "in_progress",
+      connectedToPatientPortal: false,
+      connectedToAiReceptionist: false,
+      portalReceptionSettings: {
+        enabled: true,
+        enabledPortal: true,
+        enabledReception: true,
+        cardTitle: "Doctor Consultation Booking",
+        cardDescription: "Select your specialist and convenient time slot.",
+        htmlContent: "<h3>Schedule Consultation</h3><p>Choose your doctor, consultation type, and preferred slot.</p>",
+      },
     },
     {
       id: "stage-move-to-pharmacy",
@@ -566,6 +588,16 @@ export const DEMO_PATIENT_PORTAL_PROCESS: Process = {
       color: "#8B5CF6",
       stagePosition: "intermediate",
       stageCategory: "in_progress",
+      connectedToPatientPortal: false,
+      connectedToAiReceptionist: false,
+      portalReceptionSettings: {
+        enabled: true,
+        enabledPortal: true,
+        enabledReception: true,
+        cardTitle: "Dispensary Counter Directions",
+        cardDescription: "Pick up your digital e-prescription at Pharmacy Counter B.",
+        htmlContent: "<h3>Dispensary & Pharmacy</h3><p>Your electronic prescription has been dispatched to Pharmacy Counter B.</p>",
+      },
     },
     {
       id: "stage-pay-bill",
@@ -575,6 +607,16 @@ export const DEMO_PATIENT_PORTAL_PROCESS: Process = {
       color: "#F59E0B",
       stagePosition: "intermediate",
       stageCategory: "in_progress",
+      connectedToPatientPortal: false,
+      connectedToAiReceptionist: false,
+      portalReceptionSettings: {
+        enabled: true,
+        enabledPortal: true,
+        enabledReception: true,
+        cardTitle: "Invoice Settlement",
+        cardDescription: "Review items and complete secure settlement.",
+        htmlContent: "<h3>Billing & Payment</h3><p>Review and settle your outpatient consultation fee.</p>",
+      },
     },
     {
       id: "stage-payment-done",
@@ -586,6 +628,16 @@ export const DEMO_PATIENT_PORTAL_PROCESS: Process = {
       isFinalStage: true,
       stagePosition: "final",
       stageCategory: "success",
+      connectedToPatientPortal: false,
+      connectedToAiReceptionist: false,
+      portalReceptionSettings: {
+        enabled: true,
+        enabledPortal: true,
+        enabledReception: true,
+        cardTitle: "Receipt & Discharge Confirmation",
+        cardDescription: "Payment confirmed. Download your official tax invoice.",
+        htmlContent: "<h3>Payment Settled</h3><p>Thank you! Your payment is complete. You may download your receipt.</p>",
+      },
     },
   ],
 };
@@ -596,6 +648,32 @@ export function getProcessesForPatientPortal(): Process[] {
 
 export function getProcessesForAiReceptionist(): Process[] {
   return getStoredProcesses().filter((p) => Boolean(p.connectedToAiReceptionist));
+}
+
+export function isStageEnabledForPortal(stage: Stage): boolean {
+  if (!stage) return false;
+  const isEnabled = Boolean(
+    stage.connectedToPatientPortal ||
+    stage.portalReceptionSettings?.enabledPortal ||
+    stage.portalReceptionSettings?.enabled
+  );
+  return isEnabled;
+}
+
+export function isStageEnabledForAiReceptionist(stage: Stage): boolean {
+  if (!stage) return false;
+  const isEnabled = Boolean(
+    stage.connectedToAiReceptionist ||
+    stage.portalReceptionSettings?.enabledReception ||
+    stage.portalReceptionSettings?.enabled
+  );
+  if (!isEnabled) return false;
+  // Stage is only shown if configuration is actually done (has cardTitle or htmlContent configured)
+  const isConfigured = Boolean(
+    stage.portalReceptionSettings?.cardTitle?.trim() ||
+    stage.portalReceptionSettings?.htmlContent?.trim()
+  );
+  return isConfigured;
 }
 
 export const DEFAULT_INITIAL_PROCESSES: Process[] = [
@@ -866,25 +944,32 @@ export function getStoredProcesses(): Process[] {
     return { ...p, stages: updatedStages };
   });
 
-  // Ensure Demo Patient Care Journey exists and retains its flags
-  const demoExists = list.some((p) => p.id === DEMO_PATIENT_PORTAL_PROCESS_ID || p.name === "Patient Care Journey");
-  if (!demoExists) {
+  // Ensure Demo Patient Care Journey exists and is connected to portal
+  const demoProcIdx = list.findIndex((p) => p.id === DEMO_PATIENT_PORTAL_PROCESS_ID || p.name === "Patient Care Journey");
+  if (demoProcIdx === -1) {
     list.unshift(DEMO_PATIENT_PORTAL_PROCESS);
     changed = true;
   } else {
-    list = list.map((p) => {
-      if (p.id === DEMO_PATIENT_PORTAL_PROCESS_ID || p.name === "Patient Care Journey") {
-        if (!p.connectedToPatientPortal || !p.connectedToAiReceptionist) {
-          changed = true;
-          return {
-            ...p,
-            connectedToPatientPortal: true,
-            connectedToAiReceptionist: true,
-          };
-        }
-      }
-      return p;
-    });
+    const existingDemo = list[demoProcIdx];
+    if (!existingDemo.connectedToPatientPortal) {
+      existingDemo.connectedToPatientPortal = true;
+      existingDemo.connectedToAiReceptionist = true;
+      changed = true;
+    }
+    const checkinSt = existingDemo.stages.find((s) => s.id === "stage-client-checked-in" || s.name === "Client Checked In");
+    if (checkinSt && (!checkinSt.connectedToPatientPortal || !checkinSt.portalReceptionSettings)) {
+      checkinSt.connectedToPatientPortal = true;
+      checkinSt.connectedToAiReceptionist = true;
+      checkinSt.portalReceptionSettings = {
+        enabled: true,
+        enabledPortal: true,
+        enabledReception: true,
+        cardTitle: "Client Checked In",
+        cardDescription: "Your hospital arrival and token have been verified. Welcome to Mantra Care!",
+        htmlContent: "<h3>Check-in Verified</h3><p>Welcome to Mantra Care! Your arrival has been recorded. Please wait in the lounge for your appointment.</p><p><strong>Patient:</strong> {{client.name}}<br/><strong>Client ID:</strong> {{client.id}}</p>",
+      };
+      changed = true;
+    }
   }
 
   // Ensure singleton processes for non-client entities exist

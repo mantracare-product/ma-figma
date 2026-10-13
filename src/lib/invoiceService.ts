@@ -272,6 +272,77 @@ export function findInvoiceDocumentAutomation(processId?: string): { stepKey: st
 }
 
 /**
+ * Finds an active automation rule matching invoice creation to determine initial target stage
+ */
+export function findMatchingInvoiceCreationRule(invoiceData: Record<string, any>): {
+  rule: any;
+  targetProcessId?: string;
+  targetStageId?: string;
+} | null {
+  try {
+    const rules = getStoredRules();
+    const invoiceProcesses = getStoredProcesses().filter(
+      (p) => p.entityType === "invoice" || p.id === "billing" || p.id === "billing-invoicing" || p.id === "proc-invoices"
+    );
+
+    for (const rule of rules) {
+      if (!rule.enabled) continue;
+
+      const trigEvt = (rule.trigger?.event || "").toLowerCase();
+      const trigLabel = (rule.trigger?.label || "").toLowerCase();
+
+      const isCreationTrigger =
+        trigEvt === "invoice.created" ||
+        trigEvt === "invoice_created" ||
+        trigLabel.includes("invoice created") ||
+        (rule.entityType === "invoice" && (!rule.trigger?.event || trigEvt === "invoice.created" || trigEvt === "invoice_created"));
+
+      if (!isCreationTrigger) continue;
+
+      let targetProcessId = rule.action?.processId;
+      let targetStageId = rule.action?.stageId;
+
+      if (!targetProcessId || !targetStageId) {
+        const allActions = flattenRuleSteps(rule.actions && rule.actions.length > 0 ? rule.actions : (rule as any).steps || []);
+        for (const act of allActions) {
+          const stepKey = (act.stepKey || (act as any).type || "").toLowerCase();
+          if (
+            [
+              "update_to_stage",
+              "update-stage",
+              "movetostage",
+              "move_to_stage",
+              "move-stage",
+              "stage_movement",
+              "stagemovement",
+              "processmovement",
+            ].includes(stepKey)
+          ) {
+            targetProcessId = act.params?.processId || act.params?.stepDetailProcess || targetProcessId;
+            targetStageId = act.params?.stageId || act.params?.stepDetailStage || targetStageId;
+            break;
+          }
+        }
+      }
+
+      if (!targetProcessId && targetStageId) {
+        const foundProc = invoiceProcesses.find((p) =>
+          p.stages?.some((s) => s.id === targetStageId || s.name.toLowerCase() === targetStageId?.toLowerCase())
+        );
+        if (foundProc) targetProcessId = foundProc.id;
+      }
+
+      if (targetProcessId || targetStageId) {
+        return { rule, targetProcessId, targetStageId };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Generates and stores an official PDF invoice document linked to an invoice record.
  * Idempotent: if a document for this invoice already exists, returns it without creating duplicates.
  */
@@ -408,20 +479,30 @@ class InvoiceService {
   public findStageById(stageId: string): Stage | undefined {
     const proc = this.getInvoiceProcess();
     const query = String(stageId).trim().toLowerCase();
-    const matchStage = (s: Stage) => {
-      const sId = s.id.toLowerCase();
+
+    // 1. Exact match by ID, Name, or systemCategory (strictly highest priority)
+    const exact = proc.stages.find(
+      (s) =>
+        s.id.toLowerCase() === query ||
+        s.name.toLowerCase() === query ||
+        (s.systemCategory && s.systemCategory.toLowerCase() === query)
+    );
+    if (exact) return exact;
+
+    // 2. Exact word match (e.g. "paid" must NOT match "partially_paid")
+    const wordMatch = proc.stages.find((s) => {
+      const words = s.name.toLowerCase().split(/\s+/);
+      const catWords = (s.systemCategory || "").toLowerCase().split(/[_-\s]+/);
+      return words.includes(query) || catWords.includes(query);
+    });
+    if (wordMatch) return wordMatch;
+
+    // 3. Fallback contains match only when no exact/word match exists
+    return proc.stages.find((s) => {
       const sName = s.name.toLowerCase();
       const sCat = (s.systemCategory || "").toLowerCase();
-      return (
-        sId === query ||
-        sName === query ||
-        (sCat && sCat === query) ||
-        (sCat && (query.includes(sCat) || sCat.includes(query))) ||
-        query.includes(sName) ||
-        sName.includes(query)
-      );
-    };
-    return proc.stages.find(matchStage);
+      return query.includes(sName) || sName.includes(query) || (sCat && query.includes(sCat));
+    });
   }
 
   public getInvoices(): ClientInvoice[] {
@@ -545,7 +626,23 @@ class InvoiceService {
 
     const nextNumber = 1050 + all.length;
     const proc = this.getInvoiceProcess();
-    const initialStage = proc.stages[0];
+
+    // Check if an automation rule targets a specific stage on invoice creation
+    const matchingRule = findMatchingInvoiceCreationRule({
+      ...appointment,
+      total,
+      subtotal,
+    });
+
+    let targetStage: Stage | undefined = undefined;
+    if (matchingRule?.targetStageId) {
+      targetStage = this.findStageById(matchingRule.targetStageId);
+    }
+
+    const initialStage =
+      targetStage ||
+      proc.stages.find((s) => s.isInitial || s.stagePosition === "initial") ||
+      proc.stages[0];
     const initialStageId = initialStage?.id || "";
     const initialStageName = initialStage?.name || "";
 
@@ -558,8 +655,8 @@ class InvoiceService {
       appointmentId: appointment.id ? String(appointment.id) : undefined,
       appointmentTitle: appointment.title || "Scheduled Appointment",
       processId: proc.id,
-      currentStageId: "",
-      statusLabel: "",
+      currentStageId: initialStageId,
+      statusLabel: initialStageName,
       status: "draft",
       currency: "$",
       lineItems: items,

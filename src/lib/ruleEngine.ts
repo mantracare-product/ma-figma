@@ -15,6 +15,7 @@ import { saveClientDocument, StoredClientDocument } from "./clientDocumentsStore
 import { appendActivity } from "./activityEngine";
 import { getStoredDocumentTemplates } from "./documentTemplatesStore";
 import { getClientList } from "./getClientList";
+import { moveClientToStage, getStoredClients } from "./clientsStore";
 
 const MAX_CHAIN_DEPTH = 10;
 const executedIdempotencyKeys = new Set<string>();
@@ -175,6 +176,9 @@ export async function executeRulesForEvent(
     const ruleLabel = norm(r.trigger?.label);
 
     const isDirectMatch = ruleEvt === busEvt || ruleLabel === busEvt;
+    const isCheckinMatch =
+      (ruleEvt.includes("checked.in") || ruleLabel.includes("checked.in")) &&
+      busEvt.includes("checked.in");
     const isStageMatch =
       (ruleEvt === "stage.entered" || ruleEvt === "stage.entry" || ruleEvt.endsWith(".entered_stage") || ruleEvt.endsWith(".entered.stage")) &&
       (busEvt === "stage.entered" || busEvt === "stage.entry" || busEvt.endsWith(".entered_stage") || busEvt.endsWith(".entered.stage"));
@@ -185,19 +189,23 @@ export async function executeRulesForEvent(
       (ruleEvt.includes("field") || ruleEvt === "field_update") &&
       (busEvt.includes("field") || busEvt === "field_update");
 
-    if (!isDirectMatch && !isStageMatch && !isStageExitMatch && !isFieldMatch) {
+    if (!isDirectMatch && !isCheckinMatch && !isStageMatch && !isStageExitMatch && !isFieldMatch) {
       return false;
     }
 
     const ruleEntity = (r.entityType || "").toLowerCase();
     const eventRecord = (event.recordType || "").toLowerCase();
+    const isCheckinCross =
+      (busEvt.includes("checked.in") || ruleEvt.includes("checked.in")) &&
+      ((ruleEntity === "client" && eventRecord === "appointment") || (ruleEntity === "appointment" && eventRecord === "client"));
+
     if (
       ruleEntity &&
       ruleEntity !== eventRecord &&
       !ruleEvt.startsWith(`${eventRecord}.`) &&
       !ruleLabel.startsWith(eventRecord)
     ) {
-      if (!isStageMatch && !isStageExitMatch && !isFieldMatch) {
+      if (!isStageMatch && !isStageExitMatch && !isFieldMatch && !isCheckinCross) {
         return false;
       }
     }
@@ -393,6 +401,19 @@ export async function executeRulesForEvent(
         } catch (err) {
           console.warn("[RuleEngine] Failed to sync invoice stage:", err);
         }
+      } else {
+        // Client or processes
+        try {
+          const clientId =
+            event.recordType === "client"
+              ? event.recordId
+              : (event.data?.clientId || event.data?.id || event.recordId);
+          if (clientId) {
+            moveClientToStage(clientId, rule.action.stageId, rule.action.processId);
+          }
+        } catch (err) {
+          console.warn("[RuleEngine] Failed to sync client stage:", err);
+        }
       }
     }
 
@@ -457,11 +478,31 @@ export async function executeRulesForEvent(
         const targetStageId = act.params?.stageId || act.params?.stepDetailStage || act.params?.stageName || act.params?.stepDetailStageName;
 
         if (targetStageId) {
-          // If explicitly invoice or target stage belongs to invoice
-          const isInvoiceTarget = rawTargetEntity === "invoice" || (!rawTargetEntity && event.recordType === "invoice");
-          const isAppointmentTarget = rawTargetEntity === "appointment" || (!rawTargetEntity && event.recordType === "appointment");
+          const appointmentProcesses = processes.filter((p) => p.entityType === "appointment");
+          const targetInAppt = appointmentProcesses.some((p) =>
+            p.id === act.params?.processId ||
+            p.stages?.some((s) => s.id === targetStageId || s.name.toLowerCase() === targetStageId?.toLowerCase())
+          );
 
-          if (isAppointmentTarget || (!isInvoiceTarget && event.recordType === "appointment")) {
+          const invoiceProcesses = processes.filter(
+            (p) => p.entityType === "invoice" || p.id === "billing" || p.id === "billing-invoicing" || p.id === "proc-invoices"
+          );
+          const targetInInvoice = invoiceProcesses.some(
+            (p) =>
+              p.id === act.params?.processId ||
+              p.stages?.some((s) => s.id === targetStageId || s.name.toLowerCase() === targetStageId?.toLowerCase())
+          );
+
+          // If explicitly invoice or target stage belongs to invoice
+          const isInvoiceTarget = rawTargetEntity === "invoice" || (!rawTargetEntity && event.recordType === "invoice") || targetInInvoice;
+          const isAppointmentTarget = rawTargetEntity === "appointment" || (!rawTargetEntity && event.recordType === "appointment") || targetInAppt;
+
+          const shouldMoveAppt =
+            rawTargetEntity === "appointment" ||
+            (targetInAppt && rawTargetEntity !== "invoice") ||
+            (event.recordType === "appointment" && rawTargetEntity !== "invoice" && !targetInInvoice);
+
+          if (shouldMoveAppt) {
             const apptId = event.recordType === "appointment" ? event.recordId : act.params?.appointmentId;
             if (apptId) {
               try {
@@ -477,7 +518,13 @@ export async function executeRulesForEvent(
             }
           }
 
-          if (isInvoiceTarget || (!isAppointmentTarget && event.recordType === "invoice") || (rawTargetEntity === "invoice" && event.recordType === "appointment")) {
+          const shouldMoveInvoice =
+            isInvoiceTarget ||
+            targetInInvoice ||
+            (event.recordType === "invoice" && rawTargetEntity !== "appointment" && rawTargetEntity !== "client") ||
+            (rawTargetEntity === "invoice" && event.recordType === "appointment");
+
+          if (shouldMoveInvoice) {
             const currentAppt = event.recordType === "appointment" ? appointmentService.getAppointmentById(event.recordId) : undefined;
             const invId = event.recordType === "invoice" ? event.recordId : (event.data?.invoiceId || act.params?.invoiceId || currentAppt?.invoiceId);
             if (invId) {
@@ -489,6 +536,68 @@ export async function executeRulesForEvent(
                 console.log(`[RuleEngine] Moved invoice ${invId} to stage ${targetStageId} via rule "${rule.name}"`);
               } catch (e) {
                 console.warn("[RuleEngine] Failed to move invoice stage:", e);
+              }
+            }
+          }
+
+          const isClientOrProcessTarget =
+            rawTargetEntity === "client" ||
+            (rawTargetEntity === "processes" && !targetInInvoice && !targetInAppt && event.recordType !== "invoice") ||
+            act.params?.processName === "Patient Care Journey" ||
+            act.params?.processId === "demo-patient-care-journey" ||
+            (!rawTargetEntity && event.recordType === "client");
+
+          if (isClientOrProcessTarget || (!isInvoiceTarget && !isAppointmentTarget)) {
+            let targetClientId =
+              event.recordType === "client"
+                ? event.recordId
+                : (event.data?.clientId || event.data?.id);
+            if (!targetClientId && event.recordType === "appointment") {
+              const currentAppt = appointmentService.getAppointmentById(event.recordId);
+              targetClientId = currentAppt?.clientId || currentAppt?.clientName;
+              if (targetClientId && !targetClientId.startsWith("CL-")) {
+                const matchedClient = getStoredClients().find(
+                  (c) => c.name?.toLowerCase() === targetClientId.toLowerCase()
+                );
+                if (matchedClient) targetClientId = matchedClient.id;
+              }
+            }
+            if (targetClientId) {
+              const targetProcId =
+                act.params?.processId ||
+                act.params?.stepDetailProcess ||
+                act.params?.processName ||
+                "demo-patient-care-journey";
+              const targetStageVal =
+                act.params?.stageName ||
+                act.params?.stepDetailStageName ||
+                act.params?.stageId ||
+                act.params?.stepDetailStage;
+              const updatedClient = moveClientToStage(
+                targetClientId,
+                targetStageVal,
+                targetProcId
+              );
+              if (updatedClient) {
+                console.log(
+                  `[RuleEngine] Moved client ${targetClientId} to stage "${updatedClient.stage}" in process "${targetProcId}" via rule "${rule.name}"`
+                );
+                logStageMove({
+                  orgId: event.orgId || "default",
+                  recordType: "client",
+                  recordId: targetClientId,
+                  toStageId: act.params?.stageId || updatedClient.stage,
+                  toStageName: updatedClient.stage,
+                  processId: targetProcId,
+                  processName: act.params?.processName || "Patient Care Journey",
+                  cause: {
+                    type: "rule",
+                    ruleId: rule.id,
+                    ruleName: rule.name,
+                    eventId: event.id,
+                    eventName: event.event,
+                  },
+                });
               }
             }
           }

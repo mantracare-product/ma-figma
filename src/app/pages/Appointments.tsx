@@ -124,14 +124,23 @@ export default function Appointments() {
     });
   }, []);
 
-  const [, setStoreTick] = useState(0);
+  const [storeTick, setStoreTick] = useState(0);
   useEffect(() => {
-    const handleStoreChange = () => setStoreTick((t) => t + 1);
+    const handleStoreChange = () => {
+      setStoreTick((t) => t + 1);
+      setAppointments(appointmentService.getAppointments() as any);
+    };
     window.addEventListener(AUTOMATION_STORE_EVENT, handleStoreChange);
     window.addEventListener(PROCESS_STORE_EVENT, handleStoreChange);
+    window.addEventListener("storage", handleStoreChange);
+    window.addEventListener("mantra_appointment_changed", handleStoreChange);
+    window.addEventListener("mantra_appointments_changed", handleStoreChange);
     return () => {
       window.removeEventListener(AUTOMATION_STORE_EVENT, handleStoreChange);
       window.removeEventListener(PROCESS_STORE_EVENT, handleStoreChange);
+      window.removeEventListener("storage", handleStoreChange);
+      window.removeEventListener("mantra_appointment_changed", handleStoreChange);
+      window.removeEventListener("mantra_appointments_changed", handleStoreChange);
     };
   }, []);
 
@@ -163,7 +172,7 @@ export default function Appointments() {
       if (scoped.length > 0) return scoped;
     }
     return apptProcs.length > 0 ? apptProcs : [DEFAULT_ENTITY_PROCESSES.appointment];
-  }, [activeOrganization]);
+  }, [activeOrganization, storeTick]);
 
   // Keep selectedProcessFilter pointing to a specific appointment process
   useEffect(() => {
@@ -181,7 +190,7 @@ export default function Appointments() {
       if (found) return found;
     }
     return appointmentProcesses[0] || DEFAULT_ENTITY_PROCESSES.appointment;
-  }, [appointmentProcesses, selectedProcessFilter]);
+  }, [appointmentProcesses, selectedProcessFilter, storeTick]);
 
   const appointmentWorkflowStages: Stage[] = useMemo(() => {
     return appointmentProcess.stages || DEFAULT_ENTITY_PROCESSES.appointment.stages;
@@ -1234,7 +1243,7 @@ export default function Appointments() {
                             s.name.toLowerCase() === stageKey.toLowerCase() ||
                             (apt.statusLabel && s.name.toLowerCase() === apt.statusLabel.toLowerCase())
                         )
-                      : (stages.find((s) => apt.statusLabel && s.name.toLowerCase() === apt.statusLabel.toLowerCase()) || (hasAppointmentAutomation(apt.processId || aptProc.id) ? stages[0] : undefined));
+                      : (stages.find((s) => apt.statusLabel && s.name.toLowerCase() === apt.statusLabel.toLowerCase()) || stages[0]);
                     const activeIdx = matchedStage ? stages.findIndex((s) => s.id === matchedStage.id) : -1;
 
                     if (!matchedStage || activeIdx === -1) {
@@ -1284,7 +1293,8 @@ export default function Appointments() {
                             if (isActive) {
                               // Active stage
                             } else if (isCurrentFinal) {
-                              if (isStgInProgress) {
+                              // When lost/final stage is marked, prior reached stages remain completed with full color
+                              if (isStgInProgress && activeIdx >= 0 && i < activeIdx) {
                                 isCompleted = true;
                               } else {
                                 isDeactivated = true;
@@ -1295,6 +1305,7 @@ export default function Appointments() {
                               }
                             }
 
+                            const isLocked = Boolean(isCurrentFinal);
                             const stgColor = stg.color || "#1E88E5";
                             const lightBg = lightenHex(stgColor, 78);
                             const lightBorder = lightenHex(stgColor, 40);
@@ -1310,17 +1321,15 @@ export default function Appointments() {
                               border = "1.5px solid #0F172A";
                               opacity = 1;
                             } else if (isCompleted) {
+                              // Preserve full stage color on completed stages even when lost is marked
                               bg = stgColor;
                               border = `1px solid ${stgColor}`;
-                              opacity = 0.85;
-                            } else if (isDeactivated) {
-                              bg = lightBg;
-                              border = `1px solid ${lightBorder}`;
-                              opacity = 0.95;
+                              opacity = 0.9;
                             } else {
-                              bg = "transparent";
+                              // Inactive / unreached / deactivated stages: light grey to show inactive
+                              bg = "#E2E8F0";
                               border = "1px solid #CBD5E1";
-                              opacity = 0.45;
+                              opacity = 0.9;
                             }
 
                             return (
@@ -1330,13 +1339,13 @@ export default function Appointments() {
                                     className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded text-[11px] font-medium shadow-md pointer-events-none"
                                     style={{ backgroundColor: "#1A2B4A", color: "#fff", zIndex: 200 }}
                                   >
-                                    {stg.name}{isDeactivated ? " (Inactive)" : isActive ? " (Current)" : isCompleted ? " (Completed)" : ""}
+                                    {stg.name}{isDeactivated ? " (Inactive)" : isActive ? " (Current)" : isCompleted ? " (Completed)" : ""}{isLocked ? " [Locked]" : ""}
                                   </div>
                                 )}
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    if (!isDeactivated) handleQuickStageChange(apt, stg);
+                                    if (!isDeactivated && !isLocked) handleQuickStageChange(apt, stg);
                                   }}
                                   onMouseEnter={() => setHoveredStageBox({ aptId: apt.id, stageIdx: i })}
                                   onMouseLeave={() => setHoveredStageBox(null)}
@@ -1347,7 +1356,7 @@ export default function Appointments() {
                                     backgroundColor: bg,
                                     border: border,
                                     opacity: opacity,
-                                    cursor: isDeactivated ? "not-allowed" : "pointer",
+                                    cursor: isDeactivated || isLocked ? "not-allowed" : "pointer",
                                     display: "block",
                                     padding: 0,
                                     flexShrink: 0,
@@ -1468,13 +1477,14 @@ export default function Appointments() {
                     onClick: (apt) => openBookingDrawerForReschedule(apt),
                   },
                   {
-                    label: "Mark Done",
+                    label: "Mark as Complete",
                     icon: <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />,
                     hidden: (apt) => apt.status === "completed",
                     onClick: (apt) => {
                       try {
                         appointmentService.completeAppointment(apt.id);
                         setAppointments(appointmentService.getAppointments() as any);
+                        setStoreTick((t) => t + 1);
                         toast.success("Appointment marked as completed");
                       } catch (e) {
                         console.warn(e);

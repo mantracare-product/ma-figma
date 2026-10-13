@@ -27,6 +27,7 @@ import { AUTOMATION_STORE_EVENT } from "../../../lib/useAutomationStore";
 import { PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { Link } from "react-router";
 import { toast } from "sonner";
+import { findRoomForAppointment, Room } from "../../../lib/roomsStore";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,9 @@ export interface BookingFormValues {
   lineItems?: InvoiceLineItem[];
   discountAmount?: number;
   location?: string;
+  roomNumber?: string;
+  roomStationId?: string;
+  roomName?: string;
   primaryInsurance?: string;
   secondaryInsurance?: string;
   source?: string;
@@ -733,6 +737,16 @@ export default function ScheduleAppointmentDrawer({
     return list;
   }, [values.serviceId, values.location, values.sessionType, allAvailableServices, allEmployeesList, orgLocations, activeOrganization.id]);
 
+  // ── Auto-allocated Room based on Service, Location, and Responsible Provider ──
+  const allocatedRoom = useMemo(() => {
+    return findRoomForAppointment({
+      serviceId: values.serviceId,
+      location: values.location,
+      employeeId: values.provider?.id,
+      employeeName: values.provider?.name,
+    });
+  }, [values.serviceId, values.location, values.provider]);
+
   // ── Handlers ──
   const handleServiceSelect = (serviceId: string) => {
     const srv = allAvailableServices.find((s) => String(s.id) === serviceId);
@@ -980,6 +994,30 @@ export default function ScheduleAppointmentDrawer({
                 onChange={handleLocationSelect}
               />
             </FieldRow>
+
+            {allocatedRoom && values.sessionType !== "video" && (
+              <div className="mt-2.5 p-2.5 rounded-lg border border-blue-200/80 bg-blue-50/60 flex items-start gap-2.5">
+                <div className="w-7 h-7 rounded-md bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                  #{allocatedRoom.roomNumber}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-bold text-slate-900">{allocatedRoom.name}</span>
+                    <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200/60">
+                      Auto-allocated Room
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      • {allocatedRoom.location}
+                    </span>
+                  </div>
+                  {allocatedRoom.direction && (
+                    <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+                      <strong className="text-slate-700">Directions:</strong> {allocatedRoom.direction}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </SectionCard>
 

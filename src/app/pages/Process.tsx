@@ -4201,8 +4201,10 @@ export default function Process() {
                               type="checkbox"
                               className="sr-only peer"
                               checked={
-                                ((selectedProcessData.connectedToPatientPortal ?? true) &&
-                                (selectedProcessData.connectedToAiReceptionist ?? selectedProcessData.receptionEnabled ?? true))
+                                Boolean(
+                                  selectedProcessData.connectedToPatientPortal &&
+                                  (selectedProcessData.connectedToAiReceptionist || selectedProcessData.receptionEnabled)
+                                )
                               }
                               onChange={(e) => {
                                 const val = e.target.checked;
@@ -4595,7 +4597,7 @@ export default function Process() {
                                       <input
                                         type="checkbox"
                                         className="sr-only peer"
-                                        checked={(stage.connectedToPatientPortal ?? true) && (stage.connectedToAiReceptionist ?? true)}
+                                        checked={Boolean(stage.connectedToPatientPortal && stage.connectedToAiReceptionist)}
                                         onChange={(e) => {
                                           const newVal = e.target.checked;
                                           if (selectedProcess && expandedStage) {

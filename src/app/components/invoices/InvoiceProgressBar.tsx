@@ -81,13 +81,15 @@ export default function InvoiceProgressBar({
 
   const isOverdue = status === "overdue";
   const isVoid = status === "void";
+  const currentStageObj = activeIndex > 0 ? effectiveStages[activeIndex - 1] : null;
+  const isCurrentLostStage = isVoid || Boolean(currentStageObj && (currentStageObj.systemCategory === "void" || currentStageObj.systemCategory === "lost" || currentStageObj.name.toLowerCase().includes("void") || currentStageObj.name.toLowerCase().includes("cancel")));
 
   return (
     <div className="relative inline-block" ref={containerRef}>
       <div
         className="flex items-center gap-[3px] justify-center cursor-pointer p-1 rounded hover:bg-slate-100/50 transition-colors"
         onClick={() => {
-          if (interactive && onStatusChange) {
+          if (interactive && onStatusChange && !isVoid && !isCurrentLostStage) {
             setShowPopover(!showPopover);
           }
         }}
@@ -109,29 +111,32 @@ export default function InvoiceProgressBar({
           let isDisabledGrey = false;
           if (isCurrentSuccess && isStgLost) {
             isDisabledGrey = true;
-          } else if (isCurrentLost && !isActive) {
+          } else if (isCurrentLost && !isActive && !isCompleted) {
             isDisabledGrey = true;
           }
 
           const isHovered = hoveredIdx === segIdx;
 
-          let bg = "transparent";
+          let bg = "#E2E8F0";
           let border = "1px solid #CBD5E1";
-          let opacity = 1;
+          let opacity = 0.9;
 
-          if (isDisabledGrey) {
-            bg = "#E2E8F0";
-            border = "1px solid #CBD5E1";
-            opacity = 0.35;
-          } else if (isVoid) {
-            bg = isActive ? "#EF4444" : "#E2E8F0";
-            border = "none";
+          if (isActive) {
+            bg = isCurrentLost || isVoid ? "#EF4444" : (stg.color || "#1E88E5");
+            border = "1.5px solid #0F172A";
+            opacity = 1;
+          } else if (isCompleted) {
+            // Keep full stage color for completed stages even when void/lost
+            bg = stg.color || "#1E88E5";
+            border = `1px solid ${stg.color || "#1E88E5"}`;
+            opacity = 0.9;
           } else if (isOverdue && (isActive || isCompleted)) {
             bg = stg.systemCategory === "overdue" || isActive ? "#EF4444" : (stg.color || "#1E88E5");
             border = "none";
-          } else if (isCompleted || isActive) {
-            bg = stg.color || "#1E88E5";
-            border = `1px solid ${stg.color || "#1E88E5"}`;
+          } else {
+            bg = "#E2E8F0";
+            border = "1px solid #CBD5E1";
+            opacity = 0.9;
           }
 
           return (

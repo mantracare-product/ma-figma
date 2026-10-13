@@ -674,7 +674,7 @@ export default function AppointmentDetailDrawer({
                 className="px-4 py-1.5 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                Mark Done
+                Mark as Complete
               </button>
             )}
 

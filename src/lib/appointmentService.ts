@@ -20,6 +20,7 @@ import { invoiceService, hasInvoiceAutomation, hasAppointmentInvoiceAutomation, 
 import { appendActivity } from "./activityEngine";
 import { flattenRuleSteps } from "./automationTree";
 import { getClientList } from "./getClientList";
+import { findRoomForAppointment } from "./roomsStore";
 
 export function hasAppointmentAutomation(processId?: string): boolean {
   try {
@@ -121,7 +122,7 @@ export interface Appointment {
   date: string; // YYYY-MM-DD
   time: string; // HH:MM
   duration: number; // in minutes
-  status: "scheduled" | "completed" | "cancelled" | "no-show" | "pending-accept" | "rescheduled";
+  status: "scheduled" | "completed" | "cancelled" | "no-show" | "pending-accept" | "rescheduled" | "checked-in";
   notes?: string;
   rating?: number;
   title?: string;
@@ -139,10 +140,12 @@ export interface Appointment {
   invoiceId?: string;
   location?: string;
   sessionType?: "video" | "inPerson";
-  source?: string;
   roomName?: string;
+  roomNumber?: string;
+  roomStationId?: string;
   tokenNumber?: string;
   checkedInAt?: string;
+  source?: string;
 }
 
 export interface CreateAppointmentPayload {
@@ -158,6 +161,9 @@ export interface CreateAppointmentPayload {
   title?: string;
   description?: string;
   tags?: string[];
+  roomNumber?: string;
+  roomStationId?: string;
+  roomName?: string;
   clientId?: string;
   location?: string;
   sessionType?: "video" | "inPerson";
@@ -286,9 +292,32 @@ export function findMatchingAppointmentBookingRule(appointmentData: Record<strin
 
     for (const rule of rules) {
       if (!rule.enabled) continue;
+
+      const trigEvt = (rule.trigger?.event || "").toLowerCase();
+      const trigLabel = (rule.trigger?.label || "").toLowerCase();
+
+      // Explicitly reject non-booking triggers (such as appointment.completed, cancelled, etc.)
+      if (
+        trigEvt.includes("completed") ||
+        trigEvt.includes("cancelled") ||
+        trigEvt.includes("rescheduled") ||
+        trigEvt.includes("checked_in") ||
+        trigEvt.includes("checked.in") ||
+        trigLabel.includes("completed") ||
+        trigLabel.includes("cancelled") ||
+        trigLabel.includes("rescheduled") ||
+        trigLabel.includes("checked in")
+      ) {
+        continue;
+      }
+
       const isBookingTrigger =
-        rule.trigger?.event === "appointment.booked" ||
-        (rule.entityType === "appointment" && (!rule.trigger?.event || rule.trigger.event.startsWith("appointment.")));
+        trigEvt === "appointment.booked" ||
+        trigEvt === "appointment_booked" ||
+        trigEvt === "appointment.created" ||
+        trigEvt === "appointment_created" ||
+        trigLabel.includes("appointment booked") ||
+        (rule.entityType === "appointment" && (!rule.trigger?.event || trigEvt === "appointment.booked" || trigEvt === "appointment_booked"));
       if (!isBookingTrigger) continue;
 
       let conditionsPass = true;
@@ -356,6 +385,95 @@ export function findMatchingAppointmentBookingRule(appointmentData: Record<strin
   }
 }
 
+export function findMatchingAppointmentCompletionRule(appointmentData: Record<string, any>): {
+  rule: any;
+  targetProcessId?: string;
+  targetStageId?: string;
+} | null {
+  try {
+    const rules = getStoredRules();
+    const appointmentProcesses = getStoredProcesses().filter((p) => p.entityType === "appointment");
+
+    for (const rule of rules) {
+      if (!rule.enabled) continue;
+
+      const trigEvt = (rule.trigger?.event || "").toLowerCase();
+      const trigLabel = (rule.trigger?.label || "").toLowerCase();
+
+      const isCompletionTrigger =
+        trigEvt === "appointment.completed" ||
+        trigEvt === "appointment_completed" ||
+        trigLabel.includes("appointment completed") ||
+        trigLabel.includes("appointment complete") ||
+        (rule.entityType === "appointment" && (trigEvt === "appointment.completed" || trigEvt === "appointment_completed"));
+
+      if (!isCompletionTrigger) continue;
+
+      let conditionsPass = true;
+      if (rule.conditions && rule.conditions.length > 0) {
+        for (const cond of rule.conditions) {
+          if (!evaluateAppointmentCondition(cond, appointmentData)) {
+            conditionsPass = false;
+            break;
+          }
+        }
+      }
+      const triggerConditions = rule.trigger?.params?.triggerConditions || [];
+      if (conditionsPass && Array.isArray(triggerConditions) && triggerConditions.length > 0) {
+        for (const cond of triggerConditions) {
+          if (!evaluateAppointmentCondition(cond, appointmentData)) {
+            conditionsPass = false;
+            break;
+          }
+        }
+      }
+      if (!conditionsPass) continue;
+
+      // Extract target process and stage
+      let targetProcessId = rule.action?.processId;
+      let targetStageId = rule.action?.stageId;
+
+      if (!targetProcessId || !targetStageId) {
+        const allActions = flattenRuleSteps(rule.actions || []);
+        for (const act of allActions) {
+          const stepKey = (act.stepKey || (act as any).type || "").toLowerCase();
+          if (
+            [
+              "update_to_stage",
+              "update-stage",
+              "movetostage",
+              "move_to_stage",
+              "move-stage",
+              "stage_movement",
+              "stagemovement",
+              "processmovement",
+            ].includes(stepKey)
+          ) {
+            targetProcessId = act.params?.processId || act.params?.stepDetailProcess || targetProcessId;
+            targetStageId = act.params?.stageId || act.params?.stepDetailStage || act.params?.stageName || act.params?.stepDetailStageName || targetStageId;
+            break;
+          }
+        }
+      }
+
+      // If targetStageId is present without targetProcessId, find process from stage
+      if (!targetProcessId && targetStageId) {
+        const foundProc = appointmentProcesses.find((p) =>
+          p.stages?.some((s) => s.id === targetStageId || s.name.toLowerCase() === targetStageId?.toLowerCase())
+        );
+        if (foundProc) targetProcessId = foundProc.id;
+      }
+
+      if (targetProcessId || targetStageId) {
+        return { rule, targetProcessId, targetStageId };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 class AppointmentService {
   private getAppointmentProcess(): Process {
     const processes = getStoredProcesses();
@@ -378,34 +496,43 @@ class AppointmentService {
   public findStageById(stageId: string, processId?: string): Stage | undefined {
     const query = String(stageId).trim().toLowerCase();
     const processes = getStoredProcesses();
-    const matchStage = (s: Stage) => {
-      const sId = s.id.toLowerCase();
-      const sName = s.name.toLowerCase();
-      const sCat = (s.systemCategory || "").toLowerCase();
-      return (
-        sId === query ||
-        sName === query ||
-        (sCat && sCat === query) ||
-        (sCat && (query.includes(sCat) || sCat.includes(query))) ||
-        query.includes(sName) ||
-        sName.includes(query)
-      );
+
+    const getCandidateStages = (): Stage[] => {
+      if (processId) {
+        const proc = processes.find((p) => p.id === processId || p.name === processId);
+        if (proc?.stages) return proc.stages;
+      }
+      const apptProcs = processes.filter((p) => p.entityType === "appointment");
+      const apptStages = apptProcs.flatMap((p) => p.stages || []);
+      if (apptStages.length > 0) return apptStages;
+      return this.getAppointmentProcess().stages;
     };
 
-    if (processId) {
-      const proc = processes.find((p) => p.id === processId);
-      if (proc) {
-        const found = proc.stages.find(matchStage);
-        if (found) return found;
-      }
-    }
-    const apptProcs = processes.filter((p) => p.entityType === "appointment");
-    for (const p of apptProcs) {
-      const found = p.stages.find(matchStage);
-      if (found) return found;
-    }
-    const proc = this.getAppointmentProcess();
-    return proc.stages.find(matchStage);
+    const candidates = getCandidateStages();
+
+    // 1. Exact match by ID, Name, or systemCategory
+    const exact = candidates.find(
+      (s) =>
+        s.id.toLowerCase() === query ||
+        s.name.toLowerCase() === query ||
+        (s.systemCategory && s.systemCategory.toLowerCase() === query)
+    );
+    if (exact) return exact;
+
+    // 2. Exact word match
+    const wordMatch = candidates.find((s) => {
+      const words = s.name.toLowerCase().split(/\s+/);
+      const catWords = (s.systemCategory || "").toLowerCase().split(/[_-\s]+/);
+      return words.includes(query) || catWords.includes(query);
+    });
+    if (wordMatch) return wordMatch;
+
+    // 3. Fallback contains match
+    return candidates.find((s) => {
+      const sName = s.name.toLowerCase();
+      const sCat = (s.systemCategory || "").toLowerCase();
+      return query.includes(sName) || sName.includes(query) || (sCat && query.includes(sCat));
+    });
   }
 
   public getAppointments(): Appointment[] {
@@ -456,6 +583,7 @@ class AppointmentService {
       sessionStorage.setItem(APPOINTMENTS_STORAGE_KEY, serialized);
       localStorage.setItem(APPOINTMENTS_STORAGE_KEY, serialized);
       window.dispatchEvent(new CustomEvent(APPOINTMENTS_CHANGE_EVENT, { detail: appointments }));
+      window.dispatchEvent(new CustomEvent("mantra_appointment_changed", { detail: appointments }));
       window.dispatchEvent(new Event("storage"));
     } catch (e) {
       console.error("[AppointmentService] Failed to save appointments:", e);
@@ -527,7 +655,11 @@ class AppointmentService {
     }
 
     const proc = targetProcess || this.getAppointmentProcess();
-    const initialStage = targetStage || (payload.stageId ? this.findStageById(payload.stageId, proc.id) : undefined);
+    const initialStage =
+      targetStage ||
+      (payload.stageId ? this.findStageById(payload.stageId, proc.id) : undefined) ||
+      proc.stages.find((s) => s.isInitial || s.stagePosition === "initial") ||
+      proc.stages[0];
     const initialStageId = initialStage?.id || "";
     const initialStageName = initialStage?.name || "";
 
@@ -546,6 +678,15 @@ class AppointmentService {
         }
       } catch {}
     }
+
+    const resolvedRoom = findRoomForAppointment({
+      serviceId: payload.serviceId,
+      location: payload.location,
+      employeeId: payload.employeeId,
+    });
+    const roomNumber = payload.roomNumber || resolvedRoom?.roomNumber;
+    const roomStationId = payload.roomStationId || resolvedRoom?.id;
+    const roomName = payload.roomName || resolvedRoom?.name;
 
     const newAppointment: Appointment = {
       id: nextId,
@@ -568,6 +709,10 @@ class AppointmentService {
       clientId: resolvedClientId,
       location: payload.location,
       sessionType: payload.sessionType || "video",
+      roomNumber,
+      roomStationId,
+      roomName,
+      source: payload.source,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -795,10 +940,36 @@ class AppointmentService {
     const existing = all.find((a) => String(a.id) === String(id));
     if (!existing) throw new Error(`[AppointmentService] Appointment ${id} not found.`);
 
+    const proc = getStoredProcesses().find((p) => p.id === existing.processId) || this.getAppointmentProcess();
+
+    // Check if an automation rule with appointment.completed trigger maps to a target stage
+    const matchingRule = findMatchingAppointmentCompletionRule({
+      ...existing,
+      rating,
+    });
+
+    let completedStage: Stage | undefined = undefined;
+    if (matchingRule?.targetStageId) {
+      completedStage = this.findStageById(matchingRule.targetStageId, matchingRule.targetProcessId || proc.id);
+    }
+    if (!completedStage && proc?.stages) {
+      // Default to completed stage of the process
+      completedStage =
+        proc.stages.find((s) => s.systemCategory === "completed" || s.isFinalStage || s.isFinal) ||
+        proc.stages.find((s) => s.name.toLowerCase().includes("complete")) ||
+        proc.stages[proc.stages.length - 1];
+    }
+
+    const previousStageId = existing.currentStageId || "";
+    const newStageId = completedStage?.id || existing.currentStageId || "";
+    const newStageName = completedStage?.name || existing.statusLabel || "Completed";
+
     const updatedAppointment: Appointment = {
       ...existing,
       status: "completed",
       rating: rating ?? existing.rating,
+      currentStageId: newStageId,
+      statusLabel: newStageName,
       updatedAt: new Date().toISOString(),
     };
 
@@ -807,7 +978,22 @@ class AppointmentService {
     const formattedApptId = !isNaN(Number(id))
       ? `APT-${Number(id).toString().padStart(4, "0")}`
       : `APT-${id}`;
-    const proc = getStoredProcesses().find((p) => p.id === existing.processId) || this.getAppointmentProcess();
+
+    if (previousStageId && completedStage && previousStageId !== newStageId) {
+      logStageMove({
+        orgId: "default",
+        recordType: "appointment",
+        recordId: String(id),
+        fromStageId: previousStageId,
+        toStageId: newStageId,
+        toStageName: newStageName,
+        processId: proc.id,
+        processName: proc.name,
+        cause: matchingRule
+          ? { type: "rule", ruleName: matchingRule.rule.name }
+          : { type: "manual", ruleName: "Marked as complete" },
+      });
+    }
 
     appendActivity({
       clientId: existing.clientId || formattedApptId,
@@ -844,12 +1030,21 @@ class AppointmentService {
 
     const updatedAppointment: Appointment = {
       ...existing,
+      checkedInAt: existing.checkedInAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     this.saveAppointments(all.map((a) => (String(a.id) === String(id) ? updatedAppointment : a)));
 
     eventBus.emit("appointment.checked_in", "appointment", String(id), updatedAppointment);
+
+    const targetClientId = (existing as any).clientId || (existing as any).patientId;
+    if (targetClientId) {
+      eventBus.emit("client.checked_in", "client", String(targetClientId), {
+        ...updatedAppointment,
+        clientId: String(targetClientId),
+      });
+    }
 
     return updatedAppointment;
   }

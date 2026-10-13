@@ -24,8 +24,6 @@ import symbolLogo from "../../../imports/Ma-symbol-mark.png";
 import { useClients, getStoredClients, saveStoredClients, Client, CLIENTS_STORE_EVENT } from "../../../lib/clientsStore";
 import {
   getProcessesForPatientPortal,
-  DEMO_PATIENT_PORTAL_PROCESS,
-  DEMO_PATIENT_PORTAL_PROCESS_ID,
   Process,
   PROCESS_STORE_EVENT,
 } from "../../../lib/useProcessStore";
@@ -99,10 +97,6 @@ export default function PatientPortalLayout() {
     };
   }, []);
 
-  const activeProcess =
-    portalProcesses.find((p) => p.id === DEMO_PATIENT_PORTAL_PROCESS_ID || p.name === "Patient Care Journey") ||
-    portalProcesses[0] ||
-    DEMO_PATIENT_PORTAL_PROCESS;
 
   // Selected patient state (persisted in sessionStorage)
   const [selectedClientId, setSelectedClientId] = useState<string>(() => {
@@ -183,12 +177,22 @@ export default function PatientPortalLayout() {
     navigate(`/patient/${id}`);
   };
 
-  const stages = activeProcess?.stages || DEMO_PATIENT_PORTAL_PROCESS.stages;
-  const currentStageName = activeClient?.stage || "Client Checked In";
-  const currentStageIndex = stages.findIndex(
-    (s) => s.name.toLowerCase() === currentStageName.toLowerCase() || s.id.toLowerCase() === currentStageName.toLowerCase()
+  const activeProcess = portalProcesses.find(
+    (p) =>
+      Boolean(p.connectedToPatientPortal) &&
+      activeClient?.processes?.some((pNameOrId) => pNameOrId === p.name || pNameOrId === p.id)
   );
-  const activeIdx = currentStageIndex >= 0 ? currentStageIndex : 0;
+
+  const stages = activeProcess?.stages || [];
+  const currentStageName = activeClient?.stage;
+  const currentStageIndex = currentStageName
+    ? stages.findIndex(
+        (s) =>
+          s.name.toLowerCase() === currentStageName.toLowerCase() ||
+          s.id.toLowerCase() === currentStageName.toLowerCase()
+      )
+    : -1;
+  const activeIdx = currentStageIndex >= 0 ? currentStageIndex : -1;
 
   // If on login or register screen, render without portal wrapper/sidebar
   if (isAuthPage) {
@@ -199,6 +203,14 @@ export default function PatientPortalLayout() {
   const isSubPage = !isOverviewPage;
 
   const overviewPath = activeClient?.id ? `/patient/${activeClient.id}` : "/patient";
+
+  const isCheckedIn = Boolean(
+    activeClient?.stage &&
+    activeClient.stage !== "Confirmed" &&
+    activeClient.stage !== "Not Assigned" &&
+    activeClient.stage !== "Unregistered" &&
+    activeClient.processes?.includes("Patient Care Journey")
+  );
 
   const navItems = [
     { to: overviewPath, label: "Overview", icon: LayoutDashboard, exact: true },

@@ -180,7 +180,7 @@ export default function InvoiceDetailDrawer({
       if (match) return match;
     }
 
-    return undefined;
+    return invoiceStages[0];
   }, [invoiceStages, liveInvoice?.currentStageId, liveInvoice?.statusLabel, liveInvoice?.status]);
 
   // Client Identifier for documents and activities

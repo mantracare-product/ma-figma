@@ -37,26 +37,49 @@ import {
 } from "lucide-react";
 import { useNavigate, Link } from "react-router";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
+import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
 import { invoiceService, hasInvoiceAutomation } from "../../lib/invoiceService";
 
 export default function Invoices() {
   const navigate = useNavigate();
-  const { invoices, updateInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, voidInvoice } = useInvoices();
+  const { invoices: contextInvoices, updateInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, voidInvoice } = useInvoices();
   const allClients = getClientList();
 
   const [storedProcesses, setStoredProcesses] = useState<Process[]>(getStoredProcesses);
+  const [storeTick, setStoreTick] = useState(0);
+  const [liveInvoices, setLiveInvoices] = useState<ClientInvoice[]>(() => invoiceService.getInvoices());
 
   useEffect(() => {
-    const handleProcessesUpdate = () => {
+    return invoiceService.subscribe((updated) => {
+      setLiveInvoices(updated);
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleStoreChange = () => {
+      setStoreTick((t) => t + 1);
       setStoredProcesses(getStoredProcesses());
+      setLiveInvoices(invoiceService.getInvoices());
     };
-    window.addEventListener(PROCESS_STORE_EVENT, handleProcessesUpdate);
-    window.addEventListener("storage", handleProcessesUpdate);
+    window.addEventListener(AUTOMATION_STORE_EVENT, handleStoreChange);
+    window.addEventListener(PROCESS_STORE_EVENT, handleStoreChange);
+    window.addEventListener("storage", handleStoreChange);
+    window.addEventListener("mantra_invoices_changed", handleStoreChange);
+    window.addEventListener("mantra_invoice_changed", handleStoreChange);
+    window.addEventListener("mantra_payments_changed", handleStoreChange);
     return () => {
-      window.removeEventListener(PROCESS_STORE_EVENT, handleProcessesUpdate);
-      window.removeEventListener("storage", handleProcessesUpdate);
+      window.removeEventListener(AUTOMATION_STORE_EVENT, handleStoreChange);
+      window.removeEventListener(PROCESS_STORE_EVENT, handleStoreChange);
+      window.removeEventListener("storage", handleStoreChange);
+      window.removeEventListener("mantra_invoices_changed", handleStoreChange);
+      window.removeEventListener("mantra_invoice_changed", handleStoreChange);
+      window.removeEventListener("mantra_payments_changed", handleStoreChange);
     };
   }, []);
+
+  const invoices = useMemo(() => {
+    return liveInvoices.length > 0 ? liveInvoices : contextInvoices;
+  }, [liveInvoices, contextInvoices, storeTick]);
 
   // Metrics calculations
   const totalInvoiced = invoices.reduce((sum, i) => sum + i.total, 0);
@@ -227,8 +250,9 @@ export default function Invoices() {
   };
 
   const invoiceProcess = React.useMemo(() => {
-    return storedProcesses.find((p) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
-  }, [storedProcesses]);
+    const procs = getStoredProcesses();
+    return procs.find((p) => p.entityType === "invoice" || p.id === "billing" || p.id === "billing-invoicing") || DEFAULT_ENTITY_PROCESSES.invoice;
+  }, [storedProcesses, storeTick]);
 
   const handleUpdateInvoiceStatus = (invoiceId: string, newStatusOrStageId: InvoiceStatus | string) => {
     const stage = invoiceProcess.stages.find((s) => s.id === newStatusOrStageId || s.systemCategory === newStatusOrStageId);
@@ -529,7 +553,7 @@ export default function Invoices() {
                           s.name.toLowerCase() === stageKey.toLowerCase() ||
                           (inv.statusLabel && s.name.toLowerCase() === inv.statusLabel.toLowerCase())
                       )
-                    : undefined;
+                    : (stages.find((s) => s.systemCategory === inv.status || (inv.statusLabel && s.name.toLowerCase() === inv.statusLabel.toLowerCase())) || stages[0]);
 
                   if (!matchedStage) {
                     return (
@@ -549,7 +573,7 @@ export default function Invoices() {
                     <div className="flex items-center justify-center">
                       <InvoiceProgressBar
                         status={inv.status}
-                        currentStageId={inv.currentStageId}
+                        currentStageId={inv.currentStageId || matchedStage.id}
                         stages={invoiceProcess.stages}
                         onStatusChange={(newSt) => handleUpdateInvoiceStatus(inv.id, newSt)}
                         interactive={true}

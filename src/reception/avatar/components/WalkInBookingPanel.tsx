@@ -32,6 +32,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { getMaClient } from '../../lib/api/maClient';
+import { findRoomForAppointment } from '../../../lib/roomsStore';
 import type {
   PatientSummary,
   ServiceItem,
@@ -851,20 +852,31 @@ export const WalkInBookingPanel: React.FC<WalkInBookingPanelProps> = ({
           </div>
 
           {/* Direction Banner */}
-          <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/60 max-w-md mx-auto mb-6 flex items-center gap-4 text-left">
-            <div className="w-12 h-12 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shrink-0">
-              <MapPin className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Where to go:</p>
-              <h4 className="text-base font-bold text-white">
-                {issuedTicket.stationName || 'Doctor Consultation Room'}
-              </h4>
-              <p className="text-xs text-slate-400">
-                Please wait in the 1st Floor Lobby. Your token will be called on the screen.
-              </p>
-            </div>
-          </div>
+          {(() => {
+            const matchedRoom = findRoomForAppointment({
+              serviceId: selectedServiceId,
+              employeeId: selectedProviderId !== 'next_available' ? selectedProviderId : undefined,
+            });
+            const roomDirections = matchedRoom?.direction || 'Please proceed following hallway signs. Your token will be announced on screen.';
+            return (
+              <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/60 max-w-md mx-auto mb-6 flex items-center gap-4 text-left">
+                <div className="w-12 h-12 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shrink-0">
+                  <MapPin className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                    {matchedRoom?.roomNumber ? `Where to go (Room #${matchedRoom.roomNumber}):` : 'Where to go:'}
+                  </p>
+                  <h4 className="text-base font-bold text-white">
+                    {matchedRoom?.name || issuedTicket.stationName || 'Doctor Consultation Room'}
+                  </h4>
+                  <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
+                    {roomDirections}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Receipts */}
           <div className="max-w-md mx-auto mb-6">
