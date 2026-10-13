@@ -420,7 +420,9 @@ export default function AddAutomationDrawer({
   const [automationStatus, setAutomationStatus] = useState<"draft" | "active">("active");
 
   // Stage Trigger State (Stage Scope)
+  const [stageTriggerCategory, setStageTriggerCategory] = useState<"stage" | "client" | "appointment">("stage");
   const [stageTriggerWhen, setStageTriggerWhen] = useState<"entry" | "exit">("entry");
+  const [stageTriggerEvent, setStageTriggerEvent] = useState<string>("client.checked_in");
 
   // Global Trigger State (Global Scope)
   const [globalTriggerType, setGlobalTriggerType] = useState<EventTriggerType>("client");
@@ -495,10 +497,13 @@ export default function AddAutomationDrawer({
           setAutomationDescription(initialAutomation.description || "");
           setAutomationStatus(initialAutomation.status || "active");
           if (initialAutomation.trigger.type === "stage") {
+            setStageTriggerCategory("stage");
             setStageTriggerWhen((initialAutomation.trigger as any).when || "entry");
           } else {
             const trigType = (initialAutomation.trigger as any).type || "client";
-            const trigEvt = (initialAutomation.trigger as any).event || "client.created";
+            const trigEvt = (initialAutomation.trigger as any).event || "client.checked_in";
+            setStageTriggerCategory(trigType === "appointment" ? "appointment" : trigType === "stage" ? "stage" : "client");
+            setStageTriggerEvent(trigEvt);
             setGlobalTriggerType(trigType);
             setGlobalTriggerEvent(trigEvt);
             setGlobalTriggerParams((initialAutomation.trigger as any).params || {});
@@ -526,7 +531,9 @@ export default function AddAutomationDrawer({
           setAutomationName(defaultName);
           setAutomationDescription("");
           setAutomationStatus("active");
+          setStageTriggerCategory("stage");
           setStageTriggerWhen("entry");
+          setStageTriggerEvent("client.checked_in");
           setGlobalTriggerType("client");
           setGlobalTriggerEvent("client.created");
           setSteps(workflowSteps || []);
@@ -539,8 +546,16 @@ export default function AddAutomationDrawer({
             setAutomationName(targetStep.name);
             setAutomationDescription(targetStep.description || "");
             if (targetStep.trigger === "exit_stage") {
+              setStageTriggerCategory("stage");
               setStageTriggerWhen("exit");
+            } else if (targetStep.trigger === "client.checked_in" || targetStep.trigger === "checked_in") {
+              setStageTriggerCategory("client");
+              setStageTriggerEvent("client.checked_in");
+            } else if (targetStep.trigger === "appointment.checked_in") {
+              setStageTriggerCategory("appointment");
+              setStageTriggerEvent("appointment.checked_in");
             } else {
+              setStageTriggerCategory("stage");
               setStageTriggerWhen("entry");
             }
           }
@@ -737,16 +752,45 @@ export default function AddAutomationDrawer({
               processName: stageRef?.processName || processName,
             }
           : undefined,
+      action:
+        effectiveScope === "stage"
+          ? {
+              type: "moveToStage",
+              processId: stageRef?.processId || currentProcessId || "",
+              processName: stageRef?.processName || processName,
+              stageId: stageRef?.stageId || "",
+              stageName: stageRef?.stageName || stageName,
+            }
+          : undefined,
       name:
         automationName.trim() ||
         (effectiveScope === "stage"
-          ? `On ${stageTriggerWhen}: ${stageName}`
+          ? stageTriggerCategory === "stage"
+            ? `On ${stageTriggerWhen}: ${stageName}`
+            : `${GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find((e) => e.event === stageTriggerEvent)?.label || stageTriggerEvent}: ${stageName}`
           : "Global Automation"),
       description: automationDescription,
       status: finalStatus,
       trigger:
         effectiveScope === "stage"
-          ? { type: "stage", when: stageTriggerWhen }
+          ? stageTriggerCategory === "stage"
+            ? {
+                type: "stage",
+                when: stageTriggerWhen,
+                event: stageTriggerWhen === "exit" ? "stage.exit" : "stage.entry",
+                stageId: stageRef?.stageId || "",
+                processId: stageRef?.processId || currentProcessId || "",
+              }
+            : {
+                type: stageTriggerCategory,
+                event: stageTriggerEvent,
+                label:
+                  GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find(
+                    (e) => e.event === stageTriggerEvent
+                  )?.label || stageTriggerEvent,
+                stageId: stageRef?.stageId || "",
+                processId: stageRef?.processId || currentProcessId || "",
+              }
           : {
               type: globalTriggerType,
               event: globalTriggerEvent,
@@ -908,22 +952,40 @@ export default function AddAutomationDrawer({
                 stepAllowedTriggers={stepAllowedTriggers}
                 scopingRules={drawerScopingRules}
                 scope={effectiveScope}
-                triggerType={effectiveScope === "global" ? globalTriggerType : "stage"}
-                triggerEvent={effectiveScope === "global" ? globalTriggerEvent : stageTriggerWhen}
+                triggerType={
+                  effectiveScope === "global"
+                    ? globalTriggerType
+                    : stageTriggerCategory
+                }
+                triggerEvent={
+                  effectiveScope === "global"
+                    ? globalTriggerEvent
+                    : stageTriggerCategory === "stage"
+                    ? stageTriggerWhen
+                    : stageTriggerEvent
+                }
                 triggerLabel={
                   effectiveScope === "global"
                     ? GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find((e) => e.event === globalTriggerEvent)?.label || globalTriggerEvent
-                    : (stageTriggerWhen === "exit" ? `On Exit: ${stageName}` : `On Entry: ${stageName}`)
+                    : stageTriggerCategory === "stage"
+                    ? (stageTriggerWhen === "exit" ? `On Exit: ${stageName}` : `On Entry: ${stageName}`)
+                    : GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find((e) => e.event === stageTriggerEvent)?.label || stageTriggerEvent
                 }
                 triggerDescription={
                   effectiveScope === "global"
                     ? GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find((e) => e.event === globalTriggerEvent)?.description
-                    : (stageTriggerWhen === "exit" ? `Fires when record moves out of "${stageName}"` : `Fires when record moves into "${stageName}"`)
+                    : stageTriggerCategory === "stage"
+                    ? (stageTriggerWhen === "exit" ? `Fires when record moves out of "${stageName}"` : `Fires when record moves into "${stageName}"`)
+                    : GLOBAL_TRIGGER_CATALOG.flatMap((c) => c.events).find((e) => e.event === stageTriggerEvent)?.description
                 }
                 triggerIconKey={
                   effectiveScope === "global"
                     ? GLOBAL_TRIGGER_CATALOG.find((c) => c.type === globalTriggerType)?.iconKey || "zap"
-                    : "gitbranch"
+                    : stageTriggerCategory === "stage"
+                    ? "gitbranch"
+                    : stageTriggerCategory === "appointment"
+                    ? "calendar"
+                    : "user"
                 }
                 onTriggerChange={(trig) => {
                   if (effectiveScope === "global") {
@@ -933,10 +995,15 @@ export default function AddAutomationDrawer({
                       setGlobalTriggerParams(trig.params);
                     }
                   } else {
-                    if (trig.event === "stage.exit") {
-                      setStageTriggerWhen("exit");
-                    } else if (trig.event === "stage.entry") {
-                      setStageTriggerWhen("entry");
+                    if (trig.type === "stage" || trig.event === "stage.exit" || trig.event === "stage.entry" || trig.event === "stage.entered" || trig.event === "stage.exited") {
+                      setStageTriggerCategory("stage");
+                      setStageTriggerWhen(trig.event.includes("exit") ? "exit" : "entry");
+                    } else if (trig.type === "appointment" || trig.event.startsWith("appointment.")) {
+                      setStageTriggerCategory("appointment");
+                      setStageTriggerEvent(trig.event);
+                    } else {
+                      setStageTriggerCategory("client");
+                      setStageTriggerEvent(trig.event);
                     }
                   }
                 }}
@@ -1013,14 +1080,33 @@ export default function AddAutomationDrawer({
                   {effectiveScope === "stage" ? (
                     <div>
                       <select
-                        disabled
-                        value="stage"
-                        className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-gray-50/80 text-gray-600 cursor-not-allowed shadow-2xs"
+                        value={stageTriggerCategory}
+                        onChange={(e) => {
+                          const cat = e.target.value as "stage" | "client" | "appointment";
+                          setStageTriggerCategory(cat);
+                          if (cat === "client") {
+                            setStageTriggerEvent("client.checked_in");
+                            setAutomationName(`On Client Check-In (QR): ${stageName}`);
+                          } else if (cat === "appointment") {
+                            setStageTriggerEvent("appointment.checked_in");
+                            setAutomationName(`On Appointment Check-In: ${stageName}`);
+                          } else {
+                            setStageTriggerWhen("entry");
+                            setAutomationName(`On entry: ${stageName}`);
+                          }
+                        }}
+                        className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
                       >
-                        <option value="stage">Stage</option>
+                        <option value="stage">Stage (Movement)</option>
+                        <option value="client">Client (Check-In & Profile)</option>
+                        <option value="appointment">Appointment (Check-In & Booking)</option>
                       </select>
-                      <p className="text-[11px] text-gray-400 mt-1">
-                        Stage automations are scoped directly to this stage.
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        {stageTriggerCategory === "stage"
+                          ? `Scoped directly to movements in "${stageName}".`
+                          : stageTriggerCategory === "client"
+                          ? `Trigger on client events such as QR / Kiosk check-in for "${stageName}".`
+                          : `Trigger on appointment events such as check-in or completion.`}
                       </p>
                     </div>
                   ) : (
@@ -1060,30 +1146,54 @@ export default function AddAutomationDrawer({
                   {effectiveScope === "stage" ? (
                     <div className="space-y-1.5">
                       <div className="relative">
-                        <select
-                          value={stageTriggerWhen}
-                          onChange={(e) => {
-                            const val = e.target.value as "entry" | "exit";
-                            setStageTriggerWhen(val);
-                            if (
-                              automationName.startsWith("On entry:") ||
-                              automationName.startsWith("On exit:") ||
-                              automationName.startsWith("On Entry:") ||
-                              automationName.startsWith("On Exit:")
-                            ) {
-                              setAutomationName(`On ${val === "exit" ? "exit" : "entry"}: ${stageName}`);
-                            }
-                          }}
-                          className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
-                        >
-                          <option value="entry">On Stage Enter</option>
-                          <option value="exit">On Stage Exit</option>
-                        </select>
+                        {stageTriggerCategory === "stage" ? (
+                          <select
+                            value={stageTriggerWhen}
+                            onChange={(e) => {
+                              const val = e.target.value as "entry" | "exit";
+                              setStageTriggerWhen(val);
+                              if (
+                                automationName.startsWith("On entry:") ||
+                                automationName.startsWith("On exit:") ||
+                                automationName.startsWith("On Entry:") ||
+                                automationName.startsWith("On Exit:")
+                              ) {
+                                setAutomationName(`On ${val === "exit" ? "exit" : "entry"}: ${stageName}`);
+                              }
+                            }}
+                            className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
+                          >
+                            <option value="entry">On Stage Enter</option>
+                            <option value="exit">On Stage Exit</option>
+                          </select>
+                        ) : (
+                          <select
+                            value={stageTriggerEvent}
+                            onChange={(e) => {
+                              const newEvt = e.target.value;
+                              setStageTriggerEvent(newEvt);
+                              const matchEvt = GLOBAL_TRIGGER_CATALOG.flatMap(c => c.events).find(ev => ev.event === newEvt);
+                              if (matchEvt) {
+                                setAutomationName(`${matchEvt.label}: ${stageName}`);
+                              }
+                            }}
+                            className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
+                          >
+                            {(GLOBAL_TRIGGER_CATALOG.find(c => c.type === stageTriggerCategory)?.events || []).map((evt) => (
+                              <option key={evt.event} value={evt.event}>
+                                {evt.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                       <p className="text-[11px] text-gray-500">
-                        {stageTriggerWhen === "entry"
-                          ? `Fires automatically when a record transitions into "${stageName}".`
-                          : `Fires automatically when a record transitions out of "${stageName}".`}
+                        {stageTriggerCategory === "stage"
+                          ? stageTriggerWhen === "entry"
+                            ? `Fires automatically when a record transitions into "${stageName}".`
+                            : `Fires automatically when a record transitions out of "${stageName}".`
+                          : GLOBAL_TRIGGER_CATALOG.flatMap(c => c.events).find(ev => ev.event === stageTriggerEvent)?.description ||
+                            "Fires automatically when this event occurs."}
                       </p>
                     </div>
                   ) : (

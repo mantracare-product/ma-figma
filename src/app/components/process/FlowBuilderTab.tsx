@@ -5,7 +5,7 @@ import {
   Zap, Webhook, Search, ChevronDown, ChevronRight, Plus, Trash2, X,
   ZoomIn, ZoomOut, Maximize2, Undo2, Redo2, CheckCircle2, AlertCircle,
   Code2, Activity, Layers, PhoneCall, Save, AlignCenter, Hand, Sparkles,
-  CreditCard, FileText, Receipt, ShieldCheck, Briefcase, Sliders,
+  CreditCard, FileText, Receipt, ShieldCheck, Briefcase, Sliders, QrCode,
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import VariableSelectorModal from "./VariableSelectorModal";
@@ -307,6 +307,15 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
         iconKey: "user",
       },
       {
+        id: "trig-client-checked-in",
+        triggerType: "client",
+        triggerEvent: "client.checked_in",
+        label: "Client Checked In (QR / Kiosk / Portal)",
+        desc: "Fires when patient or client checks in via QR code, AI Receptionist kiosk, or Patient Portal",
+        icon: <QrCode className="w-4 h-4" />,
+        iconKey: "user",
+      },
+      {
         id: "trig-client-updated",
         triggerType: "client",
         triggerEvent: "client.updated",
@@ -330,6 +339,15 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
         triggerEvent: "appointment.booked",
         label: "Appointment Booked",
         desc: "Fires when a time slot is confirmed",
+        icon: <Calendar className="w-4 h-4" />,
+        iconKey: "calendar",
+      },
+      {
+        id: "trig-appt-checked-in",
+        triggerType: "appointment",
+        triggerEvent: "appointment.checked_in",
+        label: "Appointment Checked In (Arrival / Kiosk)",
+        desc: "Fires when patient arrives or confirms presence at session",
         icon: <Calendar className="w-4 h-4" />,
         iconKey: "calendar",
       },
@@ -380,7 +398,7 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
       },
     ];
   } else {
-    // Stage Scope — Only two triggers: On Stage Enter & On Stage Exit
+    // Stage Scope — Stage Enter/Exit and Check-In Triggers
     return [
       {
         id: "trig-stage-entry",
@@ -399,6 +417,24 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
         desc: `Fires when record moves out of "${stageName}"`,
         icon: <GitBranch className="w-4 h-4" />,
         iconKey: "gitbranch",
+      },
+      {
+        id: "trig-stage-client-checked-in",
+        triggerType: "client",
+        triggerEvent: "client.checked_in",
+        label: "Client Checked In (QR / Kiosk / Portal)",
+        desc: `Fires when patient or client checks in via QR code or kiosk for "${stageName}"`,
+        icon: <QrCode className="w-4 h-4" />,
+        iconKey: "user",
+      },
+      {
+        id: "trig-stage-appt-checked-in",
+        triggerType: "appointment",
+        triggerEvent: "appointment.checked_in",
+        label: "Appointment Checked In (Arrival / Kiosk)",
+        desc: `Fires when patient arrives and confirms presence for session in "${stageName}"`,
+        icon: <Calendar className="w-4 h-4" />,
+        iconKey: "calendar",
       },
     ];
   }
@@ -1735,6 +1771,22 @@ export default function FlowBuilderTab({
                     icon: <GitBranch className="w-3.5 h-3.5" />,
                     defaultTrigger: allTriggers.find((t) => t.triggerType === "stage") || allTriggers[0],
                   },
+                  {
+                    id: "client",
+                    type: "client",
+                    label: "Client Triggers",
+                    desc: "QR / Kiosk Check-In & profile",
+                    icon: <User className="w-3.5 h-3.5" />,
+                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "client.checked_in") || allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
+                  },
+                  {
+                    id: "appointment",
+                    type: "appointment",
+                    label: "Appointment Triggers",
+                    desc: "Check-in, booking, status",
+                    icon: <Calendar className="w-3.5 h-3.5" />,
+                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "appointment.checked_in") || allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
+                  },
                 ]
               : [
                   {
@@ -1757,17 +1809,17 @@ export default function FlowBuilderTab({
                     id: "client",
                     type: "client",
                     label: "Client Triggers",
-                    desc: "Created, updated, product assigned",
+                    desc: "QR Check-in, created, updated",
                     icon: <User className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
+                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "client.checked_in") || allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
                   },
                   {
                     id: "appointment",
                     type: "appointment",
                     label: "Appointment Triggers",
-                    desc: "Booked, rescheduled, cancelled",
+                    desc: "QR Check-in, booked, cancelled",
                     icon: <Calendar className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
+                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "appointment.checked_in") || allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
                   },
                   {
                     id: "invoice",

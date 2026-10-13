@@ -3313,11 +3313,13 @@ export default function StepParametersFields({
                   },
                 ],
                 client: [
+                  { event: "client.checked_in", label: "Client Checked In (QR / Kiosk / Portal)", desc: "Fires when patient or client checks in via QR code, AI Receptionist kiosk, or Patient Portal", iconKey: "user" },
                   { event: "client.created", label: "Client Created", desc: "Fires when a new client record is added to the system", iconKey: "user" },
                   { event: "client.updated", label: "Client Updated", desc: "Fires when existing client details or fields are modified", iconKey: "user" },
                   { event: "client.product_assigned", label: "Assign Product", desc: "Fires when a product or service is assigned to this client in their profile", iconKey: "briefcase" },
                 ],
                 appointment: [
+                  { event: "appointment.checked_in", label: "Appointment Checked In (Arrival / Kiosk)", desc: "Fires when patient arrives or confirms presence at session (QR / Kiosk / Manual)", iconKey: "calendar" },
                   { event: "appointment.booked", label: "Appointment Booked", desc: "Fires when a time slot is confirmed for a client", iconKey: "calendar" },
                   { event: "appointment.rescheduled", label: "Appointment Rescheduled", desc: "Fires when an appointment date or time is modified", iconKey: "calendar" },
                   { event: "appointment.cancelled", label: "Appointment Cancelled", desc: "Fires when an appointment is cancelled or marked void", iconKey: "calendar" },
