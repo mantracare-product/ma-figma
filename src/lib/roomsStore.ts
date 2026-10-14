@@ -174,12 +174,11 @@ export function deleteRoom(id: string): boolean {
 
 /**
  * Finds the allocated Room for an appointment dynamically based on:
- * 1. Matching Service AND Location AND Responsible practitioner
- * 2. Matching Service AND Location
- * 3. Matching Service AND Responsible practitioner
- * 4. Matching Service
- * 5. Matching Location
- * 6. Fallback to first active room
+ * 1. Matching Location AND Product Service AND Responsible practitioner
+ * 2. Room mapped to Location AND Product Service (open to any provider for that service)
+ * 3. Room mapped to Location AND Responsible practitioner (dedicated provider suite)
+ *
+ * NOTE: A room is NEVER allocated on the basis of location alone or via arbitrary fallback.
  */
 export function findRoomForAppointment(params: {
   serviceId?: string | number;
@@ -191,62 +190,81 @@ export function findRoomForAppointment(params: {
   const rooms = getStoredRooms().filter((r) => r.isActive !== false);
   if (rooms.length === 0) return undefined;
 
-  const targetServiceId = params.serviceId !== undefined ? String(params.serviceId).trim().toLowerCase() : "";
+  const targetServiceId = params.serviceId !== undefined && params.serviceId !== "" ? String(params.serviceId).trim().toLowerCase() : "";
   const targetServiceName = params.serviceName ? params.serviceName.trim().toLowerCase() : "";
   const targetLoc = params.location ? params.location.trim().toLowerCase() : "";
-  const targetEmpId = params.employeeId !== undefined ? String(params.employeeId).trim().toLowerCase() : "";
+  const targetEmpId = params.employeeId !== undefined && params.employeeId !== "" ? String(params.employeeId).trim().toLowerCase() : "";
   const targetEmpName = params.employeeName ? params.employeeName.trim().toLowerCase() : "";
 
-  const matchService = (r: Room) => {
-    if (!targetServiceId && !targetServiceName) return false;
-    const rSrvId = r.serviceId !== undefined ? String(r.serviceId).trim().toLowerCase() : "";
-    const rSrvName = r.serviceName ? r.serviceName.trim().toLowerCase() : "";
-    if (targetServiceId && rSrvId === targetServiceId) return true;
-    if (targetServiceName && rSrvName && (rSrvName === targetServiceName || rSrvName.includes(targetServiceName) || targetServiceName.includes(rSrvName))) return true;
-    return false;
-  };
+  // If online session or location is empty, no physical room can be allocated
+  if (!targetLoc || targetLoc === "online") return undefined;
 
+  // Normalizer for location strings (e.g., "California Branch" matches "California")
   const matchLocation = (r: Room) => {
     if (!targetLoc || targetLoc === "online") return false;
-    const rLoc = (r.location || "").trim().toLowerCase();
-    return rLoc === targetLoc || rLoc.includes(targetLoc) || targetLoc.includes(rLoc);
+    const rLoc = (r.location || "").trim().toLowerCase().replace(/\s+(branch|clinic|center|suite|hospital)$/i, "").trim();
+    const cleanTargetLoc = targetLoc.replace(/\s+(branch|clinic|center|suite|hospital)$/i, "").trim();
+    return rLoc === cleanTargetLoc || rLoc.includes(cleanTargetLoc) || cleanTargetLoc.includes(rLoc);
   };
 
+  // Normalizer for responsible staff (strips Dr., titles, handles name and ID matching)
   const matchResponsible = (r: Room) => {
     if (!targetEmpId && !targetEmpName) return false;
-    const rEmpId = r.responsibleId !== undefined ? String(r.responsibleId).trim().toLowerCase() : "";
-    const rEmpName = (r.responsibleName || "").trim().toLowerCase();
-    if (targetEmpId && rEmpId === targetEmpId) return true;
-    if (targetEmpName && rEmpName && (rEmpName === targetEmpName || rEmpName.includes(targetEmpName) || targetEmpName.includes(rEmpName))) return true;
+    const rEmpId = r.responsibleId !== undefined && r.responsibleId !== "" ? String(r.responsibleId).trim().toLowerCase() : "";
+    const rEmpName = (r.responsibleName || "").trim().toLowerCase().replace(/^dr\.\s*/i, "").trim();
+    const cleanTargetName = targetEmpName.replace(/^dr\.\s*/i, "").trim();
+
+    if (rEmpName && cleanTargetName) {
+      if (rEmpName === cleanTargetName || rEmpName.includes(cleanTargetName) || cleanTargetName.includes(rEmpName)) {
+        return true;
+      }
+      return false;
+    }
+
+    if (targetEmpId && rEmpId && targetEmpId === rEmpId) {
+      return true;
+    }
+
     return false;
   };
 
-  // 1. Exact 3-way match: Service + Location + Responsible
-  const match3 = rooms.find((r) => matchService(r) && matchLocation(r) && matchResponsible(r));
+  // Normalizer for service matching (ID and name)
+  const matchService = (r: Room) => {
+    if (!targetServiceId && !targetServiceName) return false;
+    const rSrvId = r.serviceId !== undefined && r.serviceId !== "" ? String(r.serviceId).trim().toLowerCase() : "";
+    const rSrvName = (r.serviceName || "").trim().toLowerCase();
+
+    if (rSrvName && targetServiceName) {
+      if (rSrvName === targetServiceName || rSrvName.includes(targetServiceName) || targetServiceName.includes(rSrvName)) {
+        return true;
+      }
+    }
+
+    if (targetServiceId && rSrvId && targetServiceId === rSrvId) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Filter rooms that belong to this location first
+  const locationRooms = rooms.filter(matchLocation);
+  if (locationRooms.length === 0) return undefined;
+
+  // 1. Exact 3-way match: Location matches, Service matches, AND Responsible matches
+  const match3 = locationRooms.find((r) => matchService(r) && matchResponsible(r));
   if (match3) return match3;
 
-  // 2. 2-way match: Service + Location
-  const match2Loc = rooms.find((r) => matchService(r) && matchLocation(r));
-  if (match2Loc) return match2Loc;
+  // 2. Room mapped to Location + Service, where room has NO specific responsible assigned (open to any provider of this service)
+  const matchSrvOpen = locationRooms.find((r) => matchService(r) && !r.responsibleId && !r.responsibleName);
+  if (matchSrvOpen) return matchSrvOpen;
 
-  // 3. 2-way match: Service + Responsible
-  const match2Emp = rooms.find((r) => matchService(r) && matchResponsible(r));
-  if (match2Emp) return match2Emp;
+  // 3. Room mapped to Location + Responsible, where room has NO specific service assigned (dedicated provider suite for any service)
+  const matchEmpOpen = locationRooms.find((r) => matchResponsible(r) && !r.serviceId && !r.serviceName);
+  if (matchEmpOpen) return matchEmpOpen;
 
-  // 4. Match Service
-  const matchSrv = rooms.find((r) => matchService(r));
-  if (matchSrv) return matchSrv;
-
-  // 5. Match Responsible
-  const matchEmp = rooms.find((r) => matchResponsible(r));
-  if (matchEmp) return matchEmp;
-
-  // 6. Match Location
-  const matchLoc = rooms.find((r) => matchLocation(r));
-  if (matchLoc) return matchLoc;
-
-  // Fallback
-  return rooms[0];
+  // Do NOT match on location alone or fallback to rooms[0]
+  return undefined;
 }
 
 export function onRoomsChanged(listener: () => void): () => void {

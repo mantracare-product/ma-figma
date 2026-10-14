@@ -201,7 +201,6 @@ export const EVENT_CATALOG: Record<
     { event: "appointment.booked", label: "Appointment booked", description: "A time slot is confirmed for a client session or service" },
     { event: "appointment.rescheduled", label: "Appointment rescheduled", description: "Existing appointment time or date is modified" },
     { event: "appointment.cancelled", label: "Appointment cancelled", description: "Scheduled appointment is cancelled by patient or clinic" },
-    { event: "appointment.checked_in", label: "Checked in", description: "Patient arrives or enters the appointment session" },
     { event: "appointment.completed", label: "Appointment completed", description: "Consultation or service concluded successfully" },
     { event: "appointment.no_show", label: "No-show", description: "Patient failed to attend scheduled session without notice" },
   ],

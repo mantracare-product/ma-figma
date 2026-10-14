@@ -43,13 +43,11 @@ import AdminAutomations from "./pages/admin/AdminAutomations";
 import AdminDocumentTemplates from "./pages/admin/AdminDocumentTemplates";
 import PatientPortalLayout from "./pages/patient/PatientPortalLayout";
 import PatientStatusScreen from "./pages/patient/PatientStatusScreen";
-import PatientCheckinScreen from "./pages/patient/PatientCheckinScreen";
 import PatientBookingScreen from "./pages/patient/PatientBookingScreen";
 import PatientPharmacyScreen from "./pages/patient/PatientPharmacyScreen";
 import PatientBillScreen from "./pages/patient/PatientBillScreen";
 import PatientPaymentScreen from "./pages/patient/PatientPaymentScreen";
 import PatientLoginScreen from "./pages/patient/PatientLoginScreen";
-import PatientRegisterScreen from "./pages/patient/PatientRegisterScreen";
 import PatientDocumentsScreen from "./pages/patient/PatientDocumentsScreen";
 import AdminAIVoicesModels from "./pages/admin/AdminAIVoicesModels";
 
@@ -104,9 +102,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: PatientStatusScreen },
       { path: "login", Component: PatientLoginScreen },
-      { path: "register", Component: PatientRegisterScreen },
       { path: "status", Component: PatientStatusScreen },
-      { path: "checkin", Component: PatientCheckinScreen },
+      { path: "checkin", Component: PatientStatusScreen },
       { path: "book", Component: PatientBookingScreen },
       { path: "documents", Component: PatientDocumentsScreen },
       { path: "pharmacy", Component: PatientPharmacyScreen },

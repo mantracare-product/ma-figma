@@ -3319,7 +3319,6 @@ export default function StepParametersFields({
                   { event: "client.product_assigned", label: "Assign Product", desc: "Fires when a product or service is assigned to this client in their profile", iconKey: "briefcase" },
                 ],
                 appointment: [
-                  { event: "appointment.checked_in", label: "Appointment Checked In (Arrival / Kiosk)", desc: "Fires when patient arrives or confirms presence at session (QR / Kiosk / Manual)", iconKey: "calendar" },
                   { event: "appointment.booked", label: "Appointment Booked", desc: "Fires when a time slot is confirmed for a client", iconKey: "calendar" },
                   { event: "appointment.rescheduled", label: "Appointment Rescheduled", desc: "Fires when an appointment date or time is modified", iconKey: "calendar" },
                   { event: "appointment.cancelled", label: "Appointment Cancelled", desc: "Fires when an appointment is cancelled or marked void", iconKey: "calendar" },

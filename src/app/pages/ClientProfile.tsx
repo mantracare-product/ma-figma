@@ -74,8 +74,6 @@ import {
 import DrawerShell from "../components/ui/DrawerShell";
 import CPTCodeInput from "../components/ui/CPTCodeInput";
 import DraggableOverviewSections, { OverviewSection } from "../components/profile/DraggableOverviewSections";
-import { VisitJourneyCard } from "../components/clients/VisitJourneyCard";
-import { FaceCheckinCard } from "../components/clients/FaceCheckinCard";
 import {
   Service, EMPLOYEES as SVC_EMPLOYEES, CURRENCIES as SVC_CURRENCIES, INIT_FORM as SVC_INIT_FORM,
   getCurrencySymbol, getStoredServices, addService, onServicesChanged,
@@ -83,7 +81,6 @@ import {
 } from "../../lib/servicesStore";
 import { eventBus } from "../../lib/eventBus";
 import { MOCK_SERVICES } from "../../lib/mockServicesData";
-import SendInviteModal from "../components/clients/SendInviteModal";
 
 const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
 
@@ -409,7 +406,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         return cId === cleanId;
       }) ??
       null);
-  const [showInviteModal, setShowInviteModal] = useState(false);
 
   // Custom field and section definitions from shared context (same ones Settings.tsx & Admin manage)
   const { getAllFields, addCustomField, getCustomSections, getAllSections } = useFieldRegistry();
@@ -2041,13 +2037,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
       {/* Drawer panel */}
       <div className="fixed right-0 top-0 h-full w-[92vw] lg:w-[84vw] xl:w-[76vw] max-w-[1340px] min-w-[780px] bg-[#F8FAFC] z-50 shadow-2xl flex flex-col overflow-hidden">
-        {/* Send Invite Modal */}
-        <SendInviteModal
-          isOpen={showInviteModal}
-          onClose={() => setShowInviteModal(false)}
-          client={client}
-        />
-
         {/* Hero: client identity */}
         <div className="p-6 border-b border-border flex-shrink-0 bg-white">
           <div className="flex items-start gap-4">
@@ -2091,7 +2080,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               {!isNewClient && (
                 <button
                   type="button"
-                  onClick={() => setShowInviteModal(true)}
+                  onClick={() => {
+                    const origin = typeof window !== "undefined" ? window.location.origin : "";
+                    const portalUrl = `${origin}/patient/login?clientId=${encodeURIComponent(client.id)}`;
+                    window.open(portalUrl, "_blank");
+                    toast.success(`Opening patient portal login for ${client.name}...`);
+                  }}
                   className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-semibold text-xs rounded-xl transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
@@ -2150,15 +2144,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 {/* LEFT COLUMN: Draggable Structured Information Sections */}
                 <div className="lg:col-span-5 space-y-5">
-                  <VisitJourneyCard
-                    clientId={client.id}
-                    clientName={client.name}
-                    clientPhone={client.phone}
-                  />
-                  <FaceCheckinCard
-                    clientId={client.id}
-                    clientName={client.name}
-                  />
                   <DraggableOverviewSections
                     mode="client"
                     client={client}

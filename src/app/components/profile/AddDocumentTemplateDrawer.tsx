@@ -872,17 +872,19 @@ export default function AddDocumentTemplateDrawer({
             />
           </div>
 
-          {/* Admin Control (Scope Rules & Permissions) */}
-          <AdminControlAccordion
-            scopingRules={scopingRules}
-            onScopingRulesChange={setScopingRules}
-            allowEntities={true}
-            defaultAdminControlOpen={true}
-            defaultScopeOpen={true}
-            defaultPermissionsOpen={false}
-            scopeTooltip="Define entity availability and restrict visibility by tenant industry category, industries, and locations."
-            permissionsTooltip="Configure what tenant users are permitted to do with this document template."
-          />
+          {/* Admin Control (Scope Rules & Permissions) - Only visible in Admin Mode */}
+          {isAdminMode && (
+            <AdminControlAccordion
+              scopingRules={scopingRules}
+              onScopingRulesChange={setScopingRules}
+              allowEntities={true}
+              defaultAdminControlOpen={true}
+              defaultScopeOpen={true}
+              defaultPermissionsOpen={false}
+              scopeTooltip="Define entity availability and restrict visibility by tenant industry category, industries, and locations."
+              permissionsTooltip="Configure what tenant users are permitted to do with this document template."
+            />
+          )}
 
           {/* Assign Category Section */}
           <div>

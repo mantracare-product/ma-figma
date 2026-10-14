@@ -342,15 +342,7 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
         icon: <Calendar className="w-4 h-4" />,
         iconKey: "calendar",
       },
-      {
-        id: "trig-appt-checked-in",
-        triggerType: "appointment",
-        triggerEvent: "appointment.checked_in",
-        label: "Appointment Checked In (Arrival / Kiosk)",
-        desc: "Fires when patient arrives or confirms presence at session",
-        icon: <Calendar className="w-4 h-4" />,
-        iconKey: "calendar",
-      },
+
       {
         id: "trig-appt-rescheduled",
         triggerType: "appointment",
@@ -427,15 +419,7 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
         icon: <QrCode className="w-4 h-4" />,
         iconKey: "user",
       },
-      {
-        id: "trig-stage-appt-checked-in",
-        triggerType: "appointment",
-        triggerEvent: "appointment.checked_in",
-        label: "Appointment Checked In (Arrival / Kiosk)",
-        desc: `Fires when patient arrives and confirms presence for session in "${stageName}"`,
-        icon: <Calendar className="w-4 h-4" />,
-        iconKey: "calendar",
-      },
+
     ];
   }
 };
@@ -1783,9 +1767,9 @@ export default function FlowBuilderTab({
                     id: "appointment",
                     type: "appointment",
                     label: "Appointment Triggers",
-                    desc: "Check-in, booking, status",
+                    desc: "Booking, rescheduling, completion",
                     icon: <Calendar className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "appointment.checked_in") || allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
+                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "appointment.booked") || allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
                   },
                 ]
               : [
@@ -1817,9 +1801,9 @@ export default function FlowBuilderTab({
                     id: "appointment",
                     type: "appointment",
                     label: "Appointment Triggers",
-                    desc: "QR Check-in, booked, cancelled",
+                    desc: "Booked, rescheduled, completed",
                     icon: <Calendar className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "appointment.checked_in") || allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
+                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "appointment.booked") || allTriggers.find((t) => t.triggerType === "appointment") || allTriggers[0],
                   },
                   {
                     id: "invoice",

@@ -85,8 +85,8 @@ export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   generate_invoice: ["stage", "postcall"],
   generate_document: ["stage", "postcall"],
   send_payment: ["stage", "incall", "inchat", "postcall"],
-  processmovement: ["stage", "inchat", "postcall", "client.checked_in", "appointment.checked_in", "checked_in"],
-  update_to_stage: ["stage", "inchat", "postcall", "client.checked_in", "appointment.checked_in", "checked_in"],
+  processmovement: ["stage", "inchat", "postcall", "client.checked_in", "checked_in"],
+  update_to_stage: ["stage", "inchat", "postcall", "client.checked_in", "checked_in"],
   movetonewprocess: ["stage", "inchat", "postcall"],
   endworkflow: ["stage", "inchat", "postcall"],
   fieldupdate: ["stage", "inchat", "postcall"],
@@ -551,9 +551,9 @@ export default function AddAutomationDrawer({
             } else if (targetStep.trigger === "client.checked_in" || targetStep.trigger === "checked_in") {
               setStageTriggerCategory("client");
               setStageTriggerEvent("client.checked_in");
-            } else if (targetStep.trigger === "appointment.checked_in") {
+            } else if (targetStep.trigger === "appointment.booked" || targetStep.trigger?.startsWith("appointment")) {
               setStageTriggerCategory("appointment");
-              setStageTriggerEvent("appointment.checked_in");
+              setStageTriggerEvent("appointment.booked");
             } else {
               setStageTriggerCategory("stage");
               setStageTriggerWhen("entry");
@@ -1088,8 +1088,8 @@ export default function AddAutomationDrawer({
                             setStageTriggerEvent("client.checked_in");
                             setAutomationName(`On Client Check-In (QR): ${stageName}`);
                           } else if (cat === "appointment") {
-                            setStageTriggerEvent("appointment.checked_in");
-                            setAutomationName(`On Appointment Check-In: ${stageName}`);
+                            setStageTriggerEvent("appointment.booked");
+                            setAutomationName(`On Appointment Booked: ${stageName}`);
                           } else {
                             setStageTriggerWhen("entry");
                             setAutomationName(`On entry: ${stageName}`);
@@ -1099,7 +1099,7 @@ export default function AddAutomationDrawer({
                       >
                         <option value="stage">Stage (Movement)</option>
                         <option value="client">Client (Check-In & Profile)</option>
-                        <option value="appointment">Appointment (Check-In & Booking)</option>
+                        <option value="appointment">Appointment (Booking & Status)</option>
                       </select>
                       <p className="text-[11px] text-gray-500 mt-1">
                         {stageTriggerCategory === "stage"

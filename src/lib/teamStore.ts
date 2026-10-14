@@ -36,6 +36,8 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
     canBookAppointments: true,
     calendarConnected: true,
     connectedCalendar: "google",
+    locations: ["California", "California Branch", "Online"],
+    availableLocations: ["California", "California Branch", "Online"],
   },
 ];
 
@@ -65,7 +67,16 @@ function cleanLegacyMembers(list: any[]): TeamMember[] {
   if (!filtered.some((m) => m.name.toLowerCase() === "admin user" || (m.role && m.role.toLowerCase() === "admin"))) {
     return [...INITIAL_TEAM_MEMBERS, ...filtered];
   }
-  return filtered;
+  return filtered.map((m) => {
+    if (m.name?.toLowerCase() === "admin user" && (!m.locations || m.locations.length === 0)) {
+      return {
+        ...m,
+        locations: ["California", "California Branch", "Online"],
+        availableLocations: ["California", "California Branch", "Online"],
+      };
+    }
+    return m;
+  });
 }
 
 export function getStoredTeamMembers(): TeamMember[] {

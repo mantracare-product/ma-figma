@@ -615,7 +615,9 @@ export default function Appointments() {
       return;
     }
 
-    if (!selectedClient || !selectedProvider || !selectedDate || !bookingTitle.trim()) {
+    const finalTitle = (bookingTitle.trim() || `${selectedClient.name} — Appointment`).trim();
+
+    if (!selectedClient || !selectedProvider || !selectedDate || !finalTitle) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -652,7 +654,7 @@ export default function Appointments() {
         time: timeStr,
         duration: 60,
         notes: bookingNote || `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
-        title: bookingTitle.trim(),
+        title: finalTitle,
         description: bookingDescription.trim() || undefined,
         tags: parsedTags,
         clientId: selectedClient.id ? String(selectedClient.id) : undefined,

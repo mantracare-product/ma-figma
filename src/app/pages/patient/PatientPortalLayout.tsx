@@ -45,8 +45,8 @@ export default function PatientPortalLayout() {
   const { clients } = useClients();
   const { organizations, activeOrganization, setActiveOrganization } = useOrganization();
 
-  // If on login or register screen, render without portal wrapper/sidebar
-  const isAuthPage = location.pathname === "/patient/login" || location.pathname === "/patient/register";
+  // If on login screen, render without portal wrapper/sidebar
+  const isAuthPage = location.pathname === "/patient/login";
 
   const [isDevSwitcherOpen, setIsDevSwitcherOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -102,7 +102,7 @@ export default function PatientPortalLayout() {
   const [selectedClientId, setSelectedClientId] = useState<string>(() => {
     if (routeClientId) return routeClientId;
     const pathParts = window.location.pathname.split("/patient/");
-    if (pathParts[1] && !["login", "register", "checkin", "book", "documents", "pharmacy", "bill", "pay", "status"].includes(pathParts[1])) {
+    if (pathParts[1] && !["login", "book", "documents", "pharmacy", "bill", "pay", "status"].includes(pathParts[1])) {
       return pathParts[1];
     }
     const params = new URLSearchParams(window.location.search);
@@ -118,7 +118,7 @@ export default function PatientPortalLayout() {
       sessionStorage.setItem("patient_portal_active_client_id", routeClientId);
     } else {
       const pathParts = location.pathname.split("/patient/");
-      if (pathParts[1] && !["login", "register", "checkin", "book", "documents", "pharmacy", "bill", "pay", "status"].includes(pathParts[1])) {
+      if (pathParts[1] && !["login", "book", "documents", "pharmacy", "bill", "pay", "status"].includes(pathParts[1])) {
         if (pathParts[1] !== selectedClientId) {
           setSelectedClientId(pathParts[1]);
           sessionStorage.setItem("patient_portal_active_client_id", pathParts[1]);
@@ -204,17 +204,8 @@ export default function PatientPortalLayout() {
 
   const overviewPath = activeClient?.id ? `/patient/${activeClient.id}` : "/patient";
 
-  const isCheckedIn = Boolean(
-    activeClient?.stage &&
-    activeClient.stage !== "Confirmed" &&
-    activeClient.stage !== "Not Assigned" &&
-    activeClient.stage !== "Unregistered" &&
-    activeClient.processes?.includes("Patient Care Journey")
-  );
-
   const navItems = [
     { to: overviewPath, label: "Overview", icon: LayoutDashboard, exact: true },
-    { to: "/patient/checkin", label: "Check In", icon: QrCode },
     { to: "/patient/book", label: "Appointments", icon: Calendar },
     { to: "/patient/documents", label: "Documents", icon: FileText },
     { to: "/patient/bill", label: "Billing", icon: Receipt },

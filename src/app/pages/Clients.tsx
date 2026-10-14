@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router";
 import { Search, Filter, Plus, Upload, Download, MoreVertical, Eye, Phone, Trash2, Settings as SettingsIcon, FileText, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail, MapPin, Clock, MessageSquare, Edit, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, User, CalendarClock, ArrowRight, List, Play, ChevronDown, ChevronUp, GripVertical, X, Building, Briefcase, Users, GitBranch, Globe, Copy, Shield, Info, AlertCircle, AlertTriangle, CheckCircle2, RefreshCw, FileSpreadsheet, Webhook, Send } from "lucide-react";
-import SendInviteModal from "../components/clients/SendInviteModal";
 import { useDrag, useDrop } from "react-dnd";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -359,9 +358,7 @@ export default function Clients() {
     message: ""
   });
 
-  // Update Stage Form State
   const [selectedStage, setSelectedStage] = useState("");
-  const [inviteClient, setInviteClient] = useState<Client | null>(null);
 
   // Process Tab state for drawer activity
   const [activeProcessTabDrawer, setActiveProcessTabDrawer] = useState<string>("all");
@@ -2823,7 +2820,12 @@ export default function Clients() {
               {
                 label: "Send Invite",
                 icon: <Send className="w-3.5 h-3.5 text-blue-600" />,
-                onClick: (client) => setInviteClient(client),
+                onClick: (client) => {
+                  const origin = typeof window !== "undefined" ? window.location.origin : "";
+                  const portalUrl = `${origin}/patient/login?clientId=${encodeURIComponent(client.id)}`;
+                  window.open(portalUrl, "_blank");
+                  toast.success(`Opening patient portal login for ${client.name}...`);
+                },
               },
               {
                 label: "Call",
@@ -2872,13 +2874,6 @@ export default function Clients() {
               />
             );
           })()}
-
-          {/* Send Invite Modal */}
-          <SendInviteModal
-            isOpen={Boolean(inviteClient)}
-            onClose={() => setInviteClient(null)}
-            client={inviteClient}
-          />
 
           {/* Add Client Modal */}
           <Modal

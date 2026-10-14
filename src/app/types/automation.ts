@@ -109,7 +109,6 @@ export const GLOBAL_TRIGGER_CATALOG: GlobalTriggerDefinition[] = [
       { event: "appointment.booked", label: "Appointment booked", description: "A time slot is confirmed for a client" },
       { event: "appointment.rescheduled", label: "Appointment rescheduled", description: "An existing booking time or date is updated" },
       { event: "appointment.cancelled", label: "Appointment cancelled", description: "A booking is cancelled by client or clinic" },
-      { event: "appointment.checked_in", label: "Checked in", description: "Patient arrives or confirms presence at session (QR / Kiosk / Manual)" },
       { event: "appointment.completed", label: "Appointment completed", description: "Consultation or clinical service concludes" },
       { event: "appointment.no_show", label: "No-show", description: "Client fails to attend scheduled session without notice" },
     ],

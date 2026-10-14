@@ -1,12 +1,11 @@
 import React, { useState } from "react";
-import { X, Search, User, UserPlus, ArrowRight, CheckCircle2, ShieldCheck, Sparkles, Building2 } from "lucide-react";
+import { X, Search, User, ArrowRight, CheckCircle2, ShieldCheck, Sparkles, Building2 } from "lucide-react";
 import { getStoredClients, Client } from "../../../../lib/clientsStore";
 
 interface DevPatientSwitcherModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectPatient: (patientId: string) => void;
-  onGoToRegister?: () => void;
   activePatientId?: string;
 }
 
@@ -14,7 +13,6 @@ export default function DevPatientSwitcherModal({
   isOpen,
   onClose,
   onSelectPatient,
-  onGoToRegister,
   activePatientId,
 }: DevPatientSwitcherModalProps) {
   const [search, setSearch] = useState("");
@@ -81,20 +79,6 @@ export default function DevPatientSwitcherModal({
                 autoFocus
               />
             </div>
-            {onGoToRegister && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onGoToRegister();
-                }}
-                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>+ New Patient</span>
-              </button>
-            )}
           </div>
           <div className="flex items-center justify-between text-[11px] text-slate-500 px-1 font-medium">
             <span>Showing {filtered.length} of {clients.length} patients in Mantra Assist</span>
@@ -108,7 +92,7 @@ export default function DevPatientSwitcherModal({
             <div className="text-center py-12 space-y-2">
               <User className="w-8 h-8 text-slate-300 mx-auto" />
               <p className="text-sm font-semibold text-slate-600">No patients found</p>
-              <p className="text-xs text-slate-400">Try a different search term or register a new patient.</p>
+              <p className="text-xs text-slate-400">Try a different search term.</p>
             </div>
           ) : (
             filtered.map((c) => {

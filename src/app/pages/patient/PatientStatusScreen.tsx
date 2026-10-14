@@ -51,7 +51,6 @@ export default function PatientStatusScreen() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   // Real Invoices for this client from invoiceService
   const [invoices, setInvoices] = useState<ClientInvoice[]>([]);
-  const [showQrModal, setShowQrModal] = useState(false);
 
   // Stage Detail Drawer in Client Portal
   const [selectedStageForDrawer, setSelectedStageForDrawer] = useState<Stage | null>(null);
@@ -156,45 +155,9 @@ export default function PatientStatusScreen() {
       )
     : -1;
 
-  // Determine hospital check-in state:
-  // True if assigned to a valid process stage (not Confirmed/Unregistered), OR client status is Checked In,
-  // OR client has checkedInAt timestamp, OR any appointment is checked-in.
-  const hasCheckedInAppt = appointments.some(
-    (a) =>
-      (String(a.clientId) === String(activeClient.id) || a.clientName === activeClient.name) &&
-      (a.status === "checked-in" || Boolean(a.checkedInAt))
-  );
-
-  const isCheckedIn = Boolean(
-    activeProcess &&
-    (
-      (currentStageIndex >= 0 && rawStageName && !["Unregistered", "Confirmed", "Not Assigned"].includes(rawStageName)) ||
-      activeClient.status === "Checked In" ||
-      Boolean((activeClient as any).checkedInAt) ||
-      hasCheckedInAppt
-    )
-  );
-
-  // Auto-heal stage if checked in but stage is still "Confirmed" / "Unregistered"
-  useEffect(() => {
-    if (
-      isCheckedIn &&
-      activeClient &&
-      (!activeClient.stage || ["Confirmed", "Unregistered", "Not Assigned"].includes(activeClient.stage))
-    ) {
-      moveClientToStage(activeClient.id, "Client Checked In", activeProcess?.name || "Patient Care Journey");
-    }
-  }, [isCheckedIn, activeClient?.id, activeClient?.stage, activeProcess?.name]);
-
-  const currentStageName =
-    activeClient.stage && !["Confirmed", "Unregistered", "Not Assigned"].includes(activeClient.stage)
-      ? activeClient.stage
-      : isCheckedIn
-      ? allStages[0]?.name || "Client Checked In"
-      : activeClient.stage;
-
-  const isAssignedToStage = currentStageIndex >= 0 || isCheckedIn;
-  const activeIdx = currentStageIndex >= 0 ? currentStageIndex : isCheckedIn ? 0 : -1;
+  const currentStageName = activeClient.stage;
+  const isAssignedToStage = currentStageIndex >= 0;
+  const activeIdx = currentStageIndex >= 0 ? currentStageIndex : -1;
 
   // Filter only stages where toggle is enabled AND configuration is done
   const portalEnabledStages = activeProcess ? allStages.filter((st) => isStageEnabledForPortal(st)) : [];
@@ -354,12 +317,6 @@ export default function PatientStatusScreen() {
                 })}
               </span>
             </div>
-            {isCheckedIn && (
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-300 bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-500/30">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Checked In at Clinic</span>
-              </span>
-            )}
           </div>
         </div>
       </div>
@@ -449,16 +406,9 @@ export default function PatientStatusScreen() {
             </div>
 
             <div className="flex items-center gap-2">
-              {todayAppt.status === "checked-in" ? (
-                <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Checked In at Clinic</span>
-                </span>
-              ) : (
-                <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 capitalize">
-                  {todayAppt.status}
-                </span>
-              )}
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 capitalize">
+                {todayAppt.status}
+              </span>
             </div>
           </div>
 
@@ -496,12 +446,12 @@ export default function PatientStatusScreen() {
             <div className="flex items-center gap-3 self-start md:self-center shrink-0">
               <button
                 type="button"
-                onClick={() => setShowQrModal(true)}
-                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs"
+                onClick={() => navigate("/patient/book")}
+                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <QrCode className="w-4 h-4" />
-                <span>Check-In Pass</span>
+                <Calendar className="w-4 h-4" />
+                <span>View Appointments</span>
               </button>
             </div>
           </div>
@@ -566,24 +516,6 @@ export default function PatientStatusScreen() {
                   <p className="text-xs text-slate-500 max-w-sm mx-auto">
                     This patient is not currently enrolled in a care journey process connected to the Patient Portal. Once a process is assigned and configured in Workflows, today's activities will appear here.
                   </p>
-                </div>
-              ) : !isCheckedIn ? (
-                <div className="text-center py-10 space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center mx-auto border border-amber-100">
-                    <QrCode className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-800">Hospital Check-In Required</h3>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    Today's activities timeline activates once you check in at the reception kiosk or show your digital pass.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/patient/checkin")}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-                  >
-                    <QrCode className="w-4 h-4" />
-                    <span>Open Check-In Scanner</span>
-                  </button>
                 </div>
               ) : portalEnabledStages.length === 0 ? (
                 <div className="text-center py-10 px-4 space-y-3">
@@ -814,41 +746,7 @@ export default function PatientStatusScreen() {
         </div>
       )}
 
-      {/* ── QR Check-In Pass Modal ── */}
-      {showQrModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center space-y-5 animate-in zoom-in-95 duration-150">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
-                Digital Kiosk Pass
-              </span>
-              <h3 className="text-xl font-bold text-slate-900 mt-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                {activeClient.name}
-              </h3>
-              <p className="text-xs text-slate-500 font-mono mt-0.5">
-                Patient #{activeClient.id}
-              </p>
-            </div>
 
-            {/* QR Code Graphic */}
-            <div className="w-48 h-48 mx-auto p-3 bg-white border-2 border-slate-200 rounded-2xl shadow-sm flex items-center justify-center">
-              <QrCode className="w-36 h-36 text-slate-900" />
-            </div>
-
-            <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Scan this QR code at the AI Receptionist kiosk at the clinic entrance to verify identity and check in automatically.
-            </p>
-
-            <button
-              type="button"
-              onClick={() => setShowQrModal(false)}
-              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

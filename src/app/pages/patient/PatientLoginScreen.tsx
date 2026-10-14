@@ -1,21 +1,15 @@
 import React, { useState } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import {
-  User,
+  Mail,
   Phone,
   Lock,
   ArrowRight,
   ShieldCheck,
-  Sparkles,
-  QrCode,
-  CheckCircle2,
   AlertCircle,
-  Stethoscope,
-  ChevronRight,
-  UserPlus,
-  Building2,
 } from "lucide-react";
-import { getStoredClients, Client } from "../../../lib/clientsStore";
+import { toast } from "sonner";
+import { getStoredClients, saveStoredClients, Client } from "../../../lib/clientsStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import maLogo from "../../../imports/ma_logo-1.png";
 
@@ -27,19 +21,74 @@ export default function PatientLoginScreen() {
 
   const clients = getStoredClients();
   const initialClient = paramClientId ? clients.find((c) => c.id === paramClientId) : null;
+  const isInvite = Boolean(paramClientId && initialClient);
 
-  const [identifier, setIdentifier] = useState(
-    initialClient ? initialClient.phone || initialClient.email : ""
-  );
-  const [passcode, setPasscode] = useState("1234");
+  // Invite Flow State: Pre-filled email, empty password & confirm password
+  const [inviteEmail, setInviteEmail] = useState(() => (initialClient?.email || initialClient?.phone || ""));
+  const [invitePassword, setInvitePassword] = useState("");
+  const [inviteConfirmPassword, setInviteConfirmPassword] = useState("");
+
+  // Direct Route Login State: Email and password must both be empty
+  const [identifier, setIdentifier] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
   const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  // Handle setting password and continuing from invite link
+  const handleInviteSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!initialClient) return;
+
+    if (!invitePassword.trim()) {
+      setError("Please set a password.");
+      return;
+    }
+    if (invitePassword.length < 4) {
+      setError("Password must be at least 4 characters.");
+      return;
+    }
+    if (invitePassword !== inviteConfirmPassword) {
+      setError("Passwords do not match. Please re-enter.");
+      return;
+    }
+
+    // Save client password and updated email if changed
+    const updatedClients = clients.map((c) =>
+      c.id === initialClient.id
+        ? {
+            ...c,
+            portalPassword: invitePassword,
+            email: inviteEmail.trim() || c.email,
+          }
+        : c
+    );
+    saveStoredClients(updatedClients);
+
+    sessionStorage.setItem("patient_portal_active_client_id", initialClient.id);
+    localStorage.setItem("patient_portal_active_client_id", initialClient.id);
+    window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: initialClient.id }));
+    toast.success(`Welcome, ${initialClient.name}! Your password has been set.`);
+    navigate(`/patient/${encodeURIComponent(initialClient.id)}`);
+  };
+
+  // Handle direct login from route
+  const handleDirectLogin = (e: React.FormEvent) => {
+    e.preventDefault();
     setError(null);
 
     const cleanInput = identifier.trim().toLowerCase();
     const cleanDigits = identifier.replace(/\D/g, "");
+
+    if (!cleanInput) {
+      setError("Please enter your email or phone number.");
+      return;
+    }
+    if (!loginPassword) {
+      setError("Please enter your password.");
+      return;
+    }
 
     // Look for matching client by ID, phone, or email
     const match = clients.find((c) => {
@@ -53,25 +102,23 @@ export default function PatientLoginScreen() {
     });
 
     if (match) {
+      // If client has a custom portalPassword set, check that it matches
+      if ((match as any).portalPassword && (match as any).portalPassword !== loginPassword) {
+        setError("Incorrect password. Please try again or use your invite link.");
+        return;
+      }
+
       sessionStorage.setItem("patient_portal_active_client_id", match.id);
       localStorage.setItem("patient_portal_active_client_id", match.id);
       window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: match.id }));
       navigate(`/patient/${encodeURIComponent(match.id)}`);
     } else {
-      // If user typed anything else, default to first client or show error
       if (clients.length > 0) {
-        setError(`Patient not found with identifier "${identifier}". Select an existing patient or create an account.`);
+        setError(`Patient not found with identifier "${identifier}". Please verify your details or contact the clinic reception.`);
       } else {
-        setError("No patients found in database. Please register as a new patient.");
+        setError("No patient profile found. Please contact the clinic reception.");
       }
     }
-  };
-
-  const handleSelectDevPatient = (patientId: string) => {
-    sessionStorage.setItem("patient_portal_active_client_id", patientId);
-    localStorage.setItem("patient_portal_active_client_id", patientId);
-    window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: patientId }));
-    navigate(`/patient/${encodeURIComponent(patientId)}`);
   };
 
   return (
@@ -99,109 +146,143 @@ export default function PatientLoginScreen() {
               {activeOrganization?.name || "Demo Mantra Care"}
             </h1>
             <p className="text-xs font-bold uppercase tracking-wider text-blue-600" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Patient Portal Sign In
+              {isInvite ? "Set Up Your Password" : "Patient Portal Sign In"}
             </p>
             <p className="text-xs text-slate-500 max-w-xs mx-auto" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Sign in to manage appointments, digital clinic bills, and QR check-in passes.
+              {isInvite
+                ? `Welcome, ${initialClient?.name}! Please set your account password below to access your care portal.`
+                : "Sign in to manage appointments, digital clinic bills, and patient records."}
             </p>
           </div>
 
-          {/* If redirected with clientId, show greeting */}
-          {initialClient && (
-            <div className="p-3 rounded-xl bg-blue-50 border border-blue-200/80 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                {(initialClient.name || "P").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-slate-900 truncate">
-                  Hello, {initialClient.name}!
-                </p>
-                <p className="text-[11px] text-slate-600 truncate">
-                  Personal invite detected for patient #{initialClient.id}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleSelectDevPatient(initialClient.id)}
-                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shrink-0 cursor-pointer"
-              >
-                Enter →
-              </button>
-            </div>
-          )}
-
-          {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Phone Number or Email
-              </label>
-              <div className="relative">
-                <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="e.g. 5551234567 or sarah.j@email.com"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-slate-900"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
+          {/* Form: Invite Flow vs Direct Route Login */}
+          {isInvite ? (
+            /* Invite Flow: Email pre-filled, Set Password, Confirm Password, Continue button */
+            <form onSubmit={handleInviteSubmit} className="space-y-4">
+              <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Passcode / OTP
+                  Email Address
                 </label>
-                <span className="text-[11px] text-blue-600 font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Demo PIN: 1234
-                </span>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="e.g. patient@example.com"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-slate-900"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                    required
+                  />
+                </div>
               </div>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="password"
-                  value={passcode}
-                  onChange={(e) => setPasscode(e.target.value)}
-                  placeholder="1234"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-slate-900"
-                  required
-                />
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Set Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    value={invitePassword}
+                    onChange={(e) => setInvitePassword(e.target.value)}
+                    placeholder="Enter password (min. 4 characters)"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-slate-900"
+                    required
+                    autoFocus
+                  />
+                </div>
               </div>
-            </div>
 
-            {error && (
-              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                <p className="leading-snug">{error}</p>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Confirm Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    value={inviteConfirmPassword}
+                    onChange={(e) => setInviteConfirmPassword(e.target.value)}
+                    placeholder="Re-enter your password"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-slate-900"
+                    required
+                  />
+                </div>
               </div>
-            )}
 
-            <button
-              type="submit"
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-blue-600/20 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
-              style={{ fontFamily: "DM Sans, sans-serif" }}
-            >
-              <span>Sign In to Portal</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
+              {error && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <p className="leading-snug">{error}</p>
+                </div>
+              )}
 
-          {/* Register Link */}
-          <div className="pt-2 text-center border-t border-slate-100">
-            <p className="text-xs text-slate-500 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-              New patient or scanned the clinic QR?{" "}
-              <Link
-                to="/patient/register"
-                className="text-blue-600 hover:underline font-bold inline-flex items-center gap-1"
+              <button
+                type="submit"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-blue-600/20 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
               >
-                <span>Register here</span>
-                <ChevronRight className="w-3 h-3" />
-              </Link>
-            </p>
-          </div>
+                <span>Continue</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </form>
+          ) : (
+            /* Direct Route Login Flow: Email & Password empty */
+            <form onSubmit={handleDirectLogin} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Phone Number or Email
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="e.g. 5551234567 or sarah.j@email.com"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-slate-900"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-slate-900"
+                    required
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <p className="leading-snug">{error}</p>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-blue-600/20 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+              >
+                <span>Sign In to Portal</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </form>
+          )}
         </div>
       </div>
 
