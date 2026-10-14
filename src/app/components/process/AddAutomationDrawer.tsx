@@ -85,8 +85,8 @@ export const STEP_ALLOWED_TRIGGERS: Record<string, Array<string>> = {
   generate_invoice: ["stage", "postcall"],
   generate_document: ["stage", "postcall"],
   send_payment: ["stage", "incall", "inchat", "postcall"],
-  processmovement: ["stage", "inchat", "postcall", "client.checked_in", "checked_in"],
-  update_to_stage: ["stage", "inchat", "postcall", "client.checked_in", "checked_in"],
+  processmovement: ["stage", "inchat", "postcall"],
+  update_to_stage: ["stage", "inchat", "postcall"],
   movetonewprocess: ["stage", "inchat", "postcall"],
   endworkflow: ["stage", "inchat", "postcall"],
   fieldupdate: ["stage", "inchat", "postcall"],
@@ -422,7 +422,7 @@ export default function AddAutomationDrawer({
   // Stage Trigger State (Stage Scope)
   const [stageTriggerCategory, setStageTriggerCategory] = useState<"stage" | "client" | "appointment">("stage");
   const [stageTriggerWhen, setStageTriggerWhen] = useState<"entry" | "exit">("entry");
-  const [stageTriggerEvent, setStageTriggerEvent] = useState<string>("client.checked_in");
+  const [stageTriggerEvent, setStageTriggerEvent] = useState<string>("client.created");
 
   // Global Trigger State (Global Scope)
   const [globalTriggerType, setGlobalTriggerType] = useState<EventTriggerType>("client");
@@ -533,7 +533,7 @@ export default function AddAutomationDrawer({
           setAutomationStatus("active");
           setStageTriggerCategory("stage");
           setStageTriggerWhen("entry");
-          setStageTriggerEvent("client.checked_in");
+          setStageTriggerEvent("client.created");
           setGlobalTriggerType("client");
           setGlobalTriggerEvent("client.created");
           setSteps(workflowSteps || []);
@@ -548,9 +548,9 @@ export default function AddAutomationDrawer({
             if (targetStep.trigger === "exit_stage") {
               setStageTriggerCategory("stage");
               setStageTriggerWhen("exit");
-            } else if (targetStep.trigger === "client.checked_in" || targetStep.trigger === "checked_in") {
+            } else if (targetStep.trigger === "client.created" || targetStep.trigger === "client.updated" || targetStep.trigger?.startsWith("client")) {
               setStageTriggerCategory("client");
-              setStageTriggerEvent("client.checked_in");
+              setStageTriggerEvent(targetStep.trigger || "client.created");
             } else if (targetStep.trigger === "appointment.booked" || targetStep.trigger?.startsWith("appointment")) {
               setStageTriggerCategory("appointment");
               setStageTriggerEvent("appointment.booked");
@@ -1085,8 +1085,8 @@ export default function AddAutomationDrawer({
                           const cat = e.target.value as "stage" | "client" | "appointment";
                           setStageTriggerCategory(cat);
                           if (cat === "client") {
-                            setStageTriggerEvent("client.checked_in");
-                            setAutomationName(`On Client Check-In (QR): ${stageName}`);
+                            setStageTriggerEvent("client.created");
+                            setAutomationName(`On Client Created: ${stageName}`);
                           } else if (cat === "appointment") {
                             setStageTriggerEvent("appointment.booked");
                             setAutomationName(`On Appointment Booked: ${stageName}`);
@@ -1098,14 +1098,14 @@ export default function AddAutomationDrawer({
                         className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
                       >
                         <option value="stage">Stage (Movement)</option>
-                        <option value="client">Client (Check-In & Profile)</option>
+                        <option value="client">Client (Profile & Lifecycle)</option>
                         <option value="appointment">Appointment (Booking & Status)</option>
                       </select>
                       <p className="text-[11px] text-gray-500 mt-1">
                         {stageTriggerCategory === "stage"
                           ? `Scoped directly to movements in "${stageName}".`
                           : stageTriggerCategory === "client"
-                          ? `Trigger on client events such as QR / Kiosk check-in for "${stageName}".`
+                          ? `Trigger on client events such as creation or profile updates.`
                           : `Trigger on appointment events such as check-in or completion.`}
                       </p>
                     </div>

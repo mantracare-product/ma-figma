@@ -307,15 +307,6 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
         iconKey: "user",
       },
       {
-        id: "trig-client-checked-in",
-        triggerType: "client",
-        triggerEvent: "client.checked_in",
-        label: "Client Checked In (QR / Kiosk / Portal)",
-        desc: "Fires when patient or client checks in via QR code, AI Receptionist kiosk, or Patient Portal",
-        icon: <QrCode className="w-4 h-4" />,
-        iconKey: "user",
-      },
-      {
         id: "trig-client-updated",
         triggerType: "client",
         triggerEvent: "client.updated",
@@ -410,16 +401,6 @@ export const getTriggerCatalogItems = (scope: "stage" | "global", stageName: str
         icon: <GitBranch className="w-4 h-4" />,
         iconKey: "gitbranch",
       },
-      {
-        id: "trig-stage-client-checked-in",
-        triggerType: "client",
-        triggerEvent: "client.checked_in",
-        label: "Client Checked In (QR / Kiosk / Portal)",
-        desc: `Fires when patient or client checks in via QR code or kiosk for "${stageName}"`,
-        icon: <QrCode className="w-4 h-4" />,
-        iconKey: "user",
-      },
-
     ];
   }
 };
@@ -1759,9 +1740,9 @@ export default function FlowBuilderTab({
                     id: "client",
                     type: "client",
                     label: "Client Triggers",
-                    desc: "QR / Kiosk Check-In & profile",
+                    desc: "Profile creation & updates",
                     icon: <User className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "client.checked_in") || allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
+                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "client.created") || allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
                   },
                   {
                     id: "appointment",
@@ -1793,9 +1774,9 @@ export default function FlowBuilderTab({
                     id: "client",
                     type: "client",
                     label: "Client Triggers",
-                    desc: "QR Check-in, created, updated",
+                    desc: "Created, updated, product assigned",
                     icon: <User className="w-3.5 h-3.5" />,
-                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "client.checked_in") || allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
+                    defaultTrigger: allTriggers.find((t) => t.triggerEvent === "client.created") || allTriggers.find((t) => t.triggerType === "client") || allTriggers[0],
                   },
                   {
                     id: "appointment",

@@ -192,7 +192,6 @@ export const EVENT_CATALOG: Record<
 > = {
   client: [
     { event: "client.created", label: "Client created", description: "Fires when a new client record is added (manual, import, webhook, or call)" },
-    { event: "client.checked_in", label: "Checked in", description: "Patient or client arrives / checks in at AI Receptionist or Patient Portal" },
     { event: "client.intent_matched", label: "Intent matched", description: "AI receptionist identifies caller intent matching process keywords" },
     { event: "client.call_ended", label: "Call ended", description: "Phone conversation concludes with transcript and summary" },
     { event: "client.entered_stage", label: "Entered stage", description: "Client transitions into an intake or custom process stage" },
@@ -370,25 +369,23 @@ export function getStoredRules(orgId?: string): AutomationRule[] {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    // Filter out hardcoded sample mock rules
+    // Filter out hardcoded sample mock rules and check-in rules
     const legacyMockIds = new Set([
       "rule-client-intake-auto",
       "rule-appt-booked-auto",
       "rule-appt-rescheduled-auto",
       "rule-inv-sent-auto",
       "rule-inv-paid-auto",
+      "rule-patient-checkin-care-journey",
     ]);
-    let filtered = parsed.filter((r) => !legacyMockIds.has(r.id));
-    const hasCheckinRule = filtered.some(
+    let filtered = parsed.filter(
       (r) =>
-        r.id === DEFAULT_CHECKIN_CARE_JOURNEY_RULE.id ||
-        r.trigger?.event === "client.checked_in" ||
-        r.trigger?.event === "checked_in"
+        !legacyMockIds.has(r.id) &&
+        r.trigger?.event !== "client.checked_in" &&
+        r.trigger?.event !== "checked_in" &&
+        r.trigger?.event !== "appointment.checked_in"
     );
-    if (!hasCheckinRule) {
-      filtered = [DEFAULT_CHECKIN_CARE_JOURNEY_RULE, ...filtered];
-      localStorage.setItem(AUTOMATION_RULES_STORAGE_KEY, JSON.stringify(filtered));
-    } else if (filtered.length !== parsed.length) {
+    if (filtered.length !== parsed.length) {
       localStorage.setItem(AUTOMATION_RULES_STORAGE_KEY, JSON.stringify(filtered));
     }
     if (orgId && orgId !== "all") {
