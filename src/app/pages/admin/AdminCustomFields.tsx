@@ -53,8 +53,9 @@ import {
   useFieldRegistry,
   INITIAL_SCRIBE_CUSTOM_FIELDS,
 } from "../../context/FieldRegistryContext";
+import PageHeader from "../../components/layout/PageHeader";
 import PageTopBar from "../../components/layout/PageTopBar";
-import TableComponent, { TableColumn } from "../../components/ui/TableComponent";
+import TableComponent, { TableColumn, TableRowAction } from "../../components/ui/TableComponent";
 import { AdminSectionDrawer } from "./components/AdminSectionDrawer";
 import { AdminFieldDrawer } from "./components/AdminFieldDrawer";
 import {
@@ -196,6 +197,7 @@ const MODULE_TABS: { label: string; value: Exclude<FieldModule, "deal"> }[] = [
   { label: "Processes",     value: "process" },
   { label: "Appointments",  value: "appointment" },
   { label: "Services",      value: "service" },
+  { label: "Invoices",      value: "invoice" },
   { label: "Organizations", value: "organization" },
   { label: "Team Members",  value: "teamMember" },
   { label: "AI Scribe",     value: "scribe" },
@@ -354,10 +356,15 @@ export function AdminCustomFields() {
     MODULE_TABS.find((m) => m.value === activeModule)?.label ?? activeModule;
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-200">
-      {/* ── UNIFIED TOOLBAR powered by PageTopBar ── */}
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7 animate-in fade-in duration-200">
+        <PageHeader
+          title="Sections & Fields"
+          subtitle="Configure system and custom fields, layout sections, validation rules, and scoping across modules"
+        />
+
+        {/* ── UNIFIED TOOLBAR powered by PageTopBar ── */}
       <PageTopBar
-        isBottomPanelAttached={true}
         modes={[
           { id: "fields", label: "Fields" },
           { id: "sections", label: "Sections" },
@@ -464,9 +471,6 @@ export function AdminCustomFields() {
         }}
       />
 
-      {/* ── TABLE CONTAINER ── */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
-
         {/* TAB 1: CUSTOM FIELDS TABLE VIEW */}
         {activeTab === "fields" && (() => {
           const fieldColumns: TableColumn<FieldDefinition>[] = [
@@ -479,21 +483,22 @@ export function AdminCustomFields() {
             {
               key: "key",
               header: "Key",
-              align: "center",
+              align: "left",
               render: (field) => <span className="text-xs font-mono text-gray-600">{field.key}</span>,
             },
             {
               key: "type",
               header: "Type",
-              align: "center",
+              align: "left",
               render: (field) => {
                 const isCompositeField =
-                  field.compositeDisplayMode !== undefined ||
+                  field.inputType !== "new_list" &&
+                  (field.compositeDisplayMode !== undefined ||
                   field.inputType === "table" ||
                   field.inputType === "group" ||
                   field.inputType === "group_repeatable" ||
                   (field.inputType === "list_open" && (field.listEntryType === "structured" || (field.subFields && field.subFields.length > 0))) ||
-                  (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig);
+                  (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig));
 
                 const isListField =
                   !isCompositeField &&
@@ -503,11 +508,21 @@ export function AdminCustomFields() {
                   field.inputType === "multiselect" ||
                   field.inputType === "list");
 
+                const isAdvanceList =
+                  field.inputType === "new_list" &&
+                  (field.newListConfig?.sourceMode === "advance_2" ||
+                   (field.newListConfig?.sourceMode as any) === "advance_list" ||
+                   Boolean(field.newListConfig?.advanceListId));
+
                 const typeName =
                   isCompositeField
                     ? field.compositeDisplayMode === "table" || field.inputType === "table"
                       ? "Group Field (Table)"
                       : "Group Field (Group)"
+                    : isAdvanceList
+                    ? "List (Advance)"
+                    : field.inputType === "new_list"
+                    ? "List"
                     : field.inputType === "list_open"
                     ? "List (Open · Tags)"
                     : isListField
@@ -520,6 +535,10 @@ export function AdminCustomFields() {
                 if (isCompositeField) {
                   typeBadgeStyle = "bg-indigo-50 text-indigo-700";
                   TypeIcon = field.compositeDisplayMode === "table" || field.inputType === "table" ? TableIcon : Layers;
+                }
+                else if (isAdvanceList) {
+                  typeBadgeStyle = "bg-purple-50 text-purple-700";
+                  TypeIcon = Layers;
                 }
                 else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
                 else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
@@ -559,7 +578,7 @@ export function AdminCustomFields() {
                   {
                     key: "process",
                     header: "Process",
-                    align: "center" as const,
+                    align: "left" as const,
                     render: (field: FieldDefinition) => renderProcessesCell(field, allProcesses),
                   },
                 ]
@@ -567,7 +586,7 @@ export function AdminCustomFields() {
             {
               key: "required",
               header: "Required",
-              align: "center",
+              align: "left",
               render: (field) =>
                 field.required ? (
                   <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/50">Required</span>
@@ -578,66 +597,43 @@ export function AdminCustomFields() {
             {
               key: "scope",
               header: "Scope",
-              align: "center",
+              align: "left",
               render: (field) => renderScopeCell(field),
             },
-            {
-              key: "actions",
-              header: "Actions",
-              align: "center",
-              render: (field) => {
-                const scribeSeed = isScribeSeed(field);
-                const systemField = isSystemField(field);
-                return (
-                  <div className="flex items-center justify-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditField(field)}
-                      className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                      title={scribeSeed ? "View details (protected)" : "Edit field"}
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    {scribeSeed ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="p-1.5 text-amber-400 cursor-not-allowed opacity-60"
-                        title="Scribe seed fields cannot be deleted"
-                      >
-                        <Lock className="w-3.5 h-3.5" />
-                      </button>
-                    ) : systemField ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="p-1.5 text-gray-300 cursor-not-allowed opacity-40"
-                        title="Built-in system fields cannot be deleted"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget({ type: "field", id: field.id, name: field.label })}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                        title="Delete field"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                );
-              },
-            },
           ];
+
+          const getFieldRowActions = (field: FieldDefinition): TableRowAction<FieldDefinition>[] => {
+            const scribeSeed = isScribeSeed(field);
+            const systemField = isSystemField(field);
+
+            return [
+              {
+                label: scribeSeed ? "View Details (Protected)" : "Edit Field",
+                icon: scribeSeed ? <Lock className="w-3.5 h-3.5 text-amber-500" /> : <Edit2 className="w-3.5 h-3.5 text-gray-700" />,
+                onClick: () => handleOpenEditField(field),
+              },
+              ...(!systemField && !scribeSeed
+                ? [
+                    {
+                      label: "Delete Field",
+                      icon: <Trash2 className="w-3.5 h-3.5 text-red-600" />,
+                      isDanger: true,
+                      onClick: () => setDeleteTarget({ type: "field", id: field.id, name: field.label }),
+                    },
+                  ]
+                : []),
+            ];
+          };
 
           return (
             <TableComponent
               columns={fieldColumns}
               data={filteredFields}
               getRowId={(field) => `${field.module}-${field.key}`}
+              rowActions={getFieldRowActions}
+              onRowClick={(field) => handleOpenEditField(field)}
               emptyMessage="No fields found for this module. Click 'Add Field' above to define one."
+              tableId="admin-custom-fields-table"
             />
           );
         })()}
@@ -669,7 +665,7 @@ export function AdminCustomFields() {
                   {
                     key: "process",
                     header: "Process",
-                    align: "center" as const,
+                    align: "left" as const,
                     render: (sec: SectionDefinition) => renderProcessesCell(sec, allProcesses),
                   },
                 ]
@@ -677,13 +673,13 @@ export function AdminCustomFields() {
             {
               key: "scope",
               header: "Scope",
-              align: "center",
+              align: "left",
               render: (sec) => renderScopeCell(sec),
             },
             {
               key: "fields",
               header: "Fields",
-              align: "center",
+              align: "left",
               render: (sec) => {
                 const assignedFieldCount = (sec.fieldKeys || []).length;
                 return (
@@ -693,53 +689,48 @@ export function AdminCustomFields() {
                 );
               },
             },
-            {
-              key: "actions",
-              header: "Actions",
-              align: "center",
-              render: (sec) => {
-                const isSystem = isSystemSection(sec);
-                return (
-                  <div className="flex items-center justify-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingSection(sec);
-                        setSectionDrawerOpen(true);
-                      }}
-                      className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                      title="Edit section"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    {!isSystem ? (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget({ type: "section", id: sec.id, name: sec.title })}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                        title="Delete section"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    ) : (
-                      <span className="w-7" />
-                    )}
-                  </div>
-                );
-              },
-            },
           ];
+
+          const getSectionRowActions = (sec: SectionDefinition): TableRowAction<SectionDefinition>[] => {
+            const isSystem = isSystemSection(sec);
+
+            return [
+              {
+                label: "Edit Section",
+                icon: <Edit2 className="w-3.5 h-3.5 text-gray-700" />,
+                onClick: () => {
+                  setEditingSection(sec);
+                  setSectionDrawerOpen(true);
+                },
+              },
+              ...(!isSystem
+                ? [
+                    {
+                      label: "Delete Section",
+                      icon: <Trash2 className="w-3.5 h-3.5 text-red-600" />,
+                      isDanger: true,
+                      onClick: () => setDeleteTarget({ type: "section", id: sec.id, name: sec.title }),
+                    },
+                  ]
+                : []),
+            ];
+          };
 
           return (
             <TableComponent
               columns={sectionColumns}
               data={filteredSections}
               getRowId={(sec) => sec.id}
+              rowActions={getSectionRowActions}
+              onRowClick={(sec) => {
+                setEditingSection(sec);
+                setSectionDrawerOpen(true);
+              }}
               emptyMessage="No sections found for this module. Click 'Add Section' above to define one."
+              tableId="admin-custom-sections-table"
             />
           );
         })()}
-      </div>
 
       {/* ── Field Drawer (Right Side) ── */}
       {fieldModalOpen && (
@@ -803,6 +794,7 @@ export function AdminCustomFields() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

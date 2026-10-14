@@ -14,13 +14,17 @@ export interface InvoiceLineItem {
 
 export interface ClientInvoice {
   id: string;                 // e.g. "INV-CL-1042"
+  invoiceNumber?: string;     // alias/display identifier if provided
   clientId: string;
   clientName: string;         // denormalized for easy display
   clientEmail?: string;
   clientPhone?: string;
   appointmentId?: string;     // null if standalone/manual invoice
   appointmentTitle?: string;
-  status: InvoiceStatus;
+  processId?: string;         // Links to invoice process definition
+  currentStageId?: string;    // Links to invoice process stage
+  statusLabel?: string;       // Computed/read-only status label for display and reports
+  status?: InvoiceStatus;     // Deprecated in favor of currentStageId and stage.systemCategory
   currency: string;           // default "$"
   lineItems: InvoiceLineItem[];
   subtotal: number;
@@ -39,7 +43,20 @@ export interface ClientInvoice {
   paidAt?: string;
   paymentLinkUrl?: string;    // e.g. "https://pay.mantraassist.mock/inv-1042"
   paymentMode?: string;       // e.g. "Bank Transfer", "Cash", "Card", "Insurance-EMI"
+  issueDate?: string;
+  date?: string;
+  paymentMethod?: string;
+  billingAddress?: string;
+  tax?: number;
+  discount?: number;
 }
+
+export type InvoicePaymentRecord = Payment & {
+  date?: string;
+  method?: string;
+  reference?: string;
+  status?: string;
+};
 
 export interface Payment {
   id: string;

@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { Search, Filter, Download, Upload, Phone, FileText, Play, Calendar, StopCircle, Settings as SettingsIcon, Eye, ChevronLeft, ChevronRight, ChevronDown, ChevronsLeft, ChevronsRight, AlertCircle, AlertTriangle, X, Pause, TrendingUp, Clock, GitBranch, RefreshCw, Zap, Star, Headphones, User, CheckCircle2, Volume2, Users, Target, Award, Brain, Shield, MessageSquare, Sparkles, ThumbsUp, ThumbsDown, Info, List, LayoutGrid, MoreVertical, Trash2, Pencil, Building2, CalendarClock, Package, CheckCircle, Plus, Globe, Copy } from "lucide-react";
+import { Search, Filter, Download, Upload, Phone, FileText, Play, Calendar, StopCircle, Settings as SettingsIcon, Eye, ChevronLeft, ChevronRight, ChevronDown, ChevronsLeft, ChevronsRight, AlertCircle, AlertTriangle, X, Pause, TrendingUp, Clock, GitBranch, RefreshCw, Zap, Star, Headphones, User, CheckCircle2, Volume2, Users, Target, Award, Brain, Shield, MessageSquare, Sparkles, ThumbsUp, ThumbsDown, Info, List, LayoutGrid, MoreVertical, Trash2, Pencil, Building2, CalendarClock, Package, CheckCircle, Plus, Globe, Copy, Check } from "lucide-react";
 import { PiArrowSquareOutBold, PiArrowSquareInBold, PiPhoneIncoming, PiPhoneOutgoing } from "react-icons/pi";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -32,6 +32,10 @@ import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "..
 import { getStagesForProcess } from "../components/ui/ProcessStageSelect";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
+import { getStoredClients, saveStoredClients } from "../../lib/clientsStore";
+import { CHEVRON_PALETTE } from "../components/common/ChevronStageRibbon";
+import { logStageMove } from "../../lib/useAutomationStore";
+import { appendActivity } from "../../lib/activityEngine";
 
 interface CallLog {
   id: string;
@@ -83,76 +87,47 @@ interface Deal {
   stage: string;
 }
 
-const initialDeals: Deal[] = [
-  { id: "DEAL-001", dealName: "Patient Intake Package", clientName: "Sarah Johnson", amount: 25000, currency: "₹", createdDate: "2024-05-18", status: "In Progress", responsible: "John Smith", stage: "Patient Intake: Initial Contact" },
-  { id: "DEAL-002", dealName: "Insurance Verification Bundle", clientName: "Michael Chen", amount: 0, currency: "₹", createdDate: "2024-05-17", status: "In Progress", responsible: "Emily Davis", stage: "Patient Intake: Initial Contact" },
-  { id: "DEAL-003", dealName: "Wellness Program", clientName: "Priya Sharma", amount: 15000, currency: "₹", createdDate: "2024-05-16", status: "In Progress", responsible: "Sarah Johnson", stage: "Patient Intake: Initial Contact" },
-  { id: "DEAL-004", dealName: "Billing Support Plan", clientName: "Emily Davis", amount: 8500, currency: "₹", createdDate: "2024-05-15", status: "In Progress", responsible: "Robert Wilson", stage: "Patient Intake: Schedule Appointment" },
-  { id: "DEAL-005", dealName: "Follow-up Package", clientName: "Robert Wilson", amount: 12000, currency: "₹", createdDate: "2024-05-14", status: "In Progress", responsible: "Michael Chen", stage: "Patient Intake: Schedule Appointment" },
-  { id: "DEAL-006", dealName: "Annual Health Check", clientName: "James Taylor", amount: 32000, currency: "₹", createdDate: "2024-05-13", status: "In Progress", responsible: "Amanda Taylor", stage: "Payment Reminder: Billing Inquiry" },
-  { id: "DEAL-007", dealName: "Medication Management", clientName: "Rahul Patel", amount: 7500, currency: "₹", createdDate: "2024-05-12", status: "In Progress", responsible: "David Martinez", stage: "Payment Reminder: Issue Resolution" },
-  { id: "DEAL-008", dealName: "Post-Op Care Plan", clientName: "Amanda Clark", amount: 18000, currency: "₹", createdDate: "2024-05-11", status: "In Progress", responsible: "Jessica Brown", stage: "Payment Reminder: Payment Notice" },
-  { id: "DEAL-009", dealName: "Corporate Wellness", clientName: "Lisa Anderson", amount: 85000, currency: "₹", createdDate: "2024-05-10", status: "In Progress", responsible: "John Smith", stage: "Appointment Scheduling: Slot Selection" },
-  { id: "DEAL-010", dealName: "Dental Care Package", clientName: "David Martinez", amount: 22000, currency: "₹", createdDate: "2024-05-09", status: "In Progress", responsible: "Emily Davis", stage: "Appointment Scheduling: Slot Selection" },
-  { id: "DEAL-011", dealName: "Physiotherapy Bundle", clientName: "Arjun Desai", amount: 35000, currency: "₹", createdDate: "2024-05-08", status: "In Progress", responsible: "Michael Chen", stage: "Appointment Scheduling: Confirmation" },
-  { id: "DEAL-012", dealName: "Enterprise Health Plan", clientName: "Vikram Singh", amount: 150000, currency: "₹", createdDate: "2024-05-07", status: "In Progress", responsible: "Robert Wilson", stage: "Insurance Verification: Document Check" },
-  { id: "DEAL-013", dealName: "Mental Health Support", clientName: "Deepika Nair", amount: 45000, currency: "₹", createdDate: "2024-05-06", status: "In Progress", responsible: "Sarah Johnson", stage: "Insurance Verification: Document Check" },
-  { id: "DEAL-014", dealName: "Premium Care Plan", clientName: "Charlotte Evans", amount: 95000, currency: "₹", createdDate: "2024-05-05", status: "Won", responsible: "Amanda Taylor", stage: "Appointment Scheduling: Confirmation" },
-  { id: "DEAL-015", dealName: "Specialist Consultation", clientName: "Oliver Thompson", amount: 28000, currency: "₹", createdDate: "2024-05-04", status: "Won", responsible: "David Martinez", stage: "Payment Reminder: Issue Resolution" },
-  { id: "DEAL-016", dealName: "Lab Test Bundle", clientName: "Kavya Iyer", amount: 12500, currency: "₹", createdDate: "2024-05-03", status: "Won", responsible: "John Smith", stage: "Follow-up Calls: Post-Visit Check" },
-  { id: "DEAL-017", dealName: "Ortho Care Package", clientName: "Fatima Hassan", amount: 55000, currency: "₹", createdDate: "2024-05-02", status: "Lost", responsible: "Emily Davis", stage: "Insurance Verification: Verification" },
-  { id: "DEAL-018", dealName: "Nutrition Counseling", clientName: "Youssef Said", amount: 9000, currency: "₹", createdDate: "2024-05-01", status: "Lost", responsible: "Michael Chen", stage: "Follow-up Calls: Medication Reminder" },
+const initialPatientCareDeals: Deal[] = [
+  { id: "DEAL-PCJ-001", dealName: "Patient Care Journey - Check-in", clientName: "Sarah Johnson", amount: 5000, currency: "₹", createdDate: "2026-10-12", status: "In Progress", responsible: "Dr. John Smith", stage: "Patient Care Journey: Client Checked In" },
+  { id: "DEAL-PCJ-002", dealName: "Patient Care Journey - Consultation", clientName: "Priya Sharma", amount: 15000, currency: "₹", createdDate: "2026-10-12", status: "In Progress", responsible: "Dr. Sarah Johnson", stage: "Patient Care Journey: Book Appointment" },
+  { id: "DEAL-PCJ-003", dealName: "Patient Care Journey - Pharmacy", clientName: "Rahul Patel", amount: 8000, currency: "₹", createdDate: "2026-10-11", status: "In Progress", responsible: "Dr. David Martinez", stage: "Patient Care Journey: Move to Pharmacy" },
+  { id: "DEAL-PCJ-004", dealName: "Patient Care Journey - Billing", clientName: "Michael Chen", amount: 12000, currency: "₹", createdDate: "2026-10-11", status: "In Progress", responsible: "Dr. Emily Davis", stage: "Patient Care Journey: Pay Bill" },
+  { id: "DEAL-PCJ-005", dealName: "Patient Care Journey - Settlement", clientName: "Emily Davis", amount: 25000, currency: "₹", createdDate: "2026-10-11", status: "Won", responsible: "Dr. John Smith", stage: "Patient Care Journey: Payment Done" },
 ];
 
-// Mock client data for profile drawer
-const mockClients: { [key: string]: Client } = {
-  "CL-001": { id: "CL-001", name: "Sarah Johnson", email: "sarah.j@email.com", phone: "5551234567", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake", "Follow-up Calls"], stage: "Insurance Verification", responsible: "John Smith", lastContact: "2024-04-10", status: "Active", companyName: "TechCorp Inc.", jobPosition: "Senior Manager", numberOfEmployees: "101-250" },
-  "CL-002": { id: "CL-002", name: "Michael Chen", email: "mchen@email.com", phone: "5552345678", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Initial Contact", responsible: "Sarah Johnson", lastContact: "2024-04-09", status: "Active", companyName: "Innovate Solutions", jobPosition: "Product Manager", numberOfEmployees: "51-100" },
-  "CL-003": { id: "CL-003", name: "Emily Davis", email: "emily.d@email.com", phone: "5553456789", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active", companyName: "Healthcare Plus", jobPosition: "Director of Operations", numberOfEmployees: "251-500" },
-  "CL-004": { id: "CL-004", name: "Robert Wilson", email: "rwilson@email.com", phone: "5554567890", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
-  "CL-006": { id: "CL-006", name: "David Martinez", email: "d.martinez@email.com", phone: "5556789012", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls"], stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-04-12", status: "Active" },
-  "CL-007": { id: "CL-007", name: "Lisa Anderson", email: "l.anderson@email.com", phone: "5557890123", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Billing Support", "Follow-up Calls"], stage: "Payment Reminder", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active", companyName: "MediCare Group", jobPosition: "CFO", numberOfEmployees: "501-1000" },
-  "CL-008": { id: "CL-008", name: "James Taylor", email: "jtaylor@email.com", phone: "5558901234", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Schedule Appointment", responsible: "Amanda Taylor", lastContact: "2024-04-11", status: "Active" },
-  "CL-009": { id: "CL-009", name: "Amanda Clark", email: "a.clark@email.com", phone: "5559012345", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling", "Follow-up Calls"], stage: "Confirmation", responsible: "John Smith", lastContact: "2024-04-09", status: "Active" },
-  "CL-011": { id: "CL-011", name: "Jennifer White", email: "j.white@email.com", phone: "5551234568", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support", "Patient Intake"], stage: "Initial Contact", responsible: "Michael Chen", lastContact: "2024-04-13", status: "Active" },
-  "CL-012": { id: "CL-012", name: "Matthew Lewis", email: "m.lewis@email.com", phone: "5552345679", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Insurance Verification"], stage: "Approval", responsible: "Emily Davis", lastContact: "2024-04-06", status: "Active" },
-  "CL-013": { id: "CL-013", name: "Priya Sharma", email: "priya.sharma@email.com", phone: "9820172818", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake", "Follow-up Calls"], stage: "Insurance Verification", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
-  "CL-014": { id: "CL-014", name: "Rahul Patel", email: "rahul.p@email.com", phone: "9876543210", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls"], stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-04-11", status: "Active" },
-  "CL-015": { id: "CL-015", name: "Ananya Reddy", email: "ananya.r@email.com", phone: "9123456789", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Billing Support", "Patient Intake"], stage: "Issue Resolution", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active" },
-  "CL-016": { id: "CL-016", name: "Vikram Singh", email: "vikram.s@email.com", phone: "9234567890", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "Amanda Taylor", lastContact: "2024-04-09", status: "Active" },
-  "CL-018": { id: "CL-018", name: "Arjun Desai", email: "arjun.d@email.com", phone: "9456789012", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Sarah Johnson", lastContact: "2024-04-13", status: "Active" },
-  "CL-019": { id: "CL-019", name: "Kavya Iyer", email: "kavya.i@email.com", phone: "9567890123", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Insurance Verification", "Patient Intake"], stage: "Document Check", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active" },
-  "CL-020": { id: "CL-020", name: "Rohan Kumar", email: "rohan.k@email.com", phone: "9678901234", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake"], stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
-  "CL-021": { id: "CL-021", name: "Deepika Nair", email: "deepika.n@email.com", phone: "9789012345", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Appointment Scheduling", "Follow-up Calls"], stage: "Confirmation", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
-  "CL-023": { id: "CL-023", name: "Ahmed Al-Mansoori", email: "ahmed.am@email.com", phone: "501234567", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Patient Intake", "Insurance Verification"], stage: "Insurance Verification", responsible: "David Martinez", lastContact: "2024-04-13", status: "Active" },
-  "CL-024": { id: "CL-024", name: "Fatima Hassan", email: "fatima.h@email.com", phone: "502345678", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Amanda Taylor", lastContact: "2024-04-10", status: "Active" },
-  "CL-025": { id: "CL-025", name: "Omar Al-Rashid", email: "omar.ar@email.com", phone: "503456789", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "John Smith", lastContact: "2024-04-11", status: "Active" },
-  "CL-027": { id: "CL-027", name: "Youssef Said", email: "youssef.s@email.com", phone: "505678901", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Patient Intake", "Billing Support"], stage: "Follow-up", responsible: "Michael Chen", lastContact: "2024-04-12", status: "Active" },
-  "CL-028": { id: "CL-028", name: "Oliver Thompson", email: "oliver.t@email.com", phone: "7412345678", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Patient Intake", "Follow-up Calls"], stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-09", status: "Active" },
-};
+const initialDeals: Deal[] = [
+  ...initialPatientCareDeals,
+  { id: "DEAL-001", dealName: "Client Intake Package", clientName: "Sarah Johnson", amount: 25000, currency: "₹", createdDate: "2024-05-18", status: "In Progress", responsible: "John Smith", stage: "Client Intake: Initial Contact" },
+  { id: "DEAL-002", dealName: "Intake Evaluation Bundle", clientName: "Michael Chen", amount: 0, currency: "₹", createdDate: "2024-05-17", status: "In Progress", responsible: "Emily Davis", stage: "Client Intake: Initial Contact" },
+  { id: "DEAL-003", dealName: "Wellness Program Intake", clientName: "Priya Sharma", amount: 15000, currency: "₹", createdDate: "2024-05-16", status: "In Progress", responsible: "Sarah Johnson", stage: "Client Intake: Contacted" },
+  { id: "DEAL-004", dealName: "Client Reactivation Plan", clientName: "Emily Davis", amount: 8500, currency: "₹", createdDate: "2024-05-15", status: "In Progress", responsible: "Robert Wilson", stage: "Client Reactivation: Outreach" },
+  { id: "DEAL-005", dealName: "Reactivation Outreach", clientName: "Robert Wilson", amount: 12000, currency: "₹", createdDate: "2024-05-14", status: "In Progress", responsible: "Michael Chen", stage: "Client Reactivation: Contacted" },
+  { id: "DEAL-006", dealName: "Annual Intake Check", clientName: "James Taylor", amount: 32000, currency: "₹", createdDate: "2024-05-13", status: "In Progress", responsible: "Amanda Taylor", stage: "Client Intake: Interested" },
+  { id: "DEAL-007", dealName: "Client Care Intake", clientName: "Rahul Patel", amount: 7500, currency: "₹", createdDate: "2024-05-12", status: "In Progress", responsible: "David Martinez", stage: "Client Intake: Contacted" },
+  { id: "DEAL-008", dealName: "Post-Discharge Reactivation", clientName: "Amanda Clark", amount: 18000, currency: "₹", createdDate: "2024-05-11", status: "In Progress", responsible: "Jessica Brown", stage: "Client Reactivation: Outreach" },
+  { id: "DEAL-009", dealName: "Corporate Intake", clientName: "Lisa Anderson", amount: 85000, currency: "₹", createdDate: "2024-05-10", status: "In Progress", responsible: "John Smith", stage: "Client Intake: Interested" },
+  { id: "DEAL-010", dealName: "Dental Intake Package", clientName: "David Martinez", amount: 22000, currency: "₹", createdDate: "2024-05-09", status: "In Progress", responsible: "Emily Davis", stage: "Client Intake: Initial Contact" },
+  { id: "DEAL-011", dealName: "Re-engagement Consultation", clientName: "Arjun Desai", amount: 35000, currency: "₹", createdDate: "2024-05-08", status: "In Progress", responsible: "Michael Chen", stage: "Client Reactivation: Contacted" },
+  { id: "DEAL-012", dealName: "Enterprise Intake Plan", clientName: "Vikram Singh", amount: 150000, currency: "₹", createdDate: "2024-05-07", status: "In Progress", responsible: "Robert Wilson", stage: "Client Intake: Interested" },
+  { id: "DEAL-013", dealName: "Reactivation Support", clientName: "Deepika Nair", amount: 45000, currency: "₹", createdDate: "2024-05-06", status: "In Progress", responsible: "Sarah Johnson", stage: "Client Reactivation: Outreach" },
+  { id: "DEAL-014", dealName: "Premium Intake Plan", clientName: "Charlotte Evans", amount: 95000, currency: "₹", createdDate: "2024-05-05", status: "Won", responsible: "Amanda Taylor", stage: "Client Intake: Interested" },
+  { id: "DEAL-015", dealName: "Specialist Reactivation", clientName: "Oliver Thompson", amount: 28000, currency: "₹", createdDate: "2024-05-04", status: "Won", responsible: "David Martinez", stage: "Client Reactivation: Reactivated" },
+  { id: "DEAL-016", dealName: "Intake Assessment", clientName: "Kavya Iyer", amount: 12500, currency: "₹", createdDate: "2024-05-03", status: "Won", responsible: "John Smith", stage: "Client Intake: Interested" },
+  { id: "DEAL-017", dealName: "Ortho Reactivation Package", clientName: "Fatima Hassan", amount: 55000, currency: "₹", createdDate: "2024-05-02", status: "Lost", responsible: "Emily Davis", stage: "Client Reactivation: Lost" },
+  { id: "DEAL-018", dealName: "Nutrition Intake", clientName: "Youssef Said", amount: 9000, currency: "₹", createdDate: "2024-05-01", status: "Lost", responsible: "Michael Chen", stage: "Client Intake: Not Interested" },
+];
+
 
 const getClientIdByName = (name: string): string => {
-  try {
-    const raw = sessionStorage.getItem("clients");
-    const cs = raw ? JSON.parse(raw) : [];
-    const found = cs.find((c: any) => c.name?.toLowerCase() === name.toLowerCase());
-    if (found) return found.id;
-  } catch {}
-  const found = Object.values(mockClients).find(
-    (c) => c.name.toLowerCase() === name.toLowerCase()
-  );
+  const cs = getStoredClients();
+  const found = cs.find((c: any) => c.name?.toLowerCase() === name.toLowerCase());
   return found ? found.id : "CL-001";
 };
 
 const getClientObj = (clientId?: string, clientName?: string): Client | undefined => {
-  if (clientId && mockClients[clientId]) return mockClients[clientId];
-  try {
-    const raw = sessionStorage.getItem("clients");
-    const cs: Client[] = raw ? JSON.parse(raw) : [];
-    const found = cs.find((c: any) => (clientId && c.id === clientId) || (clientName && c.name?.toLowerCase() === clientName.toLowerCase()));
-    if (found) return found;
-  } catch {}
-  return clientId && mockClients[clientId] ? mockClients[clientId] : undefined;
+  const cs = getStoredClients();
+  const found = cs.find((c: any) => (clientId && c.id === clientId) || (clientName && c.name?.toLowerCase() === clientName.toLowerCase()));
+  return found;
 };
 
 // Comprehensive call logs dataset (100 calls total)
@@ -160,48 +135,46 @@ const getClientObj = (clientId?: string, clientName?: string): Client | undefine
 // All calls mapped to valid clients with correct process assignments
 const initialCallLogs: CallLog[] = [
   // Latest calls first (Apr 13-14)
-  { id: "CALL-001", client: "Sarah Johnson", clientId: "CL-001", type: "Outbound", status: "Completed", process: "Patient Intake", currentStage: "Insurance Verification", duration: "4:32", date: "2024-04-13 14:30", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
-  { id: "CALL-002", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "3:45", date: "2024-04-13 13:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-003", client: "Ahmed Al-Mansoori", clientId: "CL-023", type: "Inbound", status: "Completed", process: "Insurance Verification", currentStage: "Document Check", duration: "5:20", date: "2024-04-13 11:40", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-004", client: "Jennifer White", clientId: "CL-011", type: "Outbound", status: "Completed", process: "Patient Intake", currentStage: "Initial Contact", duration: "2:15", date: "2024-04-13 10:00", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
-  { id: "CALL-005", client: "Arjun Desai", clientId: "CL-018", type: "Outbound", status: "Pending", process: "Billing Support", currentStage: "Billing Inquiry", duration: "", date: "2024-04-13 09:30", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
-  { id: "CALL-006", client: "Charlotte Evans", clientId: "CL-029", type: "Outbound", status: "Completed", process: "Insurance Verification", currentStage: "Approval", duration: "6:10", date: "2024-04-13 08:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-007", client: "David Martinez", clientId: "CL-006", type: "Inbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "3:55", date: "2024-04-12 16:45", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-008", client: "Deepika Nair", clientId: "CL-021", type: "Outbound", status: "Completed", process: "Appointment Scheduling", currentStage: "Confirmation", duration: "2:30", date: "2024-04-12 15:20", hasRecording: true, hasTranscript: false, hasScheduledCall: true },
-  { id: "CALL-009", client: "Youssef Said", clientId: "CL-027", type: "Outbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "4:48", date: "2024-04-12 14:10", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-010", client: "Michael Chen", clientId: "CL-002", type: "Outbound", status: "Failed", process: "Appointment Scheduling", currentStage: "Initial Contact", duration: "0:00", date: "2024-04-12 13:00", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
-  { id: "CALL-011", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Patient Intake", currentStage: "Insurance Verification", duration: "5:15", date: "2024-04-12 11:30", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-012", client: "Lisa Anderson", clientId: "CL-007", type: "Inbound", status: "Completed", process: "Billing Support", currentStage: "Payment Reminder", duration: "3:20", date: "2024-04-12 10:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-013", client: "Emily Davis", clientId: "CL-003", type: "Outbound", status: "Completed", process: "Billing Support", currentStage: "Billing Inquiry", duration: "4:05", date: "2024-04-11 16:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-014", client: "Rahul Patel", clientId: "CL-014", type: "Inbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "2:45", date: "2024-04-11 15:30", hasRecording: true, hasTranscript: false, hasScheduledCall: false },
-  { id: "CALL-015", client: "James Taylor", clientId: "CL-008", type: "Outbound", status: "Completed", process: "Patient Intake", currentStage: "Schedule Appointment", duration: "3:35", date: "2024-04-11 14:20", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
-  { id: "CALL-016", client: "Kavya Iyer", clientId: "CL-019", type: "Outbound", status: "Completed", process: "Insurance Verification", currentStage: "Document Check", duration: "5:50", date: "2024-04-11 13:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-017", client: "Omar Al-Rashid", clientId: "CL-025", type: "Outbound", status: "Pending", process: "Appointment Scheduling", currentStage: "Slot Selection", duration: "", date: "2024-04-11 11:45", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
-  { id: "CALL-018", client: "Ananya Reddy", clientId: "CL-015", type: "Outbound", status: "Completed", process: "Billing Support", currentStage: "Issue Resolution", duration: "6:25", date: "2024-04-11 10:30", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-019", client: "Fatima Hassan", clientId: "CL-024", type: "Inbound", status: "Completed", process: "Billing Support", currentStage: "Billing Inquiry", duration: "4:18", date: "2024-04-10 16:40", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
-  { id: "CALL-020", client: "Amanda Clark", clientId: "CL-009", type: "Outbound", status: "Failed", process: "Appointment Scheduling", currentStage: "Confirmation", duration: "0:00", date: "2024-04-10 15:15", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
-  { id: "CALL-021", client: "Sarah Johnson", clientId: "CL-001", type: "Inbound", status: "Completed", process: "Follow-up Calls", currentStage: "Follow-up", duration: "5:05", date: "2024-04-10 14:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-001", client: "Sarah Johnson", clientId: "CL-001", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Contacted", duration: "4:32", date: "2024-04-13 14:30", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
+  { id: "CALL-002", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Client Reactivation", currentStage: "Outreach", duration: "3:45", date: "2024-04-13 13:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-003", client: "Ahmed Al-Mansoori", clientId: "CL-023", type: "Inbound", status: "Completed", process: "Client Intake", currentStage: "Initial Contact", duration: "5:20", date: "2024-04-13 11:40", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-004", client: "Jennifer White", clientId: "CL-011", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Initial Contact", duration: "2:15", date: "2024-04-13 10:00", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
+  { id: "CALL-005", client: "Arjun Desai", clientId: "CL-018", type: "Outbound", status: "Pending", process: "Client Reactivation", currentStage: "Contacted", duration: "", date: "2024-04-13 09:30", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
+  { id: "CALL-006", client: "Charlotte Evans", clientId: "CL-029", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Interested", duration: "6:10", date: "2024-04-13 08:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-007", client: "David Martinez", clientId: "CL-006", type: "Inbound", status: "Completed", process: "Client Reactivation", currentStage: "Outreach", duration: "3:55", date: "2024-04-12 16:45", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-008", client: "Deepika Nair", clientId: "CL-021", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Contacted", duration: "2:30", date: "2024-04-12 15:20", hasRecording: true, hasTranscript: false, hasScheduledCall: true },
+  { id: "CALL-009", client: "Youssef Said", clientId: "CL-027", type: "Outbound", status: "Completed", process: "Client Reactivation", currentStage: "Reactivated", duration: "4:48", date: "2024-04-12 14:10", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-010", client: "Michael Chen", clientId: "CL-002", type: "Outbound", status: "Failed", process: "Client Intake", currentStage: "Initial Contact", duration: "0:00", date: "2024-04-12 13:00", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
+  { id: "CALL-011", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Contacted", duration: "5:15", date: "2024-04-12 11:30", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-012", client: "Lisa Anderson", clientId: "CL-007", type: "Inbound", status: "Completed", process: "Client Reactivation", currentStage: "Call Back Later", duration: "3:20", date: "2024-04-12 10:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-013", client: "Emily Davis", clientId: "CL-003", type: "Outbound", status: "Completed", process: "Client Reactivation", currentStage: "Contacted", duration: "4:05", date: "2024-04-11 16:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-014", client: "Rahul Patel", clientId: "CL-014", type: "Inbound", status: "Completed", process: "Client Intake", currentStage: "Interested", duration: "2:45", date: "2024-04-11 15:30", hasRecording: true, hasTranscript: false, hasScheduledCall: false },
+  { id: "CALL-015", client: "James Taylor", clientId: "CL-008", type: "Outbound", status: "Completed", process: "Client Intake", currentStage: "Initial Contact", duration: "3:35", date: "2024-04-11 14:20", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
+  { id: "CALL-016", client: "Kavya Iyer", clientId: "CL-019", type: "Outbound", status: "Completed", process: "Client Reactivation", currentStage: "Outreach", duration: "5:50", date: "2024-04-11 13:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-017", client: "Omar Al-Rashid", clientId: "CL-025", type: "Outbound", status: "Pending", process: "Client Intake", currentStage: "Call Back Later", duration: "", date: "2024-04-11 11:45", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
+  { id: "CALL-018", client: "Ananya Reddy", clientId: "CL-015", type: "Outbound", status: "Completed", process: "Client Reactivation", currentStage: "Reactivated", duration: "6:25", date: "2024-04-11 10:30", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-019", client: "Fatima Hassan", clientId: "CL-024", type: "Inbound", status: "Completed", process: "Client Reactivation", currentStage: "Lost", duration: "4:18", date: "2024-04-10 16:40", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
+  { id: "CALL-020", client: "Amanda Clark", clientId: "CL-009", type: "Outbound", status: "Failed", process: "Client Intake", currentStage: "Initial Contact", duration: "0:00", date: "2024-04-10 15:15", hasRecording: false, hasTranscript: false, hasScheduledCall: true },
+  { id: "CALL-021", client: "Sarah Johnson", clientId: "CL-001", type: "Inbound", status: "Completed", process: "Client Reactivation", currentStage: "Outreach", duration: "5:05", date: "2024-04-10 14:00", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
 ];
 
 // Helper function to derive process from stage
 const getProcessFromStage = (stage: string): string => {
   const stageToProcessMap: Record<string, string> = {
-    'Insurance Verification': 'Patient Intake',
-    'Insurance Verify': 'Patient Intake',
-    'Schedule Appointment': 'Patient Intake',
-    'Follow-up': 'Follow-up Calls',
-    'Post-Visit Check': 'Follow-up Calls',
-    'Medication Reminder': 'Follow-up Calls',
-    'Billing Inquiry': 'Billing Support',
-    'Issue Resolution': 'Billing Support',
-    'Payment Reminder': 'Billing Support',
-    'Slot Selection': 'Appointment Scheduling',
-    'Confirmation': 'Appointment Scheduling',
-    'Document Check': 'Insurance Verification',
-    'Verification': 'Insurance Verification',
-    'Approval': 'Insurance Verification',
+    'Initial Contact': 'Client Intake',
+    'Contacted': 'Client Intake',
+    'Interested': 'Client Intake',
+    'Not Interested': 'Client Intake',
+    'Outreach': 'Client Reactivation',
+    'Reactivated': 'Client Reactivation',
+    'Lost': 'Client Reactivation',
+    'Client Checked In': 'Patient Care Journey',
+    'Book Appointment': 'Patient Care Journey',
+    'Move to Pharmacy': 'Patient Care Journey',
+    'Pay Bill': 'Patient Care Journey',
+    'Payment Done': 'Patient Care Journey',
   };
-  return stageToProcessMap[stage] || 'Patient Intake'; // default to Patient Intake
+  return stageToProcessMap[stage] || 'Client Intake'; // default to Client Intake
 };
 
 type MetricTone = "success" | "warning" | "neutral";
@@ -346,11 +319,34 @@ export default function Deals() {
         })));
       } catch {}
     };
+
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        handler();
+      }
+    };
+
     window.addEventListener(PROCESS_LOGS_STORE_EVENT, handler);
     window.addEventListener("storage", handler);
+    window.addEventListener("focus", handler);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        channel = new BroadcastChannel("process_logs_broadcast_channel");
+        channel.onmessage = handler;
+      } catch (e) {
+        console.warn("Failed to create BroadcastChannel in Deals:", e);
+      }
+    }
+
     return () => {
       window.removeEventListener(PROCESS_LOGS_STORE_EVENT, handler);
       window.removeEventListener("storage", handler);
+      window.removeEventListener("focus", handler);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      channel?.close();
     };
   }, []);
 
@@ -523,39 +519,107 @@ export default function Deals() {
     "currency": "₹",
     "status": "In Progress",
     "responsible": "John Smith",
-    "stage": "Patient Intake: Initial Contact"
+    "stage": "Client Intake: Initial Contact"
   }, null, 2);
   const [isDragging, setIsDragging] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [showProcessesDropdown, setShowProcessesDropdown] = useState(false);
-  const [selectedProcessFilter, setSelectedProcessFilter] = useState<string | null>(null);
+  const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>(() => {
+    try {
+      const saved = sessionStorage.getItem("deals_selected_process");
+      if (saved && saved !== "All Processes" && saved !== "null" && saved !== "undefined") {
+        return saved;
+      }
+    } catch {}
+    return "Client Intake";
+  });
+
+  useEffect(() => {
+    if (selectedProcessFilter) {
+      sessionStorage.setItem("deals_selected_process", selectedProcessFilter);
+    }
+  }, [selectedProcessFilter]);
   const [stageDropdownCallId, setStageDropdownCallId] = useState<string | null>(null);
   const [draggedCallId, setDraggedCallId] = useState<string | null>(null);
   const [deals, setDeals] = useState<Deal[]>(() => {
     try {
-      const raw = sessionStorage.getItem("deals");
-      return raw ? JSON.parse(raw) : initialDeals;
+      const raw = localStorage.getItem("deals") || sessionStorage.getItem("deals");
+      let list: Deal[] = raw ? JSON.parse(raw) : initialDeals;
+      if (!Array.isArray(list) || list.length === 0) list = initialDeals;
+      const legacyProcesses = ["Patient Intake", "Follow-up Calls", "Billing Support", "Appointment Scheduling", "Insurance Verification", "Payment Reminder", "Nurture Campaign"];
+      let changed = false;
+      list = list.map((d) => {
+        if (legacyProcesses.some(leg => d.stage?.includes(leg) || d.dealName?.includes(leg))) {
+          changed = true;
+          const isReactivation = ["Follow-up Calls", "Billing Support", "Payment Reminder", "Nurture Campaign"].some(r => d.stage?.includes(r));
+          const newProc = isReactivation ? "Client Reactivation" : "Client Intake";
+          const newStage = isReactivation ? (d.status === "Won" ? "Reactivated" : d.status === "Lost" ? "Lost" : "Contacted") : (d.status === "Won" ? "Interested" : "Contacted");
+          return {
+            ...d,
+            dealName: d.dealName.replace(/Patient Intake|Follow-up Calls|Billing Support|Appointment Scheduling|Insurance Verification/gi, newProc),
+            stage: `${newProc}: ${newStage}`,
+          };
+        }
+        return d;
+      });
+      // Ensure Patient Care Journey deals exist
+      const hasPatientDeals = list.some((d) => d.stage?.startsWith("Patient Care Journey:"));
+      if (!hasPatientDeals) {
+        list = [...initialPatientCareDeals, ...list];
+        changed = true;
+      }
+      if (changed) {
+        localStorage.setItem("deals", JSON.stringify(list));
+        sessionStorage.setItem("deals", JSON.stringify(list));
+      }
+      return list;
     } catch {
       return initialDeals;
     }
   });
 
   useEffect(() => {
-    sessionStorage.setItem("deals", JSON.stringify(deals));
+    try {
+      localStorage.setItem("deals", JSON.stringify(deals));
+      sessionStorage.setItem("deals", JSON.stringify(deals));
+    } catch {}
   }, [deals]);
 
   useEffect(() => {
     const handler = () => {
       try {
-        const raw = sessionStorage.getItem("deals");
+        const raw = localStorage.getItem("deals") || sessionStorage.getItem("deals");
         if (raw) setDeals(JSON.parse(raw));
       } catch {}
     };
+
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        handler();
+      }
+    };
+
     window.addEventListener("deals_updated", handler);
     window.addEventListener("storage", handler);
+    window.addEventListener("focus", handler);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        channel = new BroadcastChannel("deals_broadcast_channel");
+        channel.onmessage = handler;
+      } catch (e) {
+        console.warn("Failed to create BroadcastChannel in Deals:", e);
+      }
+    }
+
     return () => {
       window.removeEventListener("deals_updated", handler);
       window.removeEventListener("storage", handler);
+      window.removeEventListener("focus", handler);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      channel?.close();
     };
   }, []);
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
@@ -671,14 +735,46 @@ export default function Deals() {
     notes: false,
   });
 
-  // Available processes
-  const availableProcesses = [
-    "Patient Intake",
-    "Follow-up Calls",
-    "Insurance Verification",
-    "Appointment Scheduling",
-    "Payment Reminder"
-  ];
+  // Processes belonging to the "Processes" (client) entity
+  const clientProcesses = useMemo(() => {
+    return storedProcesses.filter((p) => !p.entityType || p.entityType === "client");
+  }, [storedProcesses]);
+
+  // Available processes dynamically populated from all processes built in this entity
+  const availableProcesses = useMemo(() => {
+    const fromStore = clientProcesses.map((p) => p.name).filter(Boolean);
+    const defaults = [
+      "Client Intake",
+      "Client Reactivation"
+    ];
+    return Array.from(new Set([...fromStore, ...defaults]));
+  }, [clientProcesses]);
+
+  // Ensure selectedProcessFilter is always a valid specific process
+  useEffect(() => {
+    if (availableProcesses.length > 0 && (!selectedProcessFilter || !availableProcesses.includes(selectedProcessFilter))) {
+      setSelectedProcessFilter(availableProcesses[0]);
+    }
+  }, [availableProcesses, selectedProcessFilter]);
+
+  const handleOpenProcessInWorkflow = (processName?: string) => {
+    const targetName = processName || selectedProcessFilter || (availableProcesses[0] || "Client Intake");
+    const targetProcess = storedProcesses.find(
+      (p) => p.name.trim().toLowerCase() === targetName.trim().toLowerCase()
+    );
+    const params = new URLSearchParams();
+    if (targetProcess?.id) {
+      params.set("processId", targetProcess.id);
+    }
+    params.set("processName", targetName);
+
+    navigate(`/process?${params.toString()}`, {
+      state: {
+        processId: targetProcess?.id,
+        processName: targetName,
+      },
+    });
+  };
 
   const allAvailableFields = [
     { id: "name", label: "Name", category: "Call" },
@@ -785,35 +881,51 @@ export default function Deals() {
 
   const stages = [
     "Initial Contact",
-    "Insurance Verification",
-    "Schedule Appointment",
-    "Post-Visit Check",
-    "Medication Reminder",
-    "Billing Inquiry",
-    "Follow-up",
-    "Deal in progress",
-    "Closed deal",
-    "Test deal",
+    "Contacted",
+    "Interested",
+    "Call Back Later",
+    "Not Interested",
+    "Outreach",
+    "Reactivated",
+    "Lost",
   ];
 
-  // Comprehensive stage pipeline (for progress visualization)
-  const stagePipeline = [
-    { id: 1, label: "Initial Contact", fullLabel: "Patient Intake: Initial Contact", category: "Patient Intake" },
-    { id: 2, label: "Insurance Verify", fullLabel: "Patient Intake: Insurance Verify", category: "Patient Intake" },
-    { id: 3, label: "Schedule Appointment", fullLabel: "Patient Intake: Schedule Appointment", category: "Patient Intake" },
-    { id: 4, label: "Post-Visit Check", fullLabel: "Follow-up Calls: Post-Visit Check", category: "Follow-up Calls" },
-    { id: 5, label: "Medication Reminder", fullLabel: "Follow-up Calls: Medication Reminder", category: "Follow-up Calls" },
-    { id: 6, label: "Billing Inquiry", fullLabel: "Payment Reminder: Billing Inquiry", category: "Payment Reminder" },
-    { id: 7, label: "Issue Resolution", fullLabel: "Payment Reminder: Issue Resolution", category: "Payment Reminder" },
-    { id: 8, label: "Payment Notice", fullLabel: "Payment Reminder: Payment Notice", category: "Payment Reminder" },
-    { id: 9, label: "Payment Collected", fullLabel: "Payment Reminder: Payment Collected", category: "Payment Reminder" },
-    { id: 10, label: "Initial Contact", fullLabel: "Appointment Scheduling: Initial Contact", category: "Appointment Scheduling" },
-    { id: 11, label: "Slot Selection", fullLabel: "Appointment Scheduling: Slot Selection", category: "Appointment Scheduling" },
-    { id: 12, label: "Confirmation", fullLabel: "Appointment Scheduling: Confirmation", category: "Appointment Scheduling" },
-    { id: 13, label: "Initial Contact", fullLabel: "Insurance Verification: Initial Contact", category: "Insurance Verification" },
-    { id: 14, label: "Document Check", fullLabel: "Insurance Verification: Document Check", category: "Insurance Verification" },
-    { id: 15, label: "Verification", fullLabel: "Insurance Verification: Verification", category: "Insurance Verification" },
-  ];
+  // Comprehensive stage pipeline (dynamically including all processes built in the Processes / client entity)
+  const stagePipeline = useMemo(() => {
+    const dynamicItems: Array<{ id: number | string; label: string; fullLabel: string; category: string; color?: string; isFinalStage?: boolean }> = [];
+    let counter = 1;
+
+    clientProcesses.forEach((proc) => {
+      if (proc.stages && proc.stages.length > 0) {
+        proc.stages.forEach((stg, sIdx) => {
+          dynamicItems.push({
+            id: stg.id || `stg-${counter++}`,
+            label: stg.name,
+            fullLabel: `${proc.name}: ${stg.name}`,
+            category: proc.name,
+            color: stg.color || CHEVRON_PALETTE[sIdx % CHEVRON_PALETTE.length],
+            isFinalStage: Boolean(stg.isFinalStage || stg.isFinal),
+          });
+        });
+      }
+    });
+
+    const categoriesWithStages = new Set(dynamicItems.map((d) => d.category));
+    const fallbackDefaults = [
+      { id: 101, label: "Initial Contact", fullLabel: "Client Intake: Initial Contact", category: "Client Intake", color: "#3B82F6", isFinalStage: false },
+      { id: 102, label: "Contacted", fullLabel: "Client Intake: Contacted", category: "Client Intake", color: "#06B6D4", isFinalStage: false },
+      { id: 103, label: "Interested", fullLabel: "Client Intake: Interested", category: "Client Intake", color: "#22C55E", isFinalStage: true },
+      { id: 104, label: "Not Interested", fullLabel: "Client Intake: Not Interested", category: "Client Intake", color: "#EF4444", isFinalStage: true },
+      { id: 105, label: "Call Back Later", fullLabel: "Client Intake: Call Back Later", category: "Client Intake", color: "#F59E0B", isFinalStage: true },
+      { id: 201, label: "Outreach", fullLabel: "Client Reactivation: Outreach", category: "Client Reactivation", color: "#3B82F6", isFinalStage: false },
+      { id: 202, label: "Contacted", fullLabel: "Client Reactivation: Contacted", category: "Client Reactivation", color: "#06B6D4", isFinalStage: false },
+      { id: 203, label: "Reactivated", fullLabel: "Client Reactivation: Reactivated", category: "Client Reactivation", color: "#10B981", isFinalStage: true },
+      { id: 204, label: "Call Back Later", fullLabel: "Client Reactivation: Call Back Later", category: "Client Reactivation", color: "#F59E0B", isFinalStage: true },
+      { id: 205, label: "Lost", fullLabel: "Client Reactivation: Lost", category: "Client Reactivation", color: "#EF4444", isFinalStage: true },
+    ].filter((item) => !categoriesWithStages.has(item.category));
+
+    return [...dynamicItems, ...fallbackDefaults];
+  }, [clientProcesses]);
 
   const dealKanbanStages = [
     { id: 1, label: "New" },
@@ -828,14 +940,14 @@ export default function Deals() {
   // Helper to get stage position (1-15) from current stage name
   const getStagePosition = (stageName: string): number => {
     // Try to find exact match in pipeline
-    const exactMatch = stagePipeline.find(s => s.label === stageName);
-    if (exactMatch) return exactMatch.id;
+    const exactIndex = stagePipeline.findIndex(s => s.label === stageName);
+    if (exactIndex !== -1) return exactIndex + 1;
 
     // Try to find partial match for legacy stage names
-    const partialMatch = stagePipeline.find(s =>
+    const partialIndex = stagePipeline.findIndex(s =>
       s.label.toLowerCase().includes(stageName.toLowerCase())
     );
-    if (partialMatch) return partialMatch.id;
+    if (partialIndex !== -1) return partialIndex + 1;
 
     // Default to position 1 if no match
     return 1;
@@ -843,24 +955,21 @@ export default function Deals() {
 
   // Helper to get category from stage name
   const getCategoryFromStage = (stageName: string): string => {
+    // Check if matches a stage in stored client processes
+    for (const proc of clientProcesses) {
+      if (proc.stages?.some((s) => s.name.toLowerCase() === stageName.toLowerCase())) {
+        return proc.name;
+      }
+    }
+
     // Direct category mapping for common stage names
     const stageToCategory: { [key: string]: string } = {
-      "Initial Contact": "Patient Intake",
-      "Insurance Verification": "Insurance Verification",
-      "Insurance Verify": "Patient Intake",
-      "Schedule Appointment": "Patient Intake",
-      "Post-Visit Check": "Follow-up Calls",
-      "Medication Reminder": "Follow-up Calls",
-      "Follow-up": "Follow-up Calls",
-      "Billing Inquiry": "Payment Reminder",
-      "Issue Resolution": "Payment Reminder",
-      "Payment Notice": "Payment Reminder",
-      "Payment Collected": "Payment Reminder",
-      "Slot Selection": "Appointment Scheduling",
-      "Confirmation": "Appointment Scheduling",
-      "Document Check": "Insurance Verification",
-      "Verification": "Insurance Verification",
-      "Approval": "Insurance Verification",
+      "Initial Contact": "Client Intake",
+      "Interested": "Client Intake",
+      "Not Interested": "Client Intake",
+      "Outreach": "Client Reactivation",
+      "Reactivated": "Client Reactivation",
+      "Lost": "Client Reactivation",
     };
 
     // Try direct mapping first
@@ -877,35 +986,126 @@ export default function Deals() {
     }
 
     // Default to first category
-    return "Patient Intake";
+    return "Client Intake";
   };
 
   const dealStageLabels = ["New", "Can't Contact", "Follow-up Later", "Interested", "Close Deal"];
 
-  const getStagesListForProcess = (processName: string, currentStageName?: string): string[] => {
-    if (!processName) return currentStageName ? [currentStageName] : [];
+  const getStageObjectsForProcess = (processName: string, currentStageName?: string): Array<{
+    id: string;
+    name: string;
+    color: string;
+    isFinalStage?: boolean;
+    isInitial?: boolean;
+    stageCategory?: "in_progress" | "success" | "lost";
+    stagePosition?: "initial" | "intermediate" | "final" | null;
+    intentTrigger?: string;
+  }> => {
+    if (!processName) {
+      return currentStageName
+        ? [{ id: "1", name: currentStageName, color: CHEVRON_PALETTE[0] }]
+        : [];
+    }
     const cleanName = processName.trim().toLowerCase();
 
-    // 1. Direct match in Process Settings stored processes
+    // 1. Direct match in Process Settings stored processes (workflow processes)
     const foundProc = storedProcesses.find(
       (p) => p.name.trim().toLowerCase() === cleanName || p.id === processName
     );
     if (foundProc && foundProc.stages && foundProc.stages.length > 0) {
-      return foundProc.stages.map((s) => s.name);
+      return foundProc.stages.map((s, idx) => ({
+        id: s.id || `stg-${idx}`,
+        name: s.name,
+        color: s.color || CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
+        isFinalStage: Boolean(s.isFinalStage || s.isFinal),
+        isInitial: s.isInitial,
+        stageCategory: (s as any).stageCategory || s.systemCategory,
+        stagePosition: s.stagePosition,
+        intentTrigger: (s as any).intentTrigger,
+      }));
     }
 
     // 2. getStagesForProcess fallback
     const options = getStagesForProcess(processName);
     if (options && options.length > 0) {
-      return options.map((o) => o.label);
+      return options.map((o, idx) => ({
+        id: `stg-${idx}`,
+        name: o.label,
+        color: CHEVRON_PALETTE[idx % CHEVRON_PALETTE.length],
+        isFinalStage: idx === options.length - 1,
+      }));
     }
 
     // 3. If single stage known for this row
     if (currentStageName) {
       const clean = currentStageName.includes(":") ? currentStageName.split(":")[1].trim() : currentStageName.trim();
-      return [clean];
+      return [{ id: "1", name: clean, color: CHEVRON_PALETTE[0] }];
     }
     return [];
+  };
+
+  const getStagesListForProcess = (processName: string, currentStageName?: string): string[] => {
+    return getStageObjectsForProcess(processName, currentStageName).map((s) => s.name);
+  };
+
+  const triggerStageMoveAutomation = ({
+    clientId,
+    clientName,
+    processName,
+    fromStageName,
+    toStageName,
+    cause = "manual",
+  }: {
+    clientId: string;
+    clientName: string;
+    processName: string;
+    fromStageName?: string;
+    toStageName: string;
+    cause?: "manual" | "rule";
+  }) => {
+    const procObj = storedProcesses.find(
+      (p) => p.name.trim().toLowerCase() === (processName || "").trim().toLowerCase() || p.id === processName
+    );
+    const fromStageObj = procObj?.stages?.find(
+      (s) => s.name.toLowerCase() === (fromStageName || "").toLowerCase() || s.id === fromStageName
+    );
+    const toStageObj = procObj?.stages?.find(
+      (s) => s.name.toLowerCase() === toStageName.toLowerCase() || s.id === toStageName
+    );
+
+    const orgIdStr = typeof activeOrganization === "string" ? activeOrganization : (activeOrganization as any)?.id || "default";
+
+    const moveResult = logStageMove({
+      orgId: orgIdStr,
+      recordType: (procObj?.entityType as any) || "client",
+      recordId: clientId || clientName,
+      fromStageId: fromStageObj?.id,
+      fromStageName: fromStageObj?.name || fromStageName,
+      toStageId: toStageObj?.id || toStageName,
+      toStageName: toStageObj?.name || toStageName,
+      processId: procObj?.id || processName,
+      processName: procObj?.name || processName,
+      cause: {
+        type: cause,
+        ruleName: `Stage changed to ${toStageName} from /deals`,
+      },
+    });
+
+    appendActivity({
+      clientId: clientId || clientName,
+      processId: procObj?.id || processName,
+      processName: procObj?.name || processName,
+      type: "stage_change",
+      fromStage: fromStageName || "Initial",
+      toStage: toStageName,
+      createdBy: "user",
+      details: {
+        primary: `Stage moved to ${toStageName}`,
+        secondary: fromStageName ? `From ${fromStageName} → ${toStageName}` : `Current stage: ${toStageName}`,
+      },
+    } as any);
+
+    return moveResult;
   };
 
   const getStageIndexForProcess = (processName: string, stageName: string): number => {
@@ -1450,7 +1650,291 @@ export default function Deals() {
     }
   };
 
+  const handleUpdateLogStage = (log: CallLog, stageName: string) => {
+    const clientObj = getClientObj(log.clientId, log.client);
+    const currentValues = {
+      client_name: log.client,
+      phone: clientObj?.phone || "9667283405",
+      email: clientObj?.email || "anshul@mantracare.com",
+      ...(clientObj || {}),
+      ...(log || {}),
+    };
+    const procFields = getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process);
+    const missing = getMissingRequiredProcessFields({
+      processId: (log as any)?.processId,
+      processName: log.process,
+      currentStageName: stageName,
+      allFields: procFields,
+      fieldValues: currentValues,
+    });
+
+    if (missing.length > 0) {
+      setRequiredFieldsModalState({
+        isOpen: true,
+        clientName: log.client,
+        clientId: log.clientId,
+        processName: log.process,
+        processId: (log as any)?.processId,
+        targetStageName: stageName,
+        missingFields: missing,
+        initialValues: currentValues,
+        onConfirm: (filledValues) => {
+          const oldStage = log.currentStage;
+          const updatedLog = { ...log, ...filledValues, currentStage: stageName };
+          setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
+          saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
+          updateProcessCallLogStage(log.clientId, log.process, stageName);
+          try {
+            const allClients = getStoredClients();
+            const targetIdx = allClients.findIndex(c => c.id === log.clientId || c.name.toLowerCase() === log.client.toLowerCase());
+            if (targetIdx >= 0) {
+              allClients[targetIdx] = {
+                ...allClients[targetIdx],
+                stage: stageName,
+                processes: Array.from(new Set([log.process, ...(allClients[targetIdx].processes || [])]))
+              };
+              saveStoredClients([...allClients]);
+            }
+          } catch {}
+          setDeals((prev) =>
+            prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
+          );
+          if (selectedLogForView && selectedLogForView.id === log.id) {
+            setSelectedLogForView(updatedLog);
+          }
+          triggerStageMoveAutomation({
+            clientId: log.clientId,
+            clientName: log.client,
+            processName: log.process,
+            fromStageName: oldStage,
+            toStageName: stageName,
+          });
+          setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
+          toast.success(`Stage moved to ${stageName} with required fields saved ✓`);
+        },
+      });
+      return;
+    }
+
+    const oldStage = log.currentStage;
+    const updatedLog = { ...log, currentStage: stageName };
+    setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
+    saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
+    updateProcessCallLogStage(log.clientId, log.process, stageName);
+    try {
+      const allClients = getStoredClients();
+      const targetIdx = allClients.findIndex(c => c.id === log.clientId || c.name.toLowerCase() === log.client.toLowerCase());
+      if (targetIdx >= 0) {
+        allClients[targetIdx] = {
+          ...allClients[targetIdx],
+          stage: stageName,
+          processes: Array.from(new Set([log.process, ...(allClients[targetIdx].processes || [])]))
+        };
+        saveStoredClients([...allClients]);
+      }
+    } catch {}
+    setDeals((prev) =>
+      prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
+    );
+    if (selectedLogForView && selectedLogForView.id === log.id) {
+      setSelectedLogForView(updatedLog);
+    }
+    triggerStageMoveAutomation({
+      clientId: log.clientId,
+      clientName: log.client,
+      processName: log.process,
+      fromStageName: oldStage,
+      toStageName: stageName,
+    });
+    toast.success(`Stage moved to ${stageName} ✓`);
+  };
+
   const dealColumns: TableColumn<CallLog>[] = [
+    {
+      key: "id",
+      header: "Process ID",
+      render: (log) => {
+        const formattedId = (log as any).processId
+          ? (log as any).processId
+          : log.id.startsWith("CALL-")
+            ? `PRC-${log.id.replace("CALL-", "")}`
+            : (log.id.startsWith("PRC-") ? log.id : `PRC-${log.id}`);
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedLogForView(log);
+              setViewDrawerTab("general");
+              setHistoryFilter("");
+              setShowViewDrawer(true);
+            }}
+            className="font-mono text-xs font-semibold text-[#1456f0] hover:text-[#1d4ed8] hover:underline cursor-pointer tracking-tight"
+            style={{ fontFamily: "JetBrains Mono, monospace" }}
+            title="Open process details"
+          >
+            {formattedId}
+          </button>
+        );
+      }
+    },
+    {
+      key: "currentStage",
+      header: "Stage",
+      render: (log) => {
+        const stageObjs = getStageObjectsForProcess(log.process, log.currentStage);
+        const activeIdx = getStageIndexForProcess(log.process, log.currentStage);
+        const cleanCurrentStage = (log.currentStage || "").includes(":")
+          ? log.currentStage.split(":")[1].trim().toLowerCase()
+          : (log.currentStage || "").trim().toLowerCase();
+
+        const currentStageObj = stageObjs.find((s) => s.name.trim().toLowerCase() === cleanCurrentStage);
+        const isLostStageObj = (s?: { name: string; stageCategory?: string; intentTrigger?: string }) => {
+          if (!s) return false;
+          if (s.stageCategory === "lost") return true;
+          if (s.intentTrigger === "not_interested") return true;
+          const n = s.name.toLowerCase();
+          return n.includes("not interested") || n.includes("lost") || n.includes("cancelled") || n.includes("declined") || n.includes("failed") || n.includes("no-show");
+        };
+
+        const isWonStageObj = (s?: { name: string; stageCategory?: string; intentTrigger?: string }) => {
+          if (!s) return false;
+          if (s.stageCategory === "success") return true;
+          if (s.intentTrigger === "interested") return true;
+          const n = s.name.toLowerCase();
+          return n.includes("interested") || n.includes("won") || n.includes("reactivated") || n.includes("completed") || n.includes("closed");
+        };
+
+        const isLastOrFinalStageObj = (s?: { name: string; isFinalStage?: boolean; stagePosition?: string | null; stageCategory?: string; intentTrigger?: string }) => {
+          if (!s) return false;
+          return Boolean(s.isFinalStage || s.stagePosition === "final" || s.stageCategory === "lost" || s.stageCategory === "success" || isLostStageObj(s) || isWonStageObj(s));
+        };
+
+        const lightenHex = (hex: string, percent: number = 75): string => {
+          if (!hex || typeof hex !== "string") return "#F1F5F9";
+          let c = hex.replace("#", "").trim();
+          if (c.length === 3) c = c.split("").map((ch) => ch + ch).join("");
+          const num = parseInt(c, 16);
+          if (isNaN(num)) return hex;
+          const factor = percent / 100;
+          const r = Math.max(0, Math.min(255, Math.round(((num >> 16) & 255) + (255 - ((num >> 16) & 255)) * factor)));
+          const g = Math.max(0, Math.min(255, Math.round(((num >> 8) & 255) + (255 - ((num >> 8) & 255)) * factor)));
+          const b = Math.max(0, Math.min(255, Math.round((num & 255) + (255 - (num & 255)) * factor)));
+          return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+        };
+
+        const isCurrentFinal = isLastOrFinalStageObj(currentStageObj);
+
+        return (
+          <div className="flex items-center justify-center -space-x-px">
+            {stageObjs.map((stg, i) => {
+              const stageName = stg.name;
+              const stageColor = stg.color || CHEVRON_PALETTE[i % CHEVRON_PALETTE.length];
+              const segIdx = i + 1;
+              const isActive = segIdx === activeIdx;
+
+              const isThisFinal = isLastOrFinalStageObj(stg);
+              const isThisInProgress = !isThisFinal;
+
+              let isCompleted = false;
+              let isDeactivated = false;
+
+              if (isActive) {
+                // Active stage
+              } else if (isCurrentFinal) {
+                if (isThisInProgress && activeIdx >= 0 && segIdx < activeIdx) {
+                  // Keep reached in-progress stages completed with full color when lost or final stage is marked
+                  isCompleted = true;
+                } else {
+                  // Deactivate alternate outcome stages
+                  isDeactivated = true;
+                }
+              } else {
+                // Currently in an in-progress stage
+                if (isThisInProgress && segIdx < activeIdx) {
+                  isCompleted = true;
+                }
+              }
+
+              const isLocked = Boolean(isCurrentFinal);
+              const lightBg = lightenHex(stageColor, 78);
+              const lightBorder = lightenHex(stageColor, 40);
+
+              let bg = "transparent";
+              let border = "1px solid #CBD5E1";
+              let opacity = 1;
+
+              if (isActive) {
+                bg = stageColor;
+                border = "1.5px solid #0F172A";
+                opacity = 1;
+              } else if (isCompleted) {
+                bg = stageColor;
+                border = `1px solid ${stageColor}`;
+                opacity = 0.9;
+              } else {
+                // Inactive / unreached / deactivated stages: light grey to show inactive
+                bg = "#E2E8F0";
+                border = "1px solid #CBD5E1";
+                opacity = 0.9;
+              }
+
+              const isHovered = hoveredStageSegment?.logId === log.id && hoveredStageSegment?.segIdx === segIdx;
+              return (
+                <div
+                  key={stg.id || stageName}
+                  className="relative"
+                  style={{ zIndex: isActive ? 10 : isHovered ? 20 : 1 }}
+                >
+                  {isHovered && (
+                    <div
+                      className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-1 pointer-events-none rounded shadow-md z-[200] flex items-center gap-1.5"
+                      style={{ backgroundColor: "#1A2B4A", color: "#fff", fontSize: "12px" }}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: isDeactivated ? lightBg : stageColor }}
+                      />
+                      <span>{stageName}</span>
+                      {isDeactivated ? (
+                        <span className="text-[10px] text-gray-300 font-semibold">(Inactive)</span>
+                      ) : isActive ? (
+                        <span className="text-[10px] text-blue-300 font-semibold">(Current)</span>
+                      ) : isCompleted ? (
+                        <span className="text-[10px] text-emerald-300 font-semibold">(Completed)</span>
+                      ) : null}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!isDeactivated) handleUpdateLogStage(log, stageName);
+                    }}
+                    onMouseEnter={() => setHoveredStageSegment({ logId: log.id, segIdx })}
+                    onMouseLeave={() => setHoveredStageSegment(null)}
+                    style={{
+                      width: "18px",
+                      height: "8px",
+                      borderRadius: "0px",
+                      backgroundColor: bg,
+                      border: border,
+                      opacity: opacity,
+                      cursor: isDeactivated ? "not-allowed" : "pointer",
+                      display: "block",
+                      padding: 0,
+                      flexShrink: 0,
+                      transition: "all 0.2s ease",
+                    }}
+                    title={`${stageName}${isActive ? " (Current)" : isDeactivated ? " (Inactive)" : isCompleted ? " (Completed)" : ""}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+    },
     {
       key: "client",
       header: "Client",
@@ -1465,129 +1949,6 @@ export default function Deals() {
           title="Click to view Client Profile"
         >
           {log.client}
-        </span>
-      )
-    },
-    {
-      key: "process",
-      header: "Process",
-      render: (log) => (
-        <span className="text-xs text-slate-500" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-          {log.process}
-        </span>
-      )
-    },
-    {
-      key: "currentStage",
-      header: "Stage",
-      render: (log) => {
-        const stagesList = getStagesListForProcess(log.process, log.currentStage);
-        const activeIdx = getStageIndexForProcess(log.process, log.currentStage);
-        return (
-          <div className="flex items-center justify-center gap-[3px]">
-            {stagesList.map((stageName, i) => {
-              const segIdx = i + 1;
-              const isCompleted = segIdx < activeIdx;
-              const isActive = segIdx === activeIdx;
-              const isHovered = hoveredStageSegment?.logId === log.id && hoveredStageSegment?.segIdx === segIdx;
-              return (
-                <div key={stageName} className="relative">
-                  {isHovered && (
-                    <div
-                      className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 pointer-events-none rounded-none"
-                      style={{ backgroundColor: '#1A2B4A', color: '#fff', fontSize: '12px', zIndex: 200 }}
-                    >
-                      {stageName}
-                    </div>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const clientObj = getClientObj(log.clientId, log.client);
-                      const currentValues = {
-                        client_name: log.client,
-                        phone: clientObj?.phone || "9667283405",
-                        email: clientObj?.email || "anshul@mantracare.com",
-                        ...(clientObj || {}),
-                        ...(log || {}),
-                      };
-                      const procFields = getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process);
-                      const missing = getMissingRequiredProcessFields({
-                        processId: (log as any)?.processId,
-                        processName: log.process,
-                        currentStageName: stageName,
-                        allFields: procFields,
-                        fieldValues: currentValues,
-                      });
-
-                      if (missing.length > 0) {
-                        setRequiredFieldsModalState({
-                          isOpen: true,
-                          clientName: log.client,
-                          clientId: log.clientId,
-                          processName: log.process,
-                          processId: (log as any)?.processId,
-                          targetStageName: stageName,
-                          missingFields: missing,
-                          initialValues: currentValues,
-                          onConfirm: (filledValues) => {
-                            const updatedLog = { ...log, ...filledValues, currentStage: stageName };
-                            setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
-                            saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
-                            updateProcessCallLogStage(log.clientId, log.process, stageName);
-                            setDeals((prev) =>
-                              prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
-                            );
-                            setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
-                            toast.success(`Stage moved to ${stageName} with required fields saved ✓`);
-                          },
-                        });
-                        return;
-                      }
-
-                      const updatedLog = { ...log, currentStage: stageName };
-                      setCallLogs(prev => prev.map(l => l.id === log.id ? updatedLog : l));
-                      saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
-                      updateProcessCallLogStage(log.clientId, log.process, stageName);
-                      setDeals(prev =>
-                        prev.map(d => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
-                      );
-                      toast.success(`Stage moved to ${stageName} ✓`);
-                    }}
-                    onMouseEnter={() => setHoveredStageSegment({ logId: log.id, segIdx })}
-                    onMouseLeave={() => setHoveredStageSegment(null)}
-                    style={{
-                      width: '18px',
-                      height: '8px',
-                      borderRadius: '0px',
-                      backgroundColor: (isCompleted || isActive) ? '#1E88E5' : 'transparent',
-                      border: (isCompleted || isActive) ? 'none' : '1px solid #E8ECF0',
-                      cursor: 'pointer',
-                      display: 'block',
-                      padding: 0,
-                      flexShrink: 0,
-                      transition: 'background-color 0.2s ease',
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        );
-      }
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (log) => (
-        <span className={`inline-block px-2 py-0.5 rounded-none text-[11px] font-semibold whitespace-nowrap ${
-          log.status === "Completed"
-            ? "bg-success-bg text-success"
-            : log.status === "Pending"
-              ? "bg-warning/10 text-warning"
-              : "bg-error-bg text-error"
-        }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-          {log.status}
         </span>
       )
     },
@@ -1769,7 +2130,7 @@ export default function Deals() {
         {/* Unified Search & Control Bar powered by PageTopBar */}
         <PageTopBar
           leftElement={
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {/* Process Filter Dropdown */}
               <div className="relative shrink-0">
                 <button
@@ -1778,7 +2139,7 @@ export default function Deals() {
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors"
                   style={{ fontFamily: 'Outfit, sans-serif' }}
                 >
-                  <span className="truncate max-w-[130px]">{selectedProcessFilter ? selectedProcessFilter : "Appointments"}</span>
+                  <span className="truncate max-w-[140px] font-semibold text-gray-800">{selectedProcessFilter}</span>
                   <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 </button>
 
@@ -1789,37 +2150,23 @@ export default function Deals() {
                       className="fixed inset-0 z-40"
                       onClick={() => setShowProcessesDropdown(false)}
                     />
-                    <div className="absolute top-full left-0 mt-1.5 w-56 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
-                      <button
-                        onClick={() => {
-                          setSelectedProcessFilter(null);
-                          setShowProcessesDropdown(false);
-                        }}
-                        className={`w-full text-left px-3.5 py-1.5 text-xs transition-colors ${!selectedProcessFilter ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
-                          }`}
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      >
-                        All Processes
-                      </button>
-                      {[
-                        'Appointments',
-                        'Patient Intake',
-                        'Follow-up Calls',
-                        'Insurance Verification',
-                        'Appointment Scheduling',
-                        'Payment Reminder'
-                      ].map((process) => (
+                    <div className="absolute top-full left-0 mt-1.5 w-60 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                      {availableProcesses.map((process) => (
                         <button
                           key={process}
                           onClick={() => {
                             setSelectedProcessFilter(process);
                             setShowProcessesDropdown(false);
                           }}
-                          className={`w-full text-left px-3.5 py-1.5 text-xs transition-colors ${selectedProcessFilter === process ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
-                            }`}
+                          className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between ${
+                            selectedProcessFilter === process ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-700 hover:bg-muted'
+                          }`}
                           style={{ fontFamily: 'Outfit, sans-serif' }}
                         >
-                          {process}
+                          <span className="truncate">{process}</span>
+                          {selectedProcessFilter === process && (
+                            <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />
+                          )}
                         </button>
                       ))}
                     </div>
@@ -1862,13 +2209,14 @@ export default function Deals() {
               </div>
 
               {/* Gear Settings Icon */}
-              <Link
-                to="/process"
-                className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors shrink-0"
-                title="Process Configuration"
+              <button
+                type="button"
+                onClick={() => handleOpenProcessInWorkflow(selectedProcessFilter)}
+                className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors shrink-0 cursor-pointer"
+                title={`Open "${selectedProcessFilter}" in workflow`}
               >
                 <SettingsIcon className="w-4 h-4" />
-              </Link>
+              </button>
             </div>
           }
           customFilterModalContent={
@@ -2519,7 +2867,7 @@ export default function Deals() {
                       if (draggedDealId) {
                         const targetDeal = deals.find((d) => d.id === draggedDealId);
                         if (targetDeal) {
-                          const procName = stage.category || targetDeal.stage.split(":")[0]?.trim() || "Patient Intake";
+                          const procName = stage.category || targetDeal.stage.split(":")[0]?.trim() || "Client Intake";
                           const stageClean = stage.label || stage.fullLabel.split(":")[1]?.trim() || stage.fullLabel;
                           const clientId = getClientIdByName(targetDeal.clientName);
                           const clientObj = getClientObj(clientId, targetDeal.clientName);
@@ -2560,8 +2908,30 @@ export default function Deals() {
                                   const updatedLog = { ...matchingLog, ...filledValues, currentStage: stageClean };
                                   setCallLogs((prev) => prev.map((l) => (l.id === matchingLog.id ? updatedLog : l)));
                                   saveCallLogs(getStoredCallLogs().map((l) => (l.id === matchingLog.id ? updatedLog : l)));
+                                  if (selectedLogForView && selectedLogForView.id === matchingLog.id) {
+                                    setSelectedLogForView(updatedLog);
+                                  }
                                 }
                                 updateProcessCallLogStage(clientId, procName, stageClean);
+                                try {
+                                  const allClients = getStoredClients();
+                                  const targetIdx = allClients.findIndex(c => c.id === clientId || c.name.toLowerCase() === targetDeal.clientName.toLowerCase());
+                                  if (targetIdx >= 0) {
+                                    allClients[targetIdx] = {
+                                      ...allClients[targetIdx],
+                                      stage: stageClean,
+                                      processes: Array.from(new Set([procName, ...(allClients[targetIdx].processes || [])]))
+                                    };
+                                    saveStoredClients([...allClients]);
+                                  }
+                                } catch {}
+                                triggerStageMoveAutomation({
+                                  clientId,
+                                  clientName: targetDeal.clientName,
+                                  processName: procName,
+                                  fromStageName: targetDeal.stage.split(":")[1]?.trim() || targetDeal.stage,
+                                  toStageName: stageClean,
+                                });
                                 setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
                                 toast.success(`Deal moved to ${stage.fullLabel} with required fields saved ✓`);
                               },
@@ -2577,11 +2947,33 @@ export default function Deals() {
                             )
                           );
                           updateProcessCallLogStage(clientId, procName, stageClean);
+                          try {
+                            const allClients = getStoredClients();
+                            const targetIdx = allClients.findIndex(c => c.id === clientId || c.name.toLowerCase() === targetDeal.clientName.toLowerCase());
+                            if (targetIdx >= 0) {
+                              allClients[targetIdx] = {
+                                ...allClients[targetIdx],
+                                stage: stageClean,
+                                processes: Array.from(new Set([procName, ...(allClients[targetIdx].processes || [])]))
+                              };
+                              saveStoredClients([...allClients]);
+                            }
+                          } catch {}
                           if (matchingLog) {
                             const updatedLog = { ...matchingLog, currentStage: stageClean };
                             setCallLogs((prev) => prev.map((l) => (l.id === matchingLog.id ? updatedLog : l)));
                             saveCallLogs(getStoredCallLogs().map((l) => (l.id === matchingLog.id ? updatedLog : l)));
+                            if (selectedLogForView && selectedLogForView.id === matchingLog.id) {
+                              setSelectedLogForView(updatedLog);
+                            }
                           }
+                          triggerStageMoveAutomation({
+                            clientId,
+                            clientName: targetDeal.clientName,
+                            processName: procName,
+                            fromStageName: targetDeal.stage.split(":")[1]?.trim() || targetDeal.stage,
+                            toStageName: stageClean,
+                          });
                           toast.success(`Deal moved to ${stage.fullLabel} ✓`);
                         }
                         setDraggedDealId(null);
@@ -2589,14 +2981,17 @@ export default function Deals() {
                     }}
                   >
                     {/* Column header */}
-                    <div className="px-3 py-3" style={{ backgroundColor: '#1C2B4A' }}>
+                    <div className="px-3 py-3 relative" style={{ backgroundColor: '#1C2B4A', borderTop: `3px solid ${stage.color || '#3B82F6'}` }}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-white font-bold" style={{ fontSize: '14px', fontFamily: 'Outfit, sans-serif' }}>
-                          {stage.label}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color || '#3B82F6' }} />
+                          <span className="text-white font-bold truncate" style={{ fontSize: '14px', fontFamily: 'Outfit, sans-serif' }}>
+                            {stage.label}
+                          </span>
+                        </div>
                         <div
-                          className="px-2 py-0.5 rounded-full text-xs font-semibold"
-                          style={{ backgroundColor: '#06B6D4', color: '#FFFFFF', minWidth: '20px', textAlign: 'center' }}
+                          className="px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0 ml-1"
+                          style={{ backgroundColor: stage.color || '#06B6D4', color: '#FFFFFF', minWidth: '20px', textAlign: 'center' }}
                         >
                           {stageDeals.length}
                         </div>
@@ -3687,15 +4082,26 @@ export default function Deals() {
         onStageChange={(idx) => {
           if (!selectedLogForView) return;
           const newStage = getDealStageFromIndex(idx, selectedLogForView.process);
+          const oldStage = selectedLogForView.currentStage;
           setDrawerStageIdx(idx);
           toast.success(`Stage updated to ${newStage} ✓`);
+          const updatedLog = { ...selectedLogForView, currentStage: newStage };
+          setSelectedLogForView(updatedLog);
           setCallLogs((prev) =>
-            prev.map((l) => (l.id === selectedLogForView.id ? { ...l, currentStage: newStage } : l))
+            prev.map((l) => (l.id === selectedLogForView.id ? updatedLog : l))
           );
+          saveCallLogs(getStoredCallLogs().map((l) => (l.id === selectedLogForView.id ? updatedLog : l)));
           updateProcessCallLogStage(selectedLogForView.clientId, selectedLogForView.process, newStage);
           setDeals((allDeals) =>
             allDeals.map((d) => (d.clientName === selectedLogForView.client ? { ...d, stage: `${selectedLogForView.process}: ${newStage}` } : d))
           );
+          triggerStageMoveAutomation({
+            clientId: selectedLogForView.clientId,
+            clientName: selectedLogForView.client,
+            processName: selectedLogForView.process,
+            fromStageName: oldStage,
+            toStageName: newStage,
+          });
         }}
         visibleFieldKeys={drawerVisibleFields}
         onVisibleFieldKeysChange={(keys) => {

@@ -13,7 +13,8 @@ export interface AIModelConfig {
   contextWindow: string;
   latency: string;
   description: string;
-  isActive: boolean;
+  isActive: boolean; // Admin availability to client
+  clientEnabled?: boolean; // Client default availability in processes
 }
 
 export const DEFAULT_AI_MODELS: AIModelConfig[] = [
@@ -26,6 +27,7 @@ export const DEFAULT_AI_MODELS: AIModelConfig[] = [
     latency: "~240ms",
     description: "Ultra-fast multimodal reasoning engine optimized for real-time voice latency.",
     isActive: true,
+    clientEnabled: true,
   },
   {
     id: "gpt-4o",
@@ -36,6 +38,7 @@ export const DEFAULT_AI_MODELS: AIModelConfig[] = [
     latency: "~310ms",
     description: "High-intelligence flagship omni model with advanced natural conversational capabilities.",
     isActive: true,
+    clientEnabled: true,
   },
   {
     id: "gpt-4o-mini",
@@ -46,6 +49,7 @@ export const DEFAULT_AI_MODELS: AIModelConfig[] = [
     latency: "~220ms",
     description: "Lightweight, ultra-low latency model engineered for cost-effective high-volume calls.",
     isActive: true,
+    clientEnabled: true,
   },
   {
     id: "deepseek-v4-flash",
@@ -56,6 +60,7 @@ export const DEFAULT_AI_MODELS: AIModelConfig[] = [
     latency: "~190ms",
     description: "High-throughput, ultra-fast latency optimized specifically for real-time turn-taking.",
     isActive: true,
+    clientEnabled: true,
   },
   {
     id: "claude-3-5-sonnet",
@@ -66,6 +71,7 @@ export const DEFAULT_AI_MODELS: AIModelConfig[] = [
     latency: "~380ms",
     description: "Industry-leading nuance, emotional intelligence, and complex workflow adherence.",
     isActive: true,
+    clientEnabled: true,
   },
   {
     id: "gemini-1-5-pro",
@@ -76,6 +82,7 @@ export const DEFAULT_AI_MODELS: AIModelConfig[] = [
     latency: "~450ms",
     description: "Massive context window ideal for comprehensive EHR, documents, and complex policies.",
     isActive: false,
+    clientEnabled: true,
   },
   {
     id: "llama-3-3-70b",
@@ -86,6 +93,7 @@ export const DEFAULT_AI_MODELS: AIModelConfig[] = [
     latency: "~340ms",
     description: "State-of-the-art open-weights model fine-tuned for structured data extraction.",
     isActive: false,
+    clientEnabled: true,
   },
 ];
 
@@ -128,12 +136,22 @@ export function toggleAIModelActive(id: string): AIModelConfig[] {
   return updated;
 }
 
+export function toggleClientAIModelActive(id: string): AIModelConfig[] {
+  const current = getStoredAIModels();
+  const updated = current.map((m) =>
+    m.id === id ? { ...m, clientEnabled: m.clientEnabled !== undefined ? !m.clientEnabled : false } : m
+  );
+  saveStoredAIModels(updated);
+  return updated;
+}
+
 export function getActiveAIModels(): AIModelConfig[] {
   const all = getStoredAIModels();
-  const active = all.filter((m) => m.isActive);
+  const active = all.filter((m) => m.isActive && m.clientEnabled !== false);
   // Ensure at least one active model is returned so the agent always has an engine
   if (active.length === 0 && all.length > 0) {
-    return [all[0]];
+    const adminActive = all.filter((m) => m.isActive);
+    return adminActive.length > 0 ? adminActive : [all[0]];
   }
   return active;
 }

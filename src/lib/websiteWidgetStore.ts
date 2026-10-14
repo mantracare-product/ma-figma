@@ -29,7 +29,7 @@ const DEFAULT_WIDGET_CONFIG: WebsiteWidgetConfig = {
     phone: true,
     processSelect: true,
   },
-  defaultProcessId: "1", // Patient Intake
+  defaultProcessId: "1", // Client Intake
   processLabelMap: {
     "1": "Book an Intake Appointment",
     "2": "Insurance Verification & Coverage",

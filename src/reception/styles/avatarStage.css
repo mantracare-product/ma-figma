@@ -1,0 +1,218 @@
+/**
+ * avatarStage.css
+ * Container query based sizing and stage styling for Aria Avatar & Face Check-in.
+ */
+
+.avatar-stage {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  container-type: size;
+  isolation: isolate; /* isolation fixes the glow z-index */
+}
+
+.avatar-figure {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  z-index: 1;
+  aspect-ratio: var(--ar);
+  height: min(calc(100cqh - 8px), calc(94cqw / var(--ar)));
+  -webkit-mask-image: linear-gradient(to bottom, #000 86%, transparent 100%);
+          mask-image: linear-gradient(to bottom, #000 86%, transparent 100%);
+}
+
+.avatar-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom center;
+  pointer-events: none;
+  filter: drop-shadow(0 12px 32px rgba(24, 30, 37, 0.40)); /* navy, never rgba(0,0,0) */
+}
+
+.avatar-fallback {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  z-index: 1;
+  max-height: calc(100cqh - 8px);
+  max-width: 94cqw;
+  object-fit: contain;
+  object-position: bottom center;
+  pointer-events: none;
+  filter: drop-shadow(0 12px 32px rgba(24, 30, 37, 0.40));
+  -webkit-mask-image: linear-gradient(to bottom, #000 86%, transparent 100%);
+          mask-image: linear-gradient(to bottom, #000 86%, transparent 100%);
+}
+
+.avatar-glow {
+  position: absolute;
+  left: 50%;
+  top: 32%;
+  z-index: 0;
+  width: min(90cqw, 640px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  filter: blur(64px);
+  pointer-events: none;
+  transition: background 400ms var(--ease-out, ease-out), opacity 400ms var(--ease-out, ease-out);
+}
+
+.avatar-chip {
+  position: absolute;
+  left: 50%;
+  z-index: 2;
+  transform: translateX(-50%);
+  bottom: calc(var(--caption-overlap, 24px) + 12px);
+}
+
+/* Waveform audio animation */
+@keyframes wave {
+  0%, 100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.wave-bar {
+  width: 3px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #60a5fa;
+  transform-origin: center;
+  animation: wave 900ms var(--ease-in-out, ease-in-out) infinite;
+  animation-delay: calc(var(--i) * 90ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wave-bar {
+    animation: none;
+    transform: scaleY(0.6);
+  }
+}
+
+/* Face Check-in (FACE_SCAN) Stage & Dock */
+.face-stage {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.face-camera {
+  position: absolute;
+  inset: 0;
+  border-radius: 28px;
+  overflow: hidden;
+  background: #181e25;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 16px 40px rgba(24, 30, 37, 0.18);
+}
+
+.face-guide-area {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 56px;
+  bottom: 136px;
+  display: grid;
+  place-items: center;
+}
+
+.face-guide {
+  position: relative;
+  height: min(100%, 640px);
+  aspect-ratio: 3 / 4;
+  max-width: 72%;
+}
+
+.face-dock {
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  width: clamp(320px, 58%, 460px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.dock-btn {
+  height: clamp(48px, 5.5vh, 54px);
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 700 15px/1 var(--font-dm-sans, system-ui, sans-serif);
+  cursor: pointer;
+  transition: all 160ms var(--ease-out, ease-out);
+}
+
+.dock-primary {
+  justify-content: center;
+  color: #fff;
+  background: linear-gradient(135deg, #1456f0, #2563eb);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 8px 24px rgba(20, 86, 240, 0.35);
+}
+
+.dock-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(20, 86, 240, 0.45);
+}
+
+.dock-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dock-ghost {
+  justify-content: space-between;
+  padding: 0 22px;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 24px rgba(24, 30, 37, 0.16);
+}
+
+.dock-ghost:hover {
+  background: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(24, 30, 37, 0.22);
+}
+
+.dock-ghost svg {
+  color: #1456f0;
+}
+
+.dock-cancel {
+  justify-content: center;
+  color: #ffffff;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.dock-cancel:hover {
+  background: rgba(15, 23, 42, 0.9);
+}
+

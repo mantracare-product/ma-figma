@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
+import { DataExportModal } from "../components/common/DataExportModal";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import { useInvoices } from "../context/InvoiceContext";
 import { ClientInvoice, InvoiceStatus } from "../types/invoiceTypes";
@@ -34,10 +35,51 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+import { useNavigate, Link } from "react-router";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
+import { AUTOMATION_STORE_EVENT } from "../../lib/useAutomationStore";
+import { invoiceService, hasInvoiceAutomation } from "../../lib/invoiceService";
 
 export default function Invoices() {
-  const { invoices, updateInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, voidInvoice } = useInvoices();
+  const navigate = useNavigate();
+  const { invoices: contextInvoices, updateInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, voidInvoice } = useInvoices();
   const allClients = getClientList();
+
+  const [storedProcesses, setStoredProcesses] = useState<Process[]>(getStoredProcesses);
+  const [storeTick, setStoreTick] = useState(0);
+  const [liveInvoices, setLiveInvoices] = useState<ClientInvoice[]>(() => invoiceService.getInvoices());
+
+  useEffect(() => {
+    return invoiceService.subscribe((updated) => {
+      setLiveInvoices(updated);
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleStoreChange = () => {
+      setStoreTick((t) => t + 1);
+      setStoredProcesses(getStoredProcesses());
+      setLiveInvoices(invoiceService.getInvoices());
+    };
+    window.addEventListener(AUTOMATION_STORE_EVENT, handleStoreChange);
+    window.addEventListener(PROCESS_STORE_EVENT, handleStoreChange);
+    window.addEventListener("storage", handleStoreChange);
+    window.addEventListener("mantra_invoices_changed", handleStoreChange);
+    window.addEventListener("mantra_invoice_changed", handleStoreChange);
+    window.addEventListener("mantra_payments_changed", handleStoreChange);
+    return () => {
+      window.removeEventListener(AUTOMATION_STORE_EVENT, handleStoreChange);
+      window.removeEventListener(PROCESS_STORE_EVENT, handleStoreChange);
+      window.removeEventListener("storage", handleStoreChange);
+      window.removeEventListener("mantra_invoices_changed", handleStoreChange);
+      window.removeEventListener("mantra_invoice_changed", handleStoreChange);
+      window.removeEventListener("mantra_payments_changed", handleStoreChange);
+    };
+  }, []);
+
+  const invoices = useMemo(() => {
+    return liveInvoices.length > 0 ? liveInvoices : contextInvoices;
+  }, [liveInvoices, contextInvoices, storeTick]);
 
   // Metrics calculations
   const totalInvoiced = invoices.reduce((sum, i) => sum + i.total, 0);
@@ -55,6 +97,7 @@ export default function Invoices() {
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [paymentModalInvoice, setPaymentModalInvoice] = useState<ClientInvoice | null>(null);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   
   // Selection state (matching Deals.tsx)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -125,7 +168,7 @@ export default function Invoices() {
       inv.clientName.toLowerCase().includes(query) ||
       (inv.appointmentTitle && inv.appointmentTitle.toLowerCase().includes(query));
 
-    const matchesStatus = statusFilter === "all" || inv.status === statusFilter;
+    const matchesStatus = statusFilter === "all" || inv.currentStageId === statusFilter || inv.status === statusFilter;
     const matchesClient = clientFilter === "all" || inv.clientId === clientFilter;
 
     return matchesSearch && matchesStatus && matchesClient;
@@ -174,6 +217,11 @@ export default function Invoices() {
   };
 
   const handleCreateInvoice = () => {
+    if (!hasInvoiceAutomation()) {
+      toast.error("Please build an automation first before creating invoices. Navigate to Automation to configure workflow rules.");
+      navigate("/automation");
+      return;
+    }
     setEditingInvoice(null);
     setIsCreateDrawerOpen(true);
   };
@@ -201,35 +249,54 @@ export default function Invoices() {
     setOpenCardMenuId(null);
   };
 
-  const getStatusBadge = (status: InvoiceStatus) => {
-    switch (status) {
-      case "paid":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Paid</span>;
-      case "partial":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 font-bold whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Partial</span>;
-      case "sent":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Sent</span>;
-      case "viewed":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Viewed</span>;
-      case "overdue":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 font-bold whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Overdue</span>;
-      case "void":
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 line-through whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Void</span>;
-      default:
-        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Draft</span>;
+  const invoiceProcess = React.useMemo(() => {
+    const procs = getStoredProcesses();
+    return procs.find((p) => p.entityType === "invoice" || p.id === "billing" || p.id === "billing-invoicing") || DEFAULT_ENTITY_PROCESSES.invoice;
+  }, [storedProcesses, storeTick]);
+
+  const handleUpdateInvoiceStatus = (invoiceId: string, newStatusOrStageId: InvoiceStatus | string) => {
+    const stage = invoiceProcess.stages.find((s) => s.id === newStatusOrStageId || s.systemCategory === newStatusOrStageId);
+    if (stage) {
+      invoiceService.moveToStage(invoiceId, stage.id, { type: "manual", ruleName: `Stage changed to ${stage.name}` });
+      toast.success(`Invoice moved to ${stage.name} ✓`);
+    } else {
+      updateInvoiceStatus(invoiceId, newStatusOrStageId as InvoiceStatus);
     }
   };
 
-  const kanbanColumns: { id: InvoiceStatus; title: string; headerBg: string; badgeColor: string }[] = [
-    { id: "draft", title: "Draft", headerBg: "#181e25", badgeColor: "bg-slate-100 text-slate-800" },
-    { id: "sent", title: "Sent", headerBg: "#181e25", badgeColor: "bg-blue-50 text-[#1456f0]" },
-    { id: "viewed", title: "Viewed", headerBg: "#181e25", badgeColor: "bg-purple-50 text-purple-700" },
-    { id: "partial", title: "Partial", headerBg: "#f59e0b", badgeColor: "bg-amber-50 text-amber-800" },
-    { id: "paid", title: "Paid", headerBg: "#10b981", badgeColor: "bg-emerald-50 text-emerald-800" },
-    { id: "overdue", title: "Overdue", headerBg: "#ef4444", badgeColor: "bg-rose-50 text-rose-800" },
-    { id: "void", title: "Void", headerBg: "#64748b", badgeColor: "bg-slate-100 text-slate-600" },
-  ];
+  const getStatusBadge = (invOrStatus: ClientInvoice | InvoiceStatus) => {
+    const isObj = typeof invOrStatus === "object" && invOrStatus !== null;
+    const invoice = isObj ? (invOrStatus as ClientInvoice) : undefined;
+    const stageId = invoice ? invoice.currentStageId : undefined;
+    const statusVal = invoice ? invoice.status : (invOrStatus as InvoiceStatus);
+    const stage = invoiceProcess.stages.find((s) => s.id === stageId || s.systemCategory === statusVal);
+    const label: string = (invoice && invoice.statusLabel) ? invoice.statusLabel : (stage?.name || (typeof statusVal === "string" ? statusVal : "Draft"));
+    const color = stage?.color || "#64748B";
 
+    return (
+      <span
+        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
+        style={{
+          fontFamily: "Outfit, sans-serif",
+          backgroundColor: `${color}15`,
+          color: color,
+          border: `1px solid ${color}35`,
+        }}
+      >
+        {label}
+      </span>
+    );
+  };
+
+  const kanbanColumns = useMemo(() => {
+    return invoiceProcess.stages.map((stg) => ({
+      id: stg.id,
+      category: stg.systemCategory || "draft",
+      title: stg.name,
+      headerBg: stg.color || "#181e25",
+      badgeColor: "bg-slate-100 text-slate-800",
+    }));
+  }, [invoiceProcess]);
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
@@ -266,6 +333,17 @@ export default function Invoices() {
             <span className="text-[10px] shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{overdueCount > 0 ? "Needs action" : "All clear"}</span>
           </div>
         </div>
+        {!hasInvoiceAutomation() && (
+          <div className="flex items-center justify-between px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 shadow-2xs">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              Automated Invoicing is locked — please build the automation first in Automation to enable creating invoices and stage workflows.
+            </span>
+            <Link to="/automation" className="text-blue-600 hover:underline font-semibold text-xs ml-2">
+              Build automation &rarr;
+            </Link>
+          </div>
+        )}
 
         {/* View Mode Toggle & Filter Bar powered by PageTopBar */}
         <PageTopBar
@@ -321,58 +399,9 @@ export default function Invoices() {
               value: searchQuery,
               onChange: (val) => setSearchQuery(val || ""),
             },
-            {
-              id: "status",
-              label: "Invoice Status",
-              type: "select",
-              value: statusFilter,
-              onChange: (val) => setStatusFilter(val || "all"),
-              options: [
-                { label: "All Statuses", value: "all" },
-                { label: "Draft", value: "draft" },
-                { label: "Sent", value: "sent" },
-                { label: "Viewed", value: "viewed" },
-                { label: "Partial", value: "partial" },
-                { label: "Paid", value: "paid" },
-                { label: "Overdue", value: "overdue" },
-                { label: "Void", value: "void" },
-              ],
-            },
           ]}
           secondaryActions={
             <div className="flex items-center gap-2">
-              {/* Status Filter Dropdown */}
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="all">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="sent">Sent</option>
-                <option value="viewed">Viewed</option>
-                <option value="partial">Partial</option>
-                <option value="paid">Paid</option>
-                <option value="overdue">Overdue</option>
-                <option value="void">Void</option>
-              </select>
-
-              {/* Client Filter Dropdown */}
-              <select
-                value={clientFilter}
-                onChange={(e) => setClientFilter(e.target.value)}
-                className="h-[36px] px-2.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none max-w-[150px] truncate cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="all">All Clients</option>
-                {allClients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-
               {/* Record Payment Button */}
               <button
                 type="button"
@@ -389,11 +418,59 @@ export default function Invoices() {
               </button>
             </div>
           }
+          onExport={() => setShowExportModal(true)}
           primaryAction={{
             label: "Create Invoice",
             icon: <Plus className="w-3.5 h-3.5" />,
             onClick: handleCreateInvoice,
           }}
+          afterPrimaryAction={
+            <button
+              type="button"
+              onClick={() => {
+                navigate("/process?entity=invoice&processId=process-invoice-default", {
+                  state: { processId: "process-invoice-default", processName: invoiceProcess.name },
+                });
+              }}
+              className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+              title="Configure Invoice Workflow"
+            >
+              <SettingsIcon className="w-4 h-4" />
+            </button>
+          }
+        />
+
+        {/* Unified DataExportModal */}
+        <DataExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          title="Export Invoices"
+          subtitle="Export your billing and payment records with date range and status filters"
+          data={invoices}
+          filenamePrefix="invoices"
+          dateFieldKey="createdAt"
+          dateLabel="Invoice Date"
+          statusFieldKey="status"
+          statusLabel="Payment Status"
+          statusOptions={[
+            { label: "Paid", value: "paid" },
+            { label: "Overdue", value: "overdue" },
+            { label: "Sent", value: "sent" },
+            { label: "Draft", value: "draft" },
+            { label: "Partial", value: "partial" },
+          ]}
+          allFields={[
+            { key: "invoiceNumber", label: "Invoice Number", getValue: (i) => i.invoiceNumber || i.id },
+            { key: "clientName", label: "Client Name", getValue: (i) => i.clientName },
+            { key: "clientEmail", label: "Client Email", getValue: (i) => i.clientEmail || "" },
+            { key: "status", label: "Status", getValue: (i) => i.status },
+            { key: "total", label: "Total Amount", getValue: (i) => `$${i.total.toFixed(2)}` },
+            { key: "amountPaid", label: "Amount Paid", getValue: (i) => `$${(i.amountPaid || 0).toFixed(2)}` },
+            { key: "balance", label: "Balance Due", getValue: (i) => `$${(i.total - (i.amountPaid || 0)).toFixed(2)}` },
+            { key: "dueDate", label: "Due Date", getValue: (i) => i.dueDate || "" },
+            { key: "createdAt", label: "Created Date", getValue: (i) => (i.createdAt ? i.createdAt.split("T")[0] : "") },
+            { key: "paidAt", label: "Paid Date", getValue: (i) => (i.paidAt ? i.paidAt.split("T")[0] : "") },
+          ]}
         />
 
         {/* View Mode: List View (Connected seamlessly to Toolbar) */}
@@ -411,6 +488,22 @@ export default function Invoices() {
                     {inv.id}
                   </button>
                 ),
+              },
+              {
+                id: "processId",
+                header: "Process ID",
+                align: "left",
+                render: (inv) => {
+                  const procId = inv.processId || invoiceProcess.id || "PROC-INV-01";
+                  return (
+                    <span
+                      className="font-mono text-xs font-semibold text-slate-600 bg-slate-100/80 px-2 py-0.5 rounded border border-slate-200/60"
+                      style={{ fontFamily: "JetBrains Mono, monospace" }}
+                    >
+                      {procId}
+                    </span>
+                  );
+                },
               },
               {
                 id: "client",
@@ -450,16 +543,45 @@ export default function Invoices() {
                 id: "stage",
                 header: "Stage",
                 align: "center",
-                render: (inv) => (
-                  <div className="flex items-center justify-center">
-                    <InvoiceProgressBar
-                      status={inv.status}
-                      onStatusChange={(newSt) => updateInvoiceStatus(inv.id, newSt)}
-                      interactive={true}
-                      logId={inv.id}
-                    />
-                  </div>
-                ),
+                render: (inv) => {
+                  const stages = invoiceProcess.stages;
+                  const stageKey = (inv.currentStageId || "").trim();
+                  const matchedStage = stageKey
+                    ? stages.find(
+                        (s) =>
+                          s.id.toLowerCase() === stageKey.toLowerCase() ||
+                          s.name.toLowerCase() === stageKey.toLowerCase() ||
+                          (inv.statusLabel && s.name.toLowerCase() === inv.statusLabel.toLowerCase())
+                      )
+                    : (stages.find((s) => s.systemCategory === inv.status || (inv.statusLabel && s.name.toLowerCase() === inv.statusLabel.toLowerCase())) || stages[0]);
+
+                  if (!matchedStage) {
+                    return (
+                      <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/80 tracking-tight whitespace-nowrap"
+                          title="No stage marked — please build the automation first"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          Please build the automation first
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="flex items-center justify-center">
+                      <InvoiceProgressBar
+                        status={inv.status}
+                        currentStageId={inv.currentStageId || matchedStage.id}
+                        stages={invoiceProcess.stages}
+                        onStatusChange={(newSt) => handleUpdateInvoiceStatus(inv.id, newSt)}
+                        interactive={true}
+                        logId={inv.id}
+                      />
+                    </div>
+                  );
+                },
               },
               {
                 id: "dueDate",
@@ -596,7 +718,7 @@ export default function Invoices() {
               }}
             >
               {kanbanColumns.map((col) => {
-                const columnInvoices = filteredInvoices.filter((inv) => inv.status === col.id);
+                const columnInvoices = filteredInvoices.filter((inv) => inv.currentStageId === col.id || inv.status === col.category);
                 const columnTotal = columnInvoices.reduce((sum, i) => sum + i.total, 0);
 
                 return (
@@ -622,36 +744,26 @@ export default function Invoices() {
                       const targetInv = invoices.find((i) => i.id === draggedInvoiceId);
                       if (!targetInv) return;
 
-                      if (col.id === "overdue") {
+                      if (col.category === "overdue") {
                         toast.error("Overdue status is system-derived from due date and cannot be set manually.");
                         setDraggedInvoiceId(null);
                         return;
                       }
 
-                      if (col.id === "sent") {
+                      if (col.category === "sent") {
                         sendInvoice(targetInv.id, "whatsapp");
                         toast.success(`Invoice ${targetInv.id} sent via WhatsApp`);
-                      } else if (col.id === "paid") {
+                      } else if (col.category === "paid") {
                         const remaining = Math.max(0, targetInv.total - (targetInv.amountPaid || 0));
-                        recordPayment([
-                          {
-                            invoiceId: targetInv.id,
-                            clientId: targetInv.clientId,
-                            amount: remaining,
-                            method: "cash",
-                            paymentType: "self_pay",
-                            paymentDate: new Date().toISOString().split("T")[0],
-                            note: "Settled via Kanban drag-to-Paid",
-                          },
-                        ]);
-                        toast.success(`Invoice ${targetInv.id} remaining balance ($${remaining.toFixed(2)}) paid`);
-                      } else if (col.id === "partial") {
+                        invoiceService.recordPayment(targetInv.id, remaining, "cash", "Settled via Kanban drag-to-Paid");
+                        toast.success(`Invoice ${targetInv.id} balance ($${remaining.toFixed(2)}) paid`);
+                      } else if (col.category === "partially_paid") {
                         setPaymentModalInvoice(targetInv);
-                      } else if (col.id === "void") {
+                      } else if (col.category === "void") {
                         voidInvoice(targetInv.id);
                         toast.success(`Invoice ${targetInv.id} voided`);
                       } else {
-                        updateInvoiceStatus(targetInv.id, col.id);
+                        invoiceService.moveToStage(targetInv.id, col.id, { type: "manual", ruleName: `Kanban drag to ${col.title}` });
                         toast.success(`Invoice moved to ${col.title}`);
                       }
 
@@ -800,7 +912,9 @@ export default function Invoices() {
                                 <span style={{ fontSize: "11px", color: "#94A3B8", fontFamily: "Outfit, sans-serif" }}>Stage</span>
                                 <InvoiceProgressBar
                                   status={inv.status}
-                                  onStatusChange={(newSt) => updateInvoiceStatus(inv.id, newSt)}
+                                  currentStageId={inv.currentStageId}
+                                  stages={invoiceProcess.stages}
+                                  onStatusChange={(newSt) => handleUpdateInvoiceStatus(inv.id, newSt)}
                                   interactive={true}
                                   logId={inv.id}
                                 />
@@ -839,7 +953,11 @@ export default function Invoices() {
       <InvoiceDetailDrawer
         isOpen={isDetailDrawerOpen}
         onClose={() => setIsDetailDrawerOpen(false)}
-        invoice={selectedInvoice}
+        invoice={
+          selectedInvoice
+            ? invoices.find((i) => i.id === selectedInvoice.id) || selectedInvoice
+            : null
+        }
         onOpenDocument={(inv) => {
           setIsDetailDrawerOpen(false);
           handleOpenDocument(inv);
@@ -885,6 +1003,7 @@ export default function Invoices() {
           preSelectedInvoiceId={paymentModalInvoice?.id || null}
         />
       )}
+
     </div>
   );
 }

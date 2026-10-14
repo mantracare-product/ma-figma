@@ -47,11 +47,20 @@ export function AdminSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const selectedOption = options.find((opt) => opt.value === value);
+  const selectedOption = options.find((opt) => opt.value === value || opt.label === value);
 
   const sizeClasses = size === "sm"
     ? "px-2.5 py-1.5 text-xs rounded-lg min-h-[32px]"
     : "px-3.5 py-2 text-xs font-medium rounded-lg min-h-[38px]";
+
+  const formatLabel = (lbl: any): string => {
+    if (lbl === null || lbl === undefined) return "";
+    if (typeof lbl === "object") {
+      return lbl.name || lbl.label || lbl.title || (Array.isArray(lbl) ? lbl.map(formatLabel).join(", ") : "");
+    }
+    const s = String(lbl);
+    return s === "[object Object]" ? "" : s;
+  };
 
   const hasWidth = /\bw-\S+/.test(className);
 
@@ -59,7 +68,7 @@ export function AdminSelect({
 
   const filteredOptions = searchQuery.trim()
     ? options.filter((o) =>
-        o.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        formatLabel(o.label).toLowerCase().includes(searchQuery.toLowerCase()) ||
         String(o.value).toLowerCase().includes(searchQuery.toLowerCase()) ||
         (o.badge && o.badge.toLowerCase().includes(searchQuery.toLowerCase()))
       )
@@ -85,8 +94,8 @@ export function AdminSelect({
               {selectedOption?.icon && (
                 <span className="shrink-0 text-slate-500">{selectedOption.icon}</span>
               )}
-              <span className={`truncate text-left ${selectedOption ? "text-slate-800 font-medium" : "text-slate-400 font-normal"}`}>
-                {selectedOption ? selectedOption.label : placeholder}
+              <span className={`truncate text-left ${selectedOption || value ? "text-slate-800 font-medium" : "text-slate-400 font-normal"}`}>
+                {selectedOption ? formatLabel(selectedOption.label) : (formatLabel(value) || placeholder)}
               </span>
               {selectedOption?.badge && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-mono shrink-0">
@@ -149,7 +158,7 @@ export function AdminSelect({
                   >
                     <div className="flex items-center gap-1.5 min-w-0 pr-2">
                       {opt.icon && <span className="shrink-0 text-slate-500">{opt.icon}</span>}
-                      <span className="truncate leading-normal">{opt.label}</span>
+                      <span className="truncate leading-normal">{formatLabel(opt.label)}</span>
                       {tooltipText && (
                         <span
                           className="inline-flex shrink-0 ml-0.5"

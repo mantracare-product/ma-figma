@@ -11,6 +11,7 @@ import {
 import Button from "../components/ui/Button";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
+import { DataExportModal } from "../components/common/DataExportModal";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import {
   Claim,
@@ -39,6 +40,7 @@ export default function Claims() {
   const [activeSubmissionClaim, setActiveSubmissionClaim] = useState<Claim | null>(null);
   const [activeStatusClaim, setActiveStatusClaim] = useState<Claim | null>(null);
   const [activeCMS1500Claim, setActiveCMS1500Claim] = useState<Claim | null>(null);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Load claims
   const refreshClaims = () => {
@@ -307,6 +309,7 @@ export default function Claims() {
               </select>
             </div>
           }
+          onExport={() => setShowExportModal(true)}
           primaryAction={{
             label: "Create Claim",
             icon: <Plus className="w-4 h-4" />,
@@ -315,6 +318,37 @@ export default function Claims() {
               setIsCreateDrawerOpen(true);
             },
           }}
+        />
+
+        {/* Unified DataExportModal */}
+        <DataExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          title="Export Claims"
+          subtitle="Export 837P and CMS-1500 insurance claims with payer, diagnosis, and billing details"
+          data={claims}
+          filenamePrefix="insurance_claims"
+          dateFieldKey="serviceDate"
+          dateLabel="Service Date"
+          statusFieldKey="status"
+          statusLabel="Claim Status"
+          statusOptions={[
+            { label: "Ready to Submit", value: "ready" },
+            { label: "Submitted", value: "submitted" },
+            { label: "Paid", value: "paid" },
+            { label: "Draft", value: "draft" },
+          ]}
+          allFields={[
+            { key: "claimNumber", label: "Claim #", getValue: (c) => c.claimNumber },
+            { key: "patientName", label: "Client / Patient", getValue: (c) => c.patientName },
+            { key: "insurancePayer", label: "Insurance Payer", getValue: (c) => c.payer?.name || "" },
+            { key: "policyNumber", label: "Policy #", getValue: (c) => c.insuredId || "" },
+            { key: "serviceDate", label: "Service Date", getValue: (c) => c.serviceDate },
+            { key: "totalAmount", label: "Total Billed", getValue: (c) => `$${(c.totalCharge || 0).toFixed(2)}` },
+            { key: "status", label: "Status", getValue: (c) => c.status },
+            { key: "cptCodes", label: "CPT Codes", getValue: (c) => (c.lines || []).map((x) => x.cptCode).join("; ") },
+            { key: "icd10Codes", label: "ICD-10 Diagnoses", getValue: (c) => (c.diagnosisCodes || []).map((x) => x.code).join("; ") },
+          ]}
         />
 
         {/* Claims Table View Connected with TableComponent */}

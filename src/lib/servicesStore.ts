@@ -22,6 +22,7 @@ export interface Service {
   assignedEmployees?: (number | string)[];
   createdAt?: string;
   activity?: string;
+  color?: string;
   customFields?: Record<string, any>;
 }
 

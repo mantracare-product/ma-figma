@@ -6,9 +6,18 @@ import { Settings2, Shield, Check, Info } from "lucide-react";
 interface InvoiceFieldConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
-  rule: InvoiceFieldRule;
-  onSave: (updatedRule: InvoiceFieldRule) => void;
+  rule?: InvoiceFieldRule;
+  onSave?: (updatedRule: InvoiceFieldRule) => void;
 }
+
+const DEFAULT_FALLBACK_RULE: InvoiceFieldRule = {
+  fieldKey: "paymentMode",
+  fieldName: "Payment mode",
+  requiredAtStage: "sent",
+  showAlways: false,
+  enableTooltip: false,
+  visibleToUserIds: [],
+};
 
 const MOCK_USERS = [
   { id: "u-1", name: "John Smith", role: "Senior Agent" },
@@ -21,20 +30,31 @@ const MOCK_USERS = [
 export default function InvoiceFieldConfigModal({
   isOpen,
   onClose,
-  rule,
+  rule = DEFAULT_FALLBACK_RULE,
   onSave,
 }: InvoiceFieldConfigModalProps) {
+  const activeRule = rule || DEFAULT_FALLBACK_RULE;
   const [requiredAtStage, setRequiredAtStage] = useState<RequiredStage>(
-    rule.requiredAtStage || "sent"
+    activeRule.requiredAtStage || "sent"
   );
-  const [showAlways, setShowAlways] = useState<boolean>(rule.showAlways || false);
-  const [enableTooltip, setEnableTooltip] = useState<boolean>(rule.enableTooltip || false);
+  const [showAlways, setShowAlways] = useState<boolean>(activeRule.showAlways || false);
+  const [enableTooltip, setEnableTooltip] = useState<boolean>(activeRule.enableTooltip || false);
   const [restrictUserVisibility, setRestrictUserVisibility] = useState<boolean>(
-    (rule.visibleToUserIds && rule.visibleToUserIds.length > 0) || false
+    (activeRule.visibleToUserIds && activeRule.visibleToUserIds.length > 0) || false
   );
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>(
-    rule.visibleToUserIds || []
+    activeRule.visibleToUserIds || []
   );
+
+  React.useEffect(() => {
+    if (rule) {
+      setRequiredAtStage(rule.requiredAtStage || "sent");
+      setShowAlways(rule.showAlways || false);
+      setEnableTooltip(rule.enableTooltip || false);
+      setRestrictUserVisibility((rule.visibleToUserIds && rule.visibleToUserIds.length > 0) || false);
+      setSelectedUserIds(rule.visibleToUserIds || []);
+    }
+  }, [rule]);
 
   const toggleUser = (userId: string) => {
     setSelectedUserIds((prev) =>
@@ -43,15 +63,19 @@ export default function InvoiceFieldConfigModal({
   };
 
   const handleSave = () => {
-    onSave({
-      ...rule,
-      requiredAtStage,
-      showAlways,
-      enableTooltip,
-      visibleToUserIds: restrictUserVisibility ? selectedUserIds : [],
-    });
+    if (onSave) {
+      onSave({
+        ...activeRule,
+        requiredAtStage,
+        showAlways,
+        enableTooltip,
+        visibleToUserIds: restrictUserVisibility ? selectedUserIds : [],
+      });
+    }
     onClose();
   };
+
+  if (!isOpen) return null;
 
   return (
     <Modal

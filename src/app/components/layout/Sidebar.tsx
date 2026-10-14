@@ -419,7 +419,7 @@ export default function Sidebar() {
     return config.sections
       .map((sec) => ({
         id: sec.id,
-        title: sec.id === "billing" ? "REVENUE & INSIGHTS" : sec.title,
+        title: sec.id === "billing" ? "REVENUE & INSIGHTS" : sec.id === "automation" ? "CUSTOMIZATIONS" : sec.title,
         items: sec.items
           .filter((item) => item.visible)
           .map((item) => ({
@@ -585,6 +585,13 @@ export default function Sidebar() {
     });
   }, [location.pathname, location.search, sections]);
 
+  // Auto-collapse sidebar when navigating to workflow page if currently expanded
+  useEffect(() => {
+    if (location.pathname.startsWith("/process") || location.pathname.startsWith("/workflows")) {
+      setCollapsed(true);
+    }
+  }, [location.pathname, setCollapsed]);
+
   return (
     <aside
       className={`h-full bg-white border-r border-gray-200/90 flex flex-col shrink-0 select-none transition-[width] duration-300 ease-in-out z-30 relative ${
@@ -694,7 +701,7 @@ export default function Sidebar() {
             {config.sections.map((section) => (
               <div key={section.id} className="space-y-1.5">
                 <div className="px-1 text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                  <span>{section.id === "billing" ? "REVENUE & INSIGHTS" : section.title}</span>
+                  <span>{section.id === "billing" ? "REVENUE & INSIGHTS" : section.id === "automation" ? "CUSTOMIZATIONS" : section.title}</span>
                 </div>
 
                 <div className="space-y-1">

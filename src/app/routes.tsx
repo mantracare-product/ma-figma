@@ -10,6 +10,7 @@ import CallLogs from "./pages/CallLogs";
 import CallDetails from "./pages/CallDetails";
 import Deals from "./pages/Deals";
 import Process from "./pages/Process";
+import Automation from "./pages/Automation";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import WebForms from "./pages/WebForms";
 import NewFormTemplate from "./pages/NewFormTemplate";
@@ -37,8 +38,80 @@ import Claims from "./pages/Claims";
 import AdminCustomFields from "./pages/admin/AdminCustomFields";
 import AdminIndustries from "./pages/admin/AdminIndustries";
 import AdminProcessTemplates from "./pages/admin/AdminProcessTemplates";
+import { AvatarReceptionView } from "../reception/avatar/AvatarReceptionView";
+import AdminAutomations from "./pages/admin/AdminAutomations";
+import AdminDocumentTemplates from "./pages/admin/AdminDocumentTemplates";
+import PatientPortalLayout from "./pages/patient/PatientPortalLayout";
+import PatientStatusScreen from "./pages/patient/PatientStatusScreen";
+import PatientBookingScreen from "./pages/patient/PatientBookingScreen";
+import PatientPharmacyScreen from "./pages/patient/PatientPharmacyScreen";
+import PatientBillScreen from "./pages/patient/PatientBillScreen";
+import PatientPaymentScreen from "./pages/patient/PatientPaymentScreen";
+import PatientLoginScreen from "./pages/patient/PatientLoginScreen";
+import PatientDocumentsScreen from "./pages/patient/PatientDocumentsScreen";
+import AdminAIVoicesModels from "./pages/admin/AdminAIVoicesModels";
 
 export const router = createBrowserRouter([
+  {
+    path: "/reception",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/landing",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/appointment",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/walk-in",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/billing",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/billing/:subStep",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/directions",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/directions/:categoryId",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/directions/:categoryId/:roomId",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/my-visit",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/reception/avatar",
+    Component: AvatarReceptionView,
+  },
+  {
+    path: "/patient",
+    Component: PatientPortalLayout,
+    children: [
+      { index: true, Component: PatientStatusScreen },
+      { path: "login", Component: PatientLoginScreen },
+      { path: "status", Component: PatientStatusScreen },
+      { path: "checkin", Component: PatientStatusScreen },
+      { path: "book", Component: PatientBookingScreen },
+      { path: "documents", Component: PatientDocumentsScreen },
+      { path: "pharmacy", Component: PatientPharmacyScreen },
+      { path: "bill", Component: PatientBillScreen },
+      { path: "pay", Component: PatientPaymentScreen },
+      { path: ":clientId", Component: PatientStatusScreen },
+    ],
+  },
   {
     path: "/login",
     Component: Login,
@@ -67,6 +140,7 @@ export const router = createBrowserRouter([
           { path: "call-logs/:id", Component: CallDetails },
           { path: "deals", Component: Deals },
           { path: "process", Component: Process },
+          { path: "automation", Component: Automation },
           { path: "knowledge-base", Component: KnowledgeBase },
           { path: "web-forms", Component: WebForms },
           { path: "web-forms/new", Component: NewFormTemplate },
@@ -107,8 +181,17 @@ export const router = createBrowserRouter([
           { path: "industries", Component: AdminIndustries },
           { path: "industry", Component: AdminIndustries },
           { path: "industry-category", Component: AdminIndustries },
+          { path: "workflows", Component: AdminProcessTemplates },
+          { path: "workflow", Component: AdminProcessTemplates },
           { path: "process-templates", Component: AdminProcessTemplates },
           { path: "process-template", Component: AdminProcessTemplates },
+          { path: "automations", Component: AdminAutomations },
+          { path: "automation", Component: AdminAutomations },
+          { path: "ai-voices-models", Component: AdminAIVoicesModels },
+          { path: "ai-voices", Component: AdminAIVoicesModels },
+          { path: "voice-config", Component: AdminAIVoicesModels },
+          { path: "document-templates", Component: AdminDocumentTemplates },
+          { path: "document-template", Component: AdminDocumentTemplates },
           { path: "users", Component: UserManagement },
           { path: "organizations", Component: Organizations },
           { path: "forms", Component: WebForms },

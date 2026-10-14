@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import DrawerShell from "../ui/DrawerShell";
+import { useNavigate } from "react-router";
 import {
   Settings,
   Zap,
@@ -17,11 +18,19 @@ import {
   Mic,
   RefreshCw,
   PhoneForwarded,
+  PhoneCall,
+  Voicemail,
   Trash2,
+  Volume2,
+  Play,
+  Bot,
+  Sparkles,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
 import { CallTriggerSettings, TransferNumberItem, getDefaultCallTriggerSettings } from "../../../lib/useProcessStore";
+import { getActiveAIModels, AI_MODELS_STORE_EVENT, AIModelConfig } from "../../../lib/aiModelsStore";
+import { getStoredVoices, VoiceConfigItem, VOICE_STORE_EVENT } from "../../../lib/useVoiceStore";
 
 export interface CallTriggerSaveOptions {
   setAsDefault?: boolean;
@@ -34,6 +43,7 @@ export interface CallTriggerDrawerProps {
   stageName?: string;
   processName?: string;
   settings?: CallTriggerSettings;
+  inboundNumbers?: string[];
   onSave?: (settings: CallTriggerSettings, options?: CallTriggerSaveOptions) => void;
 }
 
@@ -48,6 +58,17 @@ const DEFAULT_SETTINGS: CallTriggerSettings = {
   customTimezone: "America/New_York",
   skipDays: ["Saturday", "Sunday"],
   blackoutDates: [],
+  callingNumber: "+1 (555) 123-4567",
+  callingNumbers: ["+1 (555) 123-4567"],
+  recordCalls: true,
+  callDurationMinutes: 15,
+  hangupWindowMinutes: 2,
+  detectVoicemail: true,
+  aiModel: "Gemini 2.5 Flash",
+  aiVoiceSpeed: 1.0,
+  aiVoice: "Ava",
+  aiTone: "Professional",
+  aiStyle: "Balanced",
 };
 
 const WEEKDAYS = [
@@ -82,13 +103,23 @@ export default function CallTriggerDrawer({
   stageName,
   processName,
   settings,
+  inboundNumbers,
   onSave,
 }: CallTriggerDrawerProps) {
+  const availableNumbers = inboundNumbers && inboundNumbers.length > 0
+    ? inboundNumbers
+    : ["+1 (555) 123-4567", "+1 (555) 987-6543", "+1 (555) 555-1234"];
+
   // Collapsible dropdown states
+  const navigate = useNavigate();
+  const [callingNumberDropdownOpen, setCallingNumberDropdownOpen] = useState(true);
   const [triggerDropdownOpen, setTriggerDropdownOpen] = useState(true);
-  const [callingHoursDropdownOpen, setCallingHoursDropdownOpen] = useState(true);
-  const [skipDaysDropdownOpen, setSkipDaysDropdownOpen] = useState(true);
+  const [callingHoursDropdownOpen, setCallingHoursDropdownOpen] = useState(false);
+  const [skipDaysDropdownOpen, setSkipDaysDropdownOpen] = useState(false);
   const [callDurationDropdownOpen, setCallDurationDropdownOpen] = useState(false);
+  const [recordCallsDropdownOpen, setRecordCallsDropdownOpen] = useState(false);
+  const [detectVoicemailDropdownOpen, setDetectVoicemailDropdownOpen] = useState(false);
+  const [aiModelDropdownOpen, setAiModelDropdownOpen] = useState(false);
   const [retryRulesDropdownOpen, setRetryRulesDropdownOpen] = useState(false);
   const [transferCallDropdownOpen, setTransferCallDropdownOpen] = useState(false);
   const [scopeDropdownOpen, setScopeDropdownOpen] = useState(false);
@@ -98,6 +129,7 @@ export default function CallTriggerDrawer({
   const [applyToCurrentProcess, setApplyToCurrentProcess] = useState(false);
 
   // Form states initialized from props or defaults
+  const [callingNumber, setCallingNumber] = useState<string>("+1 (555) 123-4567");
   const [timingType, setTimingType] = useState<"immediate" | "wait">("immediate");
   const [waitDuration, setWaitDuration] = useState<number>(15);
   const [waitUnit, setWaitUnit] = useState<"minutes" | "hours" | "days" | "weeks" | "months">("minutes");
@@ -112,9 +144,47 @@ export default function CallTriggerDrawer({
   const [recordCalls, setRecordCalls] = useState<boolean>(true);
   const [callDurationMinutes, setCallDurationMinutes] = useState<number>(15);
   const [hangupWindowMinutes, setHangupWindowMinutes] = useState<number>(2);
+  const [detectVoicemail, setDetectVoicemail] = useState<boolean>(true);
   const [retryRulesEnabled, setRetryRulesEnabled] = useState<boolean>(false);
   const [retryAttempts, setRetryAttempts] = useState<number>(3);
   const [retryDelay, setRetryDelay] = useState<number>(5);
+
+  // AI Model Settings states
+  const [selectedAIModel, setSelectedAIModel] = useState<string>("Gemini 2.5 Flash");
+  const [stageVoiceSpeed, setStageVoiceSpeed] = useState<number>(1.0);
+  const [stageVoice, setStageVoice] = useState<string>("Nova");
+  const [stageTone, setStageTone] = useState<string>("Professional");
+  const [stageStyle, setStageStyle] = useState<string>("Balanced");
+  const [activeAIModels, setActiveAIModels] = useState<AIModelConfig[]>(getActiveAIModels);
+  const [configuredVoices, setConfiguredVoices] = useState<VoiceConfigItem[]>(getStoredVoices);
+
+  const activeConfiguredVoices = useMemo(() => {
+    return configuredVoices.filter(
+      (v) => (v.status === true || (v as any).status === "active") && v.clientEnabled !== false
+    );
+  }, [configuredVoices]);
+
+  useEffect(() => {
+    const handleVoiceUpdate = () => setConfiguredVoices(getStoredVoices());
+    const handleModelUpdate = () => setActiveAIModels(getActiveAIModels());
+    window.addEventListener(VOICE_STORE_EVENT, handleVoiceUpdate);
+    window.addEventListener(AI_MODELS_STORE_EVENT, handleModelUpdate);
+    window.addEventListener("storage", handleVoiceUpdate);
+    window.addEventListener("storage", handleModelUpdate);
+    return () => {
+      window.removeEventListener(VOICE_STORE_EVENT, handleVoiceUpdate);
+      window.removeEventListener(AI_MODELS_STORE_EVENT, handleModelUpdate);
+      window.removeEventListener("storage", handleVoiceUpdate);
+      window.removeEventListener("storage", handleModelUpdate);
+    };
+  }, []);
+
+  // Ensure stageVoice stays pointing to an enabled voice
+  useEffect(() => {
+    if (activeConfiguredVoices.length > 0 && !activeConfiguredVoices.some((v) => v.name === stageVoice)) {
+      setStageVoice(activeConfiguredVoices[0].name);
+    }
+  }, [activeConfiguredVoices, stageVoice]);
 
   // Transfer Call states
   const [transferCallEnabled, setTransferCallEnabled] = useState<boolean>(false);
@@ -132,6 +202,12 @@ export default function CallTriggerDrawer({
   useEffect(() => {
     if (isOpen) {
       const current = settings || getDefaultCallTriggerSettings() || DEFAULT_SETTINGS;
+      setCallingNumber(
+        current.callingNumber ||
+        (current.callingNumbers && current.callingNumbers[0]) ||
+        availableNumbers[0] ||
+        "+1 (555) 123-4567"
+      );
       setTimingType(current.timingType ?? "immediate");
       setWaitDuration(current.waitDuration ?? 15);
       setWaitUnit(current.waitUnit ?? "minutes");
@@ -142,6 +218,16 @@ export default function CallTriggerDrawer({
       setRecordCalls(current.recordCalls !== undefined ? current.recordCalls : true);
       setCallDurationMinutes(current.callDurationMinutes ?? 15);
       setHangupWindowMinutes(current.hangupWindowMinutes ?? 2);
+      setDetectVoicemail(current.detectVoicemail !== undefined ? current.detectVoicemail : true);
+      setSelectedAIModel(current.aiModel || current.aiSettings?.platform || "Gemini 2.5 Flash");
+      setStageVoiceSpeed(current.aiVoiceSpeed ?? current.aiSettings?.voiceSpeed ?? 1.0);
+      const chosenVoice = current.aiVoice || current.aiSettings?.voice;
+      const validVoice = chosenVoice && activeConfiguredVoices.some((v) => v.name === chosenVoice)
+        ? chosenVoice
+        : (activeConfiguredVoices[0]?.name || chosenVoice || "Atlas");
+      setStageVoice(validVoice);
+      setStageTone(current.aiTone || current.aiSettings?.tone || "Professional");
+      setStageStyle(current.aiStyle || current.aiSettings?.style || "Balanced");
       setRetryRulesEnabled(current.retryRulesEnabled ?? false);
       setRetryAttempts(current.retryAttempts ?? 3);
       setRetryDelay(current.retryDelay ?? 5);
@@ -270,9 +356,12 @@ export default function CallTriggerDrawer({
       customTimezone: settings?.customTimezone ?? "America/New_York",
       skipDays,
       blackoutDates,
+      callingNumber,
+      callingNumbers: [callingNumber],
       recordCalls,
       callDurationMinutes: Number(callDurationMinutes) || 15,
       hangupWindowMinutes: Number(hangupWindowMinutes) || 2,
+      detectVoicemail,
       retryRulesEnabled,
       retryAttempts: Number(retryAttempts) || 3,
       retryDelay: Number(retryDelay) || 5,
@@ -286,6 +375,18 @@ export default function CallTriggerDrawer({
       transferPhoneNumber: primaryItem?.phoneNumber || "",
       transferVoiceResponse,
       transferReason,
+      aiModel: selectedAIModel,
+      aiVoiceSpeed: stageVoiceSpeed,
+      aiVoice: stageVoice,
+      aiTone: stageTone,
+      aiStyle: stageStyle,
+      aiSettings: {
+        platform: selectedAIModel,
+        voiceSpeed: stageVoiceSpeed,
+        voice: stageVoice,
+        tone: stageTone,
+        style: stageStyle,
+      },
     };
 
     if (onSave) {
@@ -296,6 +397,7 @@ export default function CallTriggerDrawer({
 
   const handleResetDefaults = () => {
     const defaults = getDefaultCallTriggerSettings() || DEFAULT_SETTINGS;
+    setCallingNumber(defaults.callingNumber || availableNumbers[0] || "+1 (555) 123-4567");
     setTimingType(defaults.timingType);
     setWaitDuration(defaults.waitDuration);
     setWaitUnit(defaults.waitUnit);
@@ -306,6 +408,16 @@ export default function CallTriggerDrawer({
     setRecordCalls(defaults.recordCalls !== undefined ? defaults.recordCalls : true);
     setCallDurationMinutes(defaults.callDurationMinutes ?? 15);
     setHangupWindowMinutes(defaults.hangupWindowMinutes ?? 2);
+    setDetectVoicemail(defaults.detectVoicemail !== undefined ? defaults.detectVoicemail : true);
+    setSelectedAIModel(defaults.aiModel || defaults.aiSettings?.platform || "Gemini 2.5 Flash");
+    setStageVoiceSpeed(defaults.aiVoiceSpeed ?? defaults.aiSettings?.voiceSpeed ?? 1.0);
+    const chosenDefaultVoice = defaults.aiVoice || defaults.aiSettings?.voice;
+    const validDefault = chosenDefaultVoice && activeConfiguredVoices.some((v) => v.name === chosenDefaultVoice)
+      ? chosenDefaultVoice
+      : (activeConfiguredVoices[0]?.name || chosenDefaultVoice || "Atlas");
+    setStageVoice(validDefault);
+    setStageTone(defaults.aiTone || defaults.aiSettings?.tone || "Professional");
+    setStageStyle(defaults.aiStyle || defaults.aiSettings?.style || "Balanced");
     setRetryRulesEnabled(defaults.retryRulesEnabled ?? false);
     setRetryAttempts(defaults.retryAttempts ?? 3);
     setRetryDelay(defaults.retryDelay ?? 5);
@@ -366,6 +478,97 @@ export default function CallTriggerDrawer({
       }
     >
       <div className="space-y-4">
+        {/* DROPDOWN: Calling Numbers */}
+        <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+          <button
+            type="button"
+            onClick={() => setCallingNumberDropdownOpen(!callingNumberDropdownOpen)}
+            className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
+                <PhoneCall className="w-4 h-4" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="text-sm font-bold text-[#222222]"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  Calling Numbers
+                </span>
+                <Tooltip text="The integrated number the AI agent will use to initiate or receive calls in this stage.">
+                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                </Tooltip>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {callingNumber || "Default"}
+              </span>
+              <ChevronDown
+                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                  callingNumberDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </div>
+          </button>
+
+          {callingNumberDropdownOpen && (
+            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3">
+              <div>
+                <label
+                  className="block text-xs font-semibold text-slate-700 mb-1.5"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  Integrated Number (Source)
+                </label>
+                <div className="space-y-2">
+                  {availableNumbers.map((num) => {
+                    const isSelected = callingNumber === num;
+                    return (
+                      <div
+                        key={num}
+                        onClick={() => setCallingNumber(num)}
+                        className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                          isSelected
+                            ? "border-primary bg-primary/5 shadow-xs"
+                            : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`w-4 h-4 rounded-full flex items-center justify-center border transition-all ${
+                              isSelected
+                                ? "border-primary bg-primary"
+                                : "border-slate-300 bg-white"
+                            }`}
+                          >
+                            {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          </div>
+                          <span
+                            className="text-sm font-medium text-slate-900 font-mono"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            {num}
+                          </span>
+                        </div>
+                        {isSelected && (
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* DROPDOWN 1: Trigger Call Timing */}
         <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
           <button
@@ -564,6 +767,488 @@ export default function CallTriggerDrawer({
                     className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900 transition-colors"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* DROPDOWN: Call Duration */}
+        <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+          <button
+            type="button"
+            onClick={() => setCallDurationDropdownOpen(!callDurationDropdownOpen)}
+            className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
+                <Clock className="w-4 h-4" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="text-sm font-bold text-[#222222]"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  Call Duration
+                </span>
+                <Tooltip text="Set the maximum call length and when the AI should start wrapping up the conversation.">
+                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                </Tooltip>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {callDurationMinutes} min
+              </span>
+              <ChevronDown
+                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                  callDurationDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </div>
+          </button>
+
+          {callDurationDropdownOpen && (
+            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label
+                      className="text-xs font-semibold text-slate-700"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      Call Duration (min)
+                    </label>
+                    <Tooltip text="Maximum call duration allowed before the call automatically wraps up.">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                    </Tooltip>
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={callDurationMinutes}
+                    onChange={(e) => {
+                      const val = Math.max(1, parseInt(e.target.value) || 1);
+                      setCallDurationMinutes(val);
+                      if (hangupWindowMinutes >= val) {
+                        setHangupWindowMinutes(Math.max(1, val - 1));
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900 transition-colors"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label
+                      className="text-xs font-semibold text-slate-700"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      Hangup Window
+                    </label>
+                    <Tooltip text="During the last X minutes of total call duration, the AI proactively wraps up gracefully.">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                    </Tooltip>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Last
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={Math.max(1, callDurationMinutes - 1)}
+                      value={hangupWindowMinutes}
+                      onChange={(e) => {
+                        const val = Math.max(1, parseInt(e.target.value) || 1);
+                        if (val >= callDurationMinutes) {
+                          toast.error(`Hangup window must be less than call duration (${callDurationMinutes} min)`);
+                          return;
+                        }
+                        setHangupWindowMinutes(val);
+                      }}
+                      className="flex-1 px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900 transition-colors"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    />
+                    <span className="text-xs text-slate-500 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      {hangupWindowMinutes === 1 ? "min" : "mins"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* DROPDOWN: Record Calls */}
+        <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+          <button
+            type="button"
+            onClick={() => setRecordCallsDropdownOpen(!recordCallsDropdownOpen)}
+            className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
+                <Mic className="w-4 h-4" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="text-sm font-bold text-[#222222]"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  Record Calls
+                </span>
+                <Tooltip text="Enable automated audio recording and AI transcription for calls in this stage.">
+                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                </Tooltip>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  recordCalls
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-slate-100 text-slate-500"
+                }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {recordCalls ? "On" : "Off"}
+              </span>
+              <ChevronDown
+                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                  recordCallsDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </div>
+          </button>
+
+          {recordCallsDropdownOpen && (
+            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-xs font-bold text-slate-900"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    Enable Call Recording
+                  </span>
+                  <Tooltip text="Audio recordings and transcripts are saved securely with the contact record.">
+                    <Info className="w-3 h-3 text-slate-400 cursor-help" />
+                  </Tooltip>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={recordCalls}
+                    onChange={(e) => setRecordCalls(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                </label>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Ensure compliance with local call recording and privacy laws in your territory.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* DROPDOWN: Detect Voicemail */}
+        <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+          <button
+            type="button"
+            onClick={() => setDetectVoicemailDropdownOpen(!detectVoicemailDropdownOpen)}
+            className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
+                <Voicemail className="w-4 h-4" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="text-sm font-bold text-[#222222]"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  Detect Voicemail
+                </span>
+                <Tooltip text="Detect answering machines or voicemail inboxes and take appropriate actions.">
+                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                </Tooltip>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  detectVoicemail
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-slate-100 text-slate-500"
+                }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {detectVoicemail ? "On" : "Off"}
+              </span>
+              <ChevronDown
+                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                  detectVoicemailDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </div>
+          </button>
+
+          {detectVoicemailDropdownOpen && (
+            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-xs font-bold text-slate-900"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    Enable Voicemail Detection
+                  </span>
+                  <Tooltip text="This allows AI to detect if caller is on voicemail and disconnect or leave a voice note.">
+                    <Info className="w-3 h-3 text-slate-400 cursor-help" />
+                  </Tooltip>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={detectVoicemail}
+                    onChange={(e) => setDetectVoicemail(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                </label>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
+                When enabled, the AI will not waste call time speaking to answering machine greetings.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* DROPDOWN: AI Model & Voice Settings */}
+        <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+          <button
+            type="button"
+            onClick={() => setAiModelDropdownOpen(!aiModelDropdownOpen)}
+            className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
+                <Bot className="w-4 h-4" />
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="text-sm font-bold text-[#222222]"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    AI Model & Voice Settings
+                  </span>
+                  <Tooltip text="Fine-tune the technical execution of the AI agent's LLM model, voice personality, speed, tone, and conversational style.">
+                    <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                  </Tooltip>
+                </div>
+                {!aiModelDropdownOpen && (
+                  <span className="text-xs text-slate-500 font-medium truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {selectedAIModel} · {stageVoice} ({stageVoiceSpeed.toFixed(1)}x) · {stageTone}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {selectedAIModel}
+              </span>
+              <ChevronDown
+                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                  aiModelDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </div>
+          </button>
+
+          {aiModelDropdownOpen && (
+            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-5">
+              {/* Row 1: AI Model & Speech Speed */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                {/* AI Model */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-blue-500 font-mono font-bold text-xs leading-none">&gt;_</span>
+                    <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      AI Model
+                    </span>
+                    <Tooltip text="Select the underlying LLM that powers conversational logic.">
+                      <Info className="w-3 h-3 text-slate-400 cursor-help" />
+                    </Tooltip>
+                  </div>
+                  <div className="relative">
+                    <select
+                      value={selectedAIModel}
+                      onChange={(e) => {
+                        if (e.target.value === "__view_more_models__") {
+                          navigate("/settings?tab=voice-config&sub=models");
+                          return;
+                        }
+                        setSelectedAIModel(e.target.value);
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl appearance-none text-xs font-medium text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-8 cursor-pointer shadow-2xs"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {activeAIModels.map((m) => (
+                        <option key={m.id} value={m.name}>
+                          {m.name} ({m.provider})
+                        </option>
+                      ))}
+                      <option disabled value="">──────────</option>
+                      <option value="__view_more_models__" className="text-blue-600 font-semibold">
+                        Choose from library →
+                      </option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Speech Speed */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Volume2 className="w-3.5 h-3.5 text-amber-500" />
+                      <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Speech Speed
+                      </span>
+                    </div>
+                    <span className="text-xs font-semibold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      {stageVoiceSpeed.toFixed(1)}x
+                    </span>
+                  </div>
+                  <div className="space-y-1 pt-1">
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="1.5"
+                      step="0.1"
+                      value={stageVoiceSpeed}
+                      onChange={(e) => setStageVoiceSpeed(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 tracking-wider">
+                      <span>SLOW</span>
+                      <span>NATURAL</span>
+                      <span>FAST</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Voice Engine, Tone, Style */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-3 border-t border-slate-200/60 items-start">
+                {/* Voice Engine */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Mic className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Voice Engine
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="relative flex-1">
+                      <select
+                        value={stageVoice}
+                        onChange={(e) => {
+                          if (e.target.value === "__view_more_voices__") {
+                            navigate("/settings?tab=voice-config&sub=voices");
+                            return;
+                          }
+                          setStageVoice(e.target.value);
+                        }}
+                        className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl appearance-none text-xs font-medium text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-6 cursor-pointer shadow-2xs"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {activeConfiguredVoices.map((v) => (
+                          <option key={v.id || v.name} value={v.name}>
+                            {v.name} ({v.country}, {v.gender})
+                          </option>
+                        ))}
+                        <option disabled value="">──────────</option>
+                        <option value="__view_more_voices__" className="text-blue-600 font-semibold">
+                          Choose from library →
+                        </option>
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toast.success(`Playing preview for ${stageVoice || "Nova"}...`);
+                        if ("speechSynthesis" in window) {
+                          window.speechSynthesis.cancel();
+                          const utterance = new SpeechSynthesisUtterance("Hello! This is how your AI voice sounds.");
+                          utterance.rate = stageVoiceSpeed;
+                          window.speechSynthesis.speak(utterance);
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-2 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/40 rounded-xl text-xs font-semibold text-slate-800 transition-all cursor-pointer shadow-2xs group shrink-0"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <Play className="w-3 h-3 text-emerald-600 fill-emerald-600" />
+                      <span className="group-hover:text-emerald-700 text-[11px]">Test</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tone */}
+                <div className="space-y-1.5">
+                  <span className="text-xs font-bold text-slate-900 block" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Tone
+                  </span>
+                  <div className="relative">
+                    <select
+                      value={stageTone}
+                      onChange={(e) => setStageTone(e.target.value)}
+                      className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl appearance-none text-xs font-medium text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-6 cursor-pointer shadow-2xs"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="Professional">Professional</option>
+                      <option value="Friendly">Friendly</option>
+                      <option value="Empathetic">Empathetic</option>
+                      <option value="Casual">Casual</option>
+                      <option value="Persuasive">Persuasive</option>
+                      <option value="Authoritative">Authoritative</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Style */}
+                <div className="space-y-1.5">
+                  <span className="text-xs font-bold text-slate-900 block" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Style
+                  </span>
+                  <div className="relative">
+                    <select
+                      value={stageStyle}
+                      onChange={(e) => setStageStyle(e.target.value)}
+                      className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl appearance-none text-xs font-medium text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors pr-6 cursor-pointer shadow-2xs"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="Balanced">Balanced</option>
+                      <option value="Concise">Concise</option>
+                      <option value="Detailed">Detailed</option>
+                      <option value="Warm">Warm</option>
+                      <option value="Expressive">Expressive</option>
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
                 </div>
               </div>
             </div>

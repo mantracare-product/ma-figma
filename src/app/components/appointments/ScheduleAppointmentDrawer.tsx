@@ -5,22 +5,25 @@ import { useTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import { InvoiceLineItem } from "../../types/invoiceTypes";
 import {
   ChevronDown,
-  ChevronUp,
-  Plus,
-  Trash2,
-  Receipt,
+  Check,
   CheckCircle2,
-  MapPin,
   Video,
   Building2,
-  Check,
   AlertTriangle,
+  Clock,
 } from "lucide-react";
-import { initialClients } from "../../pages/ClientProfile";
+import { getStoredClients } from "../../../lib/clientsStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import { CustomSideDrawer } from "../ui/drawer";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
 import { InfoTooltip } from "../help/InfoTooltip";
+import { hasInvoiceAutomation, hasAppointmentInvoiceAutomation } from "../../../lib/invoiceService";
+import { hasAppointmentAutomation, appointmentService } from "../../../lib/appointmentService";
+import { AUTOMATION_STORE_EVENT } from "../../../lib/useAutomationStore";
+import { PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
+import { Link } from "react-router";
+import { toast } from "sonner";
+import { findRoomForAppointment, Room } from "../../../lib/roomsStore";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,8 +66,12 @@ export interface BookingFormValues {
   lineItems?: InvoiceLineItem[];
   discountAmount?: number;
   location?: string;
+  roomNumber?: string;
+  roomStationId?: string;
+  roomName?: string;
   primaryInsurance?: string;
   secondaryInsurance?: string;
+  source?: string;
 }
 
 export interface ScheduleAppointmentDrawerProps {
@@ -85,28 +92,6 @@ export interface ScheduleAppointmentDrawerProps {
   onOpenSelectFields: () => void;
   onOpenCreateField: () => void;
 }
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const INSURANCE_PROVIDERS = [
-  "Blue Cross Blue Shield",
-  "Aetna",
-  "Cigna",
-  "UnitedHealthcare",
-  "Medicare",
-  "Humana",
-  "Kaiser Permanente",
-  "Self-Pay",
-];
-
-const SECONDARY_PROVIDERS = [
-  "None",
-  "Medicare Part B",
-  "Medicaid",
-  "Aetna Supplemental",
-  "Cigna Dental/Vision",
-  "UnitedHealthcare Supplemental",
-];
 
 // ─── Custom Dropdown (portal-based, relative to page/viewport) ────────────────
 
@@ -349,68 +334,86 @@ export default function ScheduleAppointmentDrawer({
   onOpenCreateField,
   isSaving = false,
 }: ScheduleAppointmentDrawerProps) {
-  const [insuranceSectionExpanded, setInsuranceSectionExpanded] = useState(false);
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
-  const [invoiceSectionExpanded, setInvoiceSectionExpanded] = useState(false);
-  const [primaryInsurance, setPrimaryInsurance] = useState(values.primaryInsurance || "Blue Cross Blue Shield");
-  const [hasSecondaryInsurance, setHasSecondaryInsurance] = useState(
-    Boolean(values.secondaryInsurance && values.secondaryInsurance !== "None")
-  );
-  const [secondaryInsurance, setSecondaryInsurance] = useState(values.secondaryInsurance || "Medicare Part B");
-
-  // ── Available clients ──
+  // ── Available clients (synced directly with clientsStore to match Clients page) ──
   const allAvailableClients: ClientOption[] = useMemo(() => {
     const list: ClientOption[] = [];
     const seenIds = new Set<string>();
 
-    if (clients?.length) {
-      clients.forEach((c) => {
-        if (!seenIds.has(String(c.id))) { seenIds.add(String(c.id)); list.push(c); }
+    const stored = getStoredClients();
+    if (stored?.length) {
+      stored.forEach((c) => {
+        const idStr = String(c.id);
+        if (!seenIds.has(idStr)) {
+          seenIds.add(idStr);
+          list.push({
+            id: c.id,
+            name: c.name,
+            email: c.email || "",
+            phone: c.phone || "",
+            status: c.status || "Active",
+            process: Array.isArray(c.processes) ? c.processes[0] : (c as any).process,
+          });
+        }
       });
     }
 
-    try {
-      const raw = sessionStorage.getItem("clients");
-      const loaded = raw ? JSON.parse(raw) : initialClients;
-      if (Array.isArray(loaded)) {
-        loaded.forEach((c: any) => {
-          if (!seenIds.has(String(c.id))) {
-            seenIds.add(String(c.id));
-            list.push({
-              id: c.id, name: c.name, email: c.email || "", phone: c.phone || "",
-              status: c.status,
-              process: Array.isArray(c.processes) ? c.processes[0] : c.processes,
-            });
-          }
-        });
-      }
-    } catch { /* ignore */ }
+    if (clients?.length) {
+      clients.forEach((c) => {
+        const idStr = String(c.id);
+        if (!seenIds.has(idStr)) {
+          seenIds.add(idStr);
+          list.push(c);
+        }
+      });
+    }
 
-    if (values.client && !seenIds.has(String(values.client.id))) list.unshift(values.client);
-    return list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [clients, values.client]);
+    if (values.client && !seenIds.has(String(values.client.id))) {
+      list.unshift(values.client);
+    }
+    return list;
+  }, [clients, values.client, isOpen]);
 
   const { teamMembers, bookableMembers } = useTeamMembers();
 
   const [locVersion, setLocVersion] = useState(0);
+  const [automationVersion, setAutomationVersion] = useState(0);
   useEffect(() => {
-    const handleUpdate = () => setLocVersion((v) => v + 1);
+    const handleUpdate = () => {
+      setLocVersion((v) => v + 1);
+      setAutomationVersion((v) => v + 1);
+    };
     window.addEventListener("storage", handleUpdate);
     window.addEventListener("mantra_locations_changed", handleUpdate);
     window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
+    window.addEventListener(AUTOMATION_STORE_EVENT, handleUpdate);
+    window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
     return () => {
       window.removeEventListener("storage", handleUpdate);
       window.removeEventListener("mantra_locations_changed", handleUpdate);
       window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
+      window.removeEventListener(AUTOMATION_STORE_EVENT, handleUpdate);
+      window.removeEventListener(PROCESS_STORE_EVENT, handleUpdate);
     };
   }, []);
 
   useEffect(() => {
     if (isOpen) {
       setLocVersion((v) => v + 1);
+      setAutomationVersion((v) => v + 1);
       setStoredServicesState(getStoredServices());
     }
   }, [isOpen]);
+
+  const appointmentAutomationConfigured = hasAppointmentAutomation(values.processId);
+  const invoiceAutomationConfigured = hasInvoiceAutomation(values.processId);
+  const appointmentInvoiceAutomationConfigured = hasAppointmentInvoiceAutomation(values.processId);
+
+  // Auto-enable generateInvoice ONLY if appointment-to-invoice automation is specifically configured
+  useEffect(() => {
+    if (isOpen && appointmentInvoiceAutomationConfigured && values.generateInvoice === undefined) {
+      onChange({ generateInvoice: true });
+    }
+  }, [isOpen, appointmentInvoiceAutomationConfigured, values.generateInvoice, onChange]);
 
   // Combine employees prop with teamMembers store
   const allEmployeesList: Employee[] = useMemo(() => {
@@ -699,6 +702,199 @@ export default function ScheduleAppointmentDrawer({
     return list;
   }, [values.serviceId, values.location, values.sessionType, allAvailableServices, allEmployeesList, orgLocations, activeOrganization.id]);
 
+  // ── Auto-allocated Room based on Service, Location, and Responsible Provider ──
+  const allocatedRoom = useMemo(() => {
+    // Room mapping requires Location (physical), Product Service, and Responsible Staff
+    if (!values.location || values.location.toLowerCase() === "online" || !values.serviceId || !values.provider) {
+      return undefined;
+    }
+    const srvName = values.serviceName || allAvailableServices.find((s) => String(s.id) === String(values.serviceId))?.name;
+    return findRoomForAppointment({
+      serviceId: values.serviceId,
+      serviceName: srvName,
+      location: values.location,
+      employeeId: values.provider?.id,
+      employeeName: values.provider?.name,
+    });
+  }, [values.serviceId, values.serviceName, values.location, values.provider, allAvailableServices]);
+
+  // ── Compute Available Slots for Provider, Date & Location ──
+  const { generatedSlots, slotDuration, dayOffNotice } = useMemo(() => {
+    if (!values.provider || !values.date) {
+      return { generatedSlots: [], slotDuration: 30, dayOffNotice: null };
+    }
+
+    const selectedSrv = allAvailableServices.find(
+      (s) => String(s.id) === String(values.serviceId)
+    );
+    const duration = selectedSrv?.duration || 30;
+
+    // 1. Check if provider has a scheduled Day Off
+    let dayOff: any = null;
+    try {
+      const daysOffSaved = localStorage.getItem(
+        `mantra_member_common_days_off_${values.provider.id}_${activeOrganization.id}`
+      );
+      if (daysOffSaved) {
+        const daysOffList = JSON.parse(daysOffSaved);
+        dayOff = Array.isArray(daysOffList) && daysOffList.find((d: any) => d.date === values.date);
+      }
+    } catch {}
+
+    if (dayOff && dayOff.duration === "All Day") {
+      return {
+        generatedSlots: [],
+        slotDuration: duration,
+        dayOffNotice: `${values.provider.name} has a scheduled day off on this date${dayOff.reason ? ` (${dayOff.reason})` : ""}.`,
+      };
+    }
+
+    // 2. Determine day of week
+    const [yr, mo, dy] = values.date.split("-").map(Number);
+    const dateObj = new Date(yr, (mo || 1) - 1, dy || 1);
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const dayKey = dayNames[dateObj.getDay()];
+
+    // 3. Check provider weekly slots / operating hours
+    let startMin = 9 * 60; // 09:00 AM default
+    let endMin = 17 * 60;  // 05:00 PM default
+    let isDayEnabled = true;
+
+    const targetLoc = values.location || "California Branch";
+    const targetLocObj = orgLocations.find((l) => l.name.toLowerCase() === targetLoc.toLowerCase());
+    const locId = targetLocObj?.id || "loc-1";
+
+    try {
+      // Check stored custom slots for [user + location]
+      const savedUserSlots = localStorage.getItem(
+        `mantra_user_loc_slots_${values.provider.id}_${locId}_${activeOrganization.id}`
+      );
+      if (savedUserSlots) {
+        const parsed = JSON.parse(savedUserSlots);
+        const dayAvailability = parsed[dayKey];
+        if (dayAvailability) {
+          isDayEnabled = dayAvailability.enabled;
+          if (dayAvailability.slots && dayAvailability.slots.length > 0) {
+            const firstSlot = dayAvailability.slots[0];
+            const [sh, sm] = firstSlot.start.split(":").map(Number);
+            const [eh, em] = firstSlot.end.split(":").map(Number);
+            startMin = sh * 60 + sm;
+            endMin = eh * 60 + em;
+          }
+        }
+      } else {
+        // Check location schedules
+        const schedSaved = localStorage.getItem(
+          `mantra_member_loc_schedules_${values.provider.id}_${activeOrganization.id}`
+        );
+        if (schedSaved) {
+          const schedules = JSON.parse(schedSaved);
+          const matched = Object.values(schedules).find(
+            (s: any) => s.locationName === targetLoc || s.locationId === targetLoc
+          ) as any;
+          if (matched && matched.workingHours?.[dayKey]) {
+            const wh = matched.workingHours[dayKey];
+            isDayEnabled = wh.enabled;
+            if (wh.start && wh.end) {
+              const [sh, sm] = wh.start.split(":").map(Number);
+              const [eh, em] = wh.end.split(":").map(Number);
+              startMin = sh * 60 + sm;
+              endMin = eh * 60 + em;
+            }
+          }
+        }
+      }
+    } catch {}
+
+    // Special allowance: Admin User at California Branch is available on working days
+    if (!isDayEnabled && (values.provider.name.toLowerCase().includes("admin") || String(values.provider.id) === "1")) {
+      isDayEnabled = true;
+    }
+
+    if (!isDayEnabled) {
+      return {
+        generatedSlots: [],
+        slotDuration: duration,
+        dayOffNotice: `${values.provider.name} is not scheduled to work on ${dayKey.charAt(0).toUpperCase() + dayKey.slice(1)}s.`,
+      };
+    }
+
+    // 4. Check already booked appointments to prevent conflicts
+    const bookedTimes = new Set<string>();
+    try {
+      const allAppts = appointmentService.getAppointments();
+      allAppts.forEach((apt) => {
+        if (
+          apt.date === values.date &&
+          String(apt.employeeId) === String(values.provider?.id) &&
+          apt.status !== "cancelled" &&
+          apt.time
+        ) {
+          const [ah, am] = apt.time.split(":").map(Number);
+          bookedTimes.add(`${String(ah).padStart(2, "0")}:${String(am).padStart(2, "0")}`);
+        }
+      });
+    } catch {}
+
+    // 5. Generate discrete time slots
+    const slots: Array<{ hour: number; minute: number; timeStr: string; label12: string; isBooked: boolean }> = [];
+    for (let current = startMin; current + duration <= endMin; current += duration) {
+      // Check partial day off
+      if (dayOff) {
+        if (dayOff.duration === "Morning (Until 1 PM)" && current < 13 * 60) continue;
+        if (dayOff.duration === "Afternoon (After 1 PM)" && current >= 13 * 60) continue;
+      }
+
+      const h = Math.floor(current / 60);
+      const m = current % 60;
+      const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      const p = h >= 12 ? "PM" : "AM";
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      const label12 = `${h12}:${String(m).padStart(2, "0")} ${p}`;
+      const isBooked = bookedTimes.has(timeStr);
+
+      slots.push({
+        hour: h,
+        minute: m,
+        timeStr,
+        label12,
+        isBooked,
+      });
+    }
+
+    return {
+      generatedSlots: slots,
+      slotDuration: duration,
+      dayOffNotice: null,
+    };
+  }, [values.provider, values.date, values.location, values.serviceId, allAvailableServices, orgLocations, activeOrganization.id]);
+
+  // Auto-sync sessionType with location (online/virtual -> video, physical branch -> inPerson)
+  useEffect(() => {
+    if (values.location) {
+      const isOnline = values.location.toLowerCase() === "online" || values.location.toLowerCase().includes("virtual");
+      const expectedSessionType = isOnline ? "video" : "inPerson";
+      if (values.sessionType !== expectedSessionType) {
+        onChange({ sessionType: expectedSessionType });
+      }
+    }
+  }, [values.location, values.sessionType]);
+
+  // Auto-select first available slot if current slot is invalid or not in generated slots
+  useEffect(() => {
+    if (generatedSlots.length > 0) {
+      const matchesCurrent = generatedSlots.some(
+        (s) => s.hour === values.startHour && s.minute === values.startMinute && !s.isBooked
+      );
+      if (!matchesCurrent) {
+        const firstAvail = generatedSlots.find((s) => !s.isBooked);
+        if (firstAvail) {
+          onChange({ startHour: firstAvail.hour, startMinute: firstAvail.minute });
+        }
+      }
+    }
+  }, [generatedSlots, values.startHour, values.startMinute]);
+
   // ── Handlers ──
   const handleServiceSelect = (serviceId: string) => {
     const srv = allAvailableServices.find((s) => String(s.id) === serviceId);
@@ -725,7 +921,8 @@ export default function ScheduleAppointmentDrawer({
       onChange({
         serviceId: String(srv.id), serviceName: srv.name,
         title: patientName ? `${srv.name} — ${patientName}` : `${srv.name} Appointment`,
-        generateInvoice: values.generateInvoice ?? true, lineItems: [li],
+        generateInvoice: values.generateInvoice !== undefined ? values.generateInvoice : hasAppointmentInvoiceAutomation(values.processId),
+        lineItems: [li],
         provider: nextProvider,
       });
     } else {
@@ -759,38 +956,6 @@ export default function ScheduleAppointmentDrawer({
     if (cl) patch.title = srvName ? `${srvName} — ${cl.name}` : `Appointment — ${cl.name}`;
     onChange(patch);
   };
-
-  const handleAddManualLineItem = () => {
-    onChange({
-      lineItems: [...(values.lineItems || []), {
-        id: `li-${Date.now()}`, source: "manual",
-        description: "Additional Consultation / Service", quantity: 1, unitPrice: 50, taxPercent: 0,
-      }],
-    });
-  };
-
-  const handleUpdateLineItem = (index: number, patch: Partial<InvoiceLineItem>) => {
-    const current = [...(values.lineItems || [])];
-    if (current[index]) { current[index] = { ...current[index], ...patch }; onChange({ lineItems: current }); }
-  };
-
-  const handleRemoveLineItem = (index: number) => {
-    const current = [...(values.lineItems || [])];
-    current.splice(index, 1);
-    onChange({ lineItems: current });
-  };
-
-  // ── Invoice calculations ──
-  const currentLineItems = values.lineItems || [];
-  const subtotal = currentLineItems.reduce((s, i) => s + (i.unitPrice * i.quantity - (i.discountAmount || 0)), 0);
-  const discount = values.discountAmount || 0;
-  const taxSum = currentLineItems.reduce((acc, item) => {
-    const itemSub = Math.max(0, item.unitPrice * item.quantity - (item.discountAmount || 0));
-    const effDisc = subtotal > 0 ? discount * (itemSub / subtotal) : 0;
-    return acc + (Math.max(0, itemSub - effDisc) * (item.taxPercent ?? 0)) / 100;
-  }, 0);
-  const tax = Math.round(taxSum * 100) / 100;
-  const total = Math.round((Math.max(0, subtotal - discount) + tax) * 100) / 100;
 
   // ── Validation ──
   const isServiceComplete = Boolean(values.serviceId || values.serviceName);
@@ -829,25 +994,15 @@ export default function ScheduleAppointmentDrawer({
 
   const locationOptions: DropdownOption[] = [
     { value: "", label: "Select a location" },
-    ...orgLocations.map((loc) => ({
-      value: loc.name,
-      label: loc.name,
-      meta: loc.address || undefined,
-    })),
+    ...orgLocations.map((loc) => {
+      const isOnline = loc.type === "online" || loc.name.toLowerCase() === "online";
+      return {
+        value: loc.name,
+        label: loc.name,
+        meta: isOnline ? "Online (Video Call)" : (loc.address || "In-Person Clinic"),
+      };
+    }),
   ];
-
-  const processOptions: DropdownOption[] = [
-    { value: "", label: "Select a process" },
-    ...Object.keys(processStages).map((p) => ({ value: p, label: p })),
-  ];
-
-  const stageOptions: DropdownOption[] = [
-    { value: "", label: "Select a stage" },
-    ...(processStages[values.processId] || []).map((s) => ({ value: s, label: s })),
-  ];
-
-  const primaryInsOpts: DropdownOption[] = INSURANCE_PROVIDERS.map((i) => ({ value: i, label: i }));
-  const secondaryInsOpts: DropdownOption[] = SECONDARY_PROVIDERS.map((s) => ({ value: s, label: s }));
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -885,14 +1040,15 @@ export default function ScheduleAppointmentDrawer({
             <button
               type="button"
               onClick={onSave}
-              disabled={!isFormComplete || isSaving}
+              disabled={!isFormComplete || isSaving || (mode !== "reschedule" && !appointmentAutomationConfigured)}
               className="flex-1 py-2.5 rounded-lg font-semibold text-sm transition-all"
               style={{
                 fontFamily: "Outfit, sans-serif",
-                backgroundColor: isFormComplete && !isSaving ? "#181e25" : "#e2e8f0",
-                color: isFormComplete && !isSaving ? "#ffffff" : "#94a3b8",
-                cursor: isFormComplete && !isSaving ? "pointer" : "not-allowed",
+                backgroundColor: isFormComplete && !isSaving && (mode === "reschedule" || appointmentAutomationConfigured) ? "#181e25" : "#e2e8f0",
+                color: isFormComplete && !isSaving && (mode === "reschedule" || appointmentAutomationConfigured) ? "#ffffff" : "#94a3b8",
+                cursor: isFormComplete && !isSaving && (mode === "reschedule" || appointmentAutomationConfigured) ? "pointer" : "not-allowed",
               }}
+              title={mode !== "reschedule" && !appointmentAutomationConfigured ? "Please build the automation first" : undefined}
             >
               {isSaving ? "Saving..." : mode === "reschedule" ? "Save Changes" : "Book Appointment"}
             </button>
@@ -901,6 +1057,17 @@ export default function ScheduleAppointmentDrawer({
       }
     >
       <div className="space-y-3 pb-4">
+        {mode !== "reschedule" && !appointmentAutomationConfigured && (
+          <div className="px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              Appointment booking is locked — please build the automation first in the Automation page.
+            </span>
+            <Link to="/automation" className="text-blue-600 hover:underline font-semibold text-xs ml-2">
+              Build automation &rarr;
+            </Link>
+          </div>
+        )}
 
         {/* ================================================================ */}
         {/* SECTION 1 — SERVICE                                              */}
@@ -965,6 +1132,40 @@ export default function ScheduleAppointmentDrawer({
                 }}
               />
             </FieldRow>
+
+            {/* Auto-allocated Room Box — displayed after mapping Service, Location, and Responsible Staff */}
+            {values.sessionType !== "video" && values.location && values.serviceId && values.provider && (
+              allocatedRoom ? (
+                <div className="mt-2.5 p-2.5 rounded-lg border border-blue-200/80 bg-blue-50/60 flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-md bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                    #{allocatedRoom.roomNumber}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-bold text-slate-900">{allocatedRoom.name}</span>
+                      <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200/60">
+                        Auto-allocated Room
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        • {allocatedRoom.location}
+                      </span>
+                    </div>
+                    {allocatedRoom.direction && (
+                      <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+                        <strong className="text-slate-700">Directions:</strong> {allocatedRoom.direction}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2.5 p-2.5 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 text-xs text-slate-500 flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    No room mapped for this location, service & responsible provider.
+                  </span>
+                </div>
+              )
+            )}
           </div>
         </SectionCard>
 
@@ -986,78 +1187,59 @@ export default function ScheduleAppointmentDrawer({
               />
             </FieldRow>
 
-            {/* Time */}
-            <FieldRow label="Time (client timezone)" required>
-              {!values.client ? (
-                <p className="text-xs text-slate-400 py-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  Select a client to enable time selection
-                </p>
+            {/* Available Slots */}
+            <FieldRow label="Available Slots" required>
+              {!values.provider ? (
+                <div className="py-2.5 px-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-xs text-slate-400" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  Select a responsible staff member under Participants to view available slots.
+                </div>
+              ) : !values.date ? (
+                <div className="py-2.5 px-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-xs text-slate-400" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  Select an appointment date above to view available time slots.
+                </div>
+              ) : generatedSlots.length === 0 ? (
+                <div className="py-2.5 px-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>{dayOffNotice || `No open slots found for ${values.provider.name} on this date.`}</span>
+                </div>
               ) : (
-                <div>
-                  <div className="flex items-center gap-2">
-                    {/* Start time */}
-                    <div className="flex items-center gap-1 bg-slate-50/70 border border-slate-200 rounded-lg px-2.5 py-1.5 focus-within:bg-white focus-within:border-slate-400 transition-all">
-                      <input
-                        type="number" min={0} max={23}
-                        value={values.startHour}
-                        onChange={(e) => onChange({ startHour: Math.min(23, Math.max(0, Number(e.target.value))) })}
-                        className="w-8 text-center bg-transparent text-xs font-semibold text-slate-800 focus:outline-none"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      />
-                      <span className="text-slate-400 text-xs">:</span>
-                      <input
-                        type="number" min={0} max={59}
-                        value={values.startMinute}
-                        onChange={(e) => onChange({ startMinute: Math.min(59, Math.max(0, Number(e.target.value))) })}
-                        className="w-8 text-center bg-transparent text-xs font-semibold text-slate-800 focus:outline-none"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      />
-                    </div>
-
-                    <span className="text-slate-400 text-xs">→</span>
-
-                    {/* End time (read-only) */}
-                    <div className="flex items-center gap-1 bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5">
-                      <span className="text-xs font-semibold text-slate-400" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        {pad(endHour)}:{pad(endMin)}
-                      </span>
-                    </div>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    {generatedSlots.map((slot) => {
+                      const isSelected = values.startHour === slot.hour && values.startMinute === slot.minute;
+                      return (
+                        <button
+                          key={`${slot.hour}:${slot.minute}`}
+                          type="button"
+                          disabled={slot.isBooked}
+                          onClick={() => onChange({ startHour: slot.hour, startMinute: slot.minute })}
+                          className={`py-1.5 px-2 rounded-lg text-xs transition-all text-center ${
+                            isSelected
+                              ? "bg-slate-900 text-white font-semibold shadow-xs"
+                              : slot.isBooked
+                              ? "bg-slate-100 text-slate-400 border border-slate-200/60 line-through cursor-not-allowed opacity-60"
+                              : "bg-slate-50/80 hover:bg-white text-slate-700 border border-slate-200 hover:border-slate-300 font-medium"
+                          }`}
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                          title={slot.isBooked ? "Slot already booked" : `${slot.label12} (${slotDuration} min)`}
+                        >
+                          {slot.label12}
+                        </button>
+                      );
+                    })}
                   </div>
-                  {values.date && (
-                    <p className="text-[11px] text-slate-400 mt-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      {fmtTime(startHHMM)} – {fmtTime(endHHMM)}
-                    </p>
-                  )}
+
+                  <div className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-slate-500" />
+                      <span>
+                        Selected Time: <strong className="text-slate-900 font-semibold">{fmt12(values.startHour, values.startMinute)} – {fmt12(endHour, endMin)}</strong>
+                      </span>
+                    </span>
+                    <span className="text-slate-400 font-medium">{slotDuration} min</span>
+                  </div>
                 </div>
               )}
-            </FieldRow>
-
-            {/* Session type */}
-            <FieldRow label="Session Type" required>
-              <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => onChange({ sessionType: "video", location: "Online" })}
-                  className={`flex-1 py-1.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
-                    values.sessionType === "video" ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  <Video className="w-3.5 h-3.5" />
-                  Video
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onChange({ sessionType: "inPerson", location: values.location && values.location.toLowerCase() !== "online" ? values.location : orgLocations[0]?.name || "Main Clinic" })}
-                  className={`flex-1 py-1.5 text-xs font-medium flex items-center justify-center gap-1.5 border-l border-slate-200 transition-colors ${
-                    values.sessionType === "inPerson" ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  <Building2 className="w-3.5 h-3.5" />
-                  In-Person
-                </button>
-              </div>
             </FieldRow>
 
             {/* Real-time Provider Location & Day Off Notice */}
@@ -1078,329 +1260,6 @@ export default function ScheduleAppointmentDrawer({
               </div>
             )}
           </div>
-        </SectionCard>
-
-        {/* ================================================================ */}
-        {/* SECTION 4 — WORKFLOW                                             */}
-        {/* ================================================================ */}
-        <SectionCard>
-          <SectionHeader title="Workflow" />
-          <div className="p-3 space-y-1">
-            <FieldRow label="Process">
-              <CustomDropdown
-                value={values.processId}
-                options={processOptions}
-                placeholder="Select a process"
-                onChange={(val) => onChange({ processId: val, stageId: "" })}
-              />
-            </FieldRow>
-            <FieldRow label="Stage">
-              <CustomDropdown
-                value={values.stageId}
-                options={stageOptions}
-                placeholder="Select a stage"
-                onChange={(val) => onChange({ stageId: val })}
-                disabled={!values.processId}
-              />
-            </FieldRow>
-          </div>
-        </SectionCard>
-
-        {/* ================================================================ */}
-        {/* SECTION 5 — INSURANCE & BILLING (collapsed)                      */}
-        {/* ================================================================ */}
-        <SectionCard>
-          <button
-            type="button"
-            onClick={() => setInsuranceSectionExpanded(!insuranceSectionExpanded)}
-            className="w-full px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-white hover:bg-slate-50/50 transition-colors"
-          >
-            <h3
-              className="text-xs font-bold text-slate-600 uppercase tracking-wider"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              Insurance & Billing
-            </h3>
-            {insuranceSectionExpanded
-              ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-              : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            }
-          </button>
-
-          {insuranceSectionExpanded && (
-            <div className="p-3 space-y-1">
-              <FieldRow label="Primary Insurance">
-                <CustomDropdown
-                  value={primaryInsurance}
-                  options={primaryInsOpts}
-                  placeholder="Select insurance"
-                  onChange={(val) => { setPrimaryInsurance(val); onChange({ primaryInsurance: val }); }}
-                />
-              </FieldRow>
-
-              <div className="p-2 rounded-lg hover:bg-slate-50/60 transition-colors">
-                <div className="flex items-center gap-2 py-1">
-                  <input
-                    type="checkbox"
-                    id="sec-ins"
-                    checked={hasSecondaryInsurance}
-                    onChange={(e) => {
-                      setHasSecondaryInsurance(e.target.checked);
-                      onChange({ secondaryInsurance: e.target.checked ? secondaryInsurance : undefined });
-                    }}
-                    className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-slate-700"
-                  />
-                  <label
-                    htmlFor="sec-ins"
-                    className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider cursor-pointer"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    Secondary Insurance
-                  </label>
-                </div>
-
-                {hasSecondaryInsurance && (
-                  <div className="mt-2">
-                    <CustomDropdown
-                      value={secondaryInsurance}
-                      options={secondaryInsOpts}
-                      placeholder="Select secondary insurance"
-                      onChange={(val) => { setSecondaryInsurance(val); onChange({ secondaryInsurance: val }); }}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Invoice Details (nested collapsible) */}
-              <div className="border-t border-slate-100 pt-2 mt-1">
-                <button
-                  type="button"
-                  onClick={() => setInvoiceSectionExpanded(!invoiceSectionExpanded)}
-                  className="w-full flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-50 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <Receipt className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Invoice Details
-                    </span>
-                  </div>
-                  {invoiceSectionExpanded
-                    ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-                    : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                  }
-                </button>
-
-                {invoiceSectionExpanded && (
-                  <div className="mt-2 space-y-3 px-2">
-                    <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50 border border-slate-200">
-                      <p className="text-xs text-slate-700" style={{ fontFamily: "DM Sans, sans-serif" }}>Generate invoice on booking</p>
-                      <input
-                        type="checkbox"
-                        checked={values.generateInvoice ?? true}
-                        onChange={(e) => onChange({ generateInvoice: e.target.checked })}
-                        className="w-3.5 h-3.5 rounded border-slate-300 cursor-pointer accent-slate-700"
-                      />
-                    </div>
-
-                    {values.generateInvoice && (
-                      <>
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                              Line Items
-                            </span>
-                            <button
-                              type="button"
-                              onClick={handleAddManualLineItem}
-                              className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-0.5 font-medium transition-colors"
-                              style={{ fontFamily: "DM Sans, sans-serif" }}
-                            >
-                              <Plus className="w-3 h-3" /> Add item
-                            </button>
-                          </div>
-
-                          {currentLineItems.map((item, idx) => (
-                            <div key={item.id} className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-xs">
-                              <input
-                                type="text"
-                                value={item.description}
-                                onChange={(e) => handleUpdateLineItem(idx, { description: e.target.value })}
-                                placeholder="Description"
-                                className="flex-1 bg-transparent outline-none text-slate-700 placeholder:text-slate-400"
-                                style={{ fontFamily: "DM Sans, sans-serif" }}
-                              />
-                              <span className="text-slate-200">|</span>
-                              <input
-                                type="number" min={1}
-                                value={item.quantity}
-                                onChange={(e) => handleUpdateLineItem(idx, { quantity: Math.max(1, parseInt(e.target.value) || 1) })}
-                                className="w-8 text-center bg-transparent outline-none text-slate-600"
-                                style={{ fontFamily: "DM Sans, sans-serif" }}
-                              />
-                              <span className="text-slate-200">×</span>
-                              <div className="flex items-center gap-0.5">
-                                <span className="text-slate-400">$</span>
-                                <input
-                                  type="number" min={0}
-                                  value={item.unitPrice}
-                                  onChange={(e) => handleUpdateLineItem(idx, { unitPrice: parseFloat(e.target.value) || 0 })}
-                                  className="w-14 text-right bg-transparent outline-none text-slate-700"
-                                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                                />
-                              </div>
-                              <button type="button" onClick={() => handleRemoveLineItem(idx)} className="text-slate-300 hover:text-red-400 transition-colors ml-1">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-slate-500" style={{ fontFamily: "DM Sans, sans-serif" }}>Discount ($)</span>
-                          <input
-                            type="number" min={0}
-                            value={values.discountAmount || 0}
-                            onChange={(e) => onChange({ discountAmount: parseFloat(e.target.value) || 0 })}
-                            className="w-24 px-2 py-1 text-right border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:border-slate-400"
-                            style={{ fontFamily: "DM Sans, sans-serif" }}
-                          />
-                        </div>
-
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 space-y-1.5">
-                          <div className="flex justify-between text-xs text-slate-500">
-                            <span>Subtotal</span>
-                            <span className="font-semibold text-slate-700">${subtotal.toFixed(2)}</span>
-                          </div>
-                          {discount > 0 && (
-                            <div className="flex justify-between text-xs text-emerald-600">
-                              <span>Discount</span>
-                              <span>−${discount.toFixed(2)}</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between text-xs text-slate-500">
-                            <span>Tax</span>
-                            <span>${tax.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between pt-1.5 border-t border-slate-200 text-sm font-semibold text-slate-800">
-                            <span>Total</span>
-                            <span>${total.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </SectionCard>
-
-        {/* ================================================================ */}
-        {/* SECTION 6 — ADDITIONAL DETAILS (collapsed)                       */}
-        {/* ================================================================ */}
-        <SectionCard>
-          <button
-            type="button"
-            onClick={() => setDetailsExpanded(!detailsExpanded)}
-            className="w-full px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-white hover:bg-slate-50/50 transition-colors"
-          >
-            <h3
-              className="text-xs font-bold text-slate-600 uppercase tracking-wider"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              Additional Details
-            </h3>
-            {detailsExpanded
-              ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-              : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            }
-          </button>
-
-          {detailsExpanded && (
-            <div className="p-3 space-y-1">
-              <FieldRow label="Title" required>
-                <FieldInput
-                  type="text"
-                  placeholder="e.g., Follow-up — Sarah Johnson"
-                  value={values.title}
-                  onChange={(e) => onChange({ title: e.target.value })}
-                />
-              </FieldRow>
-
-              <FieldRow label="Description">
-                <textarea
-                  placeholder="Add appointment description..."
-                  value={values.description}
-                  onChange={(e) => onChange({ description: e.target.value })}
-                  rows={2}
-                  className="w-full px-3 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-400 resize-none transition-all"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                />
-              </FieldRow>
-
-              <FieldRow label="Note">
-                <FieldInput
-                  type="text"
-                  placeholder="Quick note for clinical staff..."
-                  value={values.note}
-                  onChange={(e) => onChange({ note: e.target.value })}
-                />
-              </FieldRow>
-
-              <FieldRow label="Tags">
-                <FieldInput
-                  type="text"
-                  placeholder="follow-up, urgent, specialist"
-                  value={values.tags}
-                  onChange={(e) => onChange({ tags: e.target.value })}
-                />
-              </FieldRow>
-
-              {/* Custom Fields */}
-              {(visibleCustomFieldKeys.length > 0 || customFields.length > 0) && (
-                <div className="border-t border-slate-100 pt-2 mt-1">
-                  <div className="flex items-center justify-between px-2 py-1.5 mb-1">
-                    <label
-                      className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      Custom Fields
-                    </label>
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        onClick={onOpenSelectFields}
-                        className="text-[11px] text-slate-500 hover:text-slate-800 font-medium transition-colors"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      >
-                        Select Fields
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onOpenCreateField}
-                        className="text-[11px] text-slate-500 hover:text-slate-800 font-medium transition-colors"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      >
-                        + Create Field
-                      </button>
-                    </div>
-                  </div>
-                  {customFields
-                    .filter((f) => visibleCustomFieldKeys.includes(f.key))
-                    .map((f) => (
-                      <FieldRow key={f.key} label={f.label} required={f.required}>
-                        <FieldInput
-                          type="text"
-                          value={customFieldValues[f.key] || ""}
-                          onChange={(e) => onCustomFieldChange(f.key, e.target.value)}
-                          placeholder={f.placeholder || `Enter ${f.label.toLowerCase()}`}
-                        />
-                      </FieldRow>
-                    ))}
-                </div>
-              )}
-            </div>
-          )}
         </SectionCard>
 
       </div>

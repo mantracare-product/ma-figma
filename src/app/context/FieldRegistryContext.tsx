@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import { getStoredProcesses } from "../../lib/useProcessStore";
 
-export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember" | "scribe";
+export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember" | "scribe" | "invoice";
 
 export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
   "client",
@@ -11,7 +11,8 @@ export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
   "service",
   "organization",
   "teamMember",
-  "scribe"
+  "scribe",
+  "invoice"
 ];
 
 export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plural: string }> = {
@@ -23,6 +24,7 @@ export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: strin
   organization: { singular: "organization", plural: "organizations" },
   teamMember: { singular: "team member", plural: "team members" },
   scribe: { singular: "AI Scribe field", plural: "AI Scribe fields" },
+  invoice: { singular: "invoice", plural: "invoices" },
 };
 
 export const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -88,13 +90,109 @@ export type SubFieldInputType =
   | "crm_bind"
   | "file";
 
-export type CrmBindModule = "teamMember" | "client" | "organization" | "service" | "process";
+export type CrmBindModule = "client" | "call" | "process" | "appointment" | "service" | "invoice" | "organization" | "teamMember" | "scribe";
+
+export const CRM_MODULE_COLUMNS: Record<CrmBindModule, { key: string; label: string }[]> = {
+  client: [
+    { key: "name", label: "Client Name" },
+    { key: "email", label: "Email Address" },
+    { key: "phone", label: "Phone Number" },
+    { key: "companyName", label: "Company" },
+    { key: "status", label: "Status" },
+    { key: "stage", label: "Stage" },
+    { key: "location", label: "Location" },
+    { key: "responsible", label: "Responsible Person" },
+    { key: "country", label: "Country" },
+    { key: "jobPosition", label: "Role / Job Position" },
+  ],
+  call: [
+    { key: "client", label: "Client Name" },
+    { key: "caller", label: "Caller" },
+    { key: "duration", label: "Call Duration" },
+    { key: "outcome", label: "Call Outcome" },
+    { key: "process", label: "Process" },
+    { key: "date", label: "Call Date" },
+    { key: "status", label: "Call Status" },
+  ],
+  process: [
+    { key: "name", label: "Process Name" },
+    { key: "stage", label: "Stage" },
+    { key: "stages", label: "Stages (All Pipeline Stages)" },
+    { key: "category", label: "Industry Category" },
+    { key: "status", label: "Status" },
+    { key: "stageCount", label: "Number of Stages" },
+    { key: "dealType", label: "Deal / Workflow Type" },
+    { key: "responsible", label: "Responsible Person" },
+    { key: "description", label: "Process Description" },
+  ],
+  appointment: [
+    { key: "title", label: "Appointment Title" },
+    { key: "date", label: "Date & Time" },
+    { key: "status", label: "Status" },
+    { key: "service", label: "Service Name" },
+    { key: "doctorName", label: "Provider / Doctor" },
+    { key: "clientName", label: "Client Name" },
+  ],
+  service: [
+    { key: "name", label: "Service Name" },
+    { key: "price", label: "Price / Cost" },
+    { key: "duration", label: "Duration (min)" },
+    { key: "category", label: "Category" },
+  ],
+  invoice: [
+    { key: "invoiceNumber", label: "Invoice Number" },
+    { key: "clientName", label: "Client Name" },
+    { key: "amount", label: "Total Amount" },
+    { key: "status", label: "Payment Status" },
+    { key: "dueDate", label: "Due Date" },
+  ],
+  organization: [
+    { key: "name", label: "Organization Name" },
+    { key: "industry", label: "Industry" },
+    { key: "website", label: "Website" },
+    { key: "location", label: "Location" },
+  ],
+  teamMember: [
+    { key: "name", label: "Member Name" },
+    { key: "role", label: "Role / Position" },
+    { key: "email", label: "Email Address" },
+    { key: "department", label: "Department" },
+  ],
+  scribe: [
+    { key: "sessionName", label: "Session Name" },
+    { key: "patientName", label: "Patient / Client" },
+    { key: "chiefComplaint", label: "Chief Complaint" },
+    { key: "diagnosis", label: "Assessment / Diagnosis" },
+    { key: "doctorName", label: "Doctor Name" },
+    { key: "sessionDate", label: "Session Date" },
+  ],
+};
+
+export interface FormulaTerm {
+  fieldKey: string;
+  operator?: "+" | "-" | "*" | "/";
+}
+
+export interface FormulaConfig {
+  mode: "static" | "formula";
+  staticValue?: number;
+  terms: FormulaTerm[];
+}
+
+export interface GroupBindingConfig {
+  enabled: boolean;
+  primarySubFieldId: string;
+  secondarySubFieldId: string;
+  bindingType?: "options_filter" | "derived_value";
+}
 
 export interface CrmBindConfig {
   sourceModule: CrmBindModule;
   displayField: string;             // e.g. "name", "title", "email"
   secondaryDisplayField?: string;   // e.g. "role", "phoneNumber"
   selectionMode: "single" | "multiple";
+  primaryKeyField?: string;         // Primary column based on which values will be fetched/matched
+  isPrimaryLookup?: boolean;        // Whether this column is the primary lookup key
 }
 
 export interface ListBindConfig {
@@ -124,6 +222,8 @@ export interface SubFieldConfig {
   listBindConfig?: ListBindConfig; // for list_select sub-fields
   minEntries?: number; // for composite sub-fields
   maxEntries?: number; // for composite sub-fields
+  formulaConfig?: FormulaConfig;
+  groupBindingConfig?: GroupBindingConfig;
   phoneConfig?: {
     countryCodeDisplay?: "name" | "code";
     showFlags?: boolean;
@@ -165,6 +265,8 @@ export interface TableColumnConfig {
   selectionMode?: "single" | "multiple"; // for list_select columns
   maxRating?: number; // for rating columns
   listBindConfig?: ListBindConfig; // for list_select columns
+  allowCustomOptions?: boolean;
+  allowSearch?: boolean;
   phoneConfig?: {
     countryCodeDisplay?: "name" | "code";
     showFlags?: boolean;
@@ -227,7 +329,7 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
   else if (rawType.includes("textarea") || rawType.includes("area") || rawType.includes("long")) inputType = "textarea";
   else if (rawType.includes("rating") || rawType.includes("score")) inputType = "rating";
   else if (rawType.includes("yes") || rawType.includes("bool")) inputType = "yes_no";
-  else if (rawType.includes("crm")) inputType = "crm_bind";
+  else if (rawType.includes("crm") || rawType.includes("mantra") || rawType.includes("entit")) inputType = "crm_bind";
   else if (rawType.includes("email")) inputType = "email";
   else if (rawType.includes("tel") || rawType.includes("phone")) inputType = "tel";
   else if (rawType.includes("link") || rawType.includes("url")) inputType = "link";
@@ -250,7 +352,7 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
           { id: 3, label: "Option C", value: "option_c" },
         ]
       : [],
-    crmBindConfig: col.crmBindConfig || (inputType === "crm_bind" ? { sourceModule: "teamMember", displayField: "name", selectionMode: col.selectionMode || "single" } : undefined),
+    crmBindConfig: col.crmBindConfig || (inputType === "crm_bind" ? { sourceModule: "service", displayField: "name", selectionMode: col.selectionMode || "single" } : undefined),
     defaultValue: col.defaultValue,
     currency: col.currency,
     selectionMode: isMulti ? "multiple" : (col.selectionMode || "single"),
@@ -371,6 +473,7 @@ export interface ScopingRule {
   industryCategory?: string;  // Scoped to category e.g. "Healthcare", empty or "All" = global
   industries?: string[];      // Multiple industries e.g. ["Cardiologist", "Dentist"], empty = all in category
   locations?: string[];       // Multiple locations e.g. ["California", "New York"], empty = all
+  entities?: string[];        // Multiple entities e.g. ["client", "process", "appointment", "invoice"]
 }
 
 export interface FieldPermissions {
@@ -454,6 +557,10 @@ export interface FieldDefinition {
     min?: number;
     max?: number;
   };
+  formulaConfig?: FormulaConfig;
+  groupBindingConfig?: GroupBindingConfig;
+  primarySubFieldId?: string; // Primary column/sub-field for composite/group fields
+  primaryColumnId?: string;
   phoneConfig?: {
     showCountryCode?: boolean;
     countryCodeDisplay?: "name" | "code";
@@ -515,7 +622,10 @@ export const LEGACY_SECTION_REGISTRY_EVENT = "SECTION_REGISTRY_CHANGED";
 const SYSTEM_FIELD_KEYS = new Set([
   "name", "email", "phone", "location", "country",
   "company", "role", "status", "processes", "stage",
-  "responsible", "lastContact", "companyName", "jobPosition"
+  "responsible", "lastContact", "companyName", "jobPosition",
+  "invoice_number", "issue_date", "due_date", "payment_mode",
+  "product_name", "quantity", "unit_price", "tax_rate",
+  "line_items_summary", "subtotal", "tax_amount", "discount_applied", "payment_url"
 ]);
 
 const SYSTEM_SECTION_IDS = new Set([
@@ -527,6 +637,10 @@ const SYSTEM_SECTION_IDS = new Set([
   "sec-service-info",
   "sec-service-pricing",
   "sec-service-assignment",
+  "sec-inv-details",
+  "sec-inv-items",
+  "sec-inv-payment-link",
+  "sec-inv-custom",
 ]);
 
 /**
@@ -1333,6 +1447,19 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
       ]
     },
     { key: "provider", label: "Provider", module: "appointment", inputType: "select", placeholder: "Unassigned", showAlways: true },
+    {
+      key: "source",
+      label: "Source",
+      module: "appointment",
+      inputType: "select",
+      placeholder: "Select source",
+      showAlways: true,
+      options: [
+        { id: 1, label: "MA-Client", value: "MA-Client" },
+        { id: 2, label: "Inbound Call", value: "Inbound Call" },
+        { id: 3, label: "Walked In", value: "Walked In" },
+      ],
+    },
   ],
   call: [
     { key: "status", label: "Call Status", module: "call", inputType: "text", placeholder: "Completed/Missed", showAlways: true },
@@ -1529,6 +1656,158 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
   ],
   scribe: [
     { key: "session_notes", label: "Session Clinical Notes", module: "scribe", inputType: "textarea", placeholder: "Clinical dialogue notes", showAlways: true },
+  ],
+  invoice: [
+    {
+      key: "client_name",
+      label: "Client",
+      module: "invoice",
+      sectionId: "sec-inv-details",
+      inputType: "crm_bind",
+      crmBindConfig: {
+        sourceModule: "client",
+        displayField: "name",
+        secondaryDisplayField: "email",
+        selectionMode: "single",
+      },
+      placeholder: "Select client...",
+      required: true,
+      showAlways: true,
+    },
+    { key: "client_email", label: "Client Email", module: "invoice", sectionId: "sec-inv-details", inputType: "email", placeholder: "client@example.com", showAlways: true },
+    { key: "client_phone", label: "Client Phone", module: "invoice", sectionId: "sec-inv-details", inputType: "tel", placeholder: "+1 (555) 000-0000", showAlways: true },
+    { key: "invoice_number", label: "Invoice Number", module: "invoice", sectionId: "sec-inv-details", inputType: "text", placeholder: "INV-2026-001", required: true, showAlways: true },
+    { key: "issue_date", label: "Issue Date", module: "invoice", sectionId: "sec-inv-details", inputType: "date", required: true, showAlways: true },
+    { key: "due_date", label: "Due Date", module: "invoice", sectionId: "sec-inv-details", inputType: "date", required: true, showAlways: true },
+    {
+      key: "payment_mode",
+      label: "Payment Mode",
+      module: "invoice",
+      sectionId: "sec-inv-details",
+      inputType: "new_list",
+      placeholder: "Select payment method...",
+      newListConfig: {
+        sourceMode: "basic_list",
+        allowSearch: true,
+        allowCustomOptions: true,
+      },
+      options: [
+        { id: 1, label: "Bank Transfer", value: "Bank Transfer" },
+        { id: 2, label: "Credit / Debit Card", value: "Card" },
+        { id: 3, label: "Cash", value: "Cash" },
+        { id: 4, label: "UPI", value: "UPI" },
+        { id: 5, label: "Stripe", value: "Stripe" },
+        { id: 6, label: "PayPal", value: "PayPal" },
+      ],
+      showAlways: true,
+    },
+    {
+      key: "product_name",
+      label: "Product Name",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "crm_bind",
+      crmBindConfig: {
+        sourceModule: "service",
+        displayField: "name",
+        selectionMode: "single",
+      },
+      placeholder: "Select product or service...",
+      required: true,
+      showAlways: true,
+    },
+    {
+      key: "quantity",
+      label: "Quantity",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "number",
+      placeholder: "1",
+      defaultValue: 1,
+      required: true,
+      showAlways: true,
+    },
+    {
+      key: "unit_price",
+      label: "Price",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "money",
+      placeholder: "0.00",
+      currency: "USD",
+      defaultValue: 0,
+      required: true,
+      showAlways: true,
+    },
+    {
+      key: "tax_rate",
+      label: "Tax",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "number",
+      placeholder: "5",
+      defaultValue: 5,
+      showAlways: true,
+    },
+    {
+      key: "line_items_summary",
+      label: "Line Items (Products / Services)",
+      module: "invoice",
+      sectionId: "sec-inv-items",
+      inputType: "group",
+      compositeDisplayMode: "table",
+      subFields: [
+        {
+          id: "product_name",
+          name: "Product Name",
+          inputType: "crm_bind",
+          crmBindConfig: {
+            sourceModule: "service",
+            displayField: "name",
+            selectionMode: "single",
+          },
+          required: true,
+        },
+        {
+          id: "quantity",
+          name: "Quantity",
+          inputType: "number",
+          placeholder: "1",
+          defaultValue: 1,
+          required: true,
+        },
+        {
+          id: "unit_price",
+          name: "Price",
+          inputType: "money",
+          currency: "USD",
+          placeholder: "0.00",
+          defaultValue: 0,
+          required: true,
+        },
+        {
+          id: "tax_rate",
+          name: "Tax (%)",
+          inputType: "number",
+          placeholder: "5",
+          defaultValue: 5,
+        },
+      ],
+      defaultValue: [
+        {
+          id: "row_1",
+          product_name: "Initial Comprehensive Consultation",
+          quantity: 1,
+          unit_price: 150,
+          tax_rate: 5,
+        },
+      ],
+      showAlways: true,
+    },
+    { key: "subtotal", label: "Subtotal", module: "invoice", sectionId: "sec-inv-items", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "tax_amount", label: "Tax Amount", module: "invoice", sectionId: "sec-inv-items", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "discount_applied", label: "Discount Applied", module: "invoice", sectionId: "sec-inv-items", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
+    { key: "payment_url", label: "Payment Link URL", module: "invoice", sectionId: "sec-inv-payment-link", inputType: "link", placeholder: "https://pay.example.com/...", showAlways: true },
   ],
 };
 
@@ -1841,6 +2120,45 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       createdAt: 0,
     },
   ],
+  invoice: [
+    {
+      id: "sec-inv-details",
+      title: "Client Detail",
+      description: "Client contact coordinates and invoice terms",
+      module: "invoice",
+      source: "system",
+      fieldKeys: [
+        "client_name",
+        "client_email",
+        "client_phone",
+        "invoice_number",
+        "issue_date",
+        "due_date",
+        "payment_mode",
+      ],
+      createdAt: 0,
+    },
+    {
+      id: "sec-inv-items",
+      title: "Product",
+      description: "Itemized services, consultation rates, discounts, and totals",
+      module: "invoice",
+      source: "system",
+      fieldKeys: [
+        "line_items_summary",
+      ],
+      createdAt: 0,
+    },
+    {
+      id: "sec-inv-custom",
+      title: "Custom Fields",
+      description: "Additional user-defined invoice custom properties",
+      module: "invoice",
+      source: "system",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+  ],
 };
 
 interface FieldRegistryContextValue {
@@ -1881,6 +2199,7 @@ function normalizeModuleKey(raw: any): Exclude<FieldModule, "deal"> {
   if (lower === "organization" || lower === "organizations" || lower === "organisation") return "organization";
   if (lower === "teammember" || lower === "team_member" || lower === "team member" || lower === "team members") return "teamMember";
   if (lower === "scribe" || lower === "ai scribe" || lower === "ai_scribe") return "scribe";
+  if (lower === "invoice" || lower === "invoices") return "invoice";
   return "client";
 }
 
@@ -1899,8 +2218,14 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
   } else if (rawType === "list") {
     normalizedType = "list_select";
     if (!normalizedSelectionMode) normalizedSelectionMode = "single";
-  } else if (rawType === "group_repeatable") {
-    normalizedType = "group_repeatable";
+  } else if (rawType === "group_repeatable" || rawType === "group" || rawType === "table") {
+    if (f.compositeDisplayMode === "table" || rawType === "table") {
+      normalizedType = "table";
+    } else if (f.compositeDisplayMode === "group") {
+      normalizedType = "group_repeatable";
+    } else {
+      normalizedType = rawType as FieldInputType;
+    }
   } else if (rawType === "list_open" && (f.listEntryType === "structured" || f.compositeDisplayMode !== undefined || (f.subFields && f.subFields.length > 0))) {
     normalizedType = f.compositeDisplayMode === "table" ? "table" : "group_repeatable";
   }
@@ -1989,6 +2314,12 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     phoneConfig: f.phoneConfig ?? undefined,
     mediaConfig: f.mediaConfig ?? undefined,
     numberConfig: f.numberConfig ?? undefined,
+    formulaConfig: f.formulaConfig ? {
+      mode: f.formulaConfig.mode,
+      staticValue: f.formulaConfig.staticValue,
+      terms: Array.isArray(f.formulaConfig.terms) ? f.formulaConfig.terms.map((t: any) => ({ ...t })) : [],
+    } : undefined,
+    groupBindingConfig: f.groupBindingConfig ? { ...f.groupBindingConfig } : undefined,
     compositeDisplayMode: f.compositeDisplayMode ?? undefined,
     minEntries: typeof f.minEntries === "number" ? f.minEntries : undefined,
     maxEntries: typeof f.maxEntries === "number" ? f.maxEntries : undefined,
@@ -2061,6 +2392,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
     organization: [],
     teamMember: [],
     scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
+    invoice: [],
   };
 
   if (typeof window === "undefined") {
@@ -2081,6 +2413,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
         organization: [],
         teamMember: [],
         scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
+        invoice: [],
       };
 
       if (Array.isArray(parsed)) {
@@ -2107,6 +2440,14 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
       ensureScribeSeeds(registry);
       ensureServiceSeeds(registry);
 
+      // Clean up any duplicate system seeds or removed fields from invoice custom fields
+      if (Array.isArray(registry.invoice)) {
+        const invoiceSysKeys = new Set((SYSTEM_SEEDS.invoice || []).map((s) => s.key));
+        registry.invoice = registry.invoice.filter(
+          (f) => f.source !== "system" && !invoiceSysKeys.has(f.key) && f.key !== "stage" && f.key !== "status"
+        );
+      }
+
       // Save the sanitized canonical object to localStorage
       try {
         localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(registry));
@@ -2127,6 +2468,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
     organization: [],
     teamMember: [],
     scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
+    invoice: [],
   };
 
   // Check legacy sessionStorage keys
@@ -2181,6 +2523,14 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
   }
 
   ensureScribeSeeds(registry);
+  ensureServiceSeeds(registry);
+
+  if (Array.isArray(registry.invoice)) {
+    const invoiceSysKeys = new Set((SYSTEM_SEEDS.invoice || []).map((s) => s.key));
+    registry.invoice = registry.invoice.filter(
+      (f) => f.source !== "system" && !invoiceSysKeys.has(f.key) && f.key !== "stage" && f.key !== "status"
+    );
+  }
 
   // Write the canonical module-keyed object to localStorage
   try {
@@ -2252,6 +2602,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
     organization: [],
     teamMember: [],
     scribe: [],
+    invoice: [],
   };
 
   if (typeof window === "undefined") {
@@ -2272,6 +2623,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
         organization: [],
         teamMember: [],
         scribe: [],
+        invoice: [],
       };
 
       if (Array.isArray(parsed)) {
@@ -2307,6 +2659,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
     organization: [],
     teamMember: [],
     scribe: [],
+    invoice: [],
   };
 
   const legacyRaw = sessionStorage.getItem("sectionRegistry_v1");
@@ -2430,7 +2783,10 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
 
   const getCustomFields = (module: FieldModule): FieldDefinition[] => {
     const norm = normalizeModule(module);
-    const directFields = customFields[norm] || [];
+    const systemKeys = new Set((SYSTEM_SEEDS[norm] || []).map((s) => s.key));
+    const directFields = (customFields[norm] || []).filter(
+      (f) => f.source !== "system" && !systemKeys.has(f.key)
+    );
     // Also include fields marked as reusable across modules
     const reusableFields: FieldDefinition[] = [];
     (Object.keys(customFields) as (keyof typeof customFields)[]).forEach((mod) => {
@@ -2438,7 +2794,7 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
         (customFields[mod] || []).forEach((f) => {
           if (f.isReusable) {
             const matchesModule = !f.reusableModules || f.reusableModules.length === 0 || f.reusableModules.includes(norm);
-            if (matchesModule && !directFields.some((df) => df.key === f.key) && !reusableFields.some((rf) => rf.key === f.key)) {
+            if (matchesModule && !directFields.some((df) => df.key === f.key) && !reusableFields.some((rf) => rf.key === f.key) && !systemKeys.has(f.key)) {
               reusableFields.push({ ...f, module: norm });
             }
           }
@@ -2449,7 +2805,17 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
   };
 
   const getAllFields = (module: FieldModule): FieldDefinition[] => {
-    return [...getSystemFields(module), ...getCustomFields(module)];
+    const sys = getSystemFields(module);
+    const cust = getCustomFields(module);
+    const seen = new Set<string>();
+    const result: FieldDefinition[] = [];
+    for (const f of [...sys, ...cust]) {
+      if (!seen.has(f.key)) {
+        seen.add(f.key);
+        result.push(f);
+      }
+    }
+    return result;
   };
 
   const addCustomField = (

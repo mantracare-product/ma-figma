@@ -23,6 +23,7 @@ export interface ActivityBase {
   processId?: string;
   processName?: string;
   clientId?: string;
+  appointmentId?: string;
   createdBy?: "system" | "ai" | "user";
   sourceStepName?: string;
   /** Backward-compat fallback rendered when no type-specific block applies */
@@ -67,8 +68,8 @@ export interface EmailActivityEntry extends ActivityBase {
 }
 
 export interface AppointmentActivityEntry extends ActivityBase {
-  type: "appointment_booked";
-  status: "scheduled" | "confirmed" | "completed" | "cancelled" | "no_show";
+  type: "appointment_booked" | "appointment_rescheduled" | "appointment_completed" | "appointment_cancelled";
+  status: "scheduled" | "confirmed" | "completed" | "cancelled" | "no_show" | "rescheduled" | string;
   date: string;
   time: string;
   location?: string;
@@ -145,7 +146,12 @@ export function isEmailEntry(e: ActivityEntry): e is EmailActivityEntry {
   return e.type === "email";
 }
 export function isAppointmentEntry(e: ActivityEntry): e is AppointmentActivityEntry {
-  return e.type === "appointment_booked";
+  return (
+    e.type === "appointment_booked" ||
+    e.type === "appointment_rescheduled" ||
+    e.type === "appointment_completed" ||
+    e.type === "appointment_cancelled"
+  );
 }
 export function isFormEntry(e: ActivityEntry): e is FormSubmittedActivityEntry {
   return e.type === "form_submitted";
@@ -163,36 +169,86 @@ export function isNoteEntry(e: ActivityEntry): e is NoteActivityEntry {
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 
 function readAll(): ActivityEntry[] {
+  if (typeof window === "undefined") return [];
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const rawLocal = localStorage.getItem(STORAGE_KEY);
+    if (rawLocal) return JSON.parse(rawLocal);
+    const rawSession = sessionStorage.getItem(STORAGE_KEY);
+    return rawSession ? JSON.parse(rawSession) : [];
   } catch {
     return [];
   }
 }
 
 function writeAll(entries: ActivityEntry[]): void {
+  if (typeof window === "undefined") return;
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    const serialized = JSON.stringify(entries);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    sessionStorage.setItem(STORAGE_KEY, serialized);
     window.dispatchEvent(new Event(ACTIVITY_ENGINE_EVENT));
+    window.dispatchEvent(new Event("storage"));
   } catch {}
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Read all activity entries for a client, optionally scoped to one process.
+ * Read all activity entries for a client, optionally scoped to one process or appointment.
  * Returns newest-first by default (sorted descending by timestamp).
  */
-export function getActivity(clientId: string, processId?: string): ActivityEntry[] {
+export function getActivity(
+  clientId: string | string[],
+  processId?: string,
+  options?: { appointmentId?: string }
+): ActivityEntry[] {
   const all = readAll();
+  const rawList = Array.isArray(clientId) ? clientId : [clientId];
+  const clientIds = rawList
+    .filter(Boolean)
+    .map((c) => String(c).toLowerCase().trim());
+
+  const targetApptId = options?.appointmentId
+    ? String(options.appointmentId).toLowerCase().trim()
+    : undefined;
+
   const filtered = all.filter((e) => {
-    if (e.clientId !== clientId) return false;
-    if (processId && processId !== "all") {
-      return e.processId === processId || e.processName === processId;
+    // 1. Direct appointmentId match
+    if (targetApptId && (e as any).appointmentId) {
+      const entryApptId = String((e as any).appointmentId).toLowerCase().trim();
+      const normTarget = targetApptId.replace(/[^0-9]/g, "");
+      const normEntry = entryApptId.replace(/[^0-9]/g, "");
+      if (entryApptId === targetApptId || (normTarget && normEntry && normTarget === normEntry)) {
+        return true;
+      }
     }
+
+    // 2. ClientId match
+    const entryClientId = e.clientId ? String(e.clientId).toLowerCase().trim() : "";
+    const matchClient =
+      clientIds.length === 0 ||
+      clientIds.some((cid) => {
+        if (!cid) return false;
+        if (entryClientId === cid) return true;
+        const normC = cid.replace(/[^0-9]/g, "");
+        const normE = entryClientId.replace(/[^0-9]/g, "");
+        return Boolean(normC && normE && normC === normE);
+      });
+
+    if (!matchClient) return false;
+
+    // 3. Process filter if specified and not 'all'
+    if (processId && processId !== "all") {
+      const pId = String(processId).toLowerCase();
+      const matchProcess =
+        (e.processId && String(e.processId).toLowerCase() === pId) ||
+        (e.processName && String(e.processName).toLowerCase() === pId);
+      if (!matchProcess) return false;
+    }
+
     return true;
   });
+
   return filtered.sort((a, b) => {
     const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
     if (diff !== 0) return diff;
@@ -241,14 +297,19 @@ export function appendActivity(
  * Returns an unsubscribe function.
  */
 export function subscribeToActivity(
-  clientId: string,
-  callback: (entries: ActivityEntry[]) => void
+  clientId: string | string[],
+  callback: (entries: ActivityEntry[]) => void,
+  options?: { appointmentId?: string }
 ): () => void {
   const handler = () => {
-    callback(getActivity(clientId));
+    callback(getActivity(clientId, undefined, options));
   };
   window.addEventListener(ACTIVITY_ENGINE_EVENT, handler);
-  return () => window.removeEventListener(ACTIVITY_ENGINE_EVENT, handler);
+  window.addEventListener("storage", handler);
+  return () => {
+    window.removeEventListener(ACTIVITY_ENGINE_EVENT, handler);
+    window.removeEventListener("storage", handler);
+  };
 }
 
 // ─── Duration helpers (exported for card rendering) ──────────────────────────

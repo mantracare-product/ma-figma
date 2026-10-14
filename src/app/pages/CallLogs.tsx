@@ -15,10 +15,13 @@ import {
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
+import { DataExportModal } from "../components/common/DataExportModal";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
 import ScheduleCallDrawer, { ScheduleCallClientOption } from "../components/telephony/ScheduleCallDrawer";
+import { useClients, type Client } from "../../lib/clientsStore";
+import { getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
 import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 
 interface CallLog {
@@ -28,7 +31,7 @@ interface CallLog {
   type: string;
   status: string;
   process: string;
-  lastStage: string;
+  lastStage?: string;
   currentStage: string;
   duration: string;
   date: string;
@@ -40,52 +43,7 @@ interface CallLog {
   relationshipReason?: "Call Trigger" | "Stage Change" | "Retry" | "Manual Trigger";
 }
 
-interface Client {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  country: string;
-  countryCode: string;
-  countryFlag: string;
-  processes: string[];
-  stage: string;
-  responsible?: string;
-  lastContact: string;
-  status: string;
-  companyName?: string;
-  jobPosition?: string;
-  numberOfEmployees?: string;
-  location?: string;
-}
 
-// Mock client data for profile drawer
-const mockClients: { [key: string]: Client } = {
-  "CL-001": { id: "CL-001", name: "Sarah Johnson", email: "sarah.j@email.com", phone: "5551234567", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake", "Follow-up Calls"], stage: "Insurance Verification", responsible: "John Smith", lastContact: "2024-04-10", status: "Active", companyName: "TechCorp Inc.", jobPosition: "Senior Manager", numberOfEmployees: "101-250" },
-  "CL-002": { id: "CL-002", name: "Michael Chen", email: "mchen@email.com", phone: "5552345678", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Initial Contact", responsible: "Sarah Johnson", lastContact: "2024-04-09", status: "Active", companyName: "Innovate Solutions", jobPosition: "Product Manager", numberOfEmployees: "51-100" },
-  "CL-003": { id: "CL-003", name: "Emily Davis", email: "emily.d@email.com", phone: "5553456789", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active", companyName: "Healthcare Plus", jobPosition: "Director of Operations", numberOfEmployees: "251-500" },
-  "CL-004": { id: "CL-004", name: "Robert Wilson", email: "rwilson@email.com", phone: "5554567890", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
-  "CL-006": { id: "CL-006", name: "David Martinez", email: "d.martinez@email.com", phone: "5556789012", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls"], stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-04-12", status: "Active" },
-  "CL-007": { id: "CL-007", name: "Lisa Anderson", email: "l.anderson@email.com", phone: "5557890123", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Billing Support", "Follow-up Calls"], stage: "Payment Reminder", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active", companyName: "MediCare Group", jobPosition: "CFO", numberOfEmployees: "501-1000" },
-  "CL-008": { id: "CL-008", name: "James Taylor", email: "jtaylor@email.com", phone: "5558901234", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Schedule Appointment", responsible: "Amanda Taylor", lastContact: "2024-04-11", status: "Active" },
-  "CL-009": { id: "CL-009", name: "Amanda Clark", email: "a.clark@email.com", phone: "5559012345", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling", "Follow-up Calls"], stage: "Confirmation", responsible: "John Smith", lastContact: "2024-04-09", status: "Active" },
-  "CL-011": { id: "CL-011", name: "Jennifer White", email: "j.white@email.com", phone: "5551234568", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support", "Patient Intake"], stage: "Initial Contact", responsible: "Michael Chen", lastContact: "2024-04-13", status: "Active" },
-  "CL-012": { id: "CL-012", name: "Matthew Lewis", email: "m.lewis@email.com", phone: "5552345679", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Insurance Verification"], stage: "Approval", responsible: "Emily Davis", lastContact: "2024-04-06", status: "Active" },
-  "CL-013": { id: "CL-013", name: "Priya Sharma", email: "priya.sharma@email.com", phone: "9820172818", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake", "Follow-up Calls"], stage: "Insurance Verification", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
-  "CL-014": { id: "CL-014", name: "Rahul Patel", email: "rahul.p@email.com", phone: "9876543210", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls"], stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-04-11", status: "Active" },
-  "CL-015": { id: "CL-015", name: "Ananya Reddy", email: "ananya.r@email.com", phone: "9123456789", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Billing Support", "Patient Intake"], stage: "Issue Resolution", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active" },
-  "CL-016": { id: "CL-016", name: "Vikram Singh", email: "vikram.s@email.com", phone: "9234567890", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "Amanda Taylor", lastContact: "2024-04-09", status: "Active" },
-  "CL-018": { id: "CL-018", name: "Arjun Desai", email: "arjun.d@email.com", phone: "9456789012", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Sarah Johnson", lastContact: "2024-04-13", status: "Active" },
-  "CL-019": { id: "CL-019", name: "Kavya Iyer", email: "kavya.i@email.com", phone: "9567890123", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Insurance Verification", "Patient Intake"], stage: "Document Check", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active" },
-  "CL-020": { id: "CL-020", name: "Rohan Kumar", email: "rohan.k@email.com", phone: "9678901234", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake"], stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
-  "CL-021": { id: "CL-021", name: "Deepika Nair", email: "deepika.n@email.com", phone: "9789012345", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Appointment Scheduling", "Follow-up Calls"], stage: "Confirmation", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
-  "CL-023": { id: "CL-023", name: "Ahmed Al-Mansoori", email: "ahmed.am@email.com", phone: "501234567", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Patient Intake", "Insurance Verification"], stage: "Insurance Verification", responsible: "David Martinez", lastContact: "2024-04-13", status: "Active" },
-  "CL-024": { id: "CL-024", name: "Fatima Hassan", email: "fatima.h@email.com", phone: "502345678", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Amanda Taylor", lastContact: "2024-04-10", status: "Active" },
-  "CL-025": { id: "CL-025", name: "Omar Al-Rashid", email: "omar.ar@email.com", phone: "503456789", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "John Smith", lastContact: "2024-04-11", status: "Active" },
-  "CL-027": { id: "CL-027", name: "Youssef Said", email: "youssef.s@email.com", phone: "505678901", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Patient Intake", "Billing Support"], stage: "Follow-up", responsible: "Michael Chen", lastContact: "2024-04-12", status: "Active" },
-  "CL-028": { id: "CL-028", name: "Oliver Thompson", email: "oliver.t@email.com", phone: "7412345678", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Patient Intake", "Follow-up Calls"], stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-09", status: "Active" },
-  "CL-029": { id: "CL-029", name: "Charlotte Evans", email: "charlotte.e@email.com", phone: "7423456789", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Insurance Verification"], stage: "Approval", responsible: "Robert Wilson", lastContact: "2024-04-13", status: "Active" },
-};
 
 // Comprehensive call logs dataset (100 calls total)
 // Distribution: 70 Outbound, 30 Inbound | 65 Completed, 20 Failed, 15 Pending
@@ -515,6 +473,7 @@ export function getUpdatedFields(call: CallLog): UpdatedField[] {
 
 export default function CallLogs() {
   const location = useLocation();
+  const { clients } = useClients();
 
   // Helper function to derive process from stage (defined before useState)
   const deriveProcessFromStage = (stage: string): string => {
@@ -540,17 +499,67 @@ export default function CallLogs() {
     return stageToProcessMap[stage] || 'Patient Intake';
   };
 
-  // Ensure all call logs have process field
-  const [callLogs, setCallLogs] = useState<CallLog[]>(
-    initialCallLogs.map(log => ({
-      ...log,
-      process: log.process || deriveProcessFromStage(log.currentStage)
-    }))
-  );
+  // Ensure all call logs have process field from central store
+  const [callLogs, setCallLogs] = useState<CallLog[]>(() => {
+    try {
+      const stored = getStoredCallLogs();
+      return stored.map(log => ({
+        ...log,
+        process: log.process || deriveProcessFromStage(log.currentStage)
+      }));
+    } catch {
+      return initialCallLogs.map(log => ({
+        ...log,
+        process: log.process || deriveProcessFromStage(log.currentStage)
+      }));
+    }
+  });
+
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const stored = getStoredCallLogs();
+        setCallLogs(stored.map(log => ({
+          ...log,
+          process: log.process || deriveProcessFromStage(log.currentStage)
+        })));
+      } catch {}
+    };
+
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        handler();
+      }
+    };
+
+    window.addEventListener(PROCESS_LOGS_STORE_EVENT, handler);
+    window.addEventListener("storage", handler);
+    window.addEventListener("focus", handler);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      try {
+        channel = new BroadcastChannel("process_logs_broadcast_channel");
+        channel.onmessage = handler;
+      } catch (e) {
+        console.warn("Failed to create BroadcastChannel in CallLogs:", e);
+      }
+    }
+
+    return () => {
+      window.removeEventListener(PROCESS_LOGS_STORE_EVENT, handler);
+      window.removeEventListener("storage", handler);
+      window.removeEventListener("focus", handler);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      channel?.close();
+    };
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showColumnToggle, setShowColumnToggle] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [selectedProcessFilter, setSelectedProcessFilter] = useState<string | null>(null);
   const [showProcessesDropdown, setShowProcessesDropdown] = useState(false);
@@ -705,33 +714,29 @@ export default function CallLogs() {
 
   // Comprehensive stage pipeline (for progress visualization) - matching /deals exactly
   const stagePipeline = [
-    { id: 1, label: "Initial Contact", fullLabel: "Patient Intake: Initial Contact", category: "Patient Intake" },
-    { id: 2, label: "Insurance Verify", fullLabel: "Patient Intake: Insurance Verify", category: "Patient Intake" },
-    { id: 3, label: "Schedule Appointment", fullLabel: "Patient Intake: Schedule Appointment", category: "Patient Intake" },
-    { id: 4, label: "Post-Visit Check", fullLabel: "Follow-up Calls: Post-Visit Check", category: "Follow-up Calls" },
-    { id: 5, label: "Medication Reminder", fullLabel: "Follow-up Calls: Medication Reminder", category: "Follow-up Calls" },
-    { id: 6, label: "Billing Inquiry", fullLabel: "Payment Reminder: Billing Inquiry", category: "Payment Reminder" },
-    { id: 7, label: "Issue Resolution", fullLabel: "Payment Reminder: Issue Resolution", category: "Payment Reminder" },
-    { id: 8, label: "Payment Notice", fullLabel: "Payment Reminder: Payment Notice", category: "Payment Reminder" },
-    { id: 9, label: "Payment Collected", fullLabel: "Payment Reminder: Payment Collected", category: "Payment Reminder" },
-    { id: 10, label: "Slot Selection", fullLabel: "Appointment Scheduling: Slot Selection", category: "Appointment Scheduling" },
-    { id: 11, label: "Confirmation", fullLabel: "Appointment Scheduling: Confirmation", category: "Appointment Scheduling" },
-    { id: 12, label: "Document Check", fullLabel: "Insurance Verification: Document Check", category: "Insurance Verification" },
-    { id: 13, label: "Verification", fullLabel: "Insurance Verification: Verification", category: "Insurance Verification" },
-    { id: 14, label: "Approval", fullLabel: "Insurance Verification: Approval", category: "Insurance Verification" },
+    { id: 1, label: "Initial Contact", fullLabel: "Client Intake: Initial Contact", category: "Client Intake" },
+    { id: 2, label: "Contacted", fullLabel: "Client Intake: Contacted", category: "Client Intake" },
+    { id: 3, label: "Interested", fullLabel: "Client Intake: Interested", category: "Client Intake" },
+    { id: 4, label: "Call Back Later", fullLabel: "Client Intake: Call Back Later", category: "Client Intake" },
+    { id: 5, label: "Not Interested", fullLabel: "Client Intake: Not Interested", category: "Client Intake" },
+    { id: 6, label: "Outreach", fullLabel: "Client Reactivation: Outreach", category: "Client Reactivation" },
+    { id: 7, label: "Contacted", fullLabel: "Client Reactivation: Contacted", category: "Client Reactivation" },
+    { id: 8, label: "Reactivated", fullLabel: "Client Reactivation: Reactivated", category: "Client Reactivation" },
+    { id: 9, label: "Call Back Later", fullLabel: "Client Reactivation: Call Back Later", category: "Client Reactivation" },
+    { id: 10, label: "Lost", fullLabel: "Client Reactivation: Lost", category: "Client Reactivation" },
   ];
 
-  // Helper to get stage position (1-14) from current stage name
+  // Helper to get stage position from current stage name
   const getStagePosition = (stageName: string): number => {
     // Try to find exact match in pipeline
-    const exactMatch = stagePipeline.find(s => s.label === stageName);
-    if (exactMatch) return exactMatch.id;
+    const exactIndex = stagePipeline.findIndex(s => s.label === stageName);
+    if (exactIndex !== -1) return exactIndex + 1;
 
     // Try to find partial match for legacy stage names
-    const partialMatch = stagePipeline.find(s =>
+    const partialIndex = stagePipeline.findIndex(s =>
       s.label.toLowerCase().includes(stageName.toLowerCase())
     );
-    if (partialMatch) return partialMatch.id;
+    if (partialIndex !== -1) return partialIndex + 1;
 
     // Default to position 1 if no match
     return 1;
@@ -741,21 +746,12 @@ export default function CallLogs() {
   const getCategoryFromStage = (stageName: string): string => {
     // Direct category mapping for common stage names
     const stageToCategory: { [key: string]: string } = {
-      "Initial Contact": "Patient Intake",
-      "Insurance Verification": "Insurance Verification",
-      "Insurance Verify": "Patient Intake",
-      "Schedule Appointment": "Patient Intake",
-      "Post-Visit Check": "Follow-up Calls",
-      "Medication Reminder": "Follow-up Calls",
-      "Follow-up": "Follow-up Calls",
-      "Billing Inquiry": "Billing Support",
-      "Issue Resolution": "Billing Support",
-      "Payment Reminder": "Billing Support",
-      "Slot Selection": "Appointment Scheduling",
-      "Confirmation": "Appointment Scheduling",
-      "Document Check": "Insurance Verification",
-      "Verification": "Insurance Verification",
-      "Approval": "Insurance Verification",
+      "Initial Contact": "Client Intake",
+      "Interested": "Client Intake",
+      "Not Interested": "Client Intake",
+      "Outreach": "Client Reactivation",
+      "Reactivated": "Client Reactivation",
+      "Lost": "Client Reactivation",
     };
 
     // Try direct mapping first
@@ -772,7 +768,7 @@ export default function CallLogs() {
     }
 
     // Default to first category
-    return "Patient Intake";
+    return "Client Intake";
   };
 
   // Selection state
@@ -818,7 +814,7 @@ export default function CallLogs() {
   };
 
   // Filtered clients for Schedule Call search
-  const scFilteredClients = Object.values(mockClients).filter(c =>
+  const scFilteredClients = clients.filter(c =>
     scClientSearch.length > 0 &&
     (c.name.toLowerCase().includes(scClientSearch.toLowerCase()) ||
       c.email.toLowerCase().includes(scClientSearch.toLowerCase()) ||
@@ -1304,6 +1300,7 @@ export default function CallLogs() {
           searchPlaceholder="Search call logs..."
           showSearchModal={showSearchModal}
           onSearchModalToggle={setShowSearchModal}
+          onExport={() => setShowExportModal(true)}
           primaryAction={{
             label: "Schedule Call",
             icon: <CalendarClock className="w-3.5 h-3.5" />,
@@ -1686,6 +1683,35 @@ export default function CallLogs() {
           }
         />
 
+        {/* Unified DataExportModal */}
+        <DataExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          title="Export Call Logs"
+          subtitle="Export inbound & outbound calls, recordings, stages, and metrics"
+          data={callLogs}
+          filenamePrefix="call_logs"
+          dateFieldKey="date"
+          dateLabel="Call Date"
+          statusFieldKey="status"
+          statusLabel="Call Status"
+          statusOptions={[
+            { label: "Completed", value: "Completed" },
+            { label: "Failed", value: "Failed" },
+            { label: "Pending", value: "Pending" },
+          ]}
+          allFields={[
+            { key: "id", label: "Call ID", getValue: (c) => c.id },
+            { key: "client", label: "Client Name", getValue: (c) => c.client },
+            { key: "type", label: "Call Type", getValue: (c) => c.type },
+            { key: "status", label: "Status", getValue: (c) => c.status },
+            { key: "process", label: "Process", getValue: (c) => c.process },
+            { key: "currentStage", label: "Stage", getValue: (c) => c.currentStage },
+            { key: "duration", label: "Duration", getValue: (c) => c.duration },
+            { key: "date", label: "Date & Time", getValue: (c) => c.date },
+          ]}
+        />
+
         {/* Add Field Modal */}
         {showAddFieldModal && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -1878,6 +1904,24 @@ export default function CallLogs() {
               ),
             },
             {
+              id: "lastStage",
+              header: "Previous Stage",
+              render: (log) => (
+                <span className="text-xs text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {log.lastStage && log.lastStage !== "N/A" ? log.lastStage : "—"}
+                </span>
+              ),
+            },
+            {
+              id: "currentStage",
+              header: "Last Stage",
+              render: (log) => (
+                <span className="text-xs font-semibold text-[#111827]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {log.currentStage || "—"}
+                </span>
+              ),
+            },
+            {
               id: "client",
               header: "Client",
               render: (log) => (
@@ -1889,23 +1933,6 @@ export default function CallLogs() {
                   )}
                   <span className="text-[#1A73E8]">{log.client}</span>
                 </div>
-              ),
-            },
-            {
-              id: "stage",
-              header: "Stage",
-              render: (log) => (
-                <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  {log.lastStage && log.lastStage !== "N/A" ? (
-                    <span className="flex items-center gap-1">
-                      <span className="text-[#94A3B8]">{log.lastStage}</span>
-                      <span className="text-[#94A3B8]">→</span>
-                      <span className="text-[#111827]">{log.currentStage}</span>
-                    </span>
-                  ) : (
-                    <span className="text-[#111827]">{log.currentStage}</span>
-                  )}
-                </span>
               ),
             },
             {
@@ -2230,7 +2257,7 @@ export default function CallLogs() {
         onChange={(patch) => {
           if (patch.client !== undefined) {
             if (patch.client) {
-              const origClient = mockClients[patch.client.id] || {
+              const origClient = clients.find(c => c.id === patch.client!.id) || {
                 id: patch.client.id,
                 name: patch.client.name,
                 email: patch.client.email,
@@ -2258,7 +2285,7 @@ export default function CallLogs() {
         }}
         onSave={handleScheduleCall}
         isSaving={scIsScheduling}
-        clients={Object.values(mockClients).map((c) => ({
+        clients={clients.map((c) => ({
           id: c.id,
           name: c.name,
           email: c.email,

@@ -1,26 +1,28 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { InvoiceStatus } from "../../types/invoiceTypes";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
+
+export interface InvoiceStageItem {
+  id: string;
+  name: string;
+  color?: string;
+  systemCategory?: string;
+}
 
 interface InvoiceProgressBarProps {
   status: InvoiceStatus;
-  onStatusChange?: (newStatus: InvoiceStatus) => void;
+  currentStageId?: string;
+  stages?: InvoiceStageItem[];
+  onStatusChange?: (newStatusOrStageId: InvoiceStatus | string) => void;
   interactive?: boolean;
   logId?: string;
   size?: "sm" | "md" | "lg";
 }
 
-const STAGE_BLOCKS: { id: InvoiceStatus; name: string; step: number }[] = [
-  { id: "draft", name: "Draft", step: 1 },
-  { id: "sent", name: "Sent", step: 2 },
-  { id: "viewed", name: "Viewed", step: 3 },
-  { id: "partial", name: "Partial", step: 4 },
-  { id: "paid", name: "Paid", step: 5 },
-  { id: "overdue", name: "Overdue", step: 6 },
-  { id: "void", name: "Void", step: 7 },
-];
-
 export default function InvoiceProgressBar({
   status,
+  currentStageId,
+  stages: propStages,
   onStatusChange,
   interactive = true,
   logId = "inv",
@@ -28,6 +30,31 @@ export default function InvoiceProgressBar({
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [showPopover, setShowPopover] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Fallback internal stages from store if propStages is not provided
+  const [internalStages, setInternalStages] = useState<InvoiceStageItem[]>(() => {
+    const proc = getStoredProcesses().find((p) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
+    return proc.stages;
+  });
+
+  useEffect(() => {
+    if (propStages) return;
+    const handleUpdate = () => {
+      const proc = getStoredProcesses().find((p) => p.entityType === "invoice") || DEFAULT_ENTITY_PROCESSES.invoice;
+      setInternalStages(proc.stages);
+    };
+    window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, [propStages]);
+
+  const effectiveStages = useMemo(() => {
+    if (propStages && propStages.length > 0) return propStages;
+    return internalStages;
+  }, [propStages, internalStages]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -39,52 +66,77 @@ export default function InvoiceProgressBar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Determine active step position (1-7)
-  let activeIndex = 1;
-  if (status === "draft") activeIndex = 1;
-  else if (status === "sent") activeIndex = 2;
-  else if (status === "viewed") activeIndex = 3;
-  else if (status === "partial") activeIndex = 4;
-  else if (status === "paid") activeIndex = 5;
-  else if (status === "overdue") activeIndex = 6;
-  else if (status === "void") activeIndex = 7;
+  // Determine active step position (1-based index)
+  const activeIndex = useMemo(() => {
+    if (currentStageId && currentStageId.trim() !== "") {
+      const idx = effectiveStages.findIndex(
+        (s) =>
+          s.id.toLowerCase() === currentStageId.trim().toLowerCase() ||
+          s.name.toLowerCase() === currentStageId.trim().toLowerCase()
+      );
+      if (idx !== -1) return idx + 1;
+    }
+    return -1;
+  }, [effectiveStages, currentStageId]);
 
   const isOverdue = status === "overdue";
   const isVoid = status === "void";
+  const currentStageObj = activeIndex > 0 ? effectiveStages[activeIndex - 1] : null;
+  const isCurrentLostStage = isVoid || Boolean(currentStageObj && (currentStageObj.systemCategory === "void" || currentStageObj.systemCategory === "lost" || currentStageObj.name.toLowerCase().includes("void") || currentStageObj.name.toLowerCase().includes("cancel")));
 
   return (
     <div className="relative inline-block" ref={containerRef}>
       <div
         className="flex items-center gap-[3px] justify-center cursor-pointer p-1 rounded hover:bg-slate-100/50 transition-colors"
         onClick={() => {
-          if (interactive && onStatusChange) {
+          if (interactive && onStatusChange && !isVoid && !isCurrentLostStage) {
             setShowPopover(!showPopover);
           }
         }}
       >
-        {/* Render 6 Visual Block Segments */}
-        {STAGE_BLOCKS.map((stg, i) => {
+        {/* Render dynamic Visual Block Segments */}
+        {effectiveStages.map((stg, i) => {
           const segIdx = i + 1;
-          const isCompleted = segIdx < activeIndex;
-          const isActive = segIdx === activeIndex;
-          const isFilled = isCompleted || isActive;
+          const currentStage = activeIndex > 0 ? effectiveStages[activeIndex - 1] : null;
+
+          const isStgSuccess = stg.systemCategory === "paid" || stg.name.toLowerCase().includes("paid");
+          const isStgLost = stg.systemCategory === "void" || stg.systemCategory === "lost" || stg.name.toLowerCase().includes("void") || stg.name.toLowerCase().includes("cancel");
+
+          const isCurrentSuccess = status === "paid" || (currentStage && (currentStage.systemCategory === "paid" || currentStage.name.toLowerCase().includes("paid")));
+          const isCurrentLost = status === "void" || (currentStage && (currentStage.systemCategory === "void" || currentStage.systemCategory === "lost" || currentStage.name.toLowerCase().includes("void")));
+
+          const isActive = activeIndex > 0 && segIdx === activeIndex;
+          const isCompleted = activeIndex > 0 && segIdx < activeIndex && !isStgLost;
+
+          let isDisabledGrey = false;
+          if (isCurrentSuccess && isStgLost) {
+            isDisabledGrey = true;
+          } else if (isCurrentLost && !isActive && !isCompleted) {
+            isDisabledGrey = true;
+          }
+
           const isHovered = hoveredIdx === segIdx;
 
-          let bg = "transparent";
-          let border = "1px solid #E8ECF0";
+          let bg = "#E2E8F0";
+          let border = "1px solid #CBD5E1";
+          let opacity = 0.9;
 
-          if (isVoid) {
-            bg = "#CBD5E1"; // Muted grey for void
-            border = "none";
+          if (isActive) {
+            bg = isCurrentLost || isVoid ? "#EF4444" : (stg.color || "#1E88E5");
+            border = "1.5px solid #0F172A";
+            opacity = 1;
+          } else if (isCompleted) {
+            // Keep full stage color for completed stages even when void/lost
+            bg = stg.color || "#1E88E5";
+            border = `1px solid ${stg.color || "#1E88E5"}`;
+            opacity = 0.9;
           } else if (isOverdue && (isActive || isCompleted)) {
-            bg = segIdx === 6 ? "#EF4444" : "#1E88E5"; // Red block for overdue at step 6
+            bg = stg.systemCategory === "overdue" || isActive ? "#EF4444" : (stg.color || "#1E88E5");
             border = "none";
-          } else if (stg.id === "partial" && isActive) {
-            bg = "#F59E0B"; // Amber for partial status
-            border = "none";
-          } else if (isFilled) {
-            bg = "#1E88E5"; // Blue for active/completed stages
-            border = "none";
+          } else {
+            bg = "#E2E8F0";
+            border = "1px solid #CBD5E1";
+            opacity = 0.9;
           }
 
           return (
@@ -122,7 +174,8 @@ export default function InvoiceProgressBar({
                   borderRadius: "2px",
                   backgroundColor: bg,
                   border: border,
-                  cursor: interactive && onStatusChange ? "pointer" : "default",
+                  opacity: opacity,
+                  cursor: isDisabledGrey ? "not-allowed" : (interactive && onStatusChange ? "pointer" : "default"),
                   display: "block",
                   padding: 0,
                   flexShrink: 0,
@@ -136,30 +189,39 @@ export default function InvoiceProgressBar({
         })}
       </div>
 
-      {/* Popover on click to choose ALL 6 stages explicitly */}
+      {/* Popover on click to choose stage */}
       {showPopover && (
-        <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 text-xs text-left">
+        <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 text-xs text-left">
           <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1">
-            Set Stage Status (6 Stages)
+            Set Stage Status ({effectiveStages.length} Stages)
           </div>
-          {STAGE_BLOCKS.map((stg) => (
-            <button
-              key={stg.id}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onStatusChange) onStatusChange(stg.id);
-                setShowPopover(false);
-              }}
-              className={`w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center justify-between font-medium ${
-                status === stg.id ? "bg-slate-100 font-bold text-blue-600" : "text-slate-700"
-              }`}
-            >
-              <span>
-                {stg.step}. {stg.name}
-              </span>
-              {status === stg.id && <span className="text-blue-600 font-bold">✓</span>}
-            </button>
-          ))}
+          {effectiveStages.map((stg, i) => {
+            const isSelected = (currentStageId && currentStageId === stg.id) || (!currentStageId && (status === stg.id || status === stg.systemCategory));
+            return (
+              <button
+                key={stg.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onStatusChange) onStatusChange(stg.id);
+                  setShowPopover(false);
+                }}
+                className={`w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center justify-between font-medium ${
+                  isSelected ? "bg-slate-100 font-bold text-blue-600" : "text-slate-700"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: stg.color || "#3B82F6" }}
+                  />
+                  <span>
+                    {i + 1}. {stg.name}
+                  </span>
+                </div>
+                {isSelected && <span className="text-blue-600 font-bold">✓</span>}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

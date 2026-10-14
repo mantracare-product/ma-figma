@@ -1,15 +1,26 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router";
 import {
   ChevronDown, Plus, Trash2, Info, Sliders, Star, Volume2, Play, ArrowRight,
   User, PhoneForwarded, PhoneOff, Mail, MessageSquare, Paperclip, ExternalLink,
-  ChevronRight, X, Copy, Pencil, Sparkles
+  ChevronRight, X, Copy, Pencil, Sparkles, Calendar, Receipt, Briefcase, FileCheck, Check, GitBranch, Split
 } from "lucide-react";
 import VariablePickerButton, { FETCH_FIELD_SOURCES } from "./VariablePickerButton";
+import VariableSelectorModal from "./VariableSelectorModal";
+import SelectFieldsMultiModal from "./SelectFieldsMultiModal";
 import { InfoTooltip } from "../help/InfoTooltip";
+import { useFieldRegistry, isFieldMatchingOrg, ScopingRule, ALL_MODULES, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
 
 import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
+import { getStoredProcesses, DEFAULT_ENTITY_PROCESSES, isProcessMatchingScopingRules } from "../../../lib/useProcessStore";
 import { MOCK_SERVICES } from "../../../lib/mockServicesData";
+import { getStoredServices } from "../../../lib/servicesStore";
+import {
+  getStoredDocumentTemplates,
+  isDocumentTemplateMatchingScopeRules,
+  DocumentTemplate,
+  TemplateEntity,
+} from "../../../lib/documentTemplatesStore";
 
 const availableEmployees = [
   { id: "1", name: "Sarah Johnson" },
@@ -31,6 +42,11 @@ interface ProcessOption {
   id: string;
   name: string;
   stages?: { id: string; name: string }[];
+  entityType?: string;
+  scopingRules?: ScopingRule[];
+  industryCategory?: string;
+  industry?: string;
+  locations?: string[];
 }
 
 interface StepParametersFieldsProps {
@@ -39,6 +55,7 @@ interface StepParametersFieldsProps {
   onChange: (patch: Record<string, any>) => void;
   processes?: ProcessOption[];
   stepTrigger?: string;
+  scopingRules?: ScopingRule[];
 }
 
 export default function StepParametersFields({
@@ -46,8 +63,42 @@ export default function StepParametersFields({
   params,
   onChange,
   processes = [],
-  stepTrigger
+  stepTrigger,
+  scopingRules = [],
 }: StepParametersFieldsProps) {
+  const allAvailableProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
+  const effectiveProcesses = useMemo(() => {
+    if (!scopingRules || scopingRules.length === 0) {
+      return allAvailableProcesses;
+    }
+    const hasActiveRules = scopingRules.some(
+      (r) =>
+        Boolean(r.industryCategory && r.industryCategory !== "All" && r.industryCategory !== "*") ||
+        Boolean(r.industries && r.industries.length > 0 && !r.industries.includes("All")) ||
+        Boolean(r.locations && r.locations.length > 0 && !r.locations.includes("All"))
+    );
+    if (!hasActiveRules) return allAvailableProcesses;
+
+    const filtered = allAvailableProcesses.filter((p: any) =>
+      isProcessMatchingScopingRules(p, scopingRules)
+    );
+    return filtered.length > 0 ? filtered : allAvailableProcesses;
+  }, [allAvailableProcesses, scopingRules]);
+
+  const { getAllFields } = useFieldRegistry();
+  const allClientFields = getAllFields("client");
+  const scopedClientFields = useMemo(() => {
+    if (!scopingRules || scopingRules.length === 0) return allClientFields;
+    const firstRule = scopingRules[0];
+    const scopeOrg = {
+      industryCategory: firstRule.industryCategory,
+      industry: firstRule.industries?.[0],
+      location: firstRule.locations?.[0],
+    };
+    return allClientFields.filter((f) => isFieldMatchingOrg(f, scopeOrg));
+  }, [allClientFields, scopingRules]);
+  const customClientFields = scopedClientFields.filter((f) => f.source === "custom");
+
   // Local UI-only states
   const [conditionsSectionExpanded, setConditionsSectionExpanded] = useState(true);
   const [fieldConditionsGroupExpanded, setFieldConditionsGroupExpanded] = useState(true);
@@ -66,8 +117,473 @@ export default function StepParametersFields({
   const [customWebhookIntegrations, setCustomWebhookIntegrations] = useState<any[]>([]);
   const [jsonPaste, setJsonPaste] = useState("");
   const [jsonError, setJsonError] = useState("");
-
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const storedServices = useMemo(() => getStoredServices(), []);
+  const [isFieldRegistryModalOpen, setIsFieldRegistryModalOpen] = useState(false);
+  const [fieldModalMode, setFieldModalMode] = useState<
+    | "monitoredFields"
+    | "fieldConditionSingle"
+    | "fieldConditionMulti"
+    | "fieldUpdateSingle"
+    | "fieldUpdateMulti"
+    | "genericCondition"
+    | "conditionNodeSingle"
+    | "conditionNodeMulti"
+    | "conditionNodeDynamic"
+    | "triggerConditionSingle"
+    | "triggerConditionMulti"
+    | "triggerConditionDynamic"
+  >("monitoredFields");
+  const [targetConditionIndex, setTargetConditionIndex] = useState<number | null>(null);
+  const [targetTriggerConditionIndex, setTargetTriggerConditionIndex] = useState<number | null>(null);
+  const [targetFieldUpdateIndex, setTargetFieldUpdateIndex] = useState<number | null>(null);
+
+  const getFieldDefByKey = (key: string) => {
+    if (!key) return null;
+    for (const mod of ALL_MODULES) {
+      const list = getAllFields(mod);
+      const found = list.find((f) => f.key === key);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const getFieldOptions = (fieldDef: any, fieldKey: string, fieldSource?: string): Array<{ label: string; value: string }> => {
+    if (fieldDef?.options && Array.isArray(fieldDef.options) && fieldDef.options.length > 0) {
+      return fieldDef.options.map((opt: any) => ({
+        label: String(opt.label || opt.name || opt.value),
+        value: String(opt.value ?? opt.id ?? opt.label),
+      }));
+    }
+
+    if (fieldDef?.inputType === "yes_no") {
+      return [
+        { label: "Yes", value: "yes" },
+        { label: "No", value: "no" },
+      ];
+    }
+
+    const keyLower = (fieldKey || "").toLowerCase();
+    if (keyLower === "status" || keyLower.includes("status")) {
+      if (fieldSource === "appointment" || keyLower.includes("appointment")) {
+        return [
+          { label: "Booked", value: "booked" },
+          { label: "Confirmed", value: "confirmed" },
+          { label: "Checked In", value: "checked_in" },
+          { label: "Completed", value: "completed" },
+          { label: "Cancelled", value: "cancelled" },
+          { label: "No Show", value: "no_show" },
+          { label: "Rescheduled", value: "rescheduled" },
+        ];
+      }
+      if (fieldSource === "invoice" || keyLower.includes("invoice")) {
+        return [
+          { label: "Draft", value: "draft" },
+          { label: "Sent / Issued", value: "sent" },
+          { label: "Paid", value: "paid" },
+          { label: "Partially Paid", value: "partially_paid" },
+          { label: "Overdue", value: "overdue" },
+          { label: "Cancelled", value: "cancelled" },
+        ];
+      }
+      return [
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+        { label: "Pending", value: "pending" },
+        { label: "Archived", value: "archived" },
+      ];
+    }
+
+    if (keyLower === "gender") {
+      return [
+        { label: "Male", value: "male" },
+        { label: "Female", value: "female" },
+        { label: "Other", value: "other" },
+        { label: "Prefer not to say", value: "prefer_not_to_say" },
+      ];
+    }
+
+    if (keyLower === "priority") {
+      return [
+        { label: "High", value: "high" },
+        { label: "Medium", value: "medium" },
+        { label: "Low", value: "low" },
+      ];
+    }
+
+    if (keyLower === "service" || keyLower === "service_id" || keyLower === "appointment_service") {
+      return storedServices.map((s) => ({
+        label: s.name,
+        value: String(s.name),
+      }));
+    }
+
+    return [];
+  };
+
+  const getOperatorsForField = (fieldDef: any) => {
+    const type = fieldDef?.inputType || "text";
+    if (type === "number" || type === "money" || type === "rating") {
+      return [
+        { label: "Equal To", value: "Equal To" },
+        { label: "Not Equal To", value: "Not Equal To" },
+        { label: "Greater Than", value: "Greater Than" },
+        { label: "Less Than", value: "Less Than" },
+        { label: "Greater Than or Equal", value: "Greater Than or Equal" },
+        { label: "Less Than or Equal", value: "Less Than or Equal" },
+        { label: "Is Empty", value: "Is Empty" },
+        { label: "Is Not Empty", value: "Is Not Empty" },
+      ];
+    }
+    if (type === "date" || type === "date_time" || type === "time") {
+      return [
+        { label: "Equal To", value: "Equal To" },
+        { label: "Before", value: "Before" },
+        { label: "After", value: "After" },
+        { label: "Is Empty", value: "Is Empty" },
+        { label: "Is Not Empty", value: "Is Not Empty" },
+      ];
+    }
+    if (type === "yes_no" || type === "list_select" || type === "select") {
+      return [
+        { label: "Equal To", value: "Equal To" },
+        { label: "Not Equal To", value: "Not Equal To" },
+        { label: "Is Empty", value: "Is Empty" },
+        { label: "Is Not Empty", value: "Is Not Empty" },
+      ];
+    }
+    return [
+      { label: "Equal To", value: "Equal To" },
+      { label: "Not Equal To", value: "Not Equal To" },
+      { label: "Includes / Contains", value: "Includes" },
+      { label: "Starts With", value: "Starts With" },
+      { label: "Is Empty", value: "Is Empty" },
+      { label: "Is Not Empty", value: "Is Not Empty" },
+    ];
+  };
+
+  const renderFieldValueInput = (
+    fieldKey: string,
+    fieldSource: string | undefined,
+    value: any,
+    onValChange: (newVal: any) => void,
+    placeholder = "Enter value..."
+  ) => {
+    const fieldDef = getFieldDefByKey(fieldKey);
+    const options = getFieldOptions(fieldDef, fieldKey, fieldSource);
+
+    if (options.length > 0) {
+      return (
+        <select
+          value={value ?? ""}
+          onChange={(e) => onValChange(e.target.value)}
+          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs font-medium focus:border-blue-500 outline-none cursor-pointer"
+        >
+          <option value="">Select option...</option>
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    const inputType = fieldDef?.inputType || "text";
+
+    if (inputType === "date") {
+      return (
+        <input
+          type="date"
+          value={value ?? ""}
+          onChange={(e) => onValChange(e.target.value)}
+          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
+        />
+      );
+    }
+
+    if (inputType === "date_time") {
+      return (
+        <input
+          type="datetime-local"
+          value={value ?? ""}
+          onChange={(e) => onValChange(e.target.value)}
+          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
+        />
+      );
+    }
+
+    if (inputType === "time") {
+      return (
+        <input
+          type="time"
+          value={value ?? ""}
+          onChange={(e) => onValChange(e.target.value)}
+          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
+        />
+      );
+    }
+
+    if (inputType === "number" || inputType === "rating") {
+      return (
+        <input
+          type="number"
+          value={value ?? ""}
+          onChange={(e) => onValChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
+        />
+      );
+    }
+
+    if (inputType === "money") {
+      const symbol = CURRENCY_SYMBOLS[fieldDef?.currency || "USD"] || "$";
+      return (
+        <div className="relative flex items-center">
+          <span className="absolute left-3 text-xs font-semibold text-gray-500">{symbol}</span>
+          <input
+            type="number"
+            step="0.01"
+            value={value ?? ""}
+            onChange={(e) => onValChange(e.target.value)}
+            placeholder="0.00"
+            className="w-full pl-7 pr-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
+          />
+        </div>
+      );
+    }
+
+    if (inputType === "email") {
+      return (
+        <input
+          type="email"
+          value={value ?? ""}
+          onChange={(e) => onValChange(e.target.value)}
+          placeholder="name@example.com"
+          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
+        />
+      );
+    }
+
+    if (inputType === "tel") {
+      return (
+        <input
+          type="tel"
+          value={value ?? ""}
+          onChange={(e) => onValChange(e.target.value)}
+          placeholder="+1 (555) 000-0000"
+          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
+        />
+      );
+    }
+
+    return (
+      <input
+        type="text"
+        value={value ?? ""}
+        onChange={(e) => onValChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs focus:border-blue-500 outline-none"
+      />
+    );
+  };
+
+  const handleFieldRegistryApply = (selectedKeys: string[]) => {
+    if (fieldModalMode === "monitoredFields") {
+      onChange({ monitoredFields: selectedKeys });
+    } else if (fieldModalMode === "conditionNodeSingle") {
+      if (targetConditionIndex !== null && selectedKeys.length > 0) {
+        const key = selectedKeys[0];
+        const fieldDef = getFieldDefByKey(key);
+        const currentRules = Array.isArray(params.conditions) && params.conditions.length > 0
+          ? params.conditions
+          : [{ id: `cond-1`, field: "", operator: "Equal To", value: "" }];
+        const updated = currentRules.map((c: any, i: number) =>
+          i === targetConditionIndex
+            ? {
+                ...c,
+                field: key,
+                fieldLabel: fieldDef?.label || key,
+                fieldSource: fieldDef?.module || c.fieldSource || "client",
+                value: "",
+              }
+            : c
+        );
+        onChange({
+          conditions: updated,
+          field: key,
+          fieldLabel: fieldDef?.label || key,
+          fieldSource: fieldDef?.module || "client"
+        });
+      }
+    } else if (fieldModalMode === "conditionNodeMulti") {
+      if (selectedKeys.length > 0) {
+        const currentRules = Array.isArray(params.conditions) ? params.conditions : [];
+        const newConds = selectedKeys.map((key) => {
+          const fieldDef = getFieldDefByKey(key);
+          return {
+            id: `cond-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            field: key,
+            fieldLabel: fieldDef?.label || key,
+            fieldSource: fieldDef?.module || "client",
+            operator: "Equal To",
+            valueType: "static" as const,
+            value: "",
+          };
+        });
+        onChange({ conditions: [...currentRules, ...newConds], triggerConditions: [...currentRules, ...newConds] });
+      }
+    } else if (fieldModalMode === "conditionNodeDynamic") {
+      if (targetConditionIndex !== null && selectedKeys.length > 0) {
+        const key = selectedKeys[0];
+        const fieldDef = getFieldDefByKey(key);
+        const currentRules = Array.isArray(params.conditions) && params.conditions.length > 0
+          ? params.conditions
+          : [{ id: `cond-1`, field: "", operator: "Equal To", valueType: "static", value: "" }];
+        const updated = currentRules.map((c: any, i: number) =>
+          i === targetConditionIndex
+            ? {
+                ...c,
+                valueType: "dynamic",
+                dynamicField: key,
+                dynamicFieldLabel: fieldDef?.label || key,
+                dynamicFieldSource: fieldDef?.module || "client",
+              }
+            : c
+        );
+        onChange({ conditions: updated, triggerConditions: updated });
+      }
+    } else if (fieldModalMode === "triggerConditionDynamic") {
+      if (targetTriggerConditionIndex !== null && selectedKeys.length > 0) {
+        const key = selectedKeys[0];
+        const fieldDef = getFieldDefByKey(key);
+        const currentTrigConds = Array.isArray(params.triggerConditions) && params.triggerConditions.length > 0
+          ? params.triggerConditions
+          : (Array.isArray(params.conditions) ? params.conditions : [{ id: `trig-cond-1`, field: "", operator: "Equal To", valueType: "static", value: "" }]);
+        const updated = currentTrigConds.map((c: any, i: number) =>
+          i === targetTriggerConditionIndex
+            ? {
+                ...c,
+                valueType: "dynamic",
+                dynamicField: key,
+                dynamicFieldLabel: fieldDef?.label || key,
+                dynamicFieldSource: fieldDef?.module || "appointment",
+              }
+            : c
+        );
+        onChange({ triggerConditions: updated, conditions: updated });
+      }
+    } else if (fieldModalMode === "triggerConditionSingle") {
+      if (targetTriggerConditionIndex !== null && selectedKeys.length > 0) {
+        const key = selectedKeys[0];
+        const fieldDef = getFieldDefByKey(key);
+        const currentTrigConds = Array.isArray(params.triggerConditions) && params.triggerConditions.length > 0
+          ? params.triggerConditions
+          : [{ id: `trig-cond-1`, field: "", operator: "Equal To", value: "" }];
+        const updated = currentTrigConds.map((c: any, i: number) =>
+          i === targetTriggerConditionIndex
+            ? {
+                ...c,
+                field: key,
+                fieldLabel: fieldDef?.label || key,
+                fieldSource: fieldDef?.module || c.fieldSource || "appointment",
+                value: "",
+              }
+            : c
+        );
+        onChange({ triggerConditions: updated });
+      }
+    } else if (fieldModalMode === "triggerConditionMulti") {
+      if (selectedKeys.length > 0) {
+        const currentTrigConds = Array.isArray(params.triggerConditions) ? params.triggerConditions : [];
+        const newConds = selectedKeys.map((key) => {
+          const fieldDef = getFieldDefByKey(key);
+          return {
+            id: `trig-cond-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            field: key,
+            fieldLabel: fieldDef?.label || key,
+            fieldSource: fieldDef?.module || "appointment",
+            operator: "Equal To",
+            value: "",
+          };
+        });
+        onChange({ triggerConditions: [...currentTrigConds, ...newConds] });
+      }
+    } else if (fieldModalMode === "fieldConditionSingle") {
+      if (targetConditionIndex !== null && selectedKeys.length > 0) {
+        const key = selectedKeys[0];
+        const fieldDef = getFieldDefByKey(key);
+        const updated = fieldConditions.map((c: any, i: number) =>
+          i === targetConditionIndex
+            ? {
+                ...c,
+                field: key,
+                fieldLabel: fieldDef?.label || key,
+                fieldSource: fieldDef?.module || c.fieldSource || "client",
+              }
+            : c
+        );
+        onChange({ fieldConditions: updated });
+      }
+    } else if (fieldModalMode === "fieldConditionMulti") {
+      if (selectedKeys.length > 0) {
+        const newConds = selectedKeys.map((key) => {
+          const fieldDef = getFieldDefByKey(key);
+          return {
+            id: `field-cond-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            fieldSource: fieldDef?.module || "client",
+            field: key,
+            fieldLabel: fieldDef?.label || key,
+            operator: "Equal To",
+            value: "",
+          };
+        });
+        onChange({ fieldConditions: [...fieldConditions, ...newConds] });
+      }
+    } else if (fieldModalMode === "fieldUpdateSingle") {
+      if (targetFieldUpdateIndex !== null && selectedKeys.length > 0) {
+        const key = selectedKeys[0];
+        const fieldDef = getFieldDefByKey(key);
+        const updated = fieldUpdateBlocks.map((b: any, i: number) =>
+          i === targetFieldUpdateIndex
+            ? {
+                ...b,
+                fieldToEdit: key,
+                fieldLabel: fieldDef?.label || key,
+                fieldType: fieldDef?.module || b.fieldType,
+                updateValue: "",
+              }
+            : b
+        );
+        onChange({ fieldUpdateBlocks: updated });
+      }
+    } else if (fieldModalMode === "fieldUpdateMulti") {
+      if (selectedKeys.length > 0) {
+        const newBlocks = selectedKeys.map((key) => {
+          const fieldDef = getFieldDefByKey(key);
+          return {
+            fieldType: fieldDef?.module || "client",
+            fieldToEdit: key,
+            fieldLabel: fieldDef?.label || key,
+            valueSource: "static" as const,
+            updateValue: "",
+          };
+        });
+        onChange({ fieldUpdateBlocks: [...fieldUpdateBlocks, ...newBlocks] });
+      }
+    } else if (fieldModalMode === "genericCondition") {
+      if (selectedKeys.length > 0) {
+        const key = selectedKeys[0];
+        const fieldDef = getFieldDefByKey(key);
+        onChange({
+          field: key,
+          fieldLabel: fieldDef?.label || key,
+          fieldSource: fieldDef?.module || params.fieldSource || "system",
+        });
+      }
+    }
+    setIsFieldRegistryModalOpen(false);
+  };
 
   const getRefForField = (key: string) => {
     return {
@@ -126,8 +642,37 @@ export default function StepParametersFields({
   const intentConditions = params.intentConditions ?? [];
   const intentConditionOperators = params.intentConditionOperators ?? [];
 
+  const conditionRules: Array<{
+    id: string;
+    field: string;
+    fieldLabel?: string;
+    fieldSource?: string;
+    operator: string;
+    valueType?: "static" | "dynamic";
+    value: any;
+    dynamicField?: string;
+    dynamicFieldLabel?: string;
+    dynamicFieldSource?: string;
+  }> = Array.isArray(params.conditions) && params.conditions.length > 0
+    ? params.conditions
+    : (Array.isArray(params.triggerConditions) && params.triggerConditions.length > 0
+      ? params.triggerConditions
+      : [
+          {
+            id: `cond-init-1`,
+            field: params.field || "",
+            fieldLabel: params.fieldLabel || "",
+            fieldSource: params.fieldSource || "client",
+            operator: params.operator || "Equal To",
+            valueType: "static",
+            value: params.value ?? "",
+          }
+        ]);
+
+  const triggerConditions = conditionRules;
+
   const fieldUpdateBlocks = params.fieldUpdateBlocks ?? [
-    { fieldType: "System Fields", fieldToEdit: "Select field...", valueSource: "static", updateValue: "" }
+    { fieldType: "client", fieldToEdit: "", fieldLabel: "", valueSource: "static", updateValue: "" }
   ];
   const assignedUser = params.assignedUser ?? "";
   const callActionTransferType = params.callActionTransferType ?? "human";
@@ -214,299 +759,257 @@ export default function StepParametersFields({
     </div>
   );
 
-  return (
-    <div className="space-y-6 text-left">
-      {/* ───────────── CONDITIONS EDITOR ───────────── */}
-      {stepTrigger && (
-        <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-          <div
-            onClick={() => conditionsEnabled && setConditionsSectionExpanded(!conditionsSectionExpanded)}
-            className={`flex items-center justify-between px-4 py-3 ${conditionsEnabled ? "cursor-pointer select-none" : ""}`}
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                Conditions
-              </span>
-              <span className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>— optional</span>
-              <InfoTooltip text="Add rules here to make this step run only in specific situations, like a certain field value or something the caller said." />
-            </div>
-            <div className="flex items-center gap-3">
-              <ChevronDown
-                className={`w-4 h-4 text-muted-foreground transition-transform ${!conditionsEnabled ? "text-gray-300 cursor-not-allowed opacity-50" : conditionsSectionExpanded ? "rotate-180" : ""}`}
-              />
-              <label
-                onClick={(e) => e.stopPropagation()}
-                className="relative inline-flex items-center cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={conditionsEnabled}
-                  onChange={(e) => {
-                    const val = e.target.checked;
-                    onChange({ conditionsEnabled: val });
-                    if (val) setConditionsSectionExpanded(true);
-                  }}
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-              </label>
-            </div>
+  const renderConditionRulesBuilder = (title = "Condition Rules") => {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between pb-1">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+            <Split className="w-4 h-4 text-blue-600" />
+            <span>{title}</span>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setFieldModalMode("conditionNodeMulti");
+              setIsFieldRegistryModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Select Fields from Registry</span>
+          </button>
+        </div>
 
-          {conditionsEnabled && conditionsSectionExpanded && (
-            <div className="border-t border-gray-100 px-5 py-4 space-y-3 bg-gray-50/40">
-              <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                This step will only execute when all specified conditions are met.
-              </p>
+        {conditionRules.map((cond, index) => {
+          const fieldDef = getFieldDefByKey(cond.field);
+          const operators = getOperatorsForField(fieldDef);
+          const isNullaryOp = cond.operator === "Is Empty" || cond.operator === "Is Not Empty";
+          const isDynamic = cond.valueType === "dynamic";
+          const dynamicFieldDef = cond.dynamicField ? getFieldDefByKey(cond.dynamicField) : null;
 
-              {stepTrigger === "incall" || stepTrigger === "inchat" ? (
-                <div className="space-y-4">
-                  {/* Field Conditions */}
-                  <div className="rounded-lg border border-border overflow-hidden bg-white">
-                    <button
-                      onClick={() => setFieldConditionsGroupExpanded(!fieldConditionsGroupExpanded)}
-                      className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/70 hover:bg-gray-100/50 transition-colors text-left"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          Field Conditions
-                        </span>
-                        <InfoTooltip text="Check the value of a specific field, like status or stage, before running this step." />
-                        {fieldConditions.length > 0 && (
-                          <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-semibold">
-                            {fieldConditions.length}
-                          </span>
-                        )}
-                      </div>
-                      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${fieldConditionsGroupExpanded ? "rotate-180" : ""}`} />
-                    </button>
-
-                    {fieldConditionsGroupExpanded && (
-                      <div className="border-t border-border px-4 py-3 space-y-3 bg-white">
-                        {fieldConditions.map((cond: any, index: number) => (
-                          <div key={cond.id} className="border border-border rounded-lg overflow-hidden bg-white p-3 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-semibold text-gray-500">Condition #{index + 1}</span>
-                              <button
-                                onClick={() => onChange({ fieldConditions: fieldConditions.filter((c: any) => c.id !== cond.id) })}
-                                className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" /> Remove
-                              </button>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <select
-                                value={cond.fieldSource}
-                                onChange={e => {
-                                  const updated = fieldConditions.map((c: any) => c.id === cond.id ? { ...c, fieldSource: e.target.value, field: "" } : c);
-                                  onChange({ fieldConditions: updated });
-                                }}
-                                className="px-3 py-2 text-xs border rounded-md bg-white"
-                              >
-                                <option value="">Select source...</option>
-                                {FETCH_FIELD_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                              </select>
-                              <select
-                                value={cond.field}
-                                disabled={!cond.fieldSource}
-                                onChange={e => {
-                                  const updated = fieldConditions.map((c: any) => c.id === cond.id ? { ...c, field: e.target.value } : c);
-                                  onChange({ fieldConditions: updated });
-                                }}
-                                className="px-3 py-2 text-xs border rounded-md bg-white"
-                              >
-                                <option value="">Select field...</option>
-                                {(FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields || []).map(f => (
-                                  <option key={f.value} value={f.value}>{f.label}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <select
-                                value={cond.operator}
-                                onChange={e => {
-                                  const updated = fieldConditions.map((c: any) => c.id === cond.id ? { ...c, operator: e.target.value } : c);
-                                  onChange({ fieldConditions: updated });
-                                }}
-                                className="px-3 py-2 text-xs border rounded-md bg-white"
-                              >
-                                <option value="">Operator...</option>
-                                <option value="Equal To">Equal To</option>
-                                <option value="Not Equal To">Not Equal To</option>
-                                <option value="Includes">Includes</option>
-                                <option value="Is Empty">Is Empty</option>
-                                <option value="Is Not Empty">Is Not Empty</option>
-                              </select>
-                              {cond.operator !== "Is Empty" && cond.operator !== "Is Not Empty" && (
-                                <input
-                                  type="text"
-                                  value={cond.value}
-                                  placeholder="Value..."
-                                  onChange={e => {
-                                    const updated = fieldConditions.map((c: any) => c.id === cond.id ? { ...c, value: e.target.value } : c);
-                                    onChange({ fieldConditions: updated });
-                                  }}
-                                  className="px-3 py-2 text-xs border rounded-md"
-                                />
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                        <button
-                          onClick={() => onChange({
-                            fieldConditions: [...fieldConditions, { id: `field-cond-${Date.now()}`, fieldSource: "", field: "", operator: "", value: "" }]
-                          })}
-                          className="w-full py-2 text-xs border border-dashed border-gray-300 text-blue-600 rounded-md hover:bg-blue-50/20 flex items-center justify-center gap-1"
-                        >
-                          <Plus className="w-3.5 h-3.5" /> Add Field Condition
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Intent Conditions */}
-                  <div className="rounded-lg border border-border overflow-hidden bg-white">
-                    <button
-                      onClick={() => setIntentConditionsGroupExpanded(!intentConditionsGroupExpanded)}
-                      className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/70 hover:bg-gray-100/50 transition-colors text-left"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          Intent Conditions
-                        </span>
-                        <InfoTooltip text="Run this step only when the caller says something matching one of these intents, like asking for billing." />
-                        {intentConditions.length > 0 && (
-                          <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-semibold">
-                            {intentConditions.length}
-                          </span>
-                        )}
-                      </div>
-                      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${intentConditionsGroupExpanded ? "rotate-180" : ""}`} />
-                    </button>
-
-                    {intentConditionsGroupExpanded && (
-                      <div className="border-t border-border px-4 py-3 space-y-3 bg-white">
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={intentInput}
-                            placeholder="Type caller intent (e.g., billing_query)..."
-                            onChange={e => setIntentInput(e.target.value)}
-                            className="flex-1 px-3 py-2 text-xs border rounded-md"
-                          />
-                          <button
-                            onClick={() => {
-                              if (!intentInput.trim()) return;
-                              onChange({ intentConditions: [...intentConditions, { id: `intent-cond-${Date.now()}`, value: intentInput.trim() }] });
-                              setIntentInput("");
-                            }}
-                            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold"
-                          >
-                            Add
-                          </button>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {intentConditions.map((c: any) => (
-                            <span key={c.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium">
-                              {c.value}
-                              <button onClick={() => onChange({ intentConditions: intentConditions.filter((x: any) => x.id !== c.id) })} className="hover:text-red-500">
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                /* Stage / Post-Call Conditions */
-                <div className="space-y-3">
-                  {conditions.map((cond: any, index: number) => (
-                    <div key={cond.id} className="p-3 border rounded-lg space-y-3 bg-white">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-gray-500">Condition #{index + 1}</span>
-                        <button
-                          onClick={() => onChange({ conditions: conditions.filter((c: any) => c.id !== cond.id) })}
-                          className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" /> Remove
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          value={cond.fieldSource}
-                          onChange={e => {
-                            const updated = conditions.map((c: any) => c.id === cond.id ? { ...c, fieldSource: e.target.value, field: "" } : c);
-                            onChange({ conditions: updated });
-                          }}
-                          className="px-3 py-2 text-xs border rounded-md bg-white"
-                        >
-                          <option value="">Select source...</option>
-                          {FETCH_FIELD_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                        </select>
-                        <select
-                          value={cond.field}
-                          disabled={!cond.fieldSource}
-                          onChange={e => {
-                            const updated = conditions.map((c: any) => c.id === cond.id ? { ...c, field: e.target.value } : c);
-                            onChange({ conditions: updated });
-                          }}
-                          className="px-3 py-2 text-xs border rounded-md bg-white"
-                        >
-                          <option value="">Select field...</option>
-                          {(FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields || []).map(f => (
-                            <option key={f.value} value={f.value}>{f.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          value={cond.operator}
-                          onChange={e => {
-                            const updated = conditions.map((c: any) => c.id === cond.id ? { ...c, operator: e.target.value } : c);
-                            onChange({ conditions: updated });
-                          }}
-                          className="px-3 py-2 text-xs border rounded-md bg-white"
-                        >
-                          <option value="">Operator...</option>
-                          <option value="Equal To">Equal To</option>
-                          <option value="Not Equal To">Not Equal To</option>
-                          <option value="Includes">Includes</option>
-                          <option value="Is Empty">Is Empty</option>
-                          <option value="Is Not Empty">Is Not Empty</option>
-                        </select>
-                        {cond.operator !== "Is Empty" && cond.operator !== "Is Not Empty" && (
-                          <input
-                            type="text"
-                            value={cond.value}
-                            placeholder="Value..."
-                            onChange={e => {
-                              const updated = conditions.map((c: any) => c.id === cond.id ? { ...c, value: e.target.value } : c);
-                              onChange({ conditions: updated });
-                            }}
-                            className="px-3 py-2 text-xs border rounded-md"
-                          />
-                        )}
-                      </div>
-                    </div>
-                  ))}
+          return (
+            <div key={cond.id || index} className="border border-border rounded-xl overflow-hidden bg-white p-3.5 space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-500">Condition #{index + 1}</span>
+                {conditionRules.length > 1 && (
                   <button
-                    onClick={() => onChange({
-                      conditions: [...conditions, { id: `cond-${Date.now()}`, fieldSource: "", field: "", operator: "", value: "" }]
-                    })}
-                    className="w-full py-2 text-xs border border-dashed border-gray-300 text-blue-600 rounded-md hover:bg-blue-50/20 flex items-center justify-center gap-1"
+                    type="button"
+                    onClick={() => {
+                      const updated = conditionRules.filter((_, i) => i !== index);
+                      onChange({ conditions: updated, triggerConditions: updated });
+                    }}
+                    className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1 cursor-pointer"
                   >
-                    <Plus className="w-3.5 h-3.5" /> Add Condition
+                    <Trash2 className="w-3.5 h-3.5" /> Remove
                   </button>
+                )}
+              </div>
+
+              {/* Field Selection (Primary Field) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold text-slate-700">Primary Field</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetConditionIndex(index);
+                      setFieldModalMode("conditionNodeSingle");
+                      setIsFieldRegistryModalOpen(true);
+                    }}
+                    className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                  >
+                    {cond.field ? "Change Field" : "Select from Registry"}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetConditionIndex(index);
+                    setFieldModalMode("conditionNodeSingle");
+                    setIsFieldRegistryModalOpen(true);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50/70 hover:bg-white hover:border-blue-400 transition-all text-left cursor-pointer"
+                >
+                  {cond.field ? (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
+                        {cond.fieldSource || fieldDef?.module || "field"}
+                      </span>
+                      <span className="font-semibold text-slate-900 truncate">
+                        {cond.fieldLabel || fieldDef?.label || cond.field}
+                      </span>
+                      <code className="text-[10px] text-slate-400 font-mono">({cond.field})</code>
+                    </div>
+                  ) : (
+                    <span className="text-slate-400">Click to select primary field from registry...</span>
+                  )}
+                  <Sliders className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
+                </button>
+              </div>
+
+              {/* Operator */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Operator</label>
+                <select
+                  value={cond.operator || "Equal To"}
+                  onChange={(e) => {
+                    const newOp = e.target.value;
+                    const updated = conditionRules.map((c, i) =>
+                      i === index ? { ...c, operator: newOp } : c
+                    );
+                    onChange({ conditions: updated, triggerConditions: updated });
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs font-medium focus:border-blue-500 outline-none cursor-pointer"
+                >
+                  {operators.map((op) => (
+                    <option key={op.value} value={op.value}>
+                      {op.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Comparison Value (Static vs Dynamic) */}
+              {!isNullaryOp && (
+                <div className="space-y-2 pt-1 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-slate-700">Comparison Value</label>
+                    {/* Segmented Toggle for Static vs Dynamic */}
+                    <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = conditionRules.map((c, i) =>
+                            i === index ? { ...c, valueType: "static" as const } : c
+                          );
+                          onChange({ conditions: updated, triggerConditions: updated });
+                        }}
+                        className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                          !isDynamic
+                            ? "bg-white text-blue-700 shadow-2xs"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        Static Value
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = conditionRules.map((c, i) =>
+                            i === index ? { ...c, valueType: "dynamic" as const } : c
+                          );
+                          onChange({ conditions: updated, triggerConditions: updated });
+                        }}
+                        className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                          isDynamic
+                            ? "bg-white text-blue-700 shadow-2xs"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        Dynamic Field
+                      </button>
+                    </div>
+                  </div>
+
+                  {isDynamic ? (
+                    /* Dynamic Field Picker */
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTargetConditionIndex(index);
+                          setFieldModalMode("conditionNodeDynamic");
+                          setIsFieldRegistryModalOpen(true);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 text-xs border border-blue-200 rounded-lg bg-blue-50/30 hover:bg-blue-50 hover:border-blue-400 transition-all text-left cursor-pointer"
+                      >
+                        {cond.dynamicField ? (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
+                              {cond.dynamicFieldSource || dynamicFieldDef?.module || "field"}
+                            </span>
+                            <span className="font-semibold text-slate-900 truncate">
+                              {cond.dynamicFieldLabel || dynamicFieldDef?.label || cond.dynamicField}
+                            </span>
+                            <code className="text-[10px] text-slate-400 font-mono">({cond.dynamicField})</code>
+                          </div>
+                        ) : (
+                          <span className="text-blue-500">Select dynamic field to compare against...</span>
+                        )}
+                        <Sliders className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
+                      </button>
+                      <p className="text-[10px] text-slate-400">
+                        Compares {cond.fieldLabel || cond.field || "primary field"} dynamically against {cond.dynamicFieldLabel || cond.dynamicField || "selected secondary field"}.
+                      </p>
+                    </div>
+                  ) : (
+                    /* Static Value Input */
+                    renderFieldValueInput(
+                      cond.field,
+                      cond.fieldSource || fieldDef?.module,
+                      cond.value,
+                      (newVal) => {
+                        const updated = conditionRules.map((c, i) =>
+                          i === index ? { ...c, value: newVal } : c
+                        );
+                        onChange({ conditions: updated, triggerConditions: updated });
+                      },
+                      "Enter static value..."
+                    )
+                  )}
                 </div>
               )}
             </div>
-          )}
+          );
+        })}
+
+        <div className="flex items-center gap-2 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              setFieldModalMode("conditionNodeMulti");
+              setIsFieldRegistryModalOpen(true);
+            }}
+            className="flex-1 py-2 text-xs border border-dashed border-blue-300 text-blue-600 bg-blue-50/20 hover:bg-blue-50/50 rounded-lg flex items-center justify-center gap-1.5 font-semibold cursor-pointer transition-colors"
+          >
+            <Sliders className="w-3.5 h-3.5" /> Select Fields from Registry
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const newRule = {
+                id: `cond-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                field: "",
+                fieldLabel: "",
+                fieldSource: "client",
+                operator: "Equal To",
+                valueType: "static" as const,
+                value: "",
+              };
+              onChange({
+                conditions: [...conditionRules, newRule],
+                triggerConditions: [...conditionRules, newRule],
+              });
+            }}
+            className="py-2 px-3 text-xs border border-dashed border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg flex items-center justify-center gap-1 font-medium cursor-pointer transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add Blank
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6 text-left">
+      {/* ───────────── CONDITIONS EDITOR (Trigger Config) ───────────── */}
+      {stepKey === "trigger_config" && (
+        <div className="w-full rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
+          {renderConditionRulesBuilder("Trigger Conditions")}
         </div>
       )}
 
-      {/* ───────────── PARAMETERS FIELDS ACCORDION ───────────── */}
+            {/* ───────────── PARAMETERS FIELDS ACCORDION ───────────── */}
       <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
         <div
           onClick={() => setParametersSectionExpanded(!parametersSectionExpanded)}
@@ -524,54 +1027,80 @@ export default function StepParametersFields({
           <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
             {(stepKey === "fieldupdate" || stepKey === "field-update") && (
               <div className="space-y-4">
+                <div className="flex items-center justify-between pb-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                    <Sliders className="w-4 h-4 text-blue-600" />
+                    <span>Field Update Blocks</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFieldModalMode("fieldUpdateMulti");
+                      setIsFieldRegistryModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Select Fields from Registry</span>
+                  </button>
+                </div>
+
                 {fieldUpdateBlocks.map((block: any, index: number) => (
-                  <div key={index} className="border border-border rounded-lg overflow-hidden bg-white p-3 space-y-3">
+                  <div key={index} className="border border-border rounded-lg overflow-hidden bg-white p-3 space-y-3 shadow-2xs">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-gray-500">Block #{index + 1}</span>
                       {fieldUpdateBlocks.length > 1 && (
                         <button
                           onClick={() => onChange({ fieldUpdateBlocks: fieldUpdateBlocks.filter((_: any, i: number) => i !== index) })}
-                          className="text-xs text-red-500 flex items-center gap-1"
+                          className="text-xs text-red-500 flex items-center gap-1 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" /> Remove
                         </button>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <select
-                        value={block.fieldType}
-                        onChange={e => {
-                          const updated = fieldUpdateBlocks.map((b: any, i: number) => i === index ? { ...b, fieldType: e.target.value, fieldToEdit: "" } : b);
-                          onChange({ fieldUpdateBlocks: updated });
+
+                    {/* Field Registry Selector */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-semibold text-slate-700">Target Field to Update</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTargetFieldUpdateIndex(index);
+                            setFieldModalMode("fieldUpdateSingle");
+                            setIsFieldRegistryModalOpen(true);
+                          }}
+                          className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                        >
+                          {block.fieldToEdit && block.fieldToEdit !== "Select field..." ? "Change Field" : "Select from Registry"}
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTargetFieldUpdateIndex(index);
+                          setFieldModalMode("fieldUpdateSingle");
+                          setIsFieldRegistryModalOpen(true);
                         }}
-                        className="w-full px-3 py-2 text-xs border rounded-md bg-white"
+                        className="w-full flex items-center justify-between px-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50/70 hover:bg-white hover:border-blue-400 transition-all text-left cursor-pointer"
                       >
-                        <option>System Fields</option>
-                        <option>Custom Fields</option>
-                      </select>
-                      <select
-                        value={block.fieldToEdit}
-                        onChange={e => {
-                          const updated = fieldUpdateBlocks.map((b: any, i: number) => i === index ? { ...b, fieldToEdit: e.target.value } : b);
-                          onChange({ fieldUpdateBlocks: updated });
-                        }}
-                        className="w-full px-3 py-2 text-xs border rounded-md bg-white"
-                      >
-                        <option>Select field...</option>
-                        {block.fieldType === "System Fields" ? (
-                          <>
-                            <option value="contact_name">Contact Name</option>
-                            <option value="contact_email">Contact Email</option>
-                            <option value="contact_phone">Contact Phone</option>
-                          </>
+                        {block.fieldToEdit && block.fieldToEdit !== "Select field..." ? (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700">
+                              {block.fieldType || "field"}
+                            </span>
+                            <span className="font-semibold text-slate-900 truncate">
+                              {block.fieldLabel || block.fieldToEdit}
+                            </span>
+                            <code className="text-[10px] text-slate-400 font-mono">({block.fieldToEdit})</code>
+                          </div>
                         ) : (
-                          <>
-                            <option value="custom_field_1">Custom Field 1</option>
-                            <option value="custom_field_2">Custom Field 2</option>
-                          </>
+                          <span className="text-slate-400">Click to select field from registry...</span>
                         )}
-                      </select>
+                        <Sliders className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />
+                      </button>
                     </div>
+
                     <div className="grid grid-cols-2 gap-2">
                       <select
                         value={block.valueSource}
@@ -579,35 +1108,64 @@ export default function StepParametersFields({
                           const updated = fieldUpdateBlocks.map((b: any, i: number) => i === index ? { ...b, valueSource: e.target.value, updateValue: "" } : b);
                           onChange({ fieldUpdateBlocks: updated });
                         }}
-                        className="w-full px-3 py-2 text-xs border rounded-md bg-white"
+                        className="w-full px-3 py-2 text-xs border rounded-md bg-white cursor-pointer font-medium"
                       >
                         <option value="static">Static Value</option>
                         <option value="variable">Variable / Formula</option>
                       </select>
-                      <input
-                        type="text"
-                        value={block.updateValue}
-                        placeholder="New value..."
-                        onChange={e => {
-                          const updated = fieldUpdateBlocks.map((b: any, i: number) => i === index ? { ...b, updateValue: e.target.value } : b);
-                          onChange({ fieldUpdateBlocks: updated });
-                        }}
-                        className="w-full px-3 py-2 text-xs border rounded-md"
-                      />
+                      {block.valueSource === "variable" ? (
+                        <div className="relative flex items-center">
+                          <input
+                            type="text"
+                            value={block.updateValue}
+                            placeholder="e.g. {{client_name}} or formula..."
+                            onChange={e => {
+                              const updated = fieldUpdateBlocks.map((b: any, i: number) => i === index ? { ...b, updateValue: e.target.value } : b);
+                              onChange({ fieldUpdateBlocks: updated });
+                            }}
+                            className="w-full px-3 py-2 text-xs border rounded-md"
+                          />
+                        </div>
+                      ) : (
+                        renderFieldValueInput(
+                          block.fieldToEdit,
+                          block.fieldType,
+                          block.updateValue,
+                          (newVal) => {
+                            const updated = fieldUpdateBlocks.map((b: any, i: number) => i === index ? { ...b, updateValue: newVal } : b);
+                            onChange({ fieldUpdateBlocks: updated });
+                          },
+                          "New value..."
+                        )
+                      )}
                       <p className="col-span-2 -mt-1 text-[11px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Static Value: type the exact text to set. Variable / Formula: reference data from earlier in the call.
+                        Static Value: selected value conforms to field type and choices. Variable / Formula: reference event data or earlier step outputs.
                       </p>
                     </div>
                   </div>
                 ))}
-                <button
-                  onClick={() => onChange({
-                    fieldUpdateBlocks: [...fieldUpdateBlocks, { fieldType: "System Fields", fieldToEdit: "Select field...", valueSource: "static", updateValue: "" }]
-                  })}
-                  className="w-full py-2.5 text-xs border border-dashed border-gray-300 text-blue-600 rounded-md hover:bg-blue-50/20 flex items-center justify-center gap-1 font-semibold"
-                >
-                  <Plus className="w-4 h-4" /> Add Field Update
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFieldModalMode("fieldUpdateMulti");
+                      setIsFieldRegistryModalOpen(true);
+                    }}
+                    className="flex-1 py-2 text-xs border border-dashed border-blue-300 text-blue-600 bg-blue-50/20 hover:bg-blue-50/50 rounded-lg flex items-center justify-center gap-1.5 font-semibold cursor-pointer transition-colors"
+                  >
+                    <Sliders className="w-3.5 h-3.5" /> Select Fields from Registry
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onChange({
+                      fieldUpdateBlocks: [...fieldUpdateBlocks, { fieldType: "client", fieldToEdit: "", fieldLabel: "", valueSource: "static", updateValue: "" }]
+                    })}
+                    className="py-2 px-3 text-xs border border-dashed border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg flex items-center justify-center gap-1 font-medium cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Blank
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1631,93 +2189,317 @@ export default function StepParametersFields({
               </div>
             )}
 
-            {(stepKey === "processmovement" || stepKey === "stagemovement" || stepKey === "move-process" || stepKey === "move-stage") && (
-              <div className="space-y-4">
-                {renderField("Target Process",
-                  <select
-                    value={stepDetailProcess}
-                    onChange={e => onChange({ stepDetailProcess: e.target.value, stepDetailStage: "" })}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
-                  >
-                    <option value="">Select target process...</option>
-                    {processes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                )}
-                {renderField("Target Stage",
-                  <select
-                    value={stepDetailStage}
-                    onChange={e => onChange({ stepDetailStage: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
-                  >
-                    <option value="">Select target stage...</option>
-                    {(processes.find(p => p.id === stepDetailProcess)?.stages || []).map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )}
+            {(stepKey === "update_to_stage" || stepKey === "update-stage" || stepKey === "processmovement" || stepKey === "stagemovement" || stepKey === "move-process" || stepKey === "move-stage" || stepKey === "movetonewprocess" || stepKey === "move-new-process") && (() => {
+              const stageEntity = (params.stageEntity || params.entityType || "processes") as "processes" | "appointment" | "invoice";
 
-            {(stepKey === "movetonewprocess" || stepKey === "move-new-process") && (
-              <div className="space-y-4">
-                {renderField("Assign Target Process",
-                  <select
-                    value={stepDetailProcess}
-                    onChange={e => {
-                      const selectedProcId = e.target.value;
-                      const targetProc = processes.find(p => p.id === selectedProcId);
-                      const defaultStage = targetProc?.stages?.[0];
-                      onChange({
-                        stepDetailProcess: selectedProcId,
-                        stepDetailStage: defaultStage?.id || defaultStage?.name || ""
-                      });
-                    }}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
-                  >
-                    <option value="">Select target process...</option>
-                    {processes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                )}
+              // Respective scoped entity processes
+              const appointmentProcesses = effectiveProcesses.filter((p: any) => p.entityType === "appointment");
+              const effectiveApptProcesses = appointmentProcesses.length > 0
+                ? appointmentProcesses
+                : (() => {
+                    const allAppts = getStoredProcesses().filter((p: any) => p.entityType === "appointment");
+                    return allAppts.length > 0 ? allAppts : [DEFAULT_ENTITY_PROCESSES.appointment];
+                  })();
 
-                {stepDetailProcess && (
-                  <>
-                    {renderField("Target Stage",
-                      <select
-                        value={stepDetailStage}
-                        onChange={e => onChange({ stepDetailStage: e.target.value })}
-                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
-                      >
-                        <option value="">Default (First Stage)</option>
-                        {(processes.find(p => p.id === stepDetailProcess)?.stages || []).map(s => (
-                          <option key={s.id} value={s.id || s.name}>{s.name}</option>
-                        ))}
-                      </select>
-                    )}
+              const invoiceProcesses = effectiveProcesses.filter((p: any) => p.entityType === "invoice");
+              const effectiveInvProcesses = invoiceProcesses.length > 0
+                ? invoiceProcesses
+                : (() => {
+                    const allInvs = getStoredProcesses().filter((p: any) => p.entityType === "invoice");
+                    return allInvs.length > 0 ? allInvs : [DEFAULT_ENTITY_PROCESSES.invoice];
+                  })();
 
-                    {/* Optional Toggle to End Current Process */}
-                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-4">
-                      <div>
-                        <span className="text-xs font-bold text-slate-800">
-                          End current process before moving
-                        </span>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Terminate the active process when transitioning the contact to the new process stage.
-                        </p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(params.stepEndCurrentProcess)}
-                          onChange={e => onChange({ stepEndCurrentProcess: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+              const clientProcesses = effectiveProcesses.filter((p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes");
+              const effectiveClientProcesses = clientProcesses.length > 0
+                ? clientProcesses
+                : getStoredProcesses().filter((p: any) => !p.entityType || p.entityType === "client" || p.entityType === "processes");
+
+              // Selection for appointment
+              const selectedApptProcId = stepDetailProcess || params.processId || effectiveApptProcesses[0]?.id || "";
+              const selectedApptProc = effectiveApptProcesses.find((p: any) => p.id === selectedApptProcId) || effectiveApptProcesses[0];
+              const apptStages = selectedApptProc?.stages || [];
+              const currentApptStageVal = stepDetailStage || params.stageId || apptStages[0]?.id || "";
+
+              // Selection for invoice
+              const selectedInvProcId = stepDetailProcess || params.processId || effectiveInvProcesses[0]?.id || "";
+              const selectedInvProc = effectiveInvProcesses.find((p: any) => p.id === selectedInvProcId) || effectiveInvProcesses[0];
+              const invStages = selectedInvProc?.stages || [];
+              const currentInvStageVal = stepDetailStage || params.stageId || invStages[0]?.id || "";
+
+              // Selection for client processes
+              const selectedClientProcId = stepDetailProcess || params.processId || effectiveClientProcesses[0]?.id || "";
+              const selectedClientProc = effectiveClientProcesses.find((p: any) => p.id === selectedClientProcId) || effectiveClientProcesses[0];
+              const clientStages = selectedClientProc?.stages || [];
+              const currentClientStageVal = stepDetailStage || params.stageId || clientStages[0]?.id || "";
+
+              return (
+                <div className="space-y-4">
+                  {/* Choose entity dropdown */}
+                  {renderField("Choose Entity",
+                    <select
+                      value={stageEntity}
+                      onChange={(e) => {
+                        const entId = e.target.value as "processes" | "appointment" | "invoice";
+                        let nextProcId = "";
+                        let nextProcName = "";
+                        let nextStageId = "";
+                        let nextStageName = "";
+
+                        if (entId === "processes") {
+                          const proc = effectiveClientProcesses[0];
+                          nextProcId = proc?.id || "";
+                          nextProcName = proc?.name || "";
+                          const stg = proc?.stages?.[0];
+                          nextStageId = stg?.id || stg?.name || "";
+                          nextStageName = stg?.name || "";
+                        } else if (entId === "appointment") {
+                          const proc = effectiveApptProcesses[0];
+                          nextProcId = proc?.id || "";
+                          nextProcName = proc?.name || "";
+                          const defaultApptStage = proc?.stages?.[0];
+                          nextStageId = defaultApptStage?.id || "";
+                          nextStageName = defaultApptStage?.name || "";
+                        } else if (entId === "invoice") {
+                          const proc = effectiveInvProcesses[0];
+                          nextProcId = proc?.id || "";
+                          nextProcName = proc?.name || "";
+                          const defaultInvStage = proc?.stages?.[0];
+                          nextStageId = defaultInvStage?.id || "";
+                          nextStageName = defaultInvStage?.name || "";
+                        }
+
+                        onChange({
+                          stageEntity: entId,
+                          entityType: entId,
+                          stepDetailProcess: nextProcId,
+                          processId: nextProcId,
+                          processName: nextProcName,
+                          stepDetailStage: nextStageId,
+                          stageId: nextStageId,
+                          stageName: nextStageName,
+                        });
+                      }}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                    >
+                      <option value="processes">Processes</option>
+                      <option value="appointment">Appointment</option>
+                      <option value="invoice">Invoice</option>
+                    </select>
+                  )}
+
+                  {/* Render based on entity */}
+                  {stageEntity === "processes" && (
+                    <>
+                      {renderField("Choose Process",
+                        <select
+                          value={selectedClientProc?.id || ""}
+                          onChange={(e) => {
+                            const selectedProcId = e.target.value;
+                            const targetProc = effectiveClientProcesses.find(p => p.id === selectedProcId) || effectiveClientProcesses[0];
+                            const defaultStage = targetProc?.stages?.[0];
+                            onChange({
+                              stageEntity: "processes",
+                              entityType: "processes",
+                              stepDetailProcess: selectedProcId,
+                              processId: selectedProcId,
+                              processName: targetProc?.name || "",
+                              stepDetailStage: defaultStage?.id || defaultStage?.name || "",
+                              stageId: defaultStage?.id || defaultStage?.name || "",
+                              stageName: defaultStage?.name || "",
+                            });
+                          }}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                        >
+                          <option value="">Select process...</option>
+                          {effectiveClientProcesses.map((p: any) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      {selectedClientProc && (
+                        <>
+                          {renderField("Choose Stage",
+                            <select
+                              value={currentClientStageVal}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const targetStage = clientStages.find((s: any) => s.id === val || s.name === val);
+                                onChange({
+                                  stepDetailStage: val,
+                                  stageId: val,
+                                  stageName: targetStage?.name || val,
+                                });
+                              }}
+                              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                            >
+                              {clientStages.length === 0 ? (
+                                <option value="">No stages defined for this process</option>
+                              ) : (
+                                clientStages.map((s: any) => (
+                                  <option key={s.id} value={s.id || s.name}>
+                                    {s.name}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          )}
+
+                          {/* Optional Toggle to End Current Process */}
+                          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-4">
+                            <div>
+                              <span className="text-xs font-bold text-slate-800">
+                                End current process before moving
+                              </span>
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                Terminate the active process when transitioning the record to the new process / stage.
+                              </p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(params.stepEndCurrentProcess)}
+                                onChange={(e) => onChange({ stepEndCurrentProcess: e.target.checked })}
+                                className="sr-only peer"
+                              />
+                              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                            </label>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  {stageEntity === "appointment" && (
+                    <>
+                      {renderField("Choose Process",
+                        <select
+                          value={selectedApptProc?.id || ""}
+                          onChange={(e) => {
+                            const selectedId = e.target.value;
+                            const targetProc = effectiveApptProcesses.find((p: any) => p.id === selectedId) || effectiveApptProcesses[0];
+                            const defaultStage = targetProc?.stages?.[0];
+                            onChange({
+                              stageEntity: "appointment",
+                              entityType: "appointment",
+                              stepDetailProcess: targetProc?.id || "",
+                              processId: targetProc?.id || "",
+                              processName: targetProc?.name || "",
+                              stepDetailStage: defaultStage?.id || defaultStage?.name || "",
+                              stageId: defaultStage?.id || defaultStage?.name || "",
+                              stageName: defaultStage?.name || "",
+                            });
+                          }}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                        >
+                          {effectiveApptProcesses.map((p: any) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      {renderField("Choose Stage",
+                        <select
+                          value={currentApptStageVal}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const targetStage = apptStages.find((s: any) => s.id === val || s.name === val);
+                            onChange({
+                              stageEntity: "appointment",
+                              entityType: "appointment",
+                              stepDetailProcess: selectedApptProc?.id || "",
+                              processId: selectedApptProc?.id || "",
+                              processName: selectedApptProc?.name || "",
+                              stepDetailStage: val,
+                              stageId: val,
+                              stageName: targetStage?.name || val,
+                            });
+                          }}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                        >
+                          {apptStages.length === 0 ? (
+                            <option value="">No stages defined for this process</option>
+                          ) : (
+                            apptStages.map((s: any) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name} {s.description ? `(${s.description})` : ""}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      )}
+                    </>
+                  )}
+
+                  {stageEntity === "invoice" && (
+                    <>
+                      {renderField("Choose Process",
+                        <select
+                          value={selectedInvProc?.id || ""}
+                          onChange={(e) => {
+                            const selectedId = e.target.value;
+                            const targetProc = effectiveInvProcesses.find((p: any) => p.id === selectedId) || effectiveInvProcesses[0];
+                            const defaultStage = targetProc?.stages?.[0];
+                            onChange({
+                              stageEntity: "invoice",
+                              entityType: "invoice",
+                              stepDetailProcess: targetProc?.id || "",
+                              processId: targetProc?.id || "",
+                              processName: targetProc?.name || "",
+                              stepDetailStage: defaultStage?.id || defaultStage?.name || "",
+                              stageId: defaultStage?.id || defaultStage?.name || "",
+                              stageName: defaultStage?.name || "",
+                            });
+                          }}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                        >
+                          {effectiveInvProcesses.map((p: any) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      {renderField("Choose Stage",
+                        <select
+                          value={currentInvStageVal}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const targetStage = invStages.find((s: any) => s.id === val || s.name === val);
+                            onChange({
+                              stageEntity: "invoice",
+                              entityType: "invoice",
+                              stepDetailProcess: selectedInvProc?.id || "",
+                              processId: selectedInvProc?.id || "",
+                              processName: selectedInvProc?.name || "",
+                              stepDetailStage: val,
+                              stageId: val,
+                              stageName: targetStage?.name || val,
+                            });
+                          }}
+                          className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                        >
+                          {invStages.length === 0 ? (
+                            <option value="">No stages defined for this process</option>
+                          ) : (
+                            invStages.map((s: any) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name} {s.description ? `(${s.description})` : ""}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             {stepKey === "greetingphrase" && renderField("Greeting Phrase",
               <textarea
@@ -1933,6 +2715,351 @@ export default function StepParametersFields({
               </div>
             )}
 
+            {/* Stage Action: Generate Invoice */}
+            {(stepKey === "generate_invoice" || stepKey === "generate-invoice") && (() => {
+              const triggerLower = (stepTrigger || params.stepTrigger || "").toLowerCase();
+              const isApptTrigger = Boolean(
+                triggerLower.includes("appt") ||
+                triggerLower.includes("appointment") ||
+                triggerLower.includes("booking")
+              );
+              const isApptProcess = Boolean(
+                params.processName?.toLowerCase().includes("appointment") ||
+                effectiveProcesses.some(p => (p.id === params.processId || p.entityType === "appointment") && 
+                  (p.entityType === "appointment" || p.name.toLowerCase().includes("appointment")))
+              );
+              const canSupplyAppointment = Boolean(
+                isApptTrigger ||
+                isApptProcess ||
+                params.hasAppointmentContext === true ||
+                params.appointmentInRun === true
+              );
+              const canSupplyClient = true;
+
+              // Default is the first available one:
+              const firstAvailable = canSupplyAppointment ? "appointment" : (canSupplyClient ? "client" : "choose");
+              const rawBillFor = params.billFor || firstAvailable;
+              const currentBillFor = (rawBillFor === "appointment" && !canSupplyAppointment) ? firstAvailable : rawBillFor;
+
+              // Services for "Choose services"
+              const selectedServices = Array.isArray(params.selectedServices) && params.selectedServices.length > 0
+                ? params.selectedServices
+                : [
+                    {
+                      serviceId: MOCK_SERVICES[0].id,
+                      name: MOCK_SERVICES[0].name,
+                      quantity: 1,
+                      unitPrice: MOCK_SERVICES[0].price,
+                      taxPercent: MOCK_SERVICES[0].tax ?? 5,
+                    }
+                  ];
+
+              const dueDays = typeof params.dueDays === "number" ? params.dueDays : 14;
+              const paymentMode = params.paymentMode || "Bank Transfer";
+
+              const handleBillForChange = (newBillFor: string) => {
+                const patch: Record<string, any> = { billFor: newBillFor };
+                if (newBillFor === "choose" && (!params.selectedServices || params.selectedServices.length === 0)) {
+                  patch.selectedServices = selectedServices;
+                }
+                onChange(patch);
+              };
+
+              const handleUpdateServiceDiscount = (index: number, newDiscount: number) => {
+                const next = selectedServices.map((item: any, i: number) => i === index ? { ...item, discount: newDiscount } : item);
+                onChange({ selectedServices: next });
+              };
+
+              const handleUpdateServiceDiscountType = (index: number, newType: string) => {
+                const next = selectedServices.map((item: any, i: number) => i === index ? { ...item, discountType: newType } : item);
+                onChange({ selectedServices: next });
+              };
+
+              const handleSelectServiceChange = (index: number, serviceId: string) => {
+                const found = MOCK_SERVICES.find((s) => s.id === serviceId) || MOCK_SERVICES[0];
+                const next = selectedServices.map((item: any, i: number) =>
+                  i === index
+                    ? {
+                        ...item,
+                        serviceId: found.id,
+                        name: found.name,
+                        unitPrice: found.price,
+                        taxPercent: found.tax ?? 5,
+                      }
+                    : item
+                );
+                onChange({ selectedServices: next });
+              };
+
+              const handleRemoveService = (index: number) => {
+                const next = selectedServices.filter((_: any, i: number) => i !== index);
+                onChange({ selectedServices: next });
+              };
+
+              const handleUpdateServiceQty = (index: number, newQty: number) => {
+                const next = selectedServices.map((item: any, i: number) =>
+                  i === index ? { ...item, quantity: newQty } : item
+                );
+                onChange({ selectedServices: next });
+              };
+
+              const handleAddService = () => {
+                const defaultService = MOCK_SERVICES[0];
+                const next = [
+                  ...selectedServices,
+                  {
+                    serviceId: defaultService.id,
+                    name: defaultService.name,
+                    quantity: 1,
+                    unitPrice: defaultService.price,
+                    taxPercent: defaultService.tax ?? 5,
+                    discount: 0,
+                    discountType: "%",
+                  },
+                ];
+                onChange({ selectedServices: next });
+              };
+
+              return (
+                <div className="space-y-4">
+                  {/* Bill for dropdown */}
+                  {renderField("Bill for",
+                    <select
+                      value={currentBillFor}
+                      onChange={(e) => handleBillForChange(e.target.value)}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium text-slate-800"
+                    >
+                      <option value="appointment" disabled={!canSupplyAppointment}>
+                        Appointment's service {!canSupplyAppointment ? "(Unavailable - no appointment in trigger)" : ""}
+                      </option>
+                      <option value="client" disabled={!canSupplyClient}>
+                        Client's services {!canSupplyClient ? "(Unavailable)" : ""}
+                      </option>
+                      <option value="choose">Choose services</option>
+                    </select>
+                  )}
+
+                  {/* Quantity and Discount per type */}
+                  {currentBillFor === "appointment" && (
+                    <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
+                      <p className="text-xs text-slate-500">Service automatically pulled from the appointment.</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">Quantity</label>
+                          <input
+                            type="number"
+                            value={1}
+                            disabled
+                            readOnly
+                            className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-slate-100 text-slate-500 font-semibold cursor-not-allowed text-sm"
+                          />
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">Fixed to 1 for appointment</span>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">Discount</label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={0}
+                              value={params.discount ?? 0}
+                              onChange={(e) => onChange({ discount: Math.max(0, parseFloat(e.target.value) || 0) })}
+                              className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="0"
+                            />
+                            <select
+                              value={params.discountType || "%"}
+                              onChange={(e) => onChange({ discountType: e.target.value })}
+                              className="px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-700 focus:outline-none"
+                            >
+                              <option value="%">%</option>
+                              <option value="$">$</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {currentBillFor === "client" && (
+                    <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
+                      <p className="text-xs text-slate-500">Service automatically pulled from the client profile.</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">Quantity</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={params.quantity || 1}
+                            onChange={(e) => onChange({ quantity: Math.max(1, parseInt(e.target.value) || 1) })}
+                            className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">Discount</label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={0}
+                              value={params.discount ?? 0}
+                              onChange={(e) => onChange({ discount: Math.max(0, parseFloat(e.target.value) || 0) })}
+                              className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="0"
+                            />
+                            <select
+                              value={params.discountType || "%"}
+                              onChange={(e) => onChange({ discountType: e.target.value })}
+                              className="px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-700 focus:outline-none"
+                            >
+                              <option value="%">%</option>
+                              <option value="$">$</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {currentBillFor === "choose" && (
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Services
+                      </label>
+                      {selectedServices.map((item: any, idx: number) => (
+                        <div key={idx} className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <label className="block text-xs font-semibold text-slate-700 mb-1">Service</label>
+                              <select
+                                value={item.serviceId}
+                                onChange={(e) => handleSelectServiceChange(idx, e.target.value)}
+                                className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              >
+                                {MOCK_SERVICES.map(s => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            {selectedServices.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveService(idx)}
+                                className="mt-5 p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="Remove service"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-700 mb-1">Quantity</label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={item.quantity || 1}
+                                onChange={(e) => handleUpdateServiceQty(idx, Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-700 mb-1">Discount</label>
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={item.discount ?? 0}
+                                  onChange={(e) => handleUpdateServiceDiscount(idx, Math.max(0, parseFloat(e.target.value) || 0))}
+                                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  placeholder="0"
+                                />
+                                <select
+                                  value={item.discountType || "%"}
+                                  onChange={(e) => handleUpdateServiceDiscountType(idx, e.target.value)}
+                                  className="px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-700 focus:outline-none"
+                                >
+                                  <option value="%">%</option>
+                                  <option value="$">$</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={handleAddService}
+                        className="w-full py-2 px-3 border border-dashed border-slate-300 hover:border-blue-400 rounded-xl text-xs font-semibold text-blue-600 hover:bg-blue-50/50 flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add another service
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Due in and Payment mode */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {renderField("Due in",
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          max={365}
+                          value={dueDays}
+                          onChange={(e) => onChange({ dueDays: Math.max(0, parseInt(e.target.value) || 0) })}
+                          className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-medium text-slate-600 shrink-0">days</span>
+                      </div>
+                    )}
+
+                    {renderField("Payment mode",
+                      <select
+                        value={paymentMode}
+                        onChange={(e) => onChange({ paymentMode: e.target.value })}
+                        className="w-full px-3.5 py-2 border border-slate-200 rounded-xl bg-white text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="Bank Transfer">Bank Transfer (Clinic default)</option>
+                        <option value="Card">Card</option>
+                        <option value="Cash">Cash</option>
+                        <option value="Insurance-EMI">Insurance-EMI</option>
+                      </select>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Stage Entry Action: Send Payment (Records category) */}
+            {stepKey === "send_payment" && (
+              <div className="space-y-4">
+                <div className="p-3 bg-blue-50/60 border border-blue-200/80 rounded-xl space-y-1 text-xs">
+                  <div className="flex items-center gap-2 font-semibold text-blue-900">
+                    <span>Send Payment Link</span>
+                    <InfoTooltip text="Sends a secure payment collection link directly to the contact." />
+                  </div>
+                  <p className="text-blue-700/80 text-[11px]">
+                    Dispatches the client's current outstanding balance or invoice link.
+                  </p>
+                </div>
+
+                {renderField("Delivery Channel",
+                  <select
+                    value={params.channel || "whatsapp"}
+                    onChange={e => onChange({ channel: e.target.value })}
+                    className="w-full px-3 py-2.5 border rounded-md bg-white text-sm"
+                  >
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="sms">SMS Text</option>
+                    <option value="email">Email</option>
+                  </select>
+                )}
+              </div>
+            )}
+
             {stepKey === "smartcallanalysis" && (
               <div className="space-y-4">
                 {renderField(
@@ -2029,49 +3156,74 @@ export default function StepParametersFields({
               </div>
             )}
 
-            {/* ───────────── GENERIC NodeType FALLBACKS ───────────── */}
-            {stepKey === "condition" && (
+
+
+            {(stepKey === "send_payment" || stepKey === "send-payment") && (
               <div className="space-y-4">
-                {renderField("Field Source",
+                {renderField("Payment Provider / Link Type",
                   <select
-                    value={params.fieldSource || ""}
-                    onChange={(e) => onChange({ fieldSource: e.target.value })}
+                    value={params.paymentProvider || "stripe"}
+                    onChange={(e) => onChange({ paymentProvider: e.target.value })}
                     className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
                   >
-                    <option value="">Select source...</option>
-                    <option value="system">System Fields</option>
-                    <option value="call-log">Call Logs</option>
-                    <option value="appointment">Appointment</option>
-                    <option value="custom">Custom Fields</option>
+                    <option value="stripe">Online Payment Link (Stripe Hosted)</option>
+                    <option value="clinic_portal">Patient Portal Direct Pay</option>
                   </select>
                 )}
-                {renderField("Operator",
+                {renderField("Dispatch Notification Channel",
                   <select
-                    value={params.operator || ""}
-                    onChange={(e) => onChange({ operator: e.target.value })}
+                    value={params.deliveryChannel || "whatsapp_sms"}
+                    onChange={(e) => onChange({ deliveryChannel: e.target.value })}
                     className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
                   >
-                    <option value="">Select operator...</option>
-                    <option value="equal_to">Equal To</option>
-                    <option value="not_equal_to">Not Equal To</option>
-                    <option value="includes">Includes</option>
-                    <option value="greater_than">Greater Than</option>
-                    <option value="less_than">Less Than</option>
-                    <option value="is_empty">Is Empty</option>
-                    <option value="is_not_empty">Is Not Empty</option>
+                    <option value="whatsapp_sms">WhatsApp & SMS Notification</option>
+                    <option value="whatsapp">WhatsApp Only</option>
+                    <option value="sms">SMS Text Message Only</option>
+                    <option value="email">Email Notification Only</option>
                   </select>
                 )}
-                {renderField("Value",
-                  <input
-                    type="text"
-                    value={params.value || ""}
-                    onChange={(e) => onChange({ value: e.target.value })}
-                    placeholder="Enter value..."
+                {renderField("Custom Payment Message (Optional)",
+                  <textarea
+                    value={params.customMessage || ""}
+                    onChange={(e) => onChange({ customMessage: e.target.value })}
+                    placeholder="Hi {client_name}, here is your secure checkout link for your session..."
+                    rows={2}
                     className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
                   />
                 )}
               </div>
             )}
+
+            {(stepKey === "send-invoice" || stepKey === "send_invoice") && (
+              <div className="space-y-4">
+                {renderField("Delivery Channel",
+                  <select
+                    value={params.channel || "whatsapp"}
+                    onChange={(e) => onChange({ channel: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                  >
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="email">Email</option>
+                    <option value="sms">SMS</option>
+                  </select>
+                )}
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="includePdfAttachment"
+                    checked={params.includePdf !== false}
+                    onChange={(e) => onChange({ includePdf: e.target.checked })}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="includePdfAttachment" className="text-xs text-gray-700 font-medium">
+                    Attach downloadable PDF invoice statement
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* ───────────── CONDITION NODE RULES ───────────── */}
+            {stepKey === "condition" && renderConditionRulesBuilder("Condition Rules")}
 
             {stepKey === "wait" && (
               <div className="space-y-4">
@@ -2119,9 +3271,636 @@ export default function StepParametersFields({
                 )}
               </div>
             )}
+
+            {/* ───────────── TRIGGER CONFIGURATION ───────────── */}
+            {stepKey === "trigger_config" && (() => {
+              const currentScope = params.scope || "global";
+              const isStageScope = currentScope === "stage" || params.category === "stage";
+              const activeCategory = params.category || (isStageScope ? "stage" : (params.selectedEvent === "field.updated" ? "field_update" : params.selectedEvent?.startsWith("stage") ? "stage" : "client"));
+              const currentEvent = params.selectedEvent || (
+                activeCategory === "stage" ? (isStageScope ? "stage.entry" : "stage.entered") :
+                activeCategory === "field_update" ? "field.updated" :
+                activeCategory === "client" ? "client.created" :
+                activeCategory === "appointment" ? "appointment.booked" :
+                activeCategory === "invoice" ? "invoice.created" :
+                "client.created"
+              );
+
+              const storedServices = getStoredServices();
+              const monitoredFields: string[] = Array.isArray(params.monitoredFields) ? params.monitoredFields : [];
+
+              const triggerOptionsByCategory: Record<string, Array<{ event: string; label: string; desc: string; iconKey: string }>> = {
+                stage: [
+                  {
+                    event: isStageScope ? "stage.entry" : "stage.entered",
+                    label: isStageScope ? "On Stage Entry" : "Stage Entered",
+                    desc: isStageScope ? "Runs when record moves into this stage" : "Fires when a record moves into a selected stage",
+                    iconKey: "gitbranch",
+                  },
+                  {
+                    event: isStageScope ? "stage.exit" : "stage.exited",
+                    label: isStageScope ? "On Stage Exit" : "Stage Exited",
+                    desc: isStageScope ? "Runs when record moves out of this stage" : "Fires when a record moves out of a selected stage",
+                    iconKey: "gitbranch",
+                  },
+                ],
+                field_update: [
+                  {
+                    event: "field.updated",
+                    label: "Field Updated",
+                    desc: "Fires when monitored fields on a record are updated",
+                    iconKey: "sliders",
+                  },
+                ],
+                client: [
+                  { event: "client.created", label: "Client Created", desc: "Fires when a new client record is added to the system", iconKey: "user" },
+                  { event: "client.updated", label: "Client Updated", desc: "Fires when existing client details or fields are modified", iconKey: "user" },
+                  { event: "client.product_assigned", label: "Assign Product", desc: "Fires when a product or service is assigned to this client in their profile", iconKey: "briefcase" },
+                ],
+                appointment: [
+                  { event: "appointment.booked", label: "Appointment Booked", desc: "Fires when a time slot is confirmed for a client", iconKey: "calendar" },
+                  { event: "appointment.rescheduled", label: "Appointment Rescheduled", desc: "Fires when an appointment date or time is modified", iconKey: "calendar" },
+                  { event: "appointment.cancelled", label: "Appointment Cancelled", desc: "Fires when an appointment is cancelled or marked void", iconKey: "calendar" },
+                  { event: "appointment.completed", label: "Appointment Completed", desc: "Fires when an appointment or consultation concludes successfully", iconKey: "calendar" },
+                ],
+                invoice: [
+                  { event: "invoice.created", label: "Invoice Created", desc: "Fires when a billing invoice is drafted or issued", iconKey: "receipt" },
+                  { event: "invoice.paid", label: "Invoice Paid", desc: "Fires when payment is recorded and settled for an invoice", iconKey: "receipt" },
+                ],
+              };
+
+              const currentOptions = triggerOptionsByCategory[activeCategory] || triggerOptionsByCategory.client;
+
+              const handleCategoryChange = (newCat: string) => {
+                const defaults = triggerOptionsByCategory[newCat] || triggerOptionsByCategory.client;
+                const firstOption = defaults[0];
+                onChange({
+                  category: newCat,
+                  selectedEvent: firstOption.event,
+                  triggerLabel: firstOption.label,
+                  triggerDescription: firstOption.desc,
+                  triggerIconKey: firstOption.iconKey,
+                });
+              };
+
+              const handleEventSelect = (opt: { event: string; label: string; desc: string; iconKey: string }) => {
+                onChange({
+                  selectedEvent: opt.event,
+                  triggerLabel: opt.label,
+                  triggerDescription: opt.desc,
+                  triggerIconKey: opt.iconKey,
+                });
+              };
+
+              const handleAddMonitoredField = (token: string) => {
+                const cleanKey = token.replace(/[{}]/g, "").trim();
+                if (!monitoredFields.includes(cleanKey)) {
+                  onChange({ monitoredFields: [...monitoredFields, cleanKey] });
+                }
+              };
+
+              const handleRemoveMonitoredField = (fieldKey: string) => {
+                onChange({ monitoredFields: monitoredFields.filter((f) => f !== fieldKey) });
+              };
+
+              return (
+                <div className="space-y-5">
+                  {/* Respective Trigger Options (Categories already selected in sidebar) */}
+                  {currentOptions.length > 1 && (
+                    <div className="space-y-2">
+                      <label
+                        className="block text-xs font-bold text-slate-700 uppercase tracking-wider"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        Select Trigger ({activeCategory.charAt(0).toUpperCase() + activeCategory.slice(1).replace("_", " ")})
+                      </label>
+                      <div className="space-y-2">
+                        {currentOptions.map((opt) => {
+                          const isSelected =
+                            currentEvent === opt.event ||
+                            (opt.event === "stage.entered" && (currentEvent === "stage.entry" || currentEvent === "entry")) ||
+                            (opt.event === "stage.exited" && (currentEvent === "stage.exit" || currentEvent === "exit")) ||
+                            (opt.event === "stage.entry" && (currentEvent === "stage.entered" || currentEvent === "entry")) ||
+                            (opt.event === "stage.exit" && (currentEvent === "stage.exited" || currentEvent === "exit"));
+                          return (
+                            <div
+                              key={opt.event}
+                              onClick={() => handleEventSelect(opt)}
+                              className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                                isSelected
+                                  ? "bg-blue-50/70 border-blue-500 ring-1 ring-blue-500 shadow-2xs"
+                                  : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
+                              }`}
+                            >
+                              <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                                isSelected ? "border-blue-600 bg-blue-600" : "border-slate-300 bg-white"
+                              }`}>
+                                {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p
+                                  className={`text-xs font-semibold ${isSelected ? "text-blue-900" : "text-slate-900"}`}
+                                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                                >
+                                  {opt.label}
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                                  {opt.desc}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Specific Trigger Sub-Parameters */}
+                  {activeCategory === "stage" && (
+                    <div className="p-3.5 bg-blue-50/40 rounded-xl border border-blue-100 space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <GitBranch className="w-4 h-4 text-blue-600" />
+                        <span className="text-xs font-semibold text-blue-900">Stage Filter Options</span>
+                      </div>
+                      {renderField("Process Filter",
+                        <select
+                          value={params.triggerProcessId || "all"}
+                          disabled={isStageScope || params.scope === "stage"}
+                          onChange={(e) => {
+                            const pId = e.target.value;
+                            const proc = effectiveProcesses.find((p: any) => p.id === pId);
+                            onChange({
+                              triggerProcessId: pId,
+                              triggerProcessName: proc?.name || "Any Process",
+                              triggerStageId: "all",
+                              triggerStageName: "Any Stage",
+                            });
+                          }}
+                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs disabled:opacity-80 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                        >
+                          <option value="all">Any Process</option>
+                          {effectiveProcesses.map((proc: any) => (
+                            <option key={proc.id} value={proc.id}>
+                              {proc.name} {proc.entityType ? `(${proc.entityType})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {(() => {
+                        const selectedProc = effectiveProcesses.find((p: any) => p.id === params.triggerProcessId);
+                        const stages = selectedProc?.stages || [];
+                        const isStageLocked = isStageScope || params.scope === "stage";
+                        return renderField("Stage Filter",
+                          <select
+                            value={params.triggerStageId || "all"}
+                            disabled={isStageLocked || !params.triggerProcessId || params.triggerProcessId === "all"}
+                            onChange={(e) => {
+                              const sId = e.target.value;
+                              const stg = stages.find((s: any) => s.id === sId);
+                              onChange({
+                                triggerStageId: sId,
+                                triggerStageName: stg?.name || "Any Stage",
+                              });
+                            }}
+                            className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs disabled:opacity-80 disabled:bg-slate-50 disabled:cursor-not-allowed"
+                          >
+                            <option value="all">
+                              {params.triggerProcessId && params.triggerProcessId !== "all"
+                                ? "Any Stage in this Process"
+                                : "Select a process to specify a stage"}
+                            </option>
+                            {stages.map((stg: any) => (
+                              <option key={stg.id} value={stg.id}>
+                                {stg.name}
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      })()}
+                      <p className="text-[11px] text-blue-700">
+                        {currentEvent === "stage.exited" || currentEvent === "stage.exit"
+                          ? "This automation fires whenever a record transitions out of the selected stage."
+                          : "This automation fires whenever a record transitions into the selected stage."}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Field Update Sub-Parameters */}
+                  {activeCategory === "field_update" && (
+                    <div className="p-4 bg-[#fafafa] rounded-2xl border border-slate-200 space-y-4">
+                      {/* Monitored Fields Header */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div
+                            className="flex items-center gap-1.5 text-xs font-bold text-slate-900"
+                            style={{ fontFamily: "DM Sans, sans-serif" }}
+                          >
+                            <Sliders className="w-4 h-4 text-blue-600" />
+                            <span>Monitored Fields</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Select client & record fields that will trigger this automation
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFieldModalMode("monitoredFields");
+                            setIsFieldRegistryModalOpen(true);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Select Fields</span>
+                        </button>
+                      </div>
+
+                      {/* Monitored Fields Tags */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-semibold text-slate-700">Fields to Watch</label>
+                        {monitoredFields.length === 0 ? (
+                          <div className="p-3 bg-white border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                            No specific fields selected. <strong>Triggers on ANY field update.</strong>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5 p-2 bg-white border border-slate-200 rounded-xl">
+                            {monitoredFields.map((fld) => (
+                              <span
+                                key={fld}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 text-xs font-medium border border-blue-200"
+                              >
+                                <code className="font-mono text-[11px]">{fld}</code>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveMonitoredField(fld)}
+                                  className="text-blue-500 hover:text-blue-800 cursor-pointer ml-0.5"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Trigger Parameter (Evaluation Logic) Dropdown */}
+                      <div className="space-y-1.5">
+                        <label
+                          className="block text-xs font-semibold text-slate-800"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          Trigger Parameter (Evaluation Logic)
+                        </label>
+                        <select
+                          value={params.matchLogic || "any"}
+                          onChange={(e) => onChange({ matchLogic: e.target.value })}
+                          className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          <option value="any">
+                            Any Field Updated — Triggers when ANY of the watched fields is changed
+                          </option>
+                          <option value="all">
+                            All Fields Updated — Triggers only when ALL watched fields are changed
+                          </option>
+                        </select>
+                        <p className="text-[11px] text-slate-500" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          {(params.matchLogic || "any") === "any"
+                            ? "Triggers when ANY of the watched fields is changed"
+                            : "Triggers only when ALL watched fields are changed"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Specific Trigger Sub-Parameters */}
+                  {currentEvent === "client.product_assigned" && (
+                    <div className="p-3.5 bg-blue-50/40 rounded-xl border border-blue-100 space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <Briefcase className="w-4 h-4 text-blue-600" />
+                        <span className="text-xs font-semibold text-blue-900">Assign Product Filter</span>
+                      </div>
+                      {renderField("Target Product / Service",
+                        <select
+                          value={params.selectedProductId || "all"}
+                          onChange={(e) => onChange({ selectedProductId: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
+                        >
+                          <option value="all">Any Product or Service assigned</option>
+                          {storedServices.map((svc) => (
+                            <option key={svc.id} value={String(svc.id)}>
+                              {svc.name} (${svc.price})
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <p className="text-[11px] text-blue-700">
+                        When this product is assigned in the Client Profile, this trigger activates and can feed invoice generation.
+                      </p>
+                    </div>
+                  )}
+
+                  {activeCategory === "invoice" && (
+                    <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <Receipt className="w-4 h-4 text-gray-700" />
+                        <span className="text-xs font-semibold text-gray-900">Invoice Filter</span>
+                      </div>
+                      {renderField("Payment Mode Filter",
+                        <select
+                          value={params.invoicePaymentMode || "all"}
+                          onChange={(e) => onChange({ invoicePaymentMode: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
+                        >
+                          <option value="all">Any Payment Mode</option>
+                          <option value="Online / Link">Online / Payment Link</option>
+                          <option value="Bank Transfer">Bank Transfer</option>
+                          <option value="Card on File">Card on File</option>
+                          <option value="Cash / POS">Cash / POS Terminal</option>
+                        </select>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ───────────── GENERATE DOCUMENT AUTOMATION STEP ───────────── */}
+            {(stepKey === "generate_document" || stepKey === "generate-document") && (() => {
+              const selectedEntity = ((params.entity as TemplateEntity) || "client");
+              const storedTemplates = getStoredDocumentTemplates();
+
+              // Filter stored templates by entity AND active scopingRules
+              const availableTemplates = storedTemplates.filter((t) =>
+                isDocumentTemplateMatchingScopeRules(t, scopingRules, selectedEntity)
+              );
+
+              // Active scope summary for display
+              const activeRule = scopingRules?.find(
+                (r) =>
+                  (r.industryCategory && r.industryCategory !== "All" && r.industryCategory !== "All Categories") ||
+                  (r.industries && r.industries.length > 0 && !r.industries.includes("All") && !r.industries.includes("All Industries")) ||
+                  (r.locations && r.locations.length > 0 && !r.locations.includes("All") && !r.locations.includes("All Locations"))
+              );
+
+              const currentTemplateId = params.templateId || availableTemplates[0]?.id || "";
+              const activeTemplate = availableTemplates.find((t) => t.id === currentTemplateId) || availableTemplates[0];
+
+              const handleEntityChange = (newEntity: TemplateEntity) => {
+                const nextTemplates = storedTemplates.filter((t) =>
+                  isDocumentTemplateMatchingScopeRules(t, scopingRules, newEntity)
+                );
+                const firstTpl = nextTemplates[0];
+                onChange({
+                  entity: newEntity,
+                  templateId: firstTpl?.id || "",
+                  templateName: firstTpl?.name || "",
+                  documentName: firstTpl ? `{client_name} - ${firstTpl.name}` : `{client_name} - Document`,
+                });
+              };
+
+              const handleTemplateSelect = (tplId: string) => {
+                const found = availableTemplates.find((t) => t.id === tplId);
+                onChange({
+                  templateId: tplId,
+                  templateName: found?.name || "",
+                  documentName: `{client_name} - ${found?.name || "Document"}`,
+                });
+              };
+
+              const docName = params.documentName || (activeTemplate ? `{client_name} - ${activeTemplate.name}` : "Generated Document");
+
+              const ENTITY_CONFIG = [
+                { key: "client" as TemplateEntity, label: "Client", icon: User },
+                { key: "process" as TemplateEntity, label: "Process", icon: Briefcase },
+                { key: "appointment" as TemplateEntity, label: "Appointment", icon: Calendar },
+                { key: "invoice" as TemplateEntity, label: "Invoice", icon: Receipt },
+              ];
+
+              return (
+                <div className="space-y-4">
+                  {/* Select Entity Dice */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-semibold text-gray-700">Select Entity *</label>
+                      <span className="text-[11px] text-gray-400">Target entity for template</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {ENTITY_CONFIG.map(({ key, label, icon: Icon }) => {
+                        const isSelected = selectedEntity === key;
+                        const entityCount = storedTemplates.filter((t) =>
+                          isDocumentTemplateMatchingScopeRules(t, scopingRules, key)
+                        ).length;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => handleEntityChange(key)}
+                            className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 ${
+                              isSelected
+                                ? "bg-blue-50/80 border-blue-500 text-blue-700 shadow-sm ring-1 ring-blue-500/30 font-semibold"
+                                : "bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                            }`}
+                          >
+                            <Icon className={`w-4 h-4 ${isSelected ? "text-blue-600" : "text-slate-400"}`} />
+                            <span className="text-xs leading-none">{label}</span>
+                            <span
+                              className={`text-[10px] font-semibold px-1.5 py-0.2 rounded-full ${
+                                isSelected ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {entityCount}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Scope Feedback Badge */}
+                  {activeRule ? (
+                    <div className="flex items-center justify-between px-3 py-2 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs text-amber-900">
+                      <div className="flex items-center gap-2">
+                        <Sliders className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span className="font-medium text-[11px]">
+                          Filtered by Scope: <strong className="font-bold text-amber-950">{activeRule.industryCategory}</strong>
+                          {activeRule.industries && activeRule.industries.length > 0 && ` • ${activeRule.industries.join(", ")}`}
+                          {activeRule.locations && activeRule.locations.length > 0 && ` • ${activeRule.locations.join(", ")}`}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold bg-amber-100/90 text-amber-800 px-2 py-0.5 rounded-md">
+                        {availableTemplates.length} matching
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                      <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                        Global Scope (All industries & locations)
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                        {availableTemplates.length} templates
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Respective Template */}
+                  {availableTemplates.length > 0 ? (
+                    <>
+                      {renderField(
+                        <div className="flex items-center justify-between">
+                          <span>Select Template ({selectedEntity.toUpperCase()})</span>
+                          <span className="text-[11px] text-gray-500 font-normal">
+                            {availableTemplates.length} available
+                          </span>
+                        </div>,
+                        <select
+                          value={currentTemplateId}
+                          onChange={(e) => handleTemplateSelect(e.target.value)}
+                          className="w-full px-3 py-2.5 bg-white border border-border rounded-xl text-xs font-medium focus:border-blue-500 outline-none"
+                        >
+                          {availableTemplates.map((tpl) => (
+                            <option key={tpl.id} value={tpl.id}>
+                              {tpl.name} ({tpl.category}) {tpl.scopingRules && tpl.scopingRules.length > 0 ? "• Scoped" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      {/* Selected Template Description Card */}
+                      {activeTemplate && (
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-2.5">
+                          <FileCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-slate-800">{activeTemplate.name}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              {activeTemplate.extractedFields?.length || 0} fillable fields mapped • Category: {activeTemplate.category}
+                              {activeTemplate.scopingRules && activeTemplate.scopingRules.length > 0
+                                ? ` • Scoped to ${activeTemplate.scopingRules.map((r) => r.industryCategory).filter(Boolean).join(", ")}`
+                                : " • Global Scope"}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center space-y-2">
+                      <FileCheck className="w-6 h-6 text-slate-400 mx-auto" />
+                      <p className="text-xs font-semibold text-slate-700">No {selectedEntity} templates match this scope</p>
+                      <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                        No templates for entity "{selectedEntity}" match the active scope rule ({activeRule?.industryCategory || "specified scope"}).
+                      </p>
+                      <Link
+                        to="/admin/document-templates"
+                        target="_blank"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 underline pt-1"
+                      >
+                        Manage Document Templates <ExternalLink className="w-3 h-3" />
+                      </Link>
+                    </div>
+                  )}
+
+                  {/* Document Name / Title */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-gray-700">Document Title / File Name</label>
+                      <VariablePickerButton
+                        targetRef={getRefForField("docNameInput")}
+                        value={docName}
+                        onChange={(newVal) => onChange({ documentName: newVal })}
+                        label="+ Insert Variable"
+                      />
+                    </div>
+                    <input
+                      ref={(el) => { inputRefs.current["docNameInput"] = el; }}
+                      type="text"
+                      value={docName}
+                      onChange={(e) => onChange({ documentName: e.target.value })}
+                      placeholder="e.g. {client_name} - Consultation Intake Document"
+                      className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
+                    />
+                  </div>
+
+                  {/* Output Format (Cleaned, Execution Mode removed) */}
+                  <div>
+                    {renderField("Output Format",
+                      <select
+                        value={params.fileType || "pdf"}
+                        onChange={(e) => onChange({ fileType: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-border rounded-xl text-xs"
+                      >
+                        <option value="pdf">PDF Document (.pdf)</option>
+                        <option value="doc">Word Document (.docx)</option>
+                      </select>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
+
+      {/* Root Field Registry Modal (Shared across Trigger, Conditions, and Field Updates) */}
+      {isFieldRegistryModalOpen && (
+        <SelectFieldsMultiModal
+          isOpen={isFieldRegistryModalOpen}
+          onClose={() => setIsFieldRegistryModalOpen(false)}
+          singleSelect={
+            fieldModalMode === "fieldConditionSingle" ||
+            fieldModalMode === "fieldUpdateSingle" ||
+            fieldModalMode === "genericCondition" ||
+            fieldModalMode === "conditionNodeSingle" ||
+            fieldModalMode === "triggerConditionSingle"
+          }
+          initialSelectedKeys={
+            fieldModalMode === "monitoredFields"
+              ? (Array.isArray(params.monitoredFields) ? params.monitoredFields : [])
+              : fieldModalMode === "conditionNodeSingle" && targetConditionIndex !== null && conditionRules[targetConditionIndex]?.field
+              ? [conditionRules[targetConditionIndex].field]
+              : fieldModalMode === "triggerConditionSingle" && targetTriggerConditionIndex !== null && triggerConditions[targetTriggerConditionIndex]?.field
+              ? [triggerConditions[targetTriggerConditionIndex].field]
+              : fieldModalMode === "fieldConditionSingle" && targetConditionIndex !== null && fieldConditions[targetConditionIndex]?.field
+              ? [fieldConditions[targetConditionIndex].field]
+              : fieldModalMode === "fieldUpdateSingle" && targetFieldUpdateIndex !== null && fieldUpdateBlocks[targetFieldUpdateIndex]?.fieldToEdit && fieldUpdateBlocks[targetFieldUpdateIndex].fieldToEdit !== "Select field..."
+              ? [fieldUpdateBlocks[targetFieldUpdateIndex].fieldToEdit]
+              : fieldModalMode === "genericCondition" && params.field
+              ? [params.field]
+              : []
+          }
+          onApply={handleFieldRegistryApply}
+          title={
+            fieldModalMode === "monitoredFields"
+              ? "Select Fields to Watch"
+              : fieldModalMode === "fieldConditionSingle" || fieldModalMode === "conditionNodeSingle"
+              ? "Select Condition Field"
+              : fieldModalMode === "triggerConditionSingle"
+              ? "Select Trigger Condition Field"
+              : fieldModalMode === "triggerConditionMulti"
+              ? "Add Trigger Conditions from Registry"
+              : fieldModalMode === "fieldConditionMulti" || fieldModalMode === "conditionNodeMulti"
+              ? "Add Field Conditions from Registry"
+              : fieldModalMode === "fieldUpdateSingle"
+              ? "Select Field to Update"
+              : fieldModalMode === "fieldUpdateMulti"
+              ? "Add Field Updates from Registry"
+              : "Select Condition Field"
+          }
+          subtitle={
+            fieldModalMode === "monitoredFields"
+              ? "Choose fields that will trigger this automation when updated"
+              : fieldModalMode.includes("triggerCondition")
+              ? "Choose fields to filter when this trigger activates"
+              : fieldModalMode.includes("Condition")
+              ? "Choose fields from the registry to evaluate in conditions"
+              : fieldModalMode.includes("Update")
+              ? "Choose fields from the registry to update when this step runs"
+              : "Select field from registry"
+          }
+          scopingRules={scopingRules}
+        />
+      )}
     </div>
   );
 }

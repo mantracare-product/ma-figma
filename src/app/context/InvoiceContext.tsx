@@ -2,6 +2,13 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { ClientInvoice, InvoiceLineItem, InvoiceStatus, ReportDefinition, ReportDataSource, InvoiceFieldRule, InvoiceFieldRulesMap, Payment } from "../types/invoiceTypes";
 import { addActivityEntry } from "../../lib/activityLog";
 import { useFieldRegistry } from "./FieldRegistryContext";
+import { DEFAULT_ENTITY_PROCESSES } from "../../lib/useProcessStore";
+import { mapInvoiceStatusToCategory, findStageForCategory } from "../../lib/entityMigration";
+import { invoiceService } from "../../lib/invoiceService";
+
+export function ensureInvoiceStage(inv: ClientInvoice): ClientInvoice {
+  return inv;
+}
 
 interface CreateInvoiceOptions {
   appointmentId?: string;
@@ -64,252 +71,7 @@ const DEFAULT_FIELD_RULES: InvoiceFieldRulesMap = {
   },
 };
 
-const INITIAL_INVOICES: ClientInvoice[] = [
-  {
-    id: "INV-CL-1040",
-    clientId: "c-1",
-    clientName: "James Wilson",
-    clientEmail: "james.w@example.com",
-    clientPhone: "+1 (555) 123-4567",
-    appointmentId: "1",
-    appointmentTitle: "Initial Consultation",
-    status: "paid",
-    currency: "$",
-    paymentMode: "Card",
-    lineItems: [
-      { id: "li-1", source: "service", serviceId: "srv-1", description: "Initial Consultation", quantity: 1, unitPrice: 150 },
-    ],
-    subtotal: 150,
-    discountAmount: 0,
-    taxAmount: 12,
-    total: 162,
-    amountPaid: 162,
-    paymentType: "self_pay",
-    createdAt: "2026-05-12T09:00:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-05-26",
-    sentAt: "2026-05-12T09:05:00Z",
-    sentVia: "whatsapp",
-    paidAt: "2026-05-14T14:30:00Z",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1040",
-  },
-  {
-    id: "INV-CL-1041",
-    clientId: "c-2",
-    clientName: "Emma Brown",
-    clientEmail: "emma.b@example.com",
-    clientPhone: "+1 (555) 234-5678",
-    appointmentId: "2",
-    appointmentTitle: "Follow-up Visit",
-    status: "sent",
-    currency: "$",
-    paymentMode: "Bank Transfer",
-    lineItems: [
-      { id: "li-2", source: "service", serviceId: "srv-2", description: "Follow-up Visit", quantity: 1, unitPrice: 75 },
-    ],
-    subtotal: 75,
-    discountAmount: 0,
-    taxAmount: 6,
-    total: 81,
-    amountPaid: 0,
-    createdAt: "2026-05-12T10:30:00Z",
-    createdBy: "system",
-    dueDate: "2026-05-26",
-    sentAt: "2026-05-12T10:31:00Z",
-    sentVia: "whatsapp",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1041",
-  },
-  {
-    id: "INV-CL-1042",
-    clientId: "c-3",
-    clientName: "Oliver Davis",
-    clientEmail: "oliver.d@example.com",
-    clientPhone: "+1 (555) 345-6789",
-    appointmentId: "3",
-    appointmentTitle: "X-Ray Imaging",
-    status: "overdue",
-    currency: "$",
-    lineItems: [
-      { id: "li-3", source: "service", serviceId: "srv-4", description: "X-Ray Imaging", quantity: 1, unitPrice: 80 },
-      { id: "li-4", source: "manual", description: "Radiology Processing Fee", quantity: 1, unitPrice: 25 },
-    ],
-    subtotal: 105,
-    discountAmount: 5,
-    taxAmount: 8,
-    total: 108,
-    amountPaid: 0,
-    createdAt: "2026-05-13T14:00:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-05-27",
-    sentAt: "2026-05-13T14:05:00Z",
-    sentVia: "sms",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1042",
-  },
-  {
-    id: "INV-CL-1043",
-    clientId: "c-4",
-    clientName: "Priya Nair",
-    clientEmail: "priya.n@example.com",
-    clientPhone: "+1 (555) 987-6543",
-    status: "draft",
-    currency: "$",
-    lineItems: [
-      { id: "li-5", source: "service", serviceId: "srv-3", description: "Dental Cleaning", quantity: 1, unitPrice: 120 },
-    ],
-    subtotal: 120,
-    discountAmount: 10,
-    taxAmount: 8.8,
-    total: 118.8,
-    amountPaid: 0,
-    createdAt: "2026-08-10T15:00:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-08-25",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1043",
-  },
-  {
-    id: "INV-CL-1044",
-    clientId: "c-5",
-    clientName: "David Miller",
-    clientEmail: "dmiller@example.com",
-    clientPhone: "+1 (555) 432-1098",
-    status: "viewed",
-    currency: "$",
-    lineItems: [
-      { id: "li-6", source: "service", serviceId: "srv-5", description: "Physiotherapy Session", quantity: 2, unitPrice: 110 },
-    ],
-    subtotal: 220,
-    discountAmount: 20,
-    taxAmount: 16,
-    total: 216,
-    amountPaid: 0,
-    createdAt: "2026-08-05T08:45:00Z",
-    createdBy: "system",
-    dueDate: "2026-08-19",
-    sentAt: "2026-08-05T08:46:00Z",
-    sentVia: "email",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1044",
-  },
-  {
-    id: "INV-CL-1045",
-    clientId: "c-1",
-    clientName: "Sarah Jenkins",
-    clientEmail: "sarah.j@example.com",
-    clientPhone: "+1 (555) 234-5678",
-    status: "paid",
-    currency: "$",
-    lineItems: [
-      { id: "li-7", source: "service", serviceId: "srv-6", description: "Blood Test & Lab Panel", quantity: 1, unitPrice: 95 },
-    ],
-    subtotal: 95,
-    discountAmount: 0,
-    taxAmount: 7.6,
-    total: 102.6,
-    amountPaid: 102.6,
-    paymentType: "self_pay",
-    createdAt: "2026-07-20T14:20:00Z",
-    createdBy: "system",
-    dueDate: "2026-08-04",
-    sentAt: "2026-07-20T14:21:00Z",
-    sentVia: "whatsapp",
-    paidAt: "2026-07-22T09:15:00Z",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1045",
-  },
-  {
-    id: "INV-CL-1046",
-    clientId: "c-2",
-    clientName: "Michael Chang",
-    clientEmail: "m.chang@example.com",
-    clientPhone: "+1 (555) 876-5432",
-    status: "paid",
-    currency: "$",
-    lineItems: [
-      { id: "li-8", source: "service", serviceId: "srv-1", description: "Initial Consultation", quantity: 1, unitPrice: 150 },
-    ],
-    subtotal: 150,
-    discountAmount: 15,
-    taxAmount: 10.8,
-    total: 145.8,
-    amountPaid: 145.8,
-    paymentType: "self_pay",
-    createdAt: "2026-06-15T11:00:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-06-30",
-    sentAt: "2026-06-15T11:05:00Z",
-    sentVia: "whatsapp",
-    paidAt: "2026-06-16T16:00:00Z",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1046",
-  },
-  {
-    id: "INV-CL-1047",
-    clientId: "c-3",
-    clientName: "Elena Rostova",
-    clientEmail: "elena.r@example.com",
-    clientPhone: "+1 (555) 345-6789",
-    status: "void",
-    currency: "$",
-    lineItems: [
-      { id: "li-9", source: "service", serviceId: "srv-2", description: "Follow-up Visit", quantity: 1, unitPrice: 75 },
-    ],
-    subtotal: 75,
-    discountAmount: 0,
-    taxAmount: 6,
-    total: 81,
-    amountPaid: 0,
-    createdAt: "2026-06-10T09:00:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-06-24",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1047",
-  },
-  {
-    id: "INV-CL-1048",
-    clientId: "c-4",
-    clientName: "Priya Nair",
-    clientEmail: "priya.n@example.com",
-    clientPhone: "+1 (555) 987-6543",
-    status: "paid",
-    currency: "$",
-    lineItems: [
-      { id: "li-10", source: "service", serviceId: "srv-3", description: "Dental Cleaning", quantity: 1, unitPrice: 120 },
-      { id: "li-11", source: "service", serviceId: "srv-4", description: "X-Ray Imaging", quantity: 1, unitPrice: 80 },
-    ],
-    subtotal: 200,
-    discountAmount: 20,
-    taxAmount: 14.4,
-    total: 194.4,
-    amountPaid: 194.4,
-    paymentType: "self_pay",
-    createdAt: "2026-07-28T16:30:00Z",
-    createdBy: "system",
-    dueDate: "2026-08-11",
-    sentAt: "2026-07-28T16:31:00Z",
-    sentVia: "whatsapp",
-    paidAt: "2026-07-29T10:00:00Z",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1048",
-  },
-  {
-    id: "INV-CL-1049",
-    clientId: "c-5",
-    clientName: "David Miller",
-    clientEmail: "dmiller@example.com",
-    clientPhone: "+1 (555) 432-1098",
-    status: "sent",
-    currency: "$",
-    lineItems: [
-      { id: "li-12", source: "service", serviceId: "srv-1", description: "Initial Consultation", quantity: 1, unitPrice: 150 },
-    ],
-    subtotal: 150,
-    discountAmount: 0,
-    taxAmount: 12,
-    total: 162,
-    amountPaid: 0,
-    createdAt: "2026-08-08T13:10:00Z",
-    createdBy: "Admin User",
-    dueDate: "2026-08-22",
-    sentAt: "2026-08-08T13:12:00Z",
-    sentVia: "sms",
-    paymentLinkUrl: "https://pay.mantraassist.mock/inv-1049",
-  },
-];
+const INITIAL_INVOICES: ClientInvoice[] = [];
 
 
 // ─── Record-level mock rows used by the custom report engine ─────────────────
@@ -562,14 +324,37 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { getAllFields } = useFieldRegistry();
 
   const [invoices, setInvoices] = useState<ClientInvoice[]>(() => {
-    const saved = localStorage.getItem("mantra_invoices_v1");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {}
-    }
-    return INITIAL_INVOICES;
+    return invoiceService.getInvoices();
   });
+
+  useEffect(() => {
+    // Check overdue on mount
+    invoiceService.checkOverdueInvoices();
+    const unsub = invoiceService.subscribe((updated) => {
+      setInvoices(updated);
+    });
+
+    const handleSyncPayments = () => {
+      try {
+        const raw = localStorage.getItem("mantra_payments_v1");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            setPayments(parsed);
+          }
+        }
+      } catch {}
+    };
+
+    window.addEventListener("mantra_payments_changed", handleSyncPayments);
+    window.addEventListener("storage", handleSyncPayments);
+
+    return () => {
+      unsub();
+      window.removeEventListener("mantra_payments_changed", handleSyncPayments);
+      window.removeEventListener("storage", handleSyncPayments);
+    };
+  }, []);
 
   const [fieldRules, setFieldRules] = useState<InvoiceFieldRulesMap>(() => {
     const saved = localStorage.getItem("mantra_invoice_field_rules_v1");
@@ -588,11 +373,7 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return JSON.parse(saved);
       } catch {}
     }
-    return {
-      "c-1": 60,
-      "c-2": 35,
-      "c-4": 20,
-    };
+    return {};
   });
 
   const [payments, setPayments] = useState<Payment[]>(() => {
@@ -602,47 +383,7 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return JSON.parse(saved);
       } catch {}
     }
-    return [
-      {
-        id: "pmt-init-1040",
-        invoiceId: "INV-CL-1040",
-        clientId: "c-1",
-        amount: 162,
-        method: "card_on_file",
-        paymentType: "self_pay",
-        paymentDate: "2026-05-14",
-        note: "Initial payment on file",
-        receiptNumber: "REC-1040-01",
-        receiptFileName: "Receipt_INV_1040.pdf",
-        createdAt: "2026-05-14T14:30:00Z",
-      },
-      {
-        id: "pmt-init-1045",
-        invoiceId: "INV-CL-1045",
-        clientId: "c-1",
-        amount: 102.6,
-        method: "cash",
-        paymentType: "self_pay",
-        paymentDate: "2026-07-22",
-        note: "Cash settlement at frontdesk",
-        receiptNumber: "REC-1045-88",
-        receiptFileName: "Receipt_INV_1045.pdf",
-        createdAt: "2026-07-22T09:15:00Z",
-      },
-      {
-        id: "pmt-init-1046",
-        invoiceId: "INV-CL-1046",
-        clientId: "c-2",
-        amount: 145.8,
-        method: "bank_transfer",
-        paymentType: "self_pay",
-        paymentDate: "2026-06-16",
-        note: "Wire transfer wire-8920",
-        receiptNumber: "REC-1046-12",
-        receiptFileName: "Wire_Receipt_1046.pdf",
-        createdAt: "2026-06-16T16:00:00Z",
-      },
-    ];
+    return [];
   });
 
   const [reports, setReports] = useState<ReportDefinition[]>(() => {
@@ -739,159 +480,40 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     lineItems: InvoiceLineItem[],
     options?: CreateInvoiceOptions
   ): ClientInvoice => {
-    const subtotal = lineItems.reduce(
-      (acc, item) => acc + (item.unitPrice * item.quantity - (item.discountAmount || 0)),
-      0
-    );
-
-    let discount = options?.discountAmount || 0;
-    if (options?.discountType === "percent" && options.discountValue !== undefined) {
-      discount = (subtotal * options.discountValue) / 100;
-    } else if (options?.discountValue !== undefined && options?.discountAmount === undefined) {
-      discount = options.discountValue;
-    }
-
-    discount = Math.round(discount * 100) / 100;
-    const taxSum = lineItems.reduce((acc, item) => {
-      const itemSub = Math.max(0, item.unitPrice * item.quantity - (item.discountAmount || 0));
-      const effectiveDisc = subtotal > 0 ? (discount * (itemSub / subtotal)) : 0;
-      const taxableItem = Math.max(0, itemSub - effectiveDisc);
-      const taxRate = item.taxPercent !== undefined ? item.taxPercent : 8;
-      return acc + (taxableItem * taxRate) / 100;
-    }, 0);
-    const tax = Math.round(taxSum * 100) / 100;
-    const total = Math.round((Math.max(0, subtotal - discount) + tax) * 100) / 100;
-
-    const nextIdNumber = 1050 + invoices.length;
-    const newInvoice: ClientInvoice = {
-      id: `INV-CL-${nextIdNumber}`,
-      clientId: String(appointment.clientId || "c-1"),
-      clientName: appointment.clientName || "Client",
-      clientEmail: appointment.clientEmail || "",
-      clientPhone: appointment.clientPhone || "",
-      appointmentId: appointment.id ? String(appointment.id) : undefined,
-      appointmentTitle: appointment.title || "Appointment",
-      status: "draft",
-      currency: "$",
-      lineItems,
-      subtotal,
-      discountType: options?.discountType || "amount",
-      discountValue: options?.discountValue || discount,
-      discountAmount: discount,
-      taxAmount: tax,
-      total,
-      amountPaid: 0,
-      createdAt: new Date().toISOString(),
-      createdBy: options?.createdBy || "Admin User",
-      dueDate: options?.dueDate || new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
-      paymentMode: options?.paymentMode,
-      paymentLinkUrl: `https://pay.mantraassist.mock/inv-${nextIdNumber}`,
-    };
-
-    setInvoices((prev) => [newInvoice, ...prev]);
-
-    // Log to activity engine
-    if (newInvoice.clientId) {
-      addActivityEntry({
-        clientId: newInvoice.clientId,
-        processId: "billing",
-        processName: "Billing & Invoicing",
-        type: "field_update",
-        status: "success",
-        refId: newInvoice.id,
-        details: {
-          primary: `Invoice ${newInvoice.id} created`,
-          secondary: `Total: $${newInvoice.total.toFixed(2)} (${newInvoice.createdBy === "system" ? "Automated" : "Manual"})`,
-        },
-      });
-    }
-
-    return newInvoice;
+    const { invoice } = invoiceService.createInvoiceFromAppointment(appointment, lineItems, options);
+    return invoice;
   };
 
   const updateInvoice = (invoiceId: string, patch: Partial<ClientInvoice>) => {
-    setInvoices((prev) =>
-      prev.map((inv) => (inv.id === invoiceId ? { ...inv, ...patch } : inv))
-    );
+    const all = invoiceService.getInvoices();
+    const updated = all.map((inv) => (inv.id === invoiceId ? { ...inv, ...patch } : inv));
+    invoiceService.saveInvoices(updated);
   };
 
   const deleteInvoice = (invoiceId: string) => {
-    setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
+    invoiceService.deleteInvoice(invoiceId);
   };
 
   const updateInvoiceStatus = (invoiceId: string, status: InvoiceStatus) => {
-    setInvoices((prev) =>
-      prev.map((inv) => (inv.id === invoiceId ? { ...inv, status } : inv))
-    );
+    const invProc = DEFAULT_ENTITY_PROCESSES.invoice;
+    const cat = mapInvoiceStatusToCategory(status);
+    const stage = findStageForCategory(invProc, cat);
+    if (stage) {
+      invoiceService.moveToStage(invoiceId, stage.id, { type: "manual", ruleName: `Status set to ${status}` });
+    }
   };
 
   const sendInvoice = (invoiceId: string, channel: "whatsapp" | "sms" | "email" = "whatsapp") => {
-    const now = new Date().toISOString();
-    setInvoices((prev) =>
-      prev.map((inv) => {
-        if (inv.id === invoiceId) {
-          const updated: ClientInvoice = {
-            ...inv,
-            status: inv.status === "draft" ? "sent" : inv.status,
-            sentAt: now,
-            sentVia: channel,
-          };
-
-          if (updated.clientId) {
-            addActivityEntry({
-              clientId: updated.clientId,
-              processId: "billing",
-              processName: "Billing & Invoicing",
-              type: channel,
-              status: "success",
-              refId: updated.id,
-              direction: "outbound",
-              details: {
-                primary: `Invoice ${updated.id} sent via ${channel.toUpperCase()}`,
-                secondary: `Payment link: ${updated.paymentLinkUrl}`,
-              },
-            });
-          }
-
-          return updated;
-        }
-        return inv;
-      })
-    );
+    invoiceService.sendInvoice(invoiceId, channel);
   };
 
   const simulatePayment = (invoiceId: string) => {
-    const now = new Date().toISOString();
-    setInvoices((prev) =>
-      prev.map((inv) => {
-        if (inv.id === invoiceId) {
-          const updated: ClientInvoice = {
-            ...inv,
-            status: "paid",
-            paidAt: now,
-          };
-
-          if (updated.clientId) {
-            const modeText = updated.paymentMode ? ` via ${updated.paymentMode}` : "";
-            addActivityEntry({
-              clientId: updated.clientId,
-              processId: "billing",
-              processName: "Billing & Invoicing",
-              type: "field_update",
-              status: "success",
-              refId: updated.id,
-              details: {
-                primary: `Invoice ${updated.id} marked Paid${modeText}`,
-                secondary: `Amount: $${updated.total.toFixed(2)} received${modeText}`,
-              },
-            });
-          }
-
-          return updated;
-        }
-        return inv;
-      })
-    );
+    const inv = invoices.find((i) => i.id === invoiceId);
+    if (inv) {
+      const remaining = Math.max(0, inv.total - (inv.amountPaid || 0));
+      invoiceService.recordPayment(invoiceId, remaining, "card_on_file", "Simulated payment");
+      setInvoices(invoiceService.getInvoices());
+    }
   };
 
   const recordPayment = (paymentDataList: Omit<Payment, "id" | "createdAt">[]) => {
@@ -1015,40 +637,50 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return updated;
       })
     );
+
+    // Synchronize through invoiceService to trigger automations & eventBus triggers (e.g. invoice.paid)
+    createdPayments.forEach((p) => {
+      if (p.invoiceId && p.invoiceId !== "UNLINKED") {
+        try {
+          invoiceService.recordPayment(p.invoiceId, p.amount, p.method, p.note);
+        } catch (err) {
+          console.warn("[InvoiceContext] Error forwarding payment to invoiceService:", err);
+        }
+      }
+    });
+
+    // Refresh live invoice state from invoiceService
+    setInvoices(invoiceService.getInvoices());
   };
 
   const getPaymentsByInvoice = (invoiceId: string) => {
-    return payments.filter((p) => p.invoiceId === invoiceId);
+    try {
+      const raw = localStorage.getItem("mantra_payments_v1");
+      const storedList: Payment[] = raw ? JSON.parse(raw) : [];
+      const map = new Map<string, Payment>();
+      payments.forEach((p) => map.set(p.id, p));
+      storedList.forEach((p) => map.set(p.id, p));
+      return Array.from(map.values()).filter((p) => p.invoiceId === invoiceId);
+    } catch {
+      return payments.filter((p) => p.invoiceId === invoiceId);
+    }
   };
 
   const getPaymentsByClient = (clientId: string) => {
-    return payments.filter((p) => p.clientId === clientId);
+    try {
+      const raw = localStorage.getItem("mantra_payments_v1");
+      const storedList: Payment[] = raw ? JSON.parse(raw) : [];
+      const map = new Map<string, Payment>();
+      payments.forEach((p) => map.set(p.id, p));
+      storedList.forEach((p) => map.set(p.id, p));
+      return Array.from(map.values()).filter((p) => p.clientId === clientId);
+    } catch {
+      return payments.filter((p) => p.clientId === clientId);
+    }
   };
 
   const voidInvoice = (invoiceId: string) => {
-    setInvoices((prev) =>
-      prev.map((inv) => {
-        if (inv.id === invoiceId) {
-          const updated = { ...inv, status: "void" as InvoiceStatus };
-          if (updated.clientId) {
-            addActivityEntry({
-              clientId: updated.clientId,
-              processId: "billing",
-              processName: "Billing & Invoicing",
-              type: "field_update",
-              status: "success",
-              refId: updated.id,
-              details: {
-                primary: `Invoice ${updated.id} voided`,
-                secondary: `Status updated to VOID`,
-              },
-            });
-          }
-          return updated;
-        }
-        return inv;
-      })
-    );
+    invoiceService.voidInvoice(invoiceId);
   };
 
   const getInvoiceById = (invoiceId: string) => {
@@ -1364,10 +996,38 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   );
 };
 
-export const useInvoices = () => {
+const FALLBACK_INVOICE_CONTEXT: InvoiceContextType = {
+  invoices: [],
+  payments: [],
+  clientCredits: {},
+  getClientCredit: () => 0,
+  addClientCredit: () => {},
+  useClientCredit: () => {},
+  fieldRules: DEFAULT_FIELD_RULES,
+  updateFieldRule: () => {},
+  createInvoiceFromAppointment: () => ({} as ClientInvoice),
+  updateInvoice: () => {},
+  deleteInvoice: () => {},
+  updateInvoiceStatus: () => {},
+  sendInvoice: () => {},
+  simulatePayment: () => {},
+  recordPayment: () => {},
+  getPaymentsByInvoice: () => [],
+  getPaymentsByClient: () => [],
+  voidInvoice: () => {},
+  getInvoiceById: () => undefined,
+  getInvoicesByClient: () => [],
+  getReportData: () => ({ kpis: [], chartData: [] }),
+  getReportRows: () => [],
+  reports: [],
+  saveReport: (report) => ({ ...report, id: "fallback" } as any),
+  deleteReport: () => {},
+};
+
+export const useInvoices = (): InvoiceContextType => {
   const ctx = useContext(InvoiceContext);
   if (!ctx) {
-    throw new Error("useInvoices must be used within an InvoiceProvider");
+    return FALLBACK_INVOICE_CONTEXT;
   }
   return ctx;
 };
