@@ -1,56 +1,81 @@
+import { lazy, Suspense, ComponentType } from "react";
 import { createBrowserRouter } from "react-router";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import MainLayout from "./components/layout/MainLayout";
 import AdminLayout from "./components/layout/AdminLayout";
 import SettingsGuard from "./components/auth/SettingsGuard";
-import Overview from "./pages/Overview";
-import Clients from "./pages/Clients";
-import ClientProfile from "./pages/ClientProfile";
-import CallLogs from "./pages/CallLogs";
-import CallDetails from "./pages/CallDetails";
-import Deals from "./pages/Deals";
-import Process from "./pages/Process";
-import Automation from "./pages/Automation";
-import KnowledgeBase from "./pages/KnowledgeBase";
-import WebForms from "./pages/WebForms";
-import NewFormTemplate from "./pages/NewFormTemplate";
-import FormBuilder from "./pages/FormBuilder";
-import WebFormsTest from "./pages/WebFormsTest";
-import Organizations from "./pages/Organizations";
-import UserManagement from "./pages/UserManagement";
-import Payments from "./pages/Payments";
-import Transactions from "./pages/Transactions";
-import Settings from "./pages/Settings";
-import Profile from "./pages/Profile";
-import ManageTeamMember from "./pages/ManageTeamMember";
-import Services from "./pages/Services";
-import Appointments from "./pages/Appointments";
 import Login from "./pages/auth/Login";
-import Signup from "./pages/auth/Signup";
-import Chats from "./pages/Chats";
-import NotFound from "./pages/NotFound";
-import GuidePageRoute from "./pages/GuidePageRoute";
-import ReferAndEarn from "./pages/ReferAndEarn";
-import Invoices from "./pages/Invoices";
-import Reports from "./pages/Reports";
-import AIScribeConsole from "./pages/AIScribeConsole";
-import Claims from "./pages/Claims";
-import AdminCustomFields from "./pages/admin/AdminCustomFields";
-import AdminIndustries from "./pages/admin/AdminIndustries";
-import AdminProcessTemplates from "./pages/admin/AdminProcessTemplates";
-import { AvatarReceptionView } from "../reception/avatar/AvatarReceptionView";
-import AdminAutomations from "./pages/admin/AdminAutomations";
-import AdminDocumentTemplates from "./pages/admin/AdminDocumentTemplates";
-import PatientPortalLayout from "./pages/patient/PatientPortalLayout";
-import PatientStatusScreen from "./pages/patient/PatientStatusScreen";
-import PatientBookingScreen from "./pages/patient/PatientBookingScreen";
-import PatientPharmacyScreen from "./pages/patient/PatientPharmacyScreen";
-import PatientBillScreen from "./pages/patient/PatientBillScreen";
-import PatientPaymentScreen from "./pages/patient/PatientPaymentScreen";
-import PatientLoginScreen from "./pages/patient/PatientLoginScreen";
-import PatientDocumentsScreen from "./pages/patient/PatientDocumentsScreen";
-import PatientProfileScreen from "./pages/patient/PatientProfileScreen";
-import AdminAIVoicesModels from "./pages/admin/AdminAIVoicesModels";
+
+const PageLoading = () => (
+  <div className="flex items-center justify-center min-h-[60vh] w-full">
+    <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
+
+function withLazy(factory: () => Promise<any>, exportName = "default"): ComponentType<any> {
+  const LazyComponent = lazy(async () => {
+    const mod = await factory();
+    const Component = (mod as any)[exportName] || (mod as any).default;
+    return { default: Component };
+  });
+
+  return function LazyRouteWrapper(props: any) {
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <LazyComponent {...props} />
+      </Suspense>
+    );
+  };
+}
+
+// Route components loaded lazily on demand to keep initial JS payload minimal and prevent Vercel main-thread freeze
+const Overview = withLazy(() => import("./pages/Overview"));
+const Clients = withLazy(() => import("./pages/Clients"));
+const ClientProfile = withLazy(() => import("./pages/ClientProfile"));
+const CallLogs = withLazy(() => import("./pages/CallLogs"));
+const CallDetails = withLazy(() => import("./pages/CallDetails"));
+const Deals = withLazy(() => import("./pages/Deals"));
+const Process = withLazy(() => import("./pages/Process"));
+const Automation = withLazy(() => import("./pages/Automation"));
+const KnowledgeBase = withLazy(() => import("./pages/KnowledgeBase"));
+const WebForms = withLazy(() => import("./pages/WebForms"));
+const NewFormTemplate = withLazy(() => import("./pages/NewFormTemplate"));
+const FormBuilder = withLazy(() => import("./pages/FormBuilder"));
+const WebFormsTest = withLazy(() => import("./pages/WebFormsTest"));
+const Organizations = withLazy(() => import("./pages/Organizations"));
+const UserManagement = withLazy(() => import("./pages/UserManagement"));
+const Payments = withLazy(() => import("./pages/Payments"));
+const Transactions = withLazy(() => import("./pages/Transactions"));
+const Settings = withLazy(() => import("./pages/Settings"));
+const Profile = withLazy(() => import("./pages/Profile"));
+const ManageTeamMember = withLazy(() => import("./pages/ManageTeamMember"));
+const Services = withLazy(() => import("./pages/Services"));
+const Appointments = withLazy(() => import("./pages/Appointments"));
+const Signup = withLazy(() => import("./pages/auth/Signup"));
+const Chats = withLazy(() => import("./pages/Chats"));
+const NotFound = withLazy(() => import("./pages/NotFound"));
+const GuidePageRoute = withLazy(() => import("./pages/GuidePageRoute"));
+const ReferAndEarn = withLazy(() => import("./pages/ReferAndEarn"));
+const Invoices = withLazy(() => import("./pages/Invoices"));
+const Reports = withLazy(() => import("./pages/Reports"));
+const AIScribeConsole = withLazy(() => import("./pages/AIScribeConsole"));
+const Claims = withLazy(() => import("./pages/Claims"));
+const AdminCustomFields = withLazy(() => import("./pages/admin/AdminCustomFields"));
+const AdminIndustries = withLazy(() => import("./pages/admin/AdminIndustries"));
+const AdminProcessTemplates = withLazy(() => import("./pages/admin/AdminProcessTemplates"));
+const AvatarReceptionView = withLazy(() => import("../reception/avatar/AvatarReceptionView"), "AvatarReceptionView");
+const AdminAutomations = withLazy(() => import("./pages/admin/AdminAutomations"));
+const AdminDocumentTemplates = withLazy(() => import("./pages/admin/AdminDocumentTemplates"));
+const PatientPortalLayout = withLazy(() => import("./pages/patient/PatientPortalLayout"));
+const PatientStatusScreen = withLazy(() => import("./pages/patient/PatientStatusScreen"));
+const PatientBookingScreen = withLazy(() => import("./pages/patient/PatientBookingScreen"));
+const PatientPharmacyScreen = withLazy(() => import("./pages/patient/PatientPharmacyScreen"));
+const PatientBillScreen = withLazy(() => import("./pages/patient/PatientBillScreen"));
+const PatientPaymentScreen = withLazy(() => import("./pages/patient/PatientPaymentScreen"));
+const PatientLoginScreen = withLazy(() => import("./pages/patient/PatientLoginScreen"));
+const PatientDocumentsScreen = withLazy(() => import("./pages/patient/PatientDocumentsScreen"));
+const PatientProfileScreen = withLazy(() => import("./pages/patient/PatientProfileScreen"));
+const AdminAIVoicesModels = withLazy(() => import("./pages/admin/AdminAIVoicesModels"));
 
 export const router = createBrowserRouter([
   {

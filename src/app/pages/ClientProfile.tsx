@@ -590,7 +590,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         setDynamicFieldValues(dyn);
       }
     }
-  }, [id, clients]);
+  }, [id]);
 
   const client: Client | null = useMemo(() => {
     if (isNewClient) {
@@ -643,7 +643,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   // Live-sync custom sections & fields from FieldRegistry (e.g. created/updated in Admin or Settings)
   useEffect(() => {
-    const handleSectionsUpdate = () => {
+    const handleSectionsUpdate = (e?: any) => {
+      if (e?.key && !e.key.includes("section") && !e.key.includes("field") && !e.key.includes("organization")) {
+        return;
+      }
       setClientSections((prev) =>
         computeMergedClientSections(
           prev,
@@ -669,16 +672,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   useEffect(() => {
     if (client) {
-      setClientName(client.name || "");
-      setClientEmail(client.email || "");
-      setClientPhone(client.phone || "");
-      setClientCompany(client.companyName || "");
-      setClientRole(client.jobPosition || "");
-      setClientStatus(client.status || "Active");
-      setClientLocation(client.location || "");
-      setClientCountry(client.country || "");
-      setSelectedProcesses(client.processes || []);
-
       let savedSections = (client as any).customSections;
       if (!savedSections) {
         try {
@@ -694,26 +687,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         client.visibleFieldKeys
       );
       setClientSections(merged);
-
-      if (
-        (client as any).customSections &&
-        (client as any).customSections.some((s: any) => s.id === "sec-custom-fields") &&
-        JSON.stringify((client as any).customSections) !== JSON.stringify(merged)
-      ) {
-        setClients((prev) =>
-          prev.map((c) =>
-            c.id === client.id ? { ...c, customSections: merged } : c
-          )
-        );
-      }
-
-      const dyn: Record<string, any> = {};
-      Object.keys(client).forEach((k) => {
-        if (!HARDCODED_KEYS.has(k)) {
-          dyn[k] = (client as any)[k];
-        }
-      });
-      setDynamicFieldValues(dyn);
     }
   }, [client?.id, getCustomSections, getAllFields]);
 
@@ -721,9 +694,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   useEffect(() => {
     if (client?.id && client.id !== "new") {
       const cid = String(client.id);
-      localStorage.setItem("patient_portal_active_client_id", cid);
-      sessionStorage.setItem("patient_portal_active_client_id", cid);
-      window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: cid }));
+      const current = localStorage.getItem("patient_portal_active_client_id");
+      if (current !== cid) {
+        localStorage.setItem("patient_portal_active_client_id", cid);
+        sessionStorage.setItem("patient_portal_active_client_id", cid);
+        window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: cid }));
+      }
     }
   }, [client?.id]);
 

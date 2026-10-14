@@ -128,18 +128,6 @@ export default defineConfig(({ mode }) => {
                 return 'vendor-react-core';
               }
             }
-            if (id.includes('src/reception')) {
-              return 'chunk-reception';
-            }
-            if (id.includes('src/app/pages/patient')) {
-              return 'chunk-patient-portal';
-            }
-            if (id.includes('src/app/pages/Settings')) {
-              return 'chunk-settings';
-            }
-            if (id.includes('src/app/pages/admin') || id.includes('src/app/pages/Process') || id.includes('src/app/pages/WebForms') || id.includes('src/app/pages/FormBuilder')) {
-              return 'chunk-admin-builder';
-            }
           },
         },
       },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Outlet, NavLink, useNavigate, useLocation, useParams } from "react-router";
 import {
   Calendar,
@@ -189,9 +189,37 @@ export default function PatientPortalLayout() {
     : -1;
   const activeIdx = currentStageIndex >= 0 ? currentStageIndex : -1;
 
+  const outletContext = useMemo(() => ({
+    activeClient,
+    activeProcess,
+    currentStageName,
+    currentStageIndex: activeIdx,
+    stages,
+    onStageChange: (newStageName: string) => {
+      if (!activeClient) return;
+      const procName = activeProcess?.name || "Patient Care Journey";
+      const cid = String(activeClient.id);
+      const all = getStoredClients();
+      const updated = all.map((c) =>
+        c.id === activeClient.id
+          ? {
+              ...c,
+              stage: newStageName,
+              lastUpdatedProcess: procName,
+              processStagesMap: { ...(c.processStagesMap || {}), [procName]: newStageName },
+              processes: Array.from(new Set([procName, ...(c.processes || [])])),
+            }
+          : c
+      );
+      saveStoredClients(updated);
+      updateProcessCallLogStage(cid, procName, newStageName);
+      window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: cid }));
+    },
+  }), [activeClient, activeProcess, currentStageName, activeIdx, stages]);
+
   // If on login screen, render without portal wrapper/sidebar
   if (isAuthPage) {
-    return <Outlet />;
+    return <Outlet context={outletContext} />;
   }
 
   const isOverviewPage = location.pathname === "/patient" || location.pathname === "/patient/" || (routeClientId && location.pathname === `/patient/${routeClientId}`);
@@ -488,36 +516,7 @@ export default function PatientPortalLayout() {
         {/* ── Main Scrollable Viewport (with bottom padding for mobile bar) ── */}
         <main className="flex-1 overflow-y-auto bg-[#F8FAFC] p-4 sm:p-6 lg:p-8 pb-24 md:pb-8">
           <div className="max-w-4xl mx-auto w-full">
-            <Outlet
-              context={{
-                activeClient,
-                activeProcess,
-                currentStageName,
-                currentStageIndex: activeIdx,
-                stages,
-                onStageChange: (newStageName: string) => {
-                  if (!activeClient) return;
-                  const procName = activeProcess?.name || "Patient Care Journey";
-                  const cid = String(activeClient.id);
-                  const all = getStoredClients();
-                  const updated = all.map((c) =>
-                    c.id === activeClient.id
-                      ? {
-                          ...c,
-                          stage: newStageName,
-                          lastUpdatedProcess: procName,
-                          processStagesMap: { ...(c.processStagesMap || {}), [procName]: newStageName },
-                          processes: Array.from(new Set([procName, ...(c.processes || [])])),
-                        }
-                      : c
-                  );
-                  saveStoredClients(updated);
-                  updateProcessCallLogStage(cid, procName, newStageName);
-                  window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: cid }));
-                  window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT, { detail: updated }));
-                },
-              }}
-            />
+            <Outlet context={outletContext} />
           </div>
         </main>
 

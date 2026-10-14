@@ -159,12 +159,14 @@ export default function PatientStatusScreen() {
             );
 
       setInvoices(matchedOrPending.length > 0 ? matchedOrPending : allInvoices);
-      setStoreTick((t) => t + 1);
     };
 
     loadData();
 
-    const handleDataChange = () => loadData();
+    const handleDataChange = () => {
+      loadData();
+      setStoreTick((t) => t + 1);
+    };
 
     window.addEventListener("mantra_appointments_changed", handleDataChange);
     window.addEventListener("mantra_appointments_updated", handleDataChange);
@@ -189,7 +191,7 @@ export default function PatientStatusScreen() {
       window.removeEventListener("deals_updated", handleDataChange);
       window.removeEventListener("storage", handleDataChange);
     };
-  }, [activeClient]);
+  }, [activeClient?.id]);
 
   // Keep latest client record reactive
   const latestClient = useMemo(() => {

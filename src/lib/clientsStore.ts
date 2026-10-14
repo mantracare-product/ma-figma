@@ -297,39 +297,22 @@ export function useClients() {
   const [clients, setClients] = useState<Client[]>(() => getStoredClients());
 
   useEffect(() => {
-    const handleUpdate = (e?: any) => {
+    const handleUpdate = () => {
       const fresh = getStoredClients();
-      console.log(`[clientsStore] useClients received update event (${e?.type || 'channel'}), new count:`, fresh.length, 'Top client:', fresh[0]?.name);
-      setClients(fresh);
-    };
-
-    const handleVisibility = () => {
-      if (typeof document !== "undefined" && !document.hidden) {
-        handleUpdate({ type: 'visibilitychange' });
-      }
+      setClients((prev) => {
+        if (prev.length === fresh.length && JSON.stringify(prev) === JSON.stringify(fresh)) {
+          return prev;
+        }
+        return fresh;
+      });
     };
 
     window.addEventListener(CLIENTS_STORE_EVENT, handleUpdate);
     window.addEventListener("storage", handleUpdate);
-    window.addEventListener("focus", handleUpdate);
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    let channel: BroadcastChannel | null = null;
-    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
-      try {
-        channel = new BroadcastChannel(CLIENTS_CHANNEL_NAME);
-        channel.onmessage = handleUpdate;
-      } catch (e) {
-        console.warn("Failed to create BroadcastChannel in useClients:", e);
-      }
-    }
 
     return () => {
       window.removeEventListener(CLIENTS_STORE_EVENT, handleUpdate);
       window.removeEventListener("storage", handleUpdate);
-      window.removeEventListener("focus", handleUpdate);
-      document.removeEventListener("visibilitychange", handleVisibility);
-      channel?.close();
     };
   }, []);
 

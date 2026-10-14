@@ -68,7 +68,7 @@ export default function PatientBookingScreen() {
       );
       setAppointments(userApts);
     });
-  }, [activeClient]);
+  }, [activeClient?.id]);
 
   // ── 2. Data Sources (Services, Locations, Doctors) ──
   const services = useMemo(() => {
