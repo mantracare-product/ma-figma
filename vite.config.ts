@@ -103,5 +103,46 @@ export default defineConfig(({ mode }) => {
 
     // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
     assetsInclude: ['**/*.svg', '**/*.csv'],
+    build: {
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('jspdf') || id.includes('mammoth') || id.includes('docx-preview') || id.includes('jszip') || id.includes('html2canvas')) {
+                return 'vendor-docs-pdf';
+              }
+              if (id.includes('lucide-react') || id.includes('react-icons')) {
+                return 'vendor-icons';
+              }
+              if (id.includes('recharts') || id.includes('d3')) {
+                return 'vendor-charts';
+              }
+              if (id.includes('@anthropic-ai')) {
+                return 'vendor-ai';
+              }
+              if (id.includes('@radix-ui')) {
+                return 'vendor-radix';
+              }
+              if (id.includes('react-router') || id.includes('react-dom') || id.includes('react')) {
+                return 'vendor-react-core';
+              }
+            }
+            if (id.includes('src/reception')) {
+              return 'chunk-reception';
+            }
+            if (id.includes('src/app/pages/patient')) {
+              return 'chunk-patient-portal';
+            }
+            if (id.includes('src/app/pages/Settings')) {
+              return 'chunk-settings';
+            }
+            if (id.includes('src/app/pages/admin') || id.includes('src/app/pages/Process') || id.includes('src/app/pages/WebForms') || id.includes('src/app/pages/FormBuilder')) {
+              return 'chunk-admin-builder';
+            }
+          },
+        },
+      },
+    },
   };
 });

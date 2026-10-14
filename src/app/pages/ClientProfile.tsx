@@ -577,6 +577,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         setClientLocation(target.location || "");
         setClientCountry(target.country || "");
         setSelectedProcesses(target.processes ?? []);
+        setSelectedDealProcessFilter("All Processes");
         if ((target as any).customSections) {
           setClientSections((target as any).customSections);
         }
@@ -694,7 +695,11 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       );
       setClientSections(merged);
 
-      if ((client as any).customSections && (client as any).customSections.some((s: any) => s.id === "sec-custom-fields")) {
+      if (
+        (client as any).customSections &&
+        (client as any).customSections.some((s: any) => s.id === "sec-custom-fields") &&
+        JSON.stringify((client as any).customSections) !== JSON.stringify(merged)
+      ) {
         setClients((prev) =>
           prev.map((c) =>
             c.id === client.id ? { ...c, customSections: merged } : c
@@ -985,7 +990,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       ...prev,
       [procName]: stageName,
     }));
-    setSelectedDealProcessFilter(procName);
+    setSelectedDealProcessFilter("All Processes");
 
     const clientIdStr = String(client.id);
 
@@ -2447,7 +2452,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       )
                     : allClientLogs;
 
-                const effectiveLogs = matchingLogs;
+                const effectiveLogs = matchingLogs.length > 0 ? matchingLogs : allClientLogs;
 
                 const searchLower = processSearchQuery.toLowerCase().trim();
                 const filteredClientDealLogs = effectiveLogs.filter((log) => {
