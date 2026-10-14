@@ -49,6 +49,7 @@ import PatientBillScreen from "./pages/patient/PatientBillScreen";
 import PatientPaymentScreen from "./pages/patient/PatientPaymentScreen";
 import PatientLoginScreen from "./pages/patient/PatientLoginScreen";
 import PatientDocumentsScreen from "./pages/patient/PatientDocumentsScreen";
+import PatientProfileScreen from "./pages/patient/PatientProfileScreen";
 import AdminAIVoicesModels from "./pages/admin/AdminAIVoicesModels";
 
 export const router = createBrowserRouter([
@@ -106,6 +107,7 @@ export const router = createBrowserRouter([
       { path: "checkin", Component: PatientStatusScreen },
       { path: "book", Component: PatientBookingScreen },
       { path: "documents", Component: PatientDocumentsScreen },
+      { path: "profile", Component: PatientProfileScreen },
       { path: "pharmacy", Component: PatientPharmacyScreen },
       { path: "bill", Component: PatientBillScreen },
       { path: "pay", Component: PatientPaymentScreen },

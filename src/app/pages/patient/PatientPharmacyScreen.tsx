@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   FileText,
   Clock,
-  Sparkles,
   Info,
 } from "lucide-react";
 import { Client, getStoredClients, saveStoredClients } from "../../../lib/clientsStore";
@@ -16,16 +15,16 @@ import { Process, Stage } from "../../../lib/useProcessStore";
 
 interface PortalContext {
   activeClient: Client;
-  activeProcess: Process;
-  currentStageName: string;
-  currentStageIndex: number;
-  stages: Stage[];
-  onStageChange: (newStageName: string) => void;
+  activeProcess?: Process;
+  currentStageName?: string;
+  currentStageIndex?: number;
+  stages?: Stage[];
+  onStageChange?: (newStageName: string) => void;
 }
 
 export default function PatientPharmacyScreen() {
   const navigate = useNavigate();
-  const { activeClient, onStageChange } = useOutletContext<PortalContext>();
+  const { activeClient } = useOutletContext<PortalContext>();
 
   const medications = [
     {
@@ -67,52 +66,42 @@ export default function PatientPharmacyScreen() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="text-center space-y-2">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 border border-purple-200/80 text-purple-800 text-xs font-semibold">
-          <Pill className="w-3.5 h-3.5 text-purple-600" />
-          <span>Stage 3 of 5 • Move to Pharmacy</span>
-        </div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-          Clinic Pharmacy & Prescription
-        </h1>
-        <p className="text-sm text-slate-500 max-w-lg mx-auto">
-          Informational step: Please proceed to the dispensary counter to collect your prescribed medicine.
-        </p>
+    <div className="max-w-2xl mx-auto space-y-6 pb-12 animate-in fade-in duration-200">
+      {/* ── Page Header (Clean, Zero Subtext) ── */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dispensary &amp; Pharmacy</h1>
       </div>
 
-      {/* Main Informational Card */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-xs space-y-6">
+      {/* ── Main Pharmacy Card ── */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-xs space-y-6">
         {/* Dispensary Counter Direction Banner */}
-        <div className="flex items-start gap-4 p-4 rounded-xl bg-purple-50/70 border border-purple-200/60 text-purple-900">
-          <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
+        <div className="flex items-start gap-3.5 p-4 rounded-2xl bg-blue-50/70 border border-blue-200/70 text-slate-800">
+          <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
             <MapPin className="w-5 h-5" />
           </div>
           <div className="space-y-1">
-            <div className="font-bold text-sm text-purple-950">
+            <div className="font-bold text-sm text-slate-900">
               Prescription Ready for Pickup at Pharmacy Counter 3
             </div>
-            <p className="text-xs text-purple-800/90 leading-relaxed">
-              Ground Floor, East Clinical Wing • Opposite Main Diagnostic Labs. Please present your Patient ID (<strong className="font-mono">{activeClient?.id}</strong>) to the dispensing pharmacist.
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Ground Floor, East Clinical Wing • Opposite Main Diagnostic Labs. Please present your Patient ID (<strong className="font-mono text-slate-900">{activeClient?.id}</strong>) to the dispensing pharmacist.
             </p>
           </div>
         </div>
 
         {/* Prescription Items Table */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <span>Prescribed Medicine Items</span>
-            <span>Est. Cost</span>
+          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">
+            Prescribed Medication Items
           </div>
 
-          <div className="divide-y divide-slate-100 border border-slate-200/80 rounded-xl overflow-hidden bg-slate-50/50">
+          <div className="divide-y divide-slate-100 border border-slate-200/80 rounded-2xl overflow-hidden bg-slate-50/50">
             {medications.map((med, idx) => (
               <div key={idx} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-white transition-colors">
                 <div className="space-y-0.5">
-                  <div className="font-semibold text-sm text-slate-900 flex items-center gap-2">
-                    <Pill className="w-4 h-4 text-purple-600" />
-                    {med.name}
+                  <div className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <Pill className="w-4 h-4 text-blue-600" />
+                    <span>{med.name}</span>
                   </div>
                   <div className="text-xs text-slate-600">
                     {med.dosage} • <span className="text-slate-400">Duration: {med.duration}</span>
@@ -121,7 +110,7 @@ export default function PatientPharmacyScreen() {
                     Note: {med.instructions}
                   </div>
                 </div>
-                <div className="text-sm font-bold text-slate-900 sm:text-right">
+                <div className="text-sm font-bold font-mono text-slate-900 sm:text-right">
                   {med.price}
                 </div>
               </div>
@@ -129,29 +118,16 @@ export default function PatientPharmacyScreen() {
           </div>
         </div>
 
-        {/* Informational Callout (Assumption Implementation) */}
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-slate-50 border border-slate-200/60 text-xs text-slate-500">
-          <Info className="w-4 h-4 text-blue-500 shrink-0" />
-          <span>
-            This is an informational step. Tapping Continue will record your arrival at Pharmacy and advance your care journey to Stage 4 (Pay Bill).
-          </span>
-        </div>
-
-        {/* Single Continue Action */}
-        <div className="pt-2 space-y-3">
+        {/* Action Button */}
+        <div className="pt-2">
           <button
             type="button"
             onClick={handleContinueToBilling}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-all active:scale-[0.98]"
+            className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-bold shadow-sm shadow-blue-500/25 transition-all active:scale-[0.98] cursor-pointer"
           >
-            <span>Continue to Stage 4 (Pay Bill)</span>
+            <span>Proceed to Billing &amp; Invoices</span>
             <ArrowRight className="w-4 h-4" />
           </button>
-
-          <div className="text-center text-[11px] text-slate-400 flex items-center justify-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Updates patient stage to "Pay Bill" in shared store</span>
-          </div>
         </div>
       </div>
     </div>

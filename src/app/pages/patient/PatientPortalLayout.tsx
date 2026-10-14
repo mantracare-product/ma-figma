@@ -1,27 +1,26 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate, useLocation, useParams } from "react-router";
 import {
-  QrCode,
   Calendar,
-  Pill,
   Receipt,
-  CheckCircle2,
-  ExternalLink,
   User,
   ChevronsUpDown,
   Check,
-  Menu,
-  X,
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
   FileText,
   LogOut,
+  Building2,
+  Sparkles,
+  ShieldCheck,
+  FlaskConical,
 } from "lucide-react";
 import { toast } from "sonner";
 import maLogo from "../../../imports/ma_logo-1.png";
 import symbolLogo from "../../../imports/Ma-symbol-mark.png";
 import { useClients, getStoredClients, saveStoredClients, Client, CLIENTS_STORE_EVENT } from "../../../lib/clientsStore";
+import { updateProcessCallLogStage } from "../../../lib/processLogsStore";
 import {
   getProcessesForPatientPortal,
   Process,
@@ -50,7 +49,6 @@ export default function PatientPortalLayout() {
 
   const [isDevSwitcherOpen, setIsDevSwitcherOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [showOrgDropdown, setShowOrgDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const orgMenuRef = useRef<HTMLDivElement>(null);
@@ -73,14 +71,9 @@ export default function PatientPortalLayout() {
   const handleLogout = () => {
     sessionStorage.removeItem("patient_portal_active_client_id");
     localStorage.removeItem("patient_portal_active_client_id");
-    toast.success("Logged out successfully");
+    toast.success("Signed out successfully");
     navigate("/patient/login");
   };
-
-  // Close mobile sidebar on route change
-  useEffect(() => {
-    setIsMobileSidebarOpen(false);
-  }, [location.pathname]);
 
   // Find active processes connected to Patient Portal
   const [portalProcesses, setPortalProcesses] = useState<Process[]>(() => getProcessesForPatientPortal());
@@ -97,7 +90,6 @@ export default function PatientPortalLayout() {
     };
   }, []);
 
-
   // Selected patient state (persisted in sessionStorage)
   const [selectedClientId, setSelectedClientId] = useState<string>(() => {
     if (routeClientId) return routeClientId;
@@ -108,7 +100,7 @@ export default function PatientPortalLayout() {
     const params = new URLSearchParams(window.location.search);
     const paramId = params.get("clientId") || params.get("id");
     if (paramId) return paramId;
-    return sessionStorage.getItem("patient_portal_active_client_id") || "CL-001";
+    return sessionStorage.getItem("patient_portal_active_client_id") || localStorage.getItem("patient_portal_active_client_id") || "CL-001";
   });
 
   // Watch URL params / path for client ID
@@ -116,6 +108,7 @@ export default function PatientPortalLayout() {
     if (routeClientId && routeClientId !== selectedClientId) {
       setSelectedClientId(routeClientId);
       sessionStorage.setItem("patient_portal_active_client_id", routeClientId);
+      localStorage.setItem("patient_portal_active_client_id", routeClientId);
     } else {
       const pathParts = location.pathname.split("/patient/");
       if (pathParts[1] && !["login", "book", "documents", "pharmacy", "bill", "pay", "status"].includes(pathParts[1])) {
@@ -174,6 +167,8 @@ export default function PatientPortalLayout() {
   const handleSelectClient = (id: string) => {
     setSelectedClientId(id);
     sessionStorage.setItem("patient_portal_active_client_id", id);
+    localStorage.setItem("patient_portal_active_client_id", id);
+    window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: id }));
     navigate(`/patient/${id}`);
   };
 
@@ -194,155 +189,137 @@ export default function PatientPortalLayout() {
     : -1;
   const activeIdx = currentStageIndex >= 0 ? currentStageIndex : -1;
 
-  // If on login or register screen, render without portal wrapper/sidebar
+  // If on login screen, render without portal wrapper/sidebar
   if (isAuthPage) {
     return <Outlet />;
   }
 
   const isOverviewPage = location.pathname === "/patient" || location.pathname === "/patient/" || (routeClientId && location.pathname === `/patient/${routeClientId}`);
   const isSubPage = !isOverviewPage;
-
   const overviewPath = activeClient?.id ? `/patient/${activeClient.id}` : "/patient";
 
   const navItems = [
-    { to: overviewPath, label: "Overview", icon: LayoutDashboard, exact: true },
-    { to: "/patient/book", label: "Appointments", icon: Calendar },
+    { to: overviewPath, label: "Today", icon: LayoutDashboard, exact: true },
+    { to: "/patient/book", label: "Visits", icon: Calendar },
     { to: "/patient/documents", label: "Documents", icon: FileText },
     { to: "/patient/bill", label: "Billing", icon: Receipt },
+    { to: "/patient/profile", label: "Profile", icon: User },
   ];
 
+  const clientInitials = (activeClient.name || "Patient")
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
   return (
-    <div className="h-screen flex overflow-hidden bg-[#F8FAFC] text-[#0F172A] font-sans selection:bg-[#E0E7FF] selection:text-[#1D4ED8]">
-      {/* ── Desktop & Tablet Docked Sidebar (Collapsible & Expandable) ── */}
+    <div className="h-screen flex flex-col md:flex-row overflow-hidden bg-[#F8FAFC] text-[#0F172A] font-sans antialiased selection:bg-[#E0E7FF] selection:text-[#1D4ED8]">
+      {/* ── Desktop & Tablet Sidebar (Slim, Modern, Navodya-Styled) ── */}
       <aside
-        className={`hidden md:flex flex-col bg-white border-r border-slate-200/90 h-full select-none z-30 shrink-0 relative transition-[width] duration-300 ease-in-out ${
-          collapsed
-            ? "w-[68px] min-w-[68px] max-w-[68px]"
-            : "w-64 min-w-[256px] max-w-[256px]"
+        className={`hidden md:flex flex-col bg-white border-r border-slate-200/80 h-full select-none z-30 shrink-0 relative transition-[width] duration-250 ease-in-out ${
+          collapsed ? "w-[72px]" : "w-64"
         }`}
       >
-        {/* Floating Collapse/Expand Toggle Button on dividing border */}
+        {/* Collapse / Expand floating button */}
         <button
           type="button"
           onClick={() => setCollapsed(!collapsed)}
-          className="absolute -right-2.5 top-[58px] w-5 h-5 rounded-full bg-white border border-slate-200/90 shadow-xs hover:shadow-sm flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-all z-40 cursor-pointer"
+          className="absolute -right-3 top-[52px] w-6 h-6 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-800 hover:bg-slate-50 transition-all z-40 cursor-pointer"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? (
-            <ChevronRight className="w-3 h-3 text-slate-600" />
-          ) : (
-            <ChevronLeft className="w-3 h-3 text-slate-600" />
-          )}
+          {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
         </button>
 
-        {/* Top Brand Logo */}
-        <div className="h-14 px-3 flex items-center border-b border-slate-200/80 shrink-0 justify-between">
+        {/* Brand Header */}
+        <div className="h-16 px-4 flex items-center border-b border-slate-100 shrink-0 justify-between">
           {collapsed ? (
             <button
               type="button"
               onClick={() => setCollapsed(false)}
-              className="w-full flex items-center justify-center p-1 rounded-xl hover:bg-slate-100 transition-all cursor-pointer"
-              title="Expand sidebar"
+              className="w-full flex items-center justify-center p-1 rounded-xl hover:bg-slate-100 transition-colors"
             >
-              <img
-                src={symbolLogo}
-                alt="MantraAssist"
-                className="h-7 w-7 object-contain transition-transform hover:scale-105"
-              />
+              <img src={symbolLogo} alt="MantraAssist" className="h-7 w-7 object-contain" />
             </button>
           ) : (
-            <NavLink to={overviewPath} className="flex items-center gap-2 group">
-              <img
-                src={maLogo}
-                alt="MantraAssist"
-                className="h-6 w-auto object-contain transition-transform group-hover:scale-102"
-              />
-              <div className="h-4 w-px bg-slate-300" />
-              <span className="text-xs font-bold text-slate-600 tracking-tight" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Client Portal
+            <NavLink to={overviewPath} className="flex items-center gap-2.5">
+              <img src={maLogo} alt="MantraAssist" className="h-6 w-auto object-contain" />
+              <div className="h-4 w-px bg-slate-200" />
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider font-display">
+                Companion
               </span>
             </NavLink>
           )}
         </div>
 
-        {/* Organization Switcher Card */}
-        {collapsed ? (
-          <div className="p-3 flex justify-center">
+        {/* Organization Badge & Dropdown */}
+        <div className="p-3" ref={orgMenuRef}>
+          <div className="relative">
             <button
               type="button"
-              onClick={() => setCollapsed(false)}
-              className="w-10 h-10 rounded-xl bg-[#1E293B] text-white flex items-center justify-center font-bold text-xs shadow-2xs hover:ring-2 hover:ring-blue-500/30 transition-all cursor-pointer"
-              title={`Organization: ${activeOrganization?.name || "Demo Mantra Care"}`}
+              onClick={() => setShowOrgDropdown(!showOrgDropdown)}
+              className={`w-full flex items-center rounded-2xl p-2.5 transition-all cursor-pointer ${
+                collapsed
+                  ? "justify-center bg-slate-50 hover:bg-slate-100"
+                  : "justify-between bg-slate-50/80 hover:bg-slate-100/90 border border-slate-200/70"
+              }`}
+              title={activeOrganization?.name || "Demo Mantra Care"}
             >
-              {activeOrganization?.name ? activeOrganization.name.charAt(0).toUpperCase() : "M"}
-            </button>
-          </div>
-        ) : (
-          <div className="p-3 pb-2" ref={orgMenuRef}>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowOrgDropdown(!showOrgDropdown)}
-                className="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200/90 hover:border-slate-300 rounded-xl p-2.5 px-3 flex items-center justify-between shadow-2xs transition-all cursor-pointer group"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-7 h-7 rounded-lg bg-[#1E293B] text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-                    {activeOrganization?.name ? activeOrganization.name.charAt(0).toUpperCase() : "M"}
-                  </div>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                  {activeOrganization?.name ? activeOrganization.name.charAt(0).toUpperCase() : "M"}
+                </div>
+                {!collapsed && (
                   <div className="flex flex-col text-left min-w-0">
-                    <span className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider leading-none">
-                      Organization
+                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">
+                      Clinic
                     </span>
-                    <span
-                      className="text-xs font-bold text-slate-900 truncate mt-0.5"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
+                    <span className="text-xs font-bold text-slate-900 truncate mt-0.5">
                       {activeOrganization?.name || "Demo Mantra Care"}
                     </span>
                   </div>
-                </div>
-                <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 shrink-0" />
-              </button>
+                )}
+              </div>
+              {!collapsed && <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
+            </button>
 
-              {/* Organization Dropdown */}
-              {showOrgDropdown && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-xl border border-slate-200/90 rounded-2xl shadow-xl p-2 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-150">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2.5 py-1">
-                    Organizations
-                  </p>
-                  {organizations.map((org) => {
-                    const isCurrent = activeOrganization?.id === org.id;
-                    return (
-                      <button
-                        key={org.id}
-                        type="button"
-                        onClick={() => {
-                          setActiveOrganization(org);
-                          setShowOrgDropdown(false);
-                        }}
-                        className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                          isCurrent ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <div className="w-5 h-5 rounded-md bg-[#1E293B] text-white flex items-center justify-center text-[10px] font-bold">
-                            {org.name.charAt(0).toUpperCase()}
-                          </div>
-                          <span className="truncate">{org.name}</span>
+            {/* Org Switcher Menu */}
+            {showOrgDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-1">
+                  Switch Clinic
+                </p>
+                {organizations.map((org) => {
+                  const isCurrent = activeOrganization?.id === org.id;
+                  return (
+                    <button
+                      key={org.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveOrganization(org);
+                        setShowOrgDropdown(false);
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                        isCurrent ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <div className="w-5 h-5 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold">
+                          {org.name.charAt(0).toUpperCase()}
                         </div>
-                        {isCurrent && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                        <span className="truncate">{org.name}</span>
+                      </div>
+                      {isCurrent && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* Portal Services Navigation Items */}
-        <div className={`flex-1 overflow-y-auto py-3 space-y-1 ${collapsed ? "px-2 flex flex-col items-center" : "px-3"}`}>
+        {/* Primary Navigation Links */}
+        <div className={`flex-1 overflow-y-auto py-2 space-y-1.5 ${collapsed ? "px-2.5 flex flex-col items-center" : "px-3"}`}>
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -351,19 +328,19 @@ export default function PatientPortalLayout() {
                 to={item.to}
                 end={item.exact}
                 className={({ isActive }) =>
-                  `flex items-center rounded-xl text-xs font-semibold transition-all relative ${
+                  `flex items-center rounded-2xl text-xs font-bold transition-all relative ${
                     collapsed
-                      ? "w-10 h-10 justify-center"
-                      : "justify-between px-3 py-2.5"
+                      ? "w-11 h-11 justify-center"
+                      : "justify-between px-3.5 py-3"
                   } ${
                     isActive
-                      ? "bg-slate-900 text-white shadow-xs"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                      ? "bg-blue-600 text-white shadow-sm shadow-blue-500/25"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
                   }`
                 }
                 title={item.label}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex items-center gap-3 min-w-0">
                   <Icon className="w-4 h-4 shrink-0" />
                   {!collapsed && <span className="truncate">{item.label}</span>}
                 </div>
@@ -372,21 +349,37 @@ export default function PatientPortalLayout() {
           })}
         </div>
 
-        {/* ── Bottom Profile Footer (Matching Mantra Assist Admin) ── */}
-        <div className="p-2.5 border-t border-slate-200/80 bg-white relative" ref={userMenuRef}>
-          {/* Upward Dropdown Menu */}
+        {/* Bottom Profile & Dev Switcher Footer */}
+        <div className="p-3 border-t border-slate-100 bg-white relative space-y-2" ref={userMenuRef}>
+          {/* Dev Switcher Pill */}
+          <button
+            type="button"
+            onClick={() => setIsDevSwitcherOpen(true)}
+            className={`w-full py-2 px-2.5 rounded-xl border border-dashed border-amber-200 bg-amber-50/70 hover:bg-amber-100/80 text-amber-800 text-[11px] font-bold flex items-center transition-colors cursor-pointer ${
+              collapsed ? "justify-center" : "justify-between"
+            }`}
+            title="Fast switch patient profile (Dev tool)"
+          >
+            <div className="flex items-center gap-1.5">
+              <FlaskConical className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              {!collapsed && <span>Switch Patient</span>}
+            </div>
+            {!collapsed && <span className="text-[9px] uppercase tracking-wider font-mono bg-amber-200/80 px-1.5 py-0.2 rounded-md">Dev</span>}
+          </button>
+
+          {/* User Upward Dropdown */}
           {showUserMenu && (
-            <div className="absolute bottom-full left-2 right-2 mb-2 bg-white/95 backdrop-blur-xl border border-slate-200/90 rounded-2xl shadow-xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+            <div className="absolute bottom-full left-3 right-3 mb-2 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-150">
               <button
                 type="button"
                 onClick={() => {
                   setShowUserMenu(false);
-                  navigate(overviewPath);
+                  navigate("/patient/profile");
                 }}
                 className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <User className="w-4 h-4 text-slate-500" />
-                <span>Profile</span>
+                <span>Profile Settings</span>
               </button>
 
               <div className="border-t border-slate-100 pt-1">
@@ -399,128 +392,27 @@ export default function PatientPortalLayout() {
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                 >
                   <LogOut className="w-4 h-4 text-red-500" />
-                  <span>Logout</span>
+                  <span>Sign Out</span>
                 </button>
               </div>
             </div>
           )}
 
-          {/* User Card Trigger Button */}
-          {collapsed ? (
-            <button
-              type="button"
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className="w-10 h-10 mx-auto rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-2xs hover:bg-slate-800 transition-all cursor-pointer"
-              title={`${activeClient.name} — Click for options`}
-            >
-              {(activeClient.name || "P").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-100/80 transition-all cursor-pointer group"
-              aria-label="Patient user menu"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-                  {(activeClient.name || "P").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
-                </div>
-                <div className="flex flex-col text-left min-w-0">
-                  <span
-                    className="text-xs font-bold text-slate-900 truncate group-hover:text-black"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {activeClient.name}
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-mono truncate">
-                    #{activeClient.id}
-                  </span>
-                </div>
+          {/* Patient Card Trigger */}
+          <button
+            type="button"
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className={`w-full flex items-center p-2 rounded-2xl hover:bg-slate-100/80 transition-all cursor-pointer group ${
+              collapsed ? "justify-center" : "justify-between"
+            }`}
+            aria-label="Patient user menu"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                {clientInitials}
               </div>
-              <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 shrink-0" />
-            </button>
-          )}
-        </div>
-      </aside>
-
-      {/* ── Mobile Drawer Sidebar ── */}
-      {isMobileSidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex">
-          <div
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
-            onClick={() => setIsMobileSidebarOpen(false)}
-          />
-          <aside className="relative flex flex-col w-72 max-w-[80vw] bg-white border-r border-slate-200 h-full shadow-2xl z-50">
-            {/* Top Logo & Close */}
-            <div className="h-14 px-4 flex items-center justify-between border-b border-slate-200">
-              <NavLink to={overviewPath} className="flex items-center gap-2">
-                <img src={maLogo} alt="MantraAssist" className="h-6 w-auto object-contain" />
-                <div className="h-4 w-px bg-slate-300" />
-                <span className="text-xs font-bold text-slate-600 tracking-tight" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Client Portal
-                </span>
-              </NavLink>
-              <button
-                type="button"
-                onClick={() => setIsMobileSidebarOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Mobile Org Card */}
-            <div className="p-3">
-              <div className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 px-3 flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[#1E293B] text-white flex items-center justify-center font-bold text-xs shrink-0">
-                  {activeOrganization?.name ? activeOrganization.name.charAt(0).toUpperCase() : "M"}
-                </div>
+              {!collapsed && (
                 <div className="flex flex-col text-left min-w-0">
-                  <span className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider leading-none">
-                    Organization
-                  </span>
-                  <span className="text-xs font-bold text-slate-900 truncate mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    {activeOrganization?.name || "Demo Mantra Care"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Mobile Nav Items */}
-            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.exact}
-                    onClick={() => setIsMobileSidebarOpen(false)}
-                    className={({ isActive }) =>
-                      `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                        isActive
-                          ? "bg-slate-900 text-white shadow-xs"
-                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                      }`
-                    }
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Icon className="w-4 h-4 shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </div>
-                  </NavLink>
-                );
-              })}
-            </div>
-
-            {/* Mobile Bottom Profile & Logout */}
-            <div className="p-3 border-t border-slate-200 bg-slate-50/60 space-y-2">
-              <div className="flex items-center gap-2.5 px-1 py-1">
-                <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                  {(activeClient.name || "P").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
-                </div>
-                <div className="flex flex-col min-w-0">
                   <span className="text-xs font-bold text-slate-900 truncate">
                     {activeClient.name}
                   </span>
@@ -528,82 +420,74 @@ export default function PatientPortalLayout() {
                     #{activeClient.id}
                   </span>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMobileSidebarOpen(false);
-                  handleLogout();
-                }}
-                className="w-full py-2 px-3 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-              >
-                <LogOut className="w-4 h-4 text-red-500" />
-                <span>Logout</span>
-              </button>
+              )}
             </div>
-          </aside>
+            {!collapsed && <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 shrink-0" />}
+          </button>
         </div>
-      )}
+      </aside>
 
       {/* ── Main Viewport Area ── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* ── Ultra-Clean Top Bar ── */}
-        <header className="h-14 bg-white border-b border-slate-200/90 flex items-center justify-between px-4 sm:px-6 lg:px-8 shrink-0 z-20">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        {/* Top Header */}
+        <header className="h-16 bg-white/90 backdrop-blur-md border-b border-slate-200/80 flex items-center justify-between px-4 sm:px-6 lg:px-8 shrink-0 z-20">
           <div className="flex items-center gap-3">
-            {/* Mobile menu hamburger toggle */}
-            <button
-              type="button"
-              onClick={() => setIsMobileSidebarOpen(true)}
-              className="md:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              aria-label="Open menu"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-
-            {/* Mobile logo when sidebar is hidden */}
+            {/* Mobile Brand / Hospital Badge */}
             <div className="md:hidden flex items-center gap-2">
               <img src={maLogo} alt="MantraAssist" className="h-6 w-auto object-contain" />
+              <div className="h-3 w-px bg-slate-200" />
+              <span className="text-xs font-bold text-slate-800 truncate max-w-[140px]">
+                {activeOrganization?.name || "Mantra Care"}
+              </span>
             </div>
 
-            {/* Desktop Page Breadcrumb / Title */}
+            {/* Desktop Breadcrumb */}
             <div className="hidden md:flex items-center gap-2 text-xs">
-              <span className="text-slate-400 font-medium">Patient Portal</span>
+              <span className="text-slate-400 font-medium">Patient Companion</span>
               <span className="text-slate-300">/</span>
-              <span className="font-semibold text-slate-800">
-                {isSubPage
-                  ? location.pathname.includes("book")
-                    ? "Appointments"
-                    : location.pathname.includes("bill")
-                    ? "Billing"
-                    : location.pathname.includes("checkin")
-                    ? "Check In"
-                    : location.pathname.includes("documents")
-                    ? "Documents"
-                    : location.pathname.includes("pharmacy")
-                    ? "Pharmacy"
-                    : "Overview"
-                  : "Overview"}
+              <span className="font-bold text-slate-900">
+                {location.pathname.includes("profile")
+                  ? "Profile"
+                  : location.pathname.includes("book")
+                  ? "Visits"
+                  : location.pathname.includes("bill") || location.pathname.includes("pay")
+                  ? "Billing"
+                  : location.pathname.includes("documents")
+                  ? "Documents"
+                  : location.pathname.includes("pharmacy")
+                  ? "Dispensary & Pharmacy"
+                  : "Today"}
               </span>
             </div>
           </div>
 
-          {/* Right Header: Sub-page back navigation only (Dev Switcher & patient button removed) */}
-          <div className="flex items-center gap-2">
+          {/* Right Header: Back link on sub-pages + Mobile Dev Switcher */}
+          <div className="flex items-center gap-2.5">
             {isSubPage && (
               <NavLink
                 to={overviewPath}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors pl-1"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 transition-colors px-2 py-1"
               >
                 <ChevronLeft className="w-4 h-4" />
-                <span>Overview</span>
+                <span>Today</span>
               </NavLink>
             )}
+
+            {/* Mobile Dev Patient Switcher Trigger */}
+            <button
+              type="button"
+              onClick={() => setIsDevSwitcherOpen(true)}
+              className="md:hidden p-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold flex items-center gap-1"
+              title="Dev: Switch Patient"
+            >
+              <FlaskConical className="w-3.5 h-3.5" />
+            </button>
           </div>
         </header>
 
-        {/* ── Main Scrollable Content ── */}
-        <main className="flex-1 overflow-y-auto bg-[#F8FAFC] p-4 sm:p-6 lg:p-8">
-          <div className="max-w-5xl mx-auto w-full">
+        {/* ── Main Scrollable Viewport (with bottom padding for mobile bar) ── */}
+        <main className="flex-1 overflow-y-auto bg-[#F8FAFC] p-4 sm:p-6 lg:p-8 pb-24 md:pb-8">
+          <div className="max-w-4xl mx-auto w-full">
             <Outlet
               context={{
                 activeClient,
@@ -613,22 +497,63 @@ export default function PatientPortalLayout() {
                 stages,
                 onStageChange: (newStageName: string) => {
                   if (!activeClient) return;
+                  const procName = activeProcess?.name || "Patient Care Journey";
+                  const cid = String(activeClient.id);
                   const all = getStoredClients();
                   const updated = all.map((c) =>
                     c.id === activeClient.id
                       ? {
                           ...c,
                           stage: newStageName,
-                          processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])),
+                          lastUpdatedProcess: procName,
+                          processStagesMap: { ...(c.processStagesMap || {}), [procName]: newStageName },
+                          processes: Array.from(new Set([procName, ...(c.processes || [])])),
                         }
                       : c
                   );
                   saveStoredClients(updated);
+                  updateProcessCallLogStage(cid, procName, newStageName);
+                  window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: cid }));
+                  window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT, { detail: updated }));
                 },
               }}
             />
           </div>
         </main>
+
+        {/* ── Mobile Fixed Bottom Navigation Bar (4-Tab Thumb Layout) ── */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-xl border-t border-slate-200/90 flex items-center justify-around px-2 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.exact}
+                className={({ isActive }) =>
+                  `flex flex-col items-center justify-center gap-1 flex-1 py-1 px-2 rounded-2xl transition-all ${
+                    isActive
+                      ? "text-blue-600 font-bold"
+                      : "text-slate-400 font-medium hover:text-slate-600"
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <div
+                      className={`w-9 h-7 rounded-xl flex items-center justify-center transition-all ${
+                        isActive ? "bg-blue-50 text-blue-600" : ""
+                      }`}
+                    >
+                      <Icon className="w-4.5 h-4.5" />
+                    </div>
+                    <span className="text-[10px] tracking-tight">{item.label}</span>
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
+        </nav>
       </div>
 
       {/* Dev Patient Switcher Modal */}

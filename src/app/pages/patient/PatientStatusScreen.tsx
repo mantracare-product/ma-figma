@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useOutletContext, useNavigate, Link } from "react-router";
 import {
   Calendar,
@@ -14,32 +14,52 @@ import {
   ArrowRight,
   Plus,
   Stethoscope,
-  ExternalLink,
   ChevronRight,
   ShieldCheck,
   Activity,
-  Radio,
-  X,
-  Layers,
-  Info,
   Receipt,
   Building2,
+  Info,
+  Pill,
+  Check,
 } from "lucide-react";
-import { Client, moveClientToStage } from "../../../lib/clientsStore";
+import { Client, getStoredClients, CLIENTS_STORE_EVENT } from "../../../lib/clientsStore";
 import { appointmentService, Appointment } from "../../../lib/appointmentService";
 import { invoiceService } from "../../../lib/invoiceService";
 import { ClientInvoice } from "../../types/invoiceTypes";
 import {
   getStoredProcesses,
+  Process,
   Stage,
   isStageEnabledForPortal,
+  isProcessConnectedToPortal,
+  PROCESS_STORE_EVENT,
 } from "../../../lib/useProcessStore";
+import { getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../../lib/processLogsStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import { findRoomForAppointment } from "../../../lib/roomsStore";
+import StageTrack, { StageStep } from "./components/StageTrack";
+import ActionCard from "./components/ActionCard";
+import QuietList, { QuietRow } from "./components/QuietList";
+import StageContentDrawer from "./components/StageContentDrawer";
 
 interface PortalContext {
   activeClient: Client;
-  onOpenDevSwitcher?: () => void;
+  activeProcess?: Process;
+  currentStageName?: string;
+  currentStageIndex?: number;
+  stages?: Stage[];
+}
+
+interface AssignedProcessState {
+  process: Process;
+  currentStageName: string;
+  currentStageIndex: number;
+  currentStageObj: Stage;
+  stageSteps: StageStep[];
+  progressPercent: number;
+  isCompleted: boolean;
+  lastUpdatedTimestamp: number;
 }
 
 export default function PatientStatusScreen() {
@@ -47,14 +67,41 @@ export default function PatientStatusScreen() {
   const context = useOutletContext<PortalContext>();
   const activeClient = context?.activeClient;
 
-  // Real Appointments for this client from appointmentService
+  // Re-sync trigger for live store changes (staff dashboard, process assignment, stage updates)
+  const [storeTick, setStoreTick] = useState(0);
+
+  // Dev View Toggler: 'all' (All Stacked Pipelines) vs 'latest' (Single Explicit Stage Only)
+  const [devViewMode, setDevViewMode] = useState<"all" | "latest">(() => {
+    try {
+      const saved = localStorage.getItem("patient_portal_pipeline_view_mode");
+      if (saved === "all" || saved === "latest") return saved;
+    } catch {}
+    return "latest";
+  });
+
+  const handleSetDevViewMode = (mode: "all" | "latest") => {
+    setDevViewMode(mode);
+    try {
+      localStorage.setItem("patient_portal_pipeline_view_mode", mode);
+    } catch {}
+  };
+
+  // Real Appointments & Invoices from shared services
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  // Real Invoices for this client from invoiceService
   const [invoices, setInvoices] = useState<ClientInvoice[]>([]);
+  const [drawerTarget, setDrawerTarget] = useState<{ stage: Stage; processName: string } | null>(null);
 
-  // Stage Detail Drawer in Client Portal
-  const [selectedStageForDrawer, setSelectedStageForDrawer] = useState<Stage | null>(null);
+  // Consent signed state (saved per patient in localStorage)
+  const [consentSigned, setConsentSigned] = useState<boolean>(() => {
+    if (!activeClient?.id) return false;
+    return localStorage.getItem(`consent_signed_${activeClient.id}`) === "true";
+  });
 
+  const { activeOrganization } = useOrganization();
+  const orgName = activeOrganization?.name || "Mantra Care";
+  const clientFirstName = (activeClient?.name || "Patient").split(" ")[0];
+
+  // Load appointments & invoices
   useEffect(() => {
     if (!activeClient) return;
 
@@ -67,10 +114,19 @@ export default function PatientStatusScreen() {
       const clientAppts = allAppts.filter((a) => {
         if (a.clientId && String(a.clientId) === String(activeClient.id)) return true;
         const aPhoneDigits = (a.clientPhone || "").replace(/\D/g, "");
-        if (patientPhoneDigits && aPhoneDigits && (patientPhoneDigits === aPhoneDigits || patientPhoneDigits.slice(-10) === aPhoneDigits.slice(-10))) {
+        if (
+          patientPhoneDigits &&
+          aPhoneDigits &&
+          (patientPhoneDigits === aPhoneDigits ||
+            patientPhoneDigits.slice(-10) === aPhoneDigits.slice(-10))
+        ) {
           return true;
         }
-        if (a.clientName && patientNameLower && a.clientName.toLowerCase().trim() === patientNameLower) {
+        if (
+          a.clientName &&
+          patientNameLower &&
+          a.clientName.toLowerCase().trim() === patientNameLower
+        ) {
           return true;
         }
         return false;
@@ -81,136 +137,225 @@ export default function PatientStatusScreen() {
       const allInvoices = invoiceService.getInvoices();
       const clientInvoices = allInvoices.filter((inv) => {
         if (inv.clientId && String(inv.clientId) === String(activeClient.id)) return true;
-        if (inv.clientName && patientNameLower && inv.clientName.toLowerCase().trim() === patientNameLower) return true;
+        if (inv.clientName && patientNameLower && inv.clientName.toLowerCase().trim() === patientNameLower)
+          return true;
         const invPhoneDigits = (inv.clientPhone || "").replace(/\D/g, "");
-        if (patientPhoneDigits && invPhoneDigits && (patientPhoneDigits === invPhoneDigits || patientPhoneDigits.slice(-10) === invPhoneDigits.slice(-10))) {
+        if (
+          patientPhoneDigits &&
+          invPhoneDigits &&
+          (patientPhoneDigits === invPhoneDigits ||
+            patientPhoneDigits.slice(-10) === invPhoneDigits.slice(-10))
+        ) {
           return true;
         }
         return false;
       });
 
-      const matchedOrPending = clientInvoices.length > 0
-        ? clientInvoices
-        : allInvoices.filter((inv) => (inv.total - (inv.amountPaid || 0)) > 0 && inv.status !== "paid");
+      const matchedOrPending =
+        clientInvoices.length > 0
+          ? clientInvoices
+          : allInvoices.filter(
+              (inv) => inv.total - (inv.amountPaid || 0) > 0 && inv.status !== "paid"
+            );
 
       setInvoices(matchedOrPending.length > 0 ? matchedOrPending : allInvoices);
+      setStoreTick((t) => t + 1);
     };
 
     loadData();
 
-    window.addEventListener("mantra_appointments_changed", loadData);
-    window.addEventListener("mantra_appointments_updated", loadData);
-    window.addEventListener("mantra_invoices_changed", loadData);
-    window.addEventListener("mantra_payments_changed", loadData);
-    window.addEventListener("patient_portal_client_changed", loadData);
-    window.addEventListener("storage", loadData);
+    const handleDataChange = () => loadData();
+
+    window.addEventListener("mantra_appointments_changed", handleDataChange);
+    window.addEventListener("mantra_appointments_updated", handleDataChange);
+    window.addEventListener("mantra_invoices_changed", handleDataChange);
+    window.addEventListener("mantra_payments_changed", handleDataChange);
+    window.addEventListener("patient_portal_client_changed", handleDataChange);
+    window.addEventListener(CLIENTS_STORE_EVENT, handleDataChange);
+    window.addEventListener(PROCESS_LOGS_STORE_EVENT, handleDataChange);
+    window.addEventListener(PROCESS_STORE_EVENT, handleDataChange);
+    window.addEventListener("deals_updated", handleDataChange);
+    window.addEventListener("storage", handleDataChange);
 
     return () => {
-      window.removeEventListener("mantra_appointments_changed", loadData);
-      window.removeEventListener("mantra_appointments_updated", loadData);
-      window.removeEventListener("mantra_invoices_changed", loadData);
-      window.removeEventListener("mantra_payments_changed", loadData);
-      window.removeEventListener("patient_portal_client_changed", loadData);
-      window.removeEventListener("storage", loadData);
+      window.removeEventListener("mantra_appointments_changed", handleDataChange);
+      window.removeEventListener("mantra_appointments_updated", handleDataChange);
+      window.removeEventListener("mantra_invoices_changed", handleDataChange);
+      window.removeEventListener("mantra_payments_changed", handleDataChange);
+      window.removeEventListener("patient_portal_client_changed", handleDataChange);
+      window.removeEventListener(CLIENTS_STORE_EVENT, handleDataChange);
+      window.removeEventListener(PROCESS_LOGS_STORE_EVENT, handleDataChange);
+      window.removeEventListener(PROCESS_STORE_EVENT, handleDataChange);
+      window.removeEventListener("deals_updated", handleDataChange);
+      window.removeEventListener("storage", handleDataChange);
     };
   }, [activeClient]);
 
+  // Keep latest client record reactive
+  const latestClient = useMemo(() => {
+    if (!activeClient) return null;
+    const all = getStoredClients();
+    return all.find((c) => c.id === activeClient.id) || activeClient;
+  }, [activeClient, storeTick]);
+
+  // Read latest Call Logs for stage tracking
+  const callLogs = useMemo(() => {
+    return getStoredCallLogs();
+  }, [storeTick]);
+
+  // Resolve all assigned processes that have patient portal visibility
+  const assignedPortalProcesses: AssignedProcessState[] = useMemo(() => {
+    if (!latestClient) return [];
+    const allProcs = getStoredProcesses();
+    const rawAssigned = latestClient.processes || [];
+
+    // Match assigned processes by name or ID
+    const matchedProcs: Process[] = [];
+    for (const pNameOrId of rawAssigned) {
+      const found = allProcs.find(
+        (p) =>
+          p.name.toLowerCase() === pNameOrId.toLowerCase() ||
+          p.id.toLowerCase() === pNameOrId.toLowerCase()
+      );
+      if (found && !matchedProcs.some((m) => m.id === found.id)) {
+        matchedProcs.push(found);
+      }
+    }
+
+    // Include all processes assigned to this patient
+    let finalProcs = matchedProcs;
+    if (finalProcs.length === 0) {
+      const portalOnly = allProcs.filter(isProcessConnectedToPortal);
+      finalProcs = portalOnly.length > 0 ? portalOnly : [
+        allProcs.find(
+          (p) => p.name === "Patient Care Journey" || p.id === "demo-patient-care-journey"
+        ) || allProcs[0]
+      ].filter(Boolean);
+    }
+
+    return finalProcs.map((proc) => {
+      // ── Stage Resolution Priority:
+      // 1. If this process is latestClient.lastUpdatedProcess, prioritize its stage
+      // 2. callLogs matching clientId & process (most recent live move from dashboard)
+      // 3. client.processStagesMap?.[proc.name]
+      // 4. latestClient.stage if present in proc.stages
+      // 5. proc.stages[0]?.name
+      const stageFromMap =
+        latestClient.processStagesMap?.[proc.name] ||
+        latestClient.processStagesMap?.[proc.id];
+
+      const logMatch = callLogs.find(
+        (l) =>
+          (l.clientId === latestClient.id ||
+            (l.client && l.client.toLowerCase() === latestClient.name.toLowerCase())) &&
+          l.process.toLowerCase() === proc.name.toLowerCase()
+      );
+      const stageFromLog = logMatch?.currentStage;
+
+      // Timestamp of the latest update for recency determination
+      let lastUpdatedTimestamp = 0;
+      if (logMatch?.date) {
+        const parsed = new Date(logMatch.date.replace(" ", "T")).getTime();
+        if (!isNaN(parsed)) lastUpdatedTimestamp = parsed;
+      }
+      if (
+        latestClient.lastUpdatedProcess &&
+        (latestClient.lastUpdatedProcess.toLowerCase() === proc.name.toLowerCase() ||
+         latestClient.lastUpdatedProcess.toLowerCase() === proc.id.toLowerCase())
+      ) {
+        lastUpdatedTimestamp = Math.max(lastUpdatedTimestamp, Date.now());
+      }
+
+      const clientGlobalStage = latestClient.stage;
+      const isGlobalStageInProc = proc.stages.some(
+        (s) => s.name.toLowerCase() === (clientGlobalStage || "").toLowerCase()
+      );
+
+      const isLastUpdated =
+        latestClient.lastUpdatedProcess &&
+        (latestClient.lastUpdatedProcess.toLowerCase() === proc.name.toLowerCase() ||
+         latestClient.lastUpdatedProcess.toLowerCase() === proc.id.toLowerCase());
+
+      const resolvedStageName =
+        (isLastUpdated && (stageFromLog || stageFromMap || clientGlobalStage)) ||
+        stageFromLog ||
+        stageFromMap ||
+        (isGlobalStageInProc ? clientGlobalStage : null) ||
+        proc.stages[0]?.name ||
+        "Active";
+
+      const stages = proc.stages || [];
+      const stageIdx = stages.findIndex(
+        (s) =>
+          s.name.toLowerCase() === resolvedStageName.toLowerCase() ||
+          s.id.toLowerCase() === resolvedStageName.toLowerCase()
+      );
+      const activeIdx = Math.max(0, stageIdx >= 0 ? stageIdx : 0);
+      const currentStageObj = stages[activeIdx] || stages[0];
+
+      const stageSteps: StageStep[] =
+        stages.length > 0
+          ? stages.map((stg, idx) => ({
+              id: stg.id,
+              label: stg.portalReceptionSettings?.cardTitle || stg.name,
+              status: idx < activeIdx ? "done" : idx === activeIdx ? "current" : "upcoming",
+            }))
+          : [
+              { id: "s-1", label: "Checked In", status: "done" },
+              { id: "s-2", label: "Consultation", status: "current" },
+              { id: "s-3", label: "Pharmacy & Billing", status: "upcoming" },
+              { id: "s-4", label: "Completed", status: "upcoming" },
+            ];
+
+      const progressPercent =
+        stages.length > 0 ? Math.round(((activeIdx + 1) / stages.length) * 100) : 50;
+
+      const isCompleted = activeIdx === stages.length - 1 && stages.length > 0;
+
+      return {
+        process: proc,
+        currentStageName: resolvedStageName,
+        currentStageIndex: activeIdx,
+        currentStageObj,
+        stageSteps,
+        progressPercent,
+        isCompleted,
+        lastUpdatedTimestamp,
+      };
+    });
+  }, [latestClient, callLogs]);
+
+  // Recency-Driven: The process that was most recently updated
+  const latestUpdatedProcessState = useMemo(() => {
+    if (assignedPortalProcesses.length === 0) return null;
+    return [...assignedPortalProcesses].sort(
+      (a, b) => b.lastUpdatedTimestamp - a.lastUpdatedTimestamp
+    )[0];
+  }, [assignedPortalProcesses]);
+
   if (!activeClient) {
     return (
-      <div className="max-w-xl mx-auto py-16 text-center space-y-4">
+      <div className="max-w-md mx-auto py-16 text-center space-y-4">
         <User className="w-12 h-12 text-slate-300 mx-auto" />
-        <h2 className="text-xl font-bold text-slate-800">No Patient Profile Active</h2>
-        <p className="text-sm text-slate-500">Please sign in or select a patient to continue.</p>
+        <h2 className="text-lg font-bold text-slate-800">No Patient Profile Active</h2>
+        <p className="text-xs text-slate-500">Please sign in or select a patient to continue.</p>
         <Link
           to="/patient/login"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold text-sm rounded-xl"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-xs"
         >
-          <span>Go to Sign In</span>
+          <span>Sign In</span>
           <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
     );
   }
 
-  // Calculate stats
-  const scheduledCount = appointments.filter((a) => a.status === "scheduled" || a.status === "pending-accept").length;
-  const pendingInvoices = invoices.filter((i) => i.status !== "paid" && i.status !== "void");
-
-  // Retrieve current active process assigned to this client
-  const allProcesses = getStoredProcesses();
-  const activeProcess =
-    allProcesses.find(
-      (p) =>
-        activeClient.processes?.some((pNameOrId) => pNameOrId === p.name || pNameOrId === p.id)
-    ) ||
-    allProcesses.find((p) => p.name === "Patient Care Journey" || p.id === "demo-patient-care-journey");
-
-  const allStages = activeProcess?.stages || [];
-  const rawStageName = activeClient.stage;
-  const currentStageIndex = rawStageName
-    ? allStages.findIndex(
-        (s) =>
-          s.name.toLowerCase() === rawStageName.toLowerCase() ||
-          s.id.toLowerCase() === rawStageName.toLowerCase()
-      )
-    : -1;
-
-  const currentStageName = activeClient.stage;
-  const isAssignedToStage = currentStageIndex >= 0;
-  const activeIdx = currentStageIndex >= 0 ? currentStageIndex : -1;
-
-  // Filter only stages where toggle is enabled AND configuration is done
-  const portalEnabledStages = activeProcess ? allStages.filter((st) => isStageEnabledForPortal(st)) : [];
-
-  // Primary upcoming appointment
-  const primaryAppt = appointments.find((a) => a.status === "scheduled" || a.status === "pending-accept") || appointments[0];
-  const primaryInvoice = invoices.find((i) => i.status !== "paid") || invoices[0];
-
-  // Substitute variables inside drawer HTML content
-  const renderDrawerHtml = (stage: Stage) => {
-    const rawHtml =
-      stage.portalReceptionSettings?.htmlContent ||
-      stage.portalReceptionSettings?.text ||
-      `<div class="stage-guide"><h3>${stage.portalReceptionSettings?.cardTitle || stage.name}</h3><p>${stage.description}</p></div>`;
-
-    const sampleValues: Record<string, string> = {
-      "client.name": activeClient.name || "Patient",
-      "client.firstName": (activeClient.name || "Patient").split(" ")[0],
-      "client.lastName": (activeClient.name || "").split(" ").slice(1).join(" ") || "",
-      "client.phone": activeClient.phone || "+1 (555) 000-0000",
-      "client.email": activeClient.email || "patient@example.com",
-      "client.id": activeClient.id || "CL-032",
-      "appointment.date": primaryAppt?.date ? new Date(primaryAppt.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Today",
-      "appointment.time": primaryAppt?.time || "11:30 AM",
-      "appointment.service": primaryAppt?.title || primaryAppt?.serviceName || "Clinical Consultation",
-      "appointment.provider": primaryAppt?.employeeName || "Dr. Rajesh Patel",
-      "appointment.room": primaryAppt?.location || "Consultation Room 3",
-      "invoice.id": primaryInvoice?.invoiceNumber || "INV-CL-1056",
-      "invoice.total": primaryInvoice ? `$${primaryInvoice.total.toFixed(2)}` : "$78.75",
-      "invoice.balanceDue": primaryInvoice ? `$${(primaryInvoice.total - (primaryInvoice.amountPaid || 0)).toFixed(2)}` : "$78.75",
-      "invoice.status": primaryInvoice?.status || "Pending",
-      "stage.name": stage.name,
-      "process.name": activeProcess?.name || "Patient Care Journey",
-      "clinic.name": "Mantra Clinic & Wellness Center",
-    };
-
-    let rendered = rawHtml;
-    Object.entries(sampleValues).forEach(([key, val]) => {
-      rendered = rendered.split(`{{${key}}}`).join(val);
-      rendered = rendered.split(`{${key}}`).join(val);
-    });
-
-    return rendered;
-  };
-
-  const { activeOrganization } = useOrganization();
-  const orgName = activeOrganization?.name || "Mantra Health & Wellness";
-  const clientFirstName = (activeClient.name || "Patient").split(" ")[0];
-
-  // ── Today's Appointment & Invoice Matching Logic ──
+  // ── Today's Appointment Logic ──
   const now = new Date();
   const todayIso = now.toISOString().split("T")[0];
-  const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate()
+  ).padStart(2, "0")}`;
 
   const todayAppts = appointments.filter((a) => {
     if (!a.date) return false;
@@ -226,15 +371,35 @@ export default function PatientStatusScreen() {
 
   const isTodayApptCompleted = todayAppt ? todayAppt.status === "completed" : false;
 
+  // Upcoming appointment (if none today, or next scheduled)
+  const nextAppt =
+    appointments.find((a) => a.status === "scheduled" && a.id !== todayAppt?.id) ||
+    appointments.find((a) => a.status === "scheduled") ||
+    todayAppt;
+
+  // Real matched invoice for today or pending
   const matchedInvoice = isTodayApptCompleted
     ? (todayAppt?.invoiceId
-        ? invoices.find((inv) => String(inv.id) === String(todayAppt.invoiceId) || inv.invoiceNumber === todayAppt.invoiceId)
+        ? invoices.find(
+            (inv) =>
+              String(inv.id) === String(todayAppt.invoiceId) ||
+              inv.invoiceNumber === todayAppt.invoiceId
+          )
         : null) ||
       invoices.find((inv) => String(inv.appointmentId) === String(todayAppt?.id)) ||
       invoices[0] ||
       null
-    : null;
+    : invoices.find((inv) => inv.total - (inv.amountPaid || 0) > 0 && inv.status !== "paid") ||
+      invoices[0] ||
+      null;
 
+  const pendingInvoices = invoices.filter((i) => i.status !== "paid" && i.status !== "void");
+  const totalBalanceDue = pendingInvoices.reduce(
+    (acc, inv) => acc + Math.max(0, inv.total - (inv.amountPaid || 0)),
+    0
+  );
+
+  // Dynamic Room Allocation from roomsStore
   const allocatedRoom = todayAppt
     ? findRoomForAppointment({
         serviceName: todayAppt.serviceName || todayAppt.title,
@@ -243,510 +408,451 @@ export default function PatientStatusScreen() {
         employeeId: todayAppt.employeeId,
       })
     : null;
+
   const roomDisplay = todayAppt?.roomNumber
     ? `Room ${todayAppt.roomNumber}`
     : allocatedRoom
     ? `Room ${allocatedRoom.roomNumber}`
     : null;
+
   const roomDirection = allocatedRoom?.direction;
 
-  // Format dynamic time for activity timeline steps
-  const getStageTime = (rawIndex: number, currentActiveIndex: number, appt: Appointment | null) => {
-    const baseTimeStr = appt?.time || "10:30 AM";
-    let baseHours = 10;
-    let baseMinutes = 30;
-    try {
-      const clean = baseTimeStr.replace(".", ":");
-      const parts = clean.split(":");
-      if (parts.length >= 2) {
-        const h = parseInt(parts[0], 10);
-        const m = parseInt(parts[1], 10);
-        if (!isNaN(h)) baseHours = h;
-        if (!isNaN(m)) baseMinutes = m;
-        if (clean.toLowerCase().includes("pm") && baseHours < 12) baseHours += 12;
-        if (clean.toLowerCase().includes("am") && baseHours === 12) baseHours = 0;
-      }
-    } catch {}
-
-    const stepDiff = rawIndex - (currentActiveIndex >= 0 ? currentActiveIndex : 0);
-    const offsetMinutes = stepDiff * 20;
-
-    const d = new Date();
-    d.setHours(baseHours, baseMinutes + offsetMinutes, 0, 0);
-
-    const hours = d.getHours();
-    const minutes = d.getMinutes();
-    const ampm = hours >= 12 ? "PM" : "AM";
-    const displayHours = hours % 12 || 12;
-    const displayMinutes = minutes < 10 ? `0${minutes}` : minutes;
-
-    return `${displayHours}:${displayMinutes} ${ampm}`;
+  const handleConsentSaved = (signatureDataUrl: string) => {
+    localStorage.setItem(`consent_signed_${activeClient.id}`, "true");
+    setConsentSigned(true);
+    setDrawerTarget(null);
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-16 px-3 sm:px-6">
-      {/* ── 1. WELCOME TO ORGANIZATION BANNER ── */}
-      <div className="relative overflow-hidden rounded-3xl bg-[#1E293B] text-white p-6 sm:p-8 shadow-sm border border-slate-800/80">
-        <div className="absolute -top-12 -right-12 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-10 -left-10 w-44 h-44 bg-blue-500/10 rounded-full blur-xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1.5 max-w-xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-white text-xs font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-blue-300" />
-              <span>{orgName}</span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white" style={{ fontFamily: "DM Sans, sans-serif" }}>
-              Welcome to {orgName}, {clientFirstName}!
-            </h1>
-
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Your dedicated patient portal for appointments, clinic guidance, and instant digital billing.
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:items-end gap-2 shrink-0">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold text-slate-200">
-              <Calendar className="w-3.5 h-3.5 text-slate-300" />
+    <div className="max-w-2xl mx-auto space-y-5 pb-12 animate-in fade-in duration-200">
+      {/* ── DEV VIEW TOGGLER: [All Pipelines] vs [Latest Active Stage] (Requested by User) ── */}
+      <div className="flex items-center justify-between px-1 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[11px] font-semibold text-slate-500">
+            {devViewMode === "latest" ? (
               <span>
-                {new Date().toLocaleDateString("en-US", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                })}
+                Active Stage:{" "}
+                <strong className="text-slate-800">
+                  {latestUpdatedProcessState?.process.name}
+                </strong>{" "}
+                · {latestUpdatedProcessState?.currentStageName}
               </span>
-            </div>
-          </div>
+            ) : (
+              <span>
+                {assignedPortalProcesses.length} care{" "}
+                {assignedPortalProcesses.length === 1 ? "pipeline" : "pipelines"} active
+              </span>
+            )}
+          </span>
+        </div>
+
+        {/* Minimalist Top Pill Toggle */}
+        <div className="inline-flex items-center gap-1 p-0.5 bg-slate-100/90 rounded-xl border border-slate-200/60 text-[11px] font-medium text-slate-600">
+          <button
+            type="button"
+            onClick={() => handleSetDevViewMode("latest")}
+            className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+              devViewMode === "latest"
+                ? "bg-white text-slate-900 font-bold shadow-2xs"
+                : "hover:text-slate-900"
+            }`}
+          >
+            Latest Active Stage
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSetDevViewMode("all")}
+            className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+              devViewMode === "all"
+                ? "bg-white text-slate-900 font-bold shadow-2xs"
+                : "hover:text-slate-900"
+            }`}
+          >
+            All Pipelines
+          </button>
         </div>
       </div>
 
-      {/* ── 2. TODAY'S APPOINTMENT OR INVOICE CARD ── */}
-      {isTodayApptCompleted ? (
-        /* REPLACED WITH INVOICE CARD WHEN APPOINTMENT IS COMPLETED */
-        <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs transition-all hover:border-slate-300">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Appointment Completed • Invoice Generated</span>
+      {/* ── 1. WELCOME & CLINIC OVERVIEW HEADER (Distinct Top Card with Clean Padding) ── */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Patient Portal · {orgName}
               </span>
             </div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+              Welcome to {orgName}, {clientFirstName}
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mt-0.5">
+              Track your real-time clinic journey, view upcoming appointments, and access digital records.
+            </p>
+          </div>
 
-            <span
-              className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider self-start sm:self-center ${
-                matchedInvoice?.status === "paid"
-                  ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                  : "bg-amber-100 text-amber-800 border border-amber-200"
-              }`}
-            >
-              {matchedInvoice?.status === "paid" ? "Paid" : "Payment Pending"}
+          <div className="text-left sm:text-right shrink-0">
+            <span className="text-xs font-semibold text-slate-400">
+              {new Date().toLocaleDateString("en-US", {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+              })}
+            </span>
+            <div className="mt-1 text-[11px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-full inline-block">
+              {devViewMode === "latest"
+                ? "Live Stage Sync"
+                : `${assignedPortalProcesses.length} Active Pipelines`}
+            </div>
+          </div>
+        </div>
+
+        {/* Key Facts Inline Pills (Doctor, Room, Schedule) */}
+        {(todayAppt || roomDisplay) && (
+          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100 text-xs text-slate-600 font-semibold">
+            {todayAppt?.employeeName && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-700">
+                <Stethoscope className="w-3.5 h-3.5 text-blue-600" />
+                <span>{todayAppt.employeeName}</span>
+              </span>
+            )}
+
+            {roomDisplay && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-700">
+                <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{roomDisplay}</span>
+              </span>
+            )}
+
+            {todayAppt?.time && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-700">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                <span>{todayAppt.time}</span>
+              </span>
+            )}
+
+            {roomDirection && (
+              <span className="text-[11px] text-slate-400 font-medium ml-1">
+                • {roomDirection}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────── */}
+      {/* ── MODE 1: LATEST ACTIVE STAGE ONLY (Recency-Driven)     ── */}
+      {/* ─────────────────────────────────────────────────────────── */}
+      {devViewMode === "latest" && latestUpdatedProcessState && (
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-7 shadow-xs relative overflow-hidden transition-all hover:border-slate-300 space-y-4">
+          {/* Top Process & Status Pill */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+              <span>{latestUpdatedProcessState.process.name}</span>
+            </div>
+
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span>Current Stage</span>
             </span>
           </div>
 
-          <div className="pt-4 flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <Receipt className="w-4 h-4 text-blue-600" />
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Invoice #{matchedInvoice?.invoiceNumber || matchedInvoice?.id || "INV-CL-1052"}
-                </span>
-              </div>
-              <h3 className="text-base sm:text-lg font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                {todayAppt?.title || todayAppt?.serviceName || "Clinical Consultation"}
-              </h3>
-              <p className="text-xs text-slate-500 font-medium">
-                Conducted by {todayAppt?.employeeName || "Assigned Physician"} • {todayAppt?.location || orgName}
+          {/* Explicit Stage Title & Information from Process Settings */}
+          <div className="space-y-2">
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+              {latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.cardTitle ||
+                latestUpdatedProcessState.currentStageObj.name}
+            </h2>
+
+            {(latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.cardDescription ||
+              latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.text ||
+              latestUpdatedProcessState.currentStageObj.description) && (
+              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                {latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.cardDescription ||
+                  latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.text ||
+                  latestUpdatedProcessState.currentStageObj.description}
               </p>
-            </div>
+            )}
+          </div>
 
-            <div className="flex items-center justify-between md:justify-end gap-5 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-              <div className="text-left md:text-right">
-                <span className="text-[11px] font-semibold text-slate-400 block uppercase">Total Amount</span>
-                <span className="text-2xl font-bold font-mono text-slate-900">
-                  ${(matchedInvoice?.total || 78.75).toFixed(2)}
-                </span>
-              </div>
+          {/* Rich HTML Guidance if configured in MA dashboard */}
+          {latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.htmlContent && (
+            <div
+              className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 prose prose-sm max-w-none"
+              dangerouslySetInnerHTML={{
+                __html: latestUpdatedProcessState.currentStageObj.portalReceptionSettings.htmlContent,
+              }}
+            />
+          )}
 
-              <div>
-                {matchedInvoice?.status === "paid" ? (
-                  <button
-                    type="button"
-                    onClick={() => navigate("/patient/bill")}
-                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
+          {/* Media Links if configured in process settings */}
+          {latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.videos &&
+            latestUpdatedProcessState.currentStageObj.portalReceptionSettings.videos.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {latestUpdatedProcessState.currentStageObj.portalReceptionSettings.videos.map((vid) => (
+                  <a
+                    key={vid.id}
+                    href={vid.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
                   >
-                    <FileText className="w-4 h-4" />
-                    <span>View Receipt</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/patient/pay/${matchedInvoice?.id || ""}`)}
-                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>Pay Now (${(matchedInvoice?.total || 78.75).toFixed(2)})</span>
-                  </button>
-                )}
+                    <span>📺 {vid.title || "Watch Video Guide"}</span>
+                  </a>
+                ))}
               </div>
-            </div>
+            )}
+
+          {/* Single Action Button */}
+          <div className="pt-2">
+            {isTodayApptCompleted &&
+            latestUpdatedProcessState.process.name === "Patient Care Journey" ? (
+              matchedInvoice?.status === "paid" ? (
+                <button
+                  type="button"
+                  onClick={() => navigate("/patient/bill")}
+                  className="w-full py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99]"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>View Paid Receipt</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/patient/pay?invoiceId=${matchedInvoice?.id || ""}`)}
+                  className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-blue-500/25 active:scale-[0.99]"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Pay Invoice (${(matchedInvoice?.total || 78.75).toFixed(2)})</span>
+                </button>
+              )
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  setDrawerTarget({
+                    stage: latestUpdatedProcessState.currentStageObj,
+                    processName: latestUpdatedProcessState.process.name,
+                  })
+                }
+                className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-blue-500/25 active:scale-[0.99]"
+              >
+                <span>Stage Details &amp; Guidance</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
-      ) : todayAppt ? (
-        /* TODAY'S ACTIVE / SCHEDULED APPOINTMENT CARD */
-        <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs transition-all hover:border-slate-300">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                <span>Today's Appointment</span>
-              </span>
-            </div>
+      )}
 
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 capitalize">
-                {todayAppt.status}
-              </span>
-            </div>
-          </div>
+      {/* ─────────────────────────────────────────────────────────── */}
+      {/* ── MODE 2: ALL PIPELINES (Stacked, Identical, Not Collapsible) ── */}
+      {/* ─────────────────────────────────────────────────────────── */}
+      {devViewMode === "all" && (
+        <div className="space-y-4">
+          {assignedPortalProcesses.map((pState, index) => {
+            const isFirstPipeline = index === 0;
 
-          <div className="pt-4 flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="space-y-2">
-              <h3 className="text-base sm:text-lg font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                {todayAppt.title || todayAppt.serviceName || "Clinical Consultation"}
-              </h3>
+            return (
+              <div
+                key={pState.process.id}
+                className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs relative overflow-hidden transition-all hover:border-slate-300 space-y-4"
+              >
+                {/* Top Badge & Stage Bar */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                    <span>{pState.process.name}</span>
+                  </div>
 
-              <div className="flex flex-wrap items-center gap-y-1.5 gap-x-4 text-xs text-slate-500 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-                <span className="flex items-center gap-1 text-slate-700 font-semibold">
-                  <Clock className="w-3.5 h-3.5 text-blue-600" />
-                  <span>{todayAppt.time || "10:00 AM"} ({todayAppt.duration || 30} mins)</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <Stethoscope className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{todayAppt.employeeName || "Assigned Physician"}</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{todayAppt.location || orgName}{roomDisplay ? ` • ${roomDisplay}` : ""}</span>
-                </span>
-              </div>
-
-              {roomDirection && (
-                <div className="pt-1">
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50/80 px-2.5 py-1 rounded-lg border border-blue-100">
-                    <Info className="w-3 h-3 text-blue-600" />
-                    <span>Clinic Direction: {roomDirection}</span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span>
+                      Step {pState.currentStageIndex + 1} of {pState.stageSteps.length}:{" "}
+                      <strong className="text-slate-800">{pState.currentStageName}</strong>
+                    </span>
                   </span>
                 </div>
-              )}
-            </div>
 
-            <div className="flex items-center gap-3 self-start md:self-center shrink-0">
-              <button
-                type="button"
-                onClick={() => navigate("/patient/book")}
-                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <Calendar className="w-4 h-4" />
-                <span>View Appointments</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* NO APPOINTMENT SCHEDULED TODAY */
-        <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center shrink-0">
-                <Calendar className="w-6 h-6" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  No Appointments Scheduled Today
-                </h3>
-                <p className="text-xs text-slate-500 max-w-md leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  You don't have any appointments scheduled for today. Book a slot whenever you need a consultation or follow-up with your doctor.
-                </p>
-              </div>
-            </div>
+                {/* Pipeline Headline / Summary */}
+                <div className="space-y-1">
+                  <h2 className="text-base sm:text-lg font-bold tracking-tight text-slate-900">
+                    {pState.process.name}
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                    {pState.process.description ||
+                      (isFirstPipeline && todayAppt
+                        ? `Active clinical journey with ${todayAppt.employeeName || "assigned physician"}.`
+                        : "Active clinical care pathway synchronized live with your clinic care team.")}
+                  </p>
+                </div>
 
-            <button
-              type="button"
-              onClick={() => navigate("/patient/book")}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer self-start sm:self-center shrink-0"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <Plus className="w-4 h-4" />
-              <span>Book Appointment</span>
-            </button>
-          </div>
+                {/* Full Horizontal Stage Track */}
+                <div className="py-1">
+                  <StageTrack
+                    steps={pState.stageSteps}
+                    onSelectStep={(stageId) => {
+                      const matched = pState.process.stages.find((s) => s.id === stageId);
+                      if (matched) {
+                        setDrawerTarget({ stage: matched, processName: pState.process.name });
+                      }
+                    }}
+                  />
+                </div>
+
+                {/* Action Button */}
+                <div>
+                  {isFirstPipeline && isTodayApptCompleted ? (
+                    matchedInvoice?.status === "paid" ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate("/patient/bill")}
+                        className="w-full py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99]"
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span>View Paid Receipt</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/patient/pay?invoiceId=${matchedInvoice?.id || ""}`)}
+                        className="w-full py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-blue-500/25 active:scale-[0.99]"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        <span>Pay Invoice (${(matchedInvoice?.total || 78.75).toFixed(2)})</span>
+                      </button>
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDrawerTarget({
+                          stage: pState.currentStageObj,
+                          processName: pState.process.name,
+                        })
+                      }
+                      className="w-full py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-blue-500/25 active:scale-[0.99]"
+                    >
+                      <span>{isFirstPipeline ? "Visit Details & Guidance" : "Guidance & Documents"}</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* ── 3. ACTIVITY TIMELINE (PREMIUM CLEAN UI) ── */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        {/* Clean Header without redundant internal CRM stage titles */}
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
-              <Activity className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                Activity Timeline
-              </h2>
-              <p className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Real-time updates for your consultation and care steps
-              </p>
-            </div>
-          </div>
-        </div>
+      {/* ── 3. ACTION NEEDED CARD (Max 1, Zero Footprint When Clear) ── */}
+      {!consentSigned && (
+        <ActionCard
+          label="Action Needed"
+          description="Informed consent and baseline medical intake form pending your digital signature."
+          actionText="Review & Sign"
+          onAction={() => {
+            const targetProcess =
+              devViewMode === "latest" && latestUpdatedProcessState
+                ? latestUpdatedProcessState
+                : assignedPortalProcesses[0];
+            setDrawerTarget({
+              stage: targetProcess.currentStageObj,
+              processName: targetProcess.process.name,
+            });
+          }}
+          variant="blue"
+        />
+      )}
 
-            <div className="p-6">
-              {!activeProcess ? (
-                <div className="text-center py-10 px-4 space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto border border-slate-200">
-                    <Layers className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-800">No Care Journey Assigned</h3>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    This patient is not currently enrolled in a care journey process connected to the Patient Portal. Once a process is assigned and configured in Workflows, today's activities will appear here.
-                  </p>
-                </div>
-              ) : portalEnabledStages.length === 0 ? (
-                <div className="text-center py-10 px-4 space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto border border-blue-100">
-                    <Info className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-800">No Portal Activities Configured</h3>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    No stages have been configured for the Patient Portal in this process yet. Configure stage card titles and details in Workflows to display activity cards.
-                  </p>
-                </div>
-              ) : (
-                /* Activity Timeline: Show only reached stages, with In Progress at the top */
-                (() => {
-                  const reachedStages = portalEnabledStages
-                    .filter((stage) => {
-                      const rawIndex = allStages.findIndex((s) => s.id === stage.id);
-                      return rawIndex <= activeIdx;
-                    })
-                    .sort((a, b) => {
-                      const aIdx = allStages.findIndex((s) => s.id === a.id);
-                      const bIdx = allStages.findIndex((s) => s.id === b.id);
-                      if (aIdx === activeIdx) return -1;
-                      if (bIdx === activeIdx) return 1;
-                      return bIdx - aIdx;
-                    });
+      {totalBalanceDue > 0 && isTodayApptCompleted === false && (
+        <ActionCard
+          label="Billing Notice"
+          description={`You have $${totalBalanceDue.toFixed(2)} pending across ${
+            pendingInvoices.length
+          } clinical invoice${pendingInvoices.length > 1 ? "s" : ""}.`}
+          actionText="Pay Now"
+          onAction={() => navigate("/patient/pay")}
+          variant="amber"
+          icon="alert"
+        />
+      )}
 
-                  if (reachedStages.length === 0) {
-                    return (
-                      <div className="text-center py-10 px-4 space-y-3">
-                        <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto border border-blue-100">
-                          <Clock className="w-6 h-6" />
-                        </div>
-                        <h3 className="text-sm font-bold text-slate-800">Waiting for Stage Activation</h3>
-                        <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                          Activity cards will appear here as you advance through your care journey steps.
-                        </p>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="space-y-0">
-                      {reachedStages.map((stage, idx) => {
-                        const rawIndex = allStages.findIndex((s) => s.id === stage.id);
-                        const isCompleted = rawIndex < activeIdx;
-                        const isCurrent = rawIndex === activeIdx;
-                        const isLast = idx === reachedStages.length - 1;
-
-                        // Clean Title & Description without internal CRM stage names
-                        const title = stage.portalReceptionSettings?.cardTitle || stage.name;
-                        const desc = stage.portalReceptionSettings?.cardDescription || stage.description;
-                        const activityTime = getStageTime(rawIndex, activeIdx, todayAppt);
-
-                        return (
-                          <div key={stage.id} className="relative flex items-stretch gap-4 sm:gap-6 pb-6 last:pb-0 group">
-                            {/* Clean Connecting Line & Node Rail */}
-                            <div className="flex flex-col items-center">
-                              <div
-                                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 transition-all shadow-xs ${
-                                  isCurrent
-                                    ? "bg-blue-600 text-white ring-4 ring-blue-100"
-                                    : "bg-emerald-500 text-white"
-                                }`}
-                              >
-                                {isCurrent ? (
-                                  <Radio className="w-4 h-4 text-white" />
-                                ) : (
-                                  <CheckCircle2 className="w-4.5 h-4.5 text-white" />
-                                )}
-                              </div>
-
-                              {!isLast && (
-                                <div className="w-0.5 flex-1 bg-slate-200 my-1 group-hover:bg-slate-300 transition-colors" />
-                              )}
-                            </div>
-
-                            {/* Premium Activity Card */}
-                            <div className="flex-1 min-w-0 pb-1">
-                              <div
-                                className={`p-4 sm:p-5 rounded-2xl border transition-all ${
-                                  isCurrent
-                                    ? "bg-gradient-to-r from-blue-50/70 via-indigo-50/30 to-white border-blue-200 shadow-sm"
-                                    : "bg-white border-slate-200/90 hover:border-slate-300 shadow-2xs"
-                                }`}
-                              >
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                  <div className="space-y-1.5 min-w-0">
-                                    {/* Time & Status row - NO CRM STAGE NAMES */}
-                                    <div className="flex flex-wrap items-center gap-2.5">
-                                      <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 bg-slate-100/80 px-2.5 py-0.5 rounded-md">
-                                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                                        <span>{activityTime}</span>
-                                      </div>
-
-                                      {isCurrent && (
-                                        <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100/80 text-blue-800 border border-blue-200 flex items-center gap-1.5 font-semibold">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
-                                          <span>In Progress</span>
-                                        </span>
-                                      )}
-
-                                      {isCompleted && (
-                                        <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                          <span>Completed</span>
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    <h3
-                                      className="text-sm sm:text-base font-bold text-slate-900"
-                                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                                    >
-                                      {title}
-                                    </h3>
-
-                                    {desc && (
-                                      <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
-                                        {desc}
-                                      </p>
-                                    )}
-                                  </div>
-
-                                  {/* View Details CTA Button */}
-                                  <div className="self-end sm:self-center shrink-0">
-                                    <button
-                                      type="button"
-                                      onClick={() => setSelectedStageForDrawer(stage)}
-                                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
-                                        isCurrent
-                                          ? "bg-blue-600 hover:bg-blue-700 text-white"
-                                          : "bg-white hover:bg-slate-50 text-slate-700 border border-slate-200"
-                                      }`}
-                                      style={{ fontFamily: "Outfit, sans-serif" }}
-                                    >
-                                      <FileText className="w-3.5 h-3.5" />
-                                      <span>View Details</span>
-                                      <ChevronRight className="w-3.5 h-3.5 opacity-70" />
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()
-              )}
-            </div>
-          </div>
-
-      {/* ── CLIENT PORTAL STAGE DETAIL DRAWER ── */}
-      {selectedStageForDrawer && (
-        <div className="fixed inset-0 z-50 flex justify-end overflow-hidden animate-in fade-in duration-200">
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-2xs transition-opacity"
-            onClick={() => setSelectedStageForDrawer(null)}
+      {/* ── 4. QUIET LIST (Secondary Essentials Without Visual Clutter) ── */}
+      <QuietList title="Clinic Highlights">
+        {/* Next Appointment Row */}
+        {nextAppt ? (
+          <QuietRow
+            icon={<Calendar className="w-4 h-4" />}
+            iconBg="#eff6ff"
+            iconColor="#2563eb"
+            title={nextAppt.title || nextAppt.serviceName || "Clinical Consultation"}
+            subtitle={`${
+              nextAppt.date
+                ? new Date(nextAppt.date).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })
+                : "Upcoming"
+            } at ${nextAppt.time || "10:30 AM"} • ${
+              nextAppt.employeeName || "Dr. Rajesh Patel"
+            }`}
+            right="View"
+            onClick={() => navigate("/patient/book")}
           />
+        ) : (
+          <QuietRow
+            icon={<Calendar className="w-4 h-4" />}
+            iconBg="#f1f5f9"
+            iconColor="#64748b"
+            title="No upcoming visits scheduled"
+            subtitle="Book routine follow-ups or specialist consultations"
+            right="Book"
+            onClick={() => navigate("/patient/book")}
+          />
+        )}
 
-          {/* Drawer Content */}
-          <div
-            className="relative w-full max-w-lg bg-white shadow-2xl h-full flex flex-col z-50 border-l border-slate-200 animate-in slide-in-from-right duration-300"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            {/* Drawer Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white flex-shrink-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-xs shrink-0"
-                  style={{ backgroundColor: selectedStageForDrawer.color || "#3B82F6" }}
-                >
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-slate-900 truncate">
-                      {selectedStageForDrawer.portalReceptionSettings?.cardTitle || selectedStageForDrawer.name}
-                    </h3>
-                  </div>
-                  <p className="text-xs text-slate-500 font-medium truncate">
-                    Stage: {selectedStageForDrawer.name} • {activeProcess.name}
-                  </p>
-                </div>
-              </div>
+        {/* Documents & Rx Row */}
+        <QuietRow
+          icon={<Pill className="w-4 h-4" />}
+          iconBg="#f5f3ff"
+          iconColor="#7c3aed"
+          title="Clinical Summary &amp; Active Rx"
+          subtitle="Consultation notes, prescriptions, and lab results"
+          right="Documents"
+          onClick={() => navigate("/patient/documents")}
+        />
 
-              <button
-                onClick={() => setSelectedStageForDrawer(null)}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer shrink-0"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+        {/* Account Balance Row */}
+        <QuietRow
+          icon={<Receipt className="w-4 h-4" />}
+          iconBg={totalBalanceDue > 0 ? "#fffbeb" : "#ecfdf5"}
+          iconColor={totalBalanceDue > 0 ? "#d97706" : "#059669"}
+          title={
+            totalBalanceDue > 0
+              ? `$${totalBalanceDue.toFixed(2)} Balance Due`
+              : "$0.00 — All Paid Up"
+          }
+          subtitle={
+            totalBalanceDue > 0 ? "Pending digital settlement" : "No outstanding clinic bills"
+          }
+          right={totalBalanceDue > 0 ? "Pay" : "Statements"}
+          onClick={() => navigate("/patient/bill")}
+        />
+      </QuietList>
 
-            {/* Drawer Body: Rendered HTML Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center gap-3">
-                <Info className="w-4 h-4 text-blue-600 shrink-0" />
-                <p className="text-xs text-slate-600">
-                  Detailed stage guidance customized for your clinical visit.
-                </p>
-              </div>
-
-              {/* Rendered HTML */}
-              <div className="p-5 rounded-2xl border border-slate-200 bg-white shadow-xs prose prose-slate max-w-none text-sm leading-relaxed [&_h3]:text-base [&_h3]:font-bold [&_h3]:text-slate-900 [&_h3]:mb-2 [&_p]:text-slate-600 [&_p]:mb-2 [&_strong]:text-slate-900">
-                <div
-                  dangerouslySetInnerHTML={{
-                    __html: renderDrawerHtml(selectedStageForDrawer),
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Drawer Footer */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50/80 flex items-center justify-end flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setSelectedStageForDrawer(null)}
-                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-              >
-                Close Details
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-
+      {/* ── STAGE CONTENT DRAWER (Slide-Out Guidance & Consent) ── */}
+      <StageContentDrawer
+        isOpen={Boolean(drawerTarget)}
+        onClose={() => setDrawerTarget(null)}
+        stage={drawerTarget?.stage || null}
+        processName={drawerTarget?.processName || "Patient Care Journey"}
+        clientName={activeClient.name}
+        doctorName={todayAppt?.employeeName || activeClient.responsible || "Dr. Rajesh Patel"}
+        roomName={roomDisplay || orgName}
+        onConsentSigned={handleConsentSaved}
+      />
     </div>
   );
 }

@@ -642,14 +642,6 @@ export const DEMO_PATIENT_PORTAL_PROCESS: Process = {
   ],
 };
 
-export function getProcessesForPatientPortal(): Process[] {
-  return getStoredProcesses().filter((p) => Boolean(p.connectedToPatientPortal));
-}
-
-export function getProcessesForAiReceptionist(): Process[] {
-  return getStoredProcesses().filter((p) => Boolean(p.connectedToAiReceptionist));
-}
-
 export function isStageEnabledForPortal(stage: Stage): boolean {
   if (!stage) return false;
   const isEnabled = Boolean(
@@ -658,6 +650,23 @@ export function isStageEnabledForPortal(stage: Stage): boolean {
     stage.portalReceptionSettings?.enabled
   );
   return isEnabled;
+}
+
+export function isProcessConnectedToPortal(proc: Process): boolean {
+  if (!proc) return false;
+  return Boolean(
+    proc.connectedToPatientPortal ||
+    proc.connectedToAiReceptionist ||
+    proc.stages?.some((s) => isStageEnabledForPortal(s))
+  );
+}
+
+export function getProcessesForPatientPortal(): Process[] {
+  return getStoredProcesses().filter(isProcessConnectedToPortal);
+}
+
+export function getProcessesForAiReceptionist(): Process[] {
+  return getStoredProcesses().filter((p) => Boolean(p.connectedToAiReceptionist));
 }
 
 export function isStageEnabledForAiReceptionist(stage: Stage): boolean {
@@ -845,26 +854,7 @@ export function getStoredProcesses(): Process[] {
 
   let changed = false;
 
-  // Migration: Ensure only Client Intake and Client Reactivation exist as standard client workflow processes
-  const legacyClientNames = ["Patient Intake", "Follow-up Calls", "Nurture Campaign", "Billing Support", "Payment Reminder", "Insurance Verification", "Appointment Scheduling"];
-  const hasLegacyClient = list.some(
-    (p) => (!p.entityType || p.entityType === "client") && legacyClientNames.some((legacy) => p.name?.toLowerCase().includes(legacy.toLowerCase()))
-  );
-  if (hasLegacyClient) {
-    const nonLegacy = list.filter((p) => {
-      const isClient = !p.entityType || p.entityType === "client";
-      if (!isClient) return true;
-      return !legacyClientNames.some((legacy) => p.name?.toLowerCase().includes(legacy.toLowerCase()));
-    });
-    const defaultClientProcs = DEFAULT_INITIAL_PROCESSES.filter((p) => !p.entityType || p.entityType === "client");
-    for (const dcp of [...defaultClientProcs].reverse()) {
-      if (!nonLegacy.some((p) => p.name?.toLowerCase() === dcp.name?.toLowerCase())) {
-        nonLegacy.unshift(dcp);
-      }
-    }
-    list = nonLegacy;
-    changed = true;
-  }
+
 
   // Ensure existing client processes have entityType assigned
   list = list.map((p) => {

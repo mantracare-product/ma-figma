@@ -2679,18 +2679,25 @@ export default function AdminProcessTemplates() {
     toast.success("Process added successfully");
   };
 
-  const handleUpdateProcess = (field: string, value: any) => {
+  const handleUpdateProcess = (
+    fieldOrUpdates: string | Record<string, any>,
+    value?: any
+  ) => {
     if (!selectedProcess) return;
 
-    setProcesses(
-      processes.map((p) =>
-        p.id === selectedProcess ? { ...p, [field]: value } : p
-      )
+    setProcesses((prevProcesses) =>
+      prevProcesses.map((p) => {
+        if (p.id !== selectedProcess) return p;
+        if (typeof fieldOrUpdates === "string") {
+          return { ...p, [fieldOrUpdates]: value };
+        }
+        return { ...p, ...fieldOrUpdates };
+      })
     );
   };
 
   const handleDeleteProcess = (processId: string) => {
-    setProcesses(processes.filter((p) => p.id !== processId));
+    setProcesses((prev) => prev.filter((p) => p.id !== processId));
     if (selectedProcess === processId) {
       setSelectedProcess(null);
       setExpandedStage(null);
@@ -2702,8 +2709,8 @@ export default function AdminProcessTemplates() {
   const handleUpdateProcessAI = (field: keyof AISettings, value: any) => {
     if (!selectedProcess) return;
 
-    setProcesses(
-      processes.map((p) =>
+    setProcesses((prevProcesses) =>
+      prevProcesses.map((p) =>
         p.id === selectedProcess
           ? { ...p, aiSettings: { ...p.aiSettings, [field]: value } }
           : p
@@ -3423,8 +3430,10 @@ export default function AdminProcessTemplates() {
                           <div className="flex items-center gap-3 pt-1">
                             <button
                               onClick={() => {
-                                handleUpdateProcess("name", draftProcessName);
-                                handleUpdateProcess("description", draftProcessDescription);
+                                handleUpdateProcess({
+                                  name: draftProcessName,
+                                  description: draftProcessDescription,
+                                });
                                 setIsEditingProcessInfo(false);
                                 toast.success("Process details updated");
                               }}
@@ -3878,15 +3887,34 @@ export default function AdminProcessTemplates() {
                               className="sr-only peer"
                               checked={
                                 Boolean(
-                                  selectedProcessData.connectedToPatientPortal &&
-                                  (selectedProcessData.connectedToAiReceptionist || selectedProcessData.receptionEnabled)
+                                  selectedProcessData.connectedToPatientPortal ||
+                                  selectedProcessData.connectedToAiReceptionist ||
+                                  selectedProcessData.receptionEnabled
                                 )
                               }
                               onChange={(e) => {
                                 const val = e.target.checked;
-                                handleUpdateProcess("connectedToPatientPortal", val);
-                                handleUpdateProcess("connectedToAiReceptionist", val);
-                                handleUpdateProcess("receptionEnabled", val);
+                                const currentStages = selectedProcessData.stages || [];
+                                const updatedStages = currentStages.map((s) => ({
+                                  ...s,
+                                  connectedToPatientPortal: val ? (s.connectedToPatientPortal ?? true) : false,
+                                  connectedToAiReceptionist: val ? (s.connectedToAiReceptionist ?? true) : false,
+                                  portalReceptionSettings: {
+                                    ...(s.portalReceptionSettings || {}),
+                                    enabled: val,
+                                    enabledPortal: val,
+                                    enabledReception: val,
+                                    cardTitle: s.portalReceptionSettings?.cardTitle || s.name,
+                                    cardDescription: s.portalReceptionSettings?.cardDescription || s.description || `${s.name} stage guidance`,
+                                  },
+                                }));
+
+                                handleUpdateProcess({
+                                  connectedToPatientPortal: val,
+                                  connectedToAiReceptionist: val,
+                                  receptionEnabled: val,
+                                  stages: updatedStages,
+                                });
                                 toast.success(val ? "Connected pipeline to Client Portal & AI Receptionist" : "Disconnected pipeline from Client Portal & AI Receptionist");
                               }}
                             />
@@ -4256,7 +4284,12 @@ export default function AdminProcessTemplates() {
                                       <input
                                         type="checkbox"
                                         className="sr-only peer"
-                                        checked={Boolean(stage.connectedToPatientPortal && stage.connectedToAiReceptionist)}
+                                        checked={Boolean(
+                                          stage.connectedToPatientPortal ||
+                                          stage.connectedToAiReceptionist ||
+                                          stage.portalReceptionSettings?.enabledPortal ||
+                                          stage.portalReceptionSettings?.enabled
+                                        )}
                                         onChange={(e) => {
                                           const newVal = e.target.checked;
                                           if (selectedProcess && expandedStage) {

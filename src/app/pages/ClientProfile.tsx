@@ -6,7 +6,7 @@ import {
   Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle,
   Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Wallet, CreditCard, AlertTriangle, Pencil, LayoutGrid, List, Workflow, Layers, Mic,
   GripVertical, MoreVertical, Settings as SettingsIcon, Share2, Send, Stethoscope, Video,
-  Tag, ShieldCheck, UserPlus,
+  Tag, ShieldCheck, UserPlus, Info,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -32,7 +32,7 @@ import {
   isSectionMatchingOrg,
 } from "../context/FieldRegistryContext";
 import { useOrganization } from "../context/OrganizationContext";
-import { getStoredCallLogs, CallLog, updateProcessCallLogFields, updateProcessCallLogStage } from "../../lib/processLogsStore";
+import { getStoredCallLogs, CallLog, updateProcessCallLogFields, updateProcessCallLogStage, addProcessCallLog, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
 import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
@@ -42,7 +42,7 @@ import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appo
 import { appendActivity } from "../../lib/activityEngine";
 import { getActivityForProcess, getActivityForClient } from "../../lib/activityLog";
 import { CLIENTS_STORE_EVENT, ClientProcessStage } from "../../lib/clientProcessState";
-import { useClients, getStoredClients } from "../../lib/clientsStore";
+import { useClients, getStoredClients, saveStoredClients } from "../../lib/clientsStore";
 import { useInvoices } from "../context/InvoiceContext";
 import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
 import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
@@ -219,6 +219,9 @@ const getAvailableProcessesList = () => {
   const names = stored.map((p) => p.name).filter(Boolean);
   const defaults = [
     "Patient Intake",
+    "Client Intake",
+    "Client Reactivation",
+    "Patient Care Journey",
     "Follow-up Calls",
     "Billing Support",
     "Appointment Scheduling",
@@ -709,6 +712,16 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     }
   }, [client?.id, getCustomSections, getAllFields]);
 
+  // Keep patient portal synced to the client currently viewed on dashboard
+  useEffect(() => {
+    if (client?.id && client.id !== "new") {
+      const cid = String(client.id);
+      localStorage.setItem("patient_portal_active_client_id", cid);
+      sessionStorage.setItem("patient_portal_active_client_id", cid);
+      window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: cid }));
+    }
+  }, [client?.id]);
+
   const fieldValues = useMemo(() => {
     return {
       name: clientName,
@@ -744,13 +757,14 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     else if (key === "status") setClientStatus(val);
     else if (key === "location") setClientLocation(val);
     else if (key === "country") setClientCountry(val);
+    else if (key === "processes") setSelectedProcesses(Array.isArray(val) ? val : [val]);
     else {
       setDynamicFieldValues((prev) => ({ ...prev, [key]: val }));
     }
 
     if (client) {
-      setClients((prev) =>
-        prev.map((c) => {
+      setClients((prev) => {
+        const nextClients = prev.map((c) => {
           if (c.id !== client.id) return c;
           const updated: any = { ...c };
           if (key === "name") updated.name = val;
@@ -761,12 +775,15 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           else if (key === "status") updated.status = val;
           else if (key === "location") updated.location = val;
           else if (key === "country") updated.country = val;
+          else if (key === "processes") updated.processes = Array.isArray(val) ? val : [val];
           else {
             updated[key] = val;
           }
           return updated;
-        })
-      );
+        });
+        saveStoredClients(nextClients);
+        return nextClients;
+      });
 
       // Emit hot update event for Rule Engine & automations
       const clientId = String(client.id);
@@ -835,7 +852,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   };
 
   const { getInvoicesByClient, updateInvoiceStatus, deleteInvoice, voidInvoice, simulatePayment } = useInvoices();
-  const [selectedDealProcessFilter, setSelectedDealProcessFilter] = useState<string>("Patient Intake");
+  const [selectedDealProcessFilter, setSelectedDealProcessFilter] = useState<string>("All Processes");
   const [showDealProcessesDropdown, setShowDealProcessesDropdown] = useState<boolean>(false);
   const [hoveredDealStageSegment, setHoveredDealStageSegment] = useState<{ logId: string; segIdx: number } | null>(null);
 
@@ -856,10 +873,45 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   // All state variables verbatim from Clients.tsx drawer
   const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "appointments" | "invoices" | "documents" | "products">("overview");
 
-  // Assign Process Dropdown state
+  // Assign Process Multi-select & Stage state
   const [isAssignProcessOpen, setIsAssignProcessOpen] = useState(false);
   const [selectedAssignProcess, setSelectedAssignProcess] = useState("");
   const [selectedAssignStage, setSelectedAssignStage] = useState("");
+  const [selectedMultiProcesses, setSelectedMultiProcesses] = useState<Record<string, string>>({});
+  const [processSearchFilter, setProcessSearchFilter] = useState("");
+  const [processLogsVersion, setProcessLogsVersion] = useState(0);
+
+  const isProcessConnectedToPortal = (processName: string): boolean => {
+    const allProcs = getStoredProcesses();
+    const matched = allProcs.find(
+      (p) => p.name?.toLowerCase() === processName.toLowerCase() || p.id === processName
+    );
+    if (!matched) return false;
+    return Boolean(
+      matched.connectedToPatientPortal ||
+      matched.connectedToAiReceptionist ||
+      matched.stages?.some(
+        (s) =>
+          s.connectedToPatientPortal ||
+          s.portalReceptionSettings?.enabledPortal ||
+          s.portalReceptionSettings?.enabled
+      )
+    );
+  };
+
+  useEffect(() => {
+    const handleLogsUpdate = () => {
+      setProcessLogsVersion((v) => v + 1);
+    };
+    window.addEventListener(PROCESS_LOGS_STORE_EVENT, handleLogsUpdate);
+    window.addEventListener("deals_updated", handleLogsUpdate);
+    window.addEventListener("storage", handleLogsUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_LOGS_STORE_EVENT, handleLogsUpdate);
+      window.removeEventListener("deals_updated", handleLogsUpdate);
+      window.removeEventListener("storage", handleLogsUpdate);
+    };
+  }, []);
 
   const handleSaveNewClient = () => {
     if (!clientName.trim()) {
@@ -919,31 +971,100 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   };
 
   const handleConfirmAssignProcess = () => {
-    if (!selectedAssignProcess) return;
-    const currentProcs = client?.processes || [];
-    if (!currentProcs.includes(selectedAssignProcess)) {
-      const updatedProcs = [...currentProcs, selectedAssignProcess];
-      setSelectedProcesses(updatedProcs);
-      if (client && client.id !== "new") {
-        setClients((prev) =>
-          prev.map((c) =>
-            c.id === client.id
-              ? { ...c, processes: updatedProcs, stage: selectedAssignStage || c.stage }
-              : c
-          )
-        );
+    if (!selectedAssignProcess || !client) return;
+    const procName = selectedAssignProcess;
+    const stageName = selectedAssignStage || getStagesForProcess(procName)[0]?.label || "Initial Contact";
+
+    // 1. Update client processes list (ensuring no duplicates)
+    const currentProcs = Array.isArray(client.processes) ? [...client.processes] : [];
+    const updatedProcs = Array.from(new Set([...currentProcs, procName]));
+
+    // 2. Update local state
+    setSelectedProcesses(updatedProcs);
+    setDrawerProcessStages((prev) => ({
+      ...prev,
+      [procName]: stageName,
+    }));
+    setSelectedDealProcessFilter(procName);
+
+    const clientIdStr = String(client.id);
+
+    // 3. Create/update call log in processLogsStore
+    addProcessCallLog({
+      clientId: clientIdStr,
+      clientName: client.name,
+      processName: procName,
+      stageName: stageName,
+    });
+    updateProcessCallLogStage(clientIdStr, procName, stageName);
+
+    // 4. Update Client in global Clients store and persistent storage
+    const stored = getStoredClients();
+    const nextClients = stored.map((c) => {
+      if (String(c.id).toLowerCase() !== clientIdStr.toLowerCase()) return c;
+      const existingStages = (c as any).processStagesMap || {};
+      return {
+        ...c,
+        processes: updatedProcs,
+        stage: stageName,
+        processStagesMap: { ...existingStages, [procName]: stageName },
+      };
+    });
+    saveStoredClients(nextClients);
+    setClients(nextClients);
+
+    // 5. Save to Deals store for Kanban view
+    try {
+      const rawDeals = localStorage.getItem("deals") || sessionStorage.getItem("deals");
+      const existingDeals: any[] = rawDeals ? JSON.parse(rawDeals) : [];
+      const dealStageStr = `${procName}: ${stageName}`;
+      const existingDealIndex = existingDeals.findIndex(
+        (d) =>
+          (d.clientName?.toLowerCase() === client.name.toLowerCase() || d.clientId === clientIdStr) &&
+          (d.stage?.toLowerCase().startsWith(`${procName.toLowerCase()}:`) || d.dealName?.toLowerCase().includes(procName.toLowerCase()))
+      );
+
+      if (existingDealIndex >= 0) {
+        existingDeals[existingDealIndex] = {
+          ...existingDeals[existingDealIndex],
+          stage: dealStageStr,
+        };
+      } else {
+        const newDeal = {
+          id: `DEAL-${clientIdStr}-${Date.now().toString().slice(-4)}`,
+          dealName: `${client.name} - ${procName}`,
+          clientName: client.name,
+          clientId: clientIdStr,
+          amount: 0,
+          currency: "₹",
+          createdDate: new Date().toISOString().split("T")[0],
+          status: "In Progress" as const,
+          responsible: (client as any).responsible || "Unassigned",
+          stage: dealStageStr,
+        };
+        existingDeals.unshift(newDeal);
       }
+
+      localStorage.setItem("deals", JSON.stringify(existingDeals));
+      sessionStorage.setItem("deals", JSON.stringify(existingDeals));
+      window.dispatchEvent(new Event("deals_updated"));
+    } catch (e) {
+      console.warn("Could not save to deals store:", e);
     }
-    if (selectedAssignStage && client) {
-      setDrawerProcessStages((prev) => ({
-        ...prev,
-        [selectedAssignProcess]: selectedAssignStage,
-      }));
-    }
+
+    try {
+      localStorage.setItem("patient_portal_active_client_id", clientIdStr);
+      sessionStorage.setItem("patient_portal_active_client_id", clientIdStr);
+      window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: clientIdStr }));
+      window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT, { detail: nextClients }));
+      window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+    } catch {}
+
+    setProcessLogsVersion((v) => v + 1);
     setIsAssignProcessOpen(false);
     setSelectedAssignProcess("");
     setSelectedAssignStage("");
-    toast.success(`Process ${selectedAssignProcess} assigned successfully!`);
+    toast.success(`Process ${procName} assigned successfully!`);
   };
 
   // ── Transcripts Tab State ──
@@ -1213,8 +1334,39 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   const handleUpdateLogStage = (log: any, stageName: string) => {
     if (!client) return;
-    setDrawerProcessStages((prev) => ({ ...prev, [log.process]: stageName }));
-    updateProcessCallLogStage(String(client.id), log.process, stageName);
+    const cid = String(client.id);
+    const procName = log.process;
+
+    setDrawerProcessStages((prev) => ({ ...prev, [procName]: stageName }));
+
+    // 1. Update Client in global Clients store and persistent storage
+    const stored = getStoredClients();
+    const nextClients = stored.map((c) => {
+      if (String(c.id).toLowerCase() !== cid.toLowerCase() && c.name?.toLowerCase() !== client.name.toLowerCase()) return c;
+      const existingStages = (c as any).processStagesMap || {};
+      return {
+        ...c,
+        stage: stageName,
+        lastUpdatedProcess: procName,
+        processStagesMap: { ...existingStages, [procName]: stageName },
+      };
+    });
+    saveStoredClients(nextClients);
+    setClients(nextClients);
+
+    // 2. Update call logs in processLogsStore & deals
+    updateProcessCallLogStage(cid, procName, stageName);
+
+    // 3. Ensure patient portal active client is set
+    try {
+      localStorage.setItem("patient_portal_active_client_id", cid);
+      sessionStorage.setItem("patient_portal_active_client_id", cid);
+      window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: cid }));
+      window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT, { detail: nextClients }));
+      window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+    } catch {}
+
+    setProcessLogsVersion((v) => v + 1);
     toast.success(`Stage updated to ${stageName}`);
   };
 
@@ -1430,6 +1582,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       const parts = processName.split(":");
       if (parts.length >= 1) headings.add(parts[0].trim());
     });
+    (selectedProcesses || []).forEach((processName) => {
+      const parts = processName.split(":");
+      if (parts.length >= 1) headings.add(parts[0].trim());
+    });
 
     const clientDeals = initialDeals.filter((d) => d.clientName === client.name);
     const emailDomain = client.email ? client.email.split("@")[1] || "—" : "—";
@@ -1511,7 +1667,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         source: (client as any).source ?? emailDomain,
       };
     });
-  }, [client, drawerProcessStages]);
+  }, [client, selectedProcesses, drawerProcessStages, processLogsVersion]);
 
   const drawerActivityItems = useMemo(() => {
     if (!client || client.id === "new") return [];
@@ -2154,9 +2310,19 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     selectedProcesses={selectedProcesses}
                     onSelectedProcessesChange={(procs) => {
                       setSelectedProcesses(procs);
-                      setClients((prev) =>
-                        prev.map((c) => (c.id === client.id ? { ...c, processes: procs } : c))
-                      );
+                      const clientIdStr = String(client.id);
+                      const stored = getStoredClients();
+                      const nextClients = stored.map((c) => {
+                        if (String(c.id).toLowerCase() !== clientIdStr.toLowerCase()) return c;
+                        return { ...c, processes: procs };
+                      });
+                      saveStoredClients(nextClients);
+                      setClients(nextClients);
+                      try {
+                        window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT, { detail: nextClients }));
+                        window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+                        window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: clientIdStr }));
+                      } catch {}
                     }}
                     availableProcesses={availableProcesses}
                     customFieldsModule="client"
@@ -2210,30 +2376,78 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             <div className="space-y-4">
               {(() => {
                 const storedLogs = getStoredCallLogs().filter(
-                  (l) => l.clientId === client.id || l.client.toLowerCase() === client.name.toLowerCase()
-                );
-                const matchingLogs = storedLogs.filter(
-                  (l) => l.process.toLowerCase() === selectedDealProcessFilter.toLowerCase()
+                  (l) => l.clientId === client.id || (l.client && l.client.toLowerCase() === client.name.toLowerCase())
                 );
 
-                const effectiveLogs = matchingLogs.length > 0 ? matchingLogs : [
-                  {
-                    id: `PRC-${client.id}-1`,
-                    processId: `PRC-${client.id}-1`,
-                    client: client.name,
-                    clientId: client.id,
-                    type: "Outbound",
-                    status: "In Progress",
-                    process: selectedDealProcessFilter,
-                    currentStage: drawerProcessStages[selectedDealProcessFilter] || "Initial Contact",
-                    duration: "4:30",
-                    date: "2024-04-13 14:30",
-                    hasRecording: true,
-                    hasTranscript: false,
-                    hasScheduledCall: true,
-                    responsible: (client as any).responsible || "Unassigned",
-                  } as any,
-                ];
+                const clientProcesses = Array.from(
+                  new Set([
+                    ...(Array.isArray(client.processes) ? client.processes : []),
+                    ...(Array.isArray(selectedProcesses) ? selectedProcesses : []),
+                  ])
+                );
+
+                // Map of process name -> existing CallLog
+                const processLogsMap = new Map<string, any>();
+                storedLogs.forEach((l) => {
+                  if (l.process) {
+                    processLogsMap.set(l.process.trim().toLowerCase(), l);
+                  }
+                });
+
+                // Generate full list of effective logs for each assigned process
+                const allClientLogs: any[] = [];
+                const seenProcesses = new Set<string>();
+
+                clientProcesses.forEach((pName) => {
+                  if (!pName) return;
+                  const key = pName.trim().toLowerCase();
+                  seenProcesses.add(key);
+                  const existing = processLogsMap.get(key);
+                  if (existing) {
+                    allClientLogs.push(existing);
+                  } else {
+                    const fallbackStage =
+                      drawerProcessStages[pName] ||
+                      (client as any)?.processStagesMap?.[pName] ||
+                      (client.stage && getStagesForProcess(pName).some((s) => s.label.toLowerCase() === client.stage.toLowerCase()) ? client.stage : null) ||
+                      getStagesForProcess(pName)[0]?.label ||
+                      "Initial Contact";
+
+                    allClientLogs.push({
+                      id: `PRC-${client.id}-${pName.replace(/\s+/g, "-").slice(0, 8).toUpperCase()}`,
+                      processId: `PRC-${client.id}-${pName.replace(/\s+/g, "-").slice(0, 8).toUpperCase()}`,
+                      client: client.name,
+                      clientId: client.id,
+                      type: "Inbound",
+                      status: "In Progress",
+                      process: pName,
+                      currentStage: fallbackStage,
+                      duration: "0:00",
+                      date: new Date().toISOString().replace("T", " ").substring(0, 16),
+                      hasRecording: false,
+                      hasTranscript: true,
+                      hasScheduledCall: false,
+                      responsible: (client as any).responsible || "Unassigned",
+                    });
+                  }
+                });
+
+                // Include any other stored logs for this client not already processed
+                storedLogs.forEach((l) => {
+                  if (l.process && !seenProcesses.has(l.process.trim().toLowerCase())) {
+                    seenProcesses.add(l.process.trim().toLowerCase());
+                    allClientLogs.push(l);
+                  }
+                });
+
+                const matchingLogs =
+                  selectedDealProcessFilter && selectedDealProcessFilter !== "All Processes"
+                    ? allClientLogs.filter(
+                        (l) => l.process && l.process.trim().toLowerCase() === selectedDealProcessFilter.trim().toLowerCase()
+                      )
+                    : allClientLogs;
+
+                const effectiveLogs = matchingLogs;
 
                 const searchLower = processSearchQuery.toLowerCase().trim();
                 const filteredClientDealLogs = effectiveLogs.filter((log) => {
@@ -2485,28 +2699,60 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                     className="fixed inset-0 z-40"
                                     onClick={() => setShowDealProcessesDropdown(false)}
                                   />
-                                  <div className="absolute top-full left-0 mt-1.5 w-60 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
-                                    {availableProcesses.map((process) => (
-                                      <button
-                                        key={process}
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedDealProcessFilter(process);
-                                          setShowDealProcessesDropdown(false);
-                                        }}
-                                        className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                                          selectedDealProcessFilter === process
-                                            ? "bg-primary/10 text-primary font-semibold"
-                                            : "text-gray-700 hover:bg-muted"
-                                        }`}
-                                        style={{ fontFamily: "Outfit, sans-serif" }}
-                                      >
-                                        <span className="truncate">{process}</span>
-                                        {selectedDealProcessFilter === process && (
-                                          <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />
-                                        )}
-                                      </button>
-                                    ))}
+                                  <div className="absolute top-full left-0 mt-1.5 w-64 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 overflow-hidden">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedDealProcessFilter("All Processes");
+                                        setShowDealProcessesDropdown(false);
+                                      }}
+                                      className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                                        selectedDealProcessFilter === "All Processes"
+                                          ? "bg-primary/10 text-primary font-semibold"
+                                          : "text-gray-700 hover:bg-muted"
+                                      }`}
+                                      style={{ fontFamily: "Outfit, sans-serif" }}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-semibold">All Processes</span>
+                                        <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-600 font-bold">
+                                          {allClientLogs.length}
+                                        </span>
+                                      </div>
+                                      {selectedDealProcessFilter === "All Processes" && (
+                                        <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />
+                                      )}
+                                    </button>
+                                    <div className="h-px bg-gray-100 my-1" />
+                                    {availableProcesses.map((process) => {
+                                      const isEnrolled = clientProcesses.some((cp) => cp.toLowerCase() === process.toLowerCase());
+                                      return (
+                                        <button
+                                          key={process}
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedDealProcessFilter(process);
+                                            setShowDealProcessesDropdown(false);
+                                          }}
+                                          className={`w-full text-left px-3.5 py-2 text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                                            selectedDealProcessFilter === process
+                                              ? "bg-primary/10 text-primary font-semibold"
+                                              : "text-gray-700 hover:bg-muted"
+                                          }`}
+                                          style={{ fontFamily: "Outfit, sans-serif" }}
+                                        >
+                                          <div className="flex items-center gap-1.5 truncate">
+                                            <span className="truncate">{process}</span>
+                                            {isEnrolled && (
+                                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" title="Enrolled" />
+                                            )}
+                                          </div>
+                                          {selectedDealProcessFilter === process && (
+                                            <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />
+                                          )}
+                                        </button>
+                                      );
+                                    })}
                                   </div>
                                 </>
                               )}
@@ -2521,10 +2767,11 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                           label: "Assign Process",
                           onClick: () => setIsAssignProcessOpen((prev) => !prev),
                           icon: <Plus className="w-4 h-4" />,
-                          className: "bg-blue-600 hover:bg-blue-700 text-white",
+                          className: "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer shadow-xs",
                         }}
                       />
 
+                      {/* Assign Process Popover */}
                       {isAssignProcessOpen && (
                         <div
                           className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-gray-200 p-4 z-30 animate-in fade-in zoom-in-95 duration-150"
@@ -2536,12 +2783,11 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                             <button
                               type="button"
                               onClick={() => setIsAssignProcessOpen(false)}
-                              className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
+                              className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
                             >
                               <X className="w-4 h-4" />
                             </button>
                           </div>
-
                           <div className="space-y-3">
                             <div>
                               <label className="block text-xs font-semibold text-gray-700 mb-1">Process</label>
@@ -2561,7 +2807,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                 ))}
                               </select>
                             </div>
-
                             <div>
                               <label className="block text-xs font-semibold text-gray-700 mb-1">Stage</label>
                               <select
@@ -2576,7 +2821,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                 ))}
                               </select>
                             </div>
-
                             <div className="pt-2 flex justify-end gap-2 border-t border-gray-100">
                               <button
                                 type="button"

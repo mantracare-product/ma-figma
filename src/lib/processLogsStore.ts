@@ -78,35 +78,7 @@ export function getStoredCallLogs(): CallLog[] {
     if (!Array.isArray(logs) || logs.length === 0) {
       logs = initialCallLogs;
     }
-    // Cleanly migrate legacy hardcoded process names to Client Intake / Client Reactivation
-    const legacyNames = ["Patient Intake", "Follow-up Calls", "Insurance Verification", "Billing Support", "Appointment Scheduling", "Payment Reminder", "Nurture Campaign"];
     let migrated = false;
-    logs = logs.map((l: CallLog) => {
-      if (legacyNames.some(leg => l.process?.toLowerCase() === leg.toLowerCase())) {
-        migrated = true;
-        const isReactivation = ["Follow-up Calls", "Billing Support", "Nurture Campaign", "Payment Reminder"].some(r => l.process?.toLowerCase() === r.toLowerCase());
-        const mappedProcess = isReactivation ? "Client Reactivation" : "Client Intake";
-        let mappedStage = "Contacted";
-        if (isReactivation) {
-          if (l.currentStage === "Reactivated" || l.currentStage === "Approval" || l.currentStage === "Payment Collected") mappedStage = "Reactivated";
-          else if (l.currentStage === "Lost" || l.currentStage === "Void") mappedStage = "Lost";
-          else if (l.currentStage === "Call Back Later") mappedStage = "Call Back Later";
-          else mappedStage = "Outreach";
-        } else {
-          if (l.currentStage === "Interested" || l.currentStage === "Confirmation") mappedStage = "Interested";
-          else if (l.currentStage === "Initial Contact") mappedStage = "Initial Contact";
-          else if (l.currentStage === "Call Back Later") mappedStage = "Call Back Later";
-          else if (l.currentStage === "Not Interested") mappedStage = "Not Interested";
-          else mappedStage = "Contacted";
-        }
-        return {
-          ...l,
-          process: mappedProcess,
-          currentStage: mappedStage,
-        };
-      }
-      return l;
-    });
 
     // Ensure Patient Care Journey logs are present in logs
     const hasPatientCare = logs.some((l: CallLog) => l.process === "Patient Care Journey");
@@ -186,6 +158,7 @@ export function addProcessCallLog(entry: {
 
 export function updateProcessCallLogStage(clientId: string, processName: string, newStageName: string): void {
   const currentLogs = getStoredCallLogs();
+  const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
   let found = false;
   const updated = currentLogs.map((l) => {
     if (
@@ -193,19 +166,28 @@ export function updateProcessCallLogStage(clientId: string, processName: string,
       l.process.toLowerCase() === processName.toLowerCase()
     ) {
       found = true;
-      return { ...l, currentStage: newStageName };
+      return { ...l, currentStage: newStageName, date: nowStr };
     }
     return l;
   });
 
+  const rawClientsStr = typeof window !== "undefined" ? (localStorage.getItem("clients") || sessionStorage.getItem("clients")) : null;
+  let clientDisplayName = clientId;
+  if (rawClientsStr) {
+    try {
+      const parsedClients = JSON.parse(rawClientsStr);
+      const foundClient = parsedClients.find((c: any) => c.id === clientId || c.name?.toLowerCase() === clientId.toLowerCase());
+      if (foundClient?.name) clientDisplayName = foundClient.name;
+    } catch {}
+  }
+
   if (!found) {
-    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
     const newLog: CallLog = {
-      id: `PRC-${clientId}`,
-      client: clientId,
+      id: `PRC-${clientId}-${Date.now().toString().slice(-4)}`,
+      client: clientDisplayName,
       clientId: clientId,
       type: "Inbound",
-      status: "Completed",
+      status: "In Progress",
       process: processName,
       currentStage: newStageName,
       duration: "0:00",
@@ -218,6 +200,72 @@ export function updateProcessCallLogStage(clientId: string, processName: string,
   }
 
   saveCallLogs(updated);
+
+  // Synchronize to clients in storage and dispatch cross-view events
+  if (typeof window !== "undefined") {
+    try {
+      const rawClients = localStorage.getItem("clients") || sessionStorage.getItem("clients");
+      if (rawClients) {
+        const clients = JSON.parse(rawClients);
+        let changed = false;
+        const nextClients = clients.map((c: any) => {
+          if (
+            c.id === clientId ||
+            (c.name && clientId && c.name.toLowerCase() === clientId.toLowerCase())
+          ) {
+            changed = true;
+            const newMap = { ...(c.processStagesMap || {}), [processName]: newStageName };
+            return {
+              ...c,
+              processStagesMap: newMap,
+              stage: newStageName,
+              lastUpdatedProcess: processName,
+            };
+          }
+          return c;
+        });
+
+        if (changed) {
+          const serialized = JSON.stringify(nextClients);
+          localStorage.setItem("clients", serialized);
+          sessionStorage.setItem("clients", serialized);
+          window.dispatchEvent(new CustomEvent("clientsStore_updated", { detail: nextClients }));
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to sync stage to clients store:", e);
+    }
+
+    // Synchronize to deals in storage
+    try {
+      const rawDeals = localStorage.getItem("deals") || sessionStorage.getItem("deals");
+      if (rawDeals) {
+        const deals = JSON.parse(rawDeals);
+        let dealChanged = false;
+        const updatedDeals = deals.map((d: any) => {
+          if (
+            (d.clientId === clientId || (d.clientName && clientId && d.clientName.toLowerCase() === clientId.toLowerCase())) &&
+            d.stage &&
+            d.stage.toLowerCase().startsWith(processName.toLowerCase())
+          ) {
+            dealChanged = true;
+            return { ...d, stage: `${processName}: ${newStageName}` };
+          }
+          return d;
+        });
+        if (dealChanged) {
+          const serializedDeals = JSON.stringify(updatedDeals);
+          localStorage.setItem("deals", serializedDeals);
+          sessionStorage.setItem("deals", serializedDeals);
+          window.dispatchEvent(new CustomEvent("deals_updated"));
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to sync stage to deals:", e);
+    }
+
+    window.dispatchEvent(new CustomEvent("patient_portal_client_changed", { detail: clientId }));
+  }
 }
 
 export function updateProcessCallLogFields(

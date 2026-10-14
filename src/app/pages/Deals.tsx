@@ -546,22 +546,7 @@ export default function Deals() {
       const raw = localStorage.getItem("deals") || sessionStorage.getItem("deals");
       let list: Deal[] = raw ? JSON.parse(raw) : initialDeals;
       if (!Array.isArray(list) || list.length === 0) list = initialDeals;
-      const legacyProcesses = ["Patient Intake", "Follow-up Calls", "Billing Support", "Appointment Scheduling", "Insurance Verification", "Payment Reminder", "Nurture Campaign"];
       let changed = false;
-      list = list.map((d) => {
-        if (legacyProcesses.some(leg => d.stage?.includes(leg) || d.dealName?.includes(leg))) {
-          changed = true;
-          const isReactivation = ["Follow-up Calls", "Billing Support", "Payment Reminder", "Nurture Campaign"].some(r => d.stage?.includes(r));
-          const newProc = isReactivation ? "Client Reactivation" : "Client Intake";
-          const newStage = isReactivation ? (d.status === "Won" ? "Reactivated" : d.status === "Lost" ? "Lost" : "Contacted") : (d.status === "Won" ? "Interested" : "Contacted");
-          return {
-            ...d,
-            dealName: d.dealName.replace(/Patient Intake|Follow-up Calls|Billing Support|Appointment Scheduling|Insurance Verification/gi, newProc),
-            stage: `${newProc}: ${newStage}`,
-          };
-        }
-        return d;
-      });
       // Ensure Patient Care Journey deals exist
       const hasPatientDeals = list.some((d) => d.stage?.startsWith("Patient Care Journey:"));
       if (!hasPatientDeals) {
