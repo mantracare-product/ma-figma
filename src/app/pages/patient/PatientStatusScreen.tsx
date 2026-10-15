@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
+  ClipboardList,
   CreditCard,
   QrCode,
   MapPin,
@@ -15,6 +16,7 @@ import {
   Plus,
   Stethoscope,
   ChevronRight,
+  ChevronDown,
   ShieldCheck,
   Activity,
   Receipt,
@@ -22,6 +24,7 @@ import {
   Info,
   Pill,
   Check,
+  RotateCcw,
 } from "lucide-react";
 import { Client, getStoredClients, CLIENTS_STORE_EVENT } from "../../../lib/clientsStore";
 import { appointmentService, Appointment } from "../../../lib/appointmentService";
@@ -39,9 +42,11 @@ import { getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../../lib/proces
 import { useOrganization } from "../../context/OrganizationContext";
 import { findRoomForAppointment } from "../../../lib/roomsStore";
 import StageTrack, { StageStep } from "./components/StageTrack";
+import MiniStageStepper from "./components/MiniStageStepper";
 import ActionCard from "./components/ActionCard";
 import QuietList, { QuietRow } from "./components/QuietList";
 import StageContentDrawer from "./components/StageContentDrawer";
+import { toast } from "sonner";
 
 interface PortalContext {
   activeClient: Client;
@@ -70,21 +75,16 @@ export default function PatientStatusScreen() {
   // Re-sync trigger for live store changes (staff dashboard, process assignment, stage updates)
   const [storeTick, setStoreTick] = useState(0);
 
-  // Dev View Toggler: 'all' (All Stacked Pipelines) vs 'latest' (Single Explicit Stage Only)
-  const [devViewMode, setDevViewMode] = useState<"all" | "latest">(() => {
-    try {
-      const saved = localStorage.getItem("patient_portal_pipeline_view_mode");
-      if (saved === "all" || saved === "latest") return saved;
-    } catch {}
-    return "latest";
-  });
+  // Active Primary Process ID (defaults to latest updated process, user can switch from "Other pipelines")
+  const [userSelectedProcessId, setUserSelectedProcessId] = useState<string | null>(null);
 
-  const handleSetDevViewMode = (mode: "all" | "latest") => {
-    setDevViewMode(mode);
-    try {
-      localStorage.setItem("patient_portal_pipeline_view_mode", mode);
-    } catch {}
-  };
+  // Map of processId -> selected preview stage index (defaults to that process's live stage)
+  const [selectedStageIndexMap, setSelectedStageIndexMap] = useState<Record<string, number>>({});
+
+  // Collapsible dropdown state for secondary active/planned pipelines
+  const [isOtherPipelinesOpen, setIsOtherPipelinesOpen] = useState(false);
+
+
 
   // Real Appointments & Invoices from shared services
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -425,364 +425,309 @@ export default function PatientStatusScreen() {
     setDrawerTarget(null);
   };
 
+  // Active primary process: user explicitly selected or latest updated
+  const primaryProcessState = useMemo(() => {
+    if (assignedPortalProcesses.length === 0) return null;
+    if (userSelectedProcessId) {
+      const found = assignedPortalProcesses.find(
+        (p) => p.process.id === userSelectedProcessId
+      );
+      if (found) return found;
+    }
+    return latestUpdatedProcessState || assignedPortalProcesses[0];
+  }, [assignedPortalProcesses, userSelectedProcessId, latestUpdatedProcessState]);
+
+  // When any process has a recent stage update (from dashboard/kanban or patient portal),
+  // automatically surface that pipeline to the top as the main expanded view
+  const lastUpdatedProcessName = latestClient?.lastUpdatedProcess;
+  useEffect(() => {
+    if (lastUpdatedProcessName && assignedPortalProcesses.length > 0) {
+      const matched = assignedPortalProcesses.find(
+        (p) =>
+          p.process.name.toLowerCase() === lastUpdatedProcessName.toLowerCase() ||
+          p.process.id.toLowerCase() === lastUpdatedProcessName.toLowerCase()
+      );
+      if (matched) {
+        setUserSelectedProcessId(matched.process.id);
+      }
+    }
+  }, [lastUpdatedProcessName, storeTick]);
+
+  // Secondary active/planned pipelines for the collapsible dropdown
+  const otherProcesses = useMemo(() => {
+    if (!primaryProcessState) return [];
+    return assignedPortalProcesses.filter(
+      (p) => p.process.id !== primaryProcessState.process.id
+    );
+  }, [assignedPortalProcesses, primaryProcessState]);
+
+
+
+  // Tap handler on mini-pipeline stage blocks:
+  // 1st tap: preview that stage in the card
+  // 2nd tap on already selected stage: open StageContentDrawer
+  const handleStageClick = (procState: AssignedProcessState, stageIdx: number) => {
+    const procId = procState.process.id;
+    const currentActiveIdx = procState.currentStageIndex;
+    const currentSelectedIdx =
+      selectedStageIndexMap[procId] !== undefined
+        ? selectedStageIndexMap[procId]
+        : currentActiveIdx;
+
+    if (currentSelectedIdx === stageIdx) {
+      // 2nd tap -> open drawer
+      const targetStage = procState.process.stages[stageIdx] || procState.currentStageObj;
+      setDrawerTarget({ stage: targetStage, processName: procState.process.name });
+    } else {
+      // 1st tap -> preview stage in card
+      setSelectedStageIndexMap((prev) => ({
+        ...prev,
+        [procId]: stageIdx,
+      }));
+    }
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-12 animate-in fade-in duration-200">
-      {/* ── DEV VIEW TOGGLER: [All Pipelines] vs [Latest Active Stage] (Requested by User) ── */}
-      <div className="flex items-center justify-between px-1 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-[11px] font-semibold text-slate-500">
-            {devViewMode === "latest" ? (
-              <span>
-                Active Stage:{" "}
-                <strong className="text-slate-800">
-                  {latestUpdatedProcessState?.process.name}
-                </strong>{" "}
-                · {latestUpdatedProcessState?.currentStageName}
-              </span>
-            ) : (
-              <span>
-                {assignedPortalProcesses.length} care{" "}
-                {assignedPortalProcesses.length === 1 ? "pipeline" : "pipelines"} active
-              </span>
-            )}
-          </span>
+      {/* ── 1. CLEAN APP HEADER (Calm, Minimal, Zero AI Slop) ── */}
+      <div className="px-1 flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+            Hello, {clientFirstName}
+          </h1>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            {new Date().toLocaleDateString("en-US", {
+              weekday: "long",
+              month: "short",
+              day: "numeric",
+            })} • {orgName}
+          </p>
         </div>
 
-        {/* Minimalist Top Pill Toggle */}
-        <div className="inline-flex items-center gap-1 p-0.5 bg-slate-100/90 rounded-xl border border-slate-200/60 text-[11px] font-medium text-slate-600">
-          <button
-            type="button"
-            onClick={() => handleSetDevViewMode("latest")}
-            className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-              devViewMode === "latest"
-                ? "bg-white text-slate-900 font-bold shadow-2xs"
-                : "hover:text-slate-900"
-            }`}
-          >
-            Latest Active Stage
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSetDevViewMode("all")}
-            className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-              devViewMode === "all"
-                ? "bg-white text-slate-900 font-bold shadow-2xs"
-                : "hover:text-slate-900"
-            }`}
-          >
-            All Pipelines
-          </button>
-        </div>
-      </div>
-
-      {/* ── 1. WELCOME & CLINIC OVERVIEW HEADER (Distinct Top Card with Clean Padding) ── */}
-      <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Patient Portal · {orgName}
-              </span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-              Welcome to {orgName}, {clientFirstName}
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed mt-0.5">
-              Track your real-time clinic journey, view upcoming appointments, and access digital records.
-            </p>
-          </div>
-
-          <div className="text-left sm:text-right shrink-0">
-            <span className="text-xs font-semibold text-slate-400">
-              {new Date().toLocaleDateString("en-US", {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              })}
-            </span>
-            <div className="mt-1 text-[11px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-full inline-block">
-              {devViewMode === "latest"
-                ? "Live Stage Sync"
-                : `${assignedPortalProcesses.length} Active Pipelines`}
-            </div>
-          </div>
-        </div>
-
-        {/* Key Facts Inline Pills (Doctor, Room, Schedule) */}
+        {/* Clean Appointment Pill (if visit today) */}
         {(todayAppt || roomDisplay) && (
-          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100 text-xs text-slate-600 font-semibold">
-            {todayAppt?.employeeName && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-700">
-                <Stethoscope className="w-3.5 h-3.5 text-blue-600" />
-                <span>{todayAppt.employeeName}</span>
-              </span>
-            )}
-
-            {roomDisplay && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-700">
-                <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{roomDisplay}</span>
-              </span>
-            )}
-
-            {todayAppt?.time && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-700">
-                <Clock className="w-3.5 h-3.5 text-slate-400" />
-                <span>{todayAppt.time}</span>
-              </span>
-            )}
-
-            {roomDirection && (
-              <span className="text-[11px] text-slate-400 font-medium ml-1">
-                • {roomDirection}
-              </span>
-            )}
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200/90 shadow-2xs text-xs font-semibold text-slate-700">
+            {todayAppt?.time && <span>{todayAppt.time}</span>}
+            {todayAppt?.employeeName && <span>• {todayAppt.employeeName}</span>}
+            {roomDisplay && <span className="text-emerald-700 font-bold">• {roomDisplay}</span>}
           </div>
         )}
       </div>
 
       {/* ─────────────────────────────────────────────────────────── */}
-      {/* ── MODE 1: LATEST ACTIVE STAGE ONLY (Recency-Driven)     ── */}
+      {/* ── 2. HERO CARE STAGE CARD (Clean, Focused, Sketch-Aligned) ── */}
       {/* ─────────────────────────────────────────────────────────── */}
-      {devViewMode === "latest" && latestUpdatedProcessState && (
-        <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-7 shadow-xs relative overflow-hidden transition-all hover:border-slate-300 space-y-4">
-          {/* Top Process & Status Pill */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
-              <span>{latestUpdatedProcessState.process.name}</span>
-            </div>
+      {primaryProcessState && (() => {
+        const procId = primaryProcessState.process.id;
+        const currentIdx = primaryProcessState.currentStageIndex;
+        const selectedIdx =
+          selectedStageIndexMap[procId] !== undefined
+            ? selectedStageIndexMap[procId]
+            : currentIdx;
 
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span>Current Stage</span>
-            </span>
-          </div>
+        const displayedStage =
+          primaryProcessState.process.stages?.[selectedIdx] ||
+          primaryProcessState.currentStageObj;
 
-          {/* Explicit Stage Title & Information from Process Settings */}
-          <div className="space-y-2">
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-              {latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.cardTitle ||
-                latestUpdatedProcessState.currentStageObj.name}
-            </h2>
+        const isPreviewingNonCurrent = selectedIdx !== currentIdx;
 
-            {(latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.cardDescription ||
-              latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.text ||
-              latestUpdatedProcessState.currentStageObj.description) && (
-              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                {latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.cardDescription ||
-                  latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.text ||
-                  latestUpdatedProcessState.currentStageObj.description}
-              </p>
-            )}
-          </div>
+        return (
+          <div className="space-y-3">
+            {/* Main Primary Hero Pipeline Card */}
+            <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-7 shadow-xs relative overflow-hidden transition-all hover:border-slate-300 space-y-4">
+              {/* Top Bar: Pipeline Title on Left, Contiguous Stepper Blocks on Right */}
+              <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <span className="text-xs sm:text-sm font-bold text-slate-800 tracking-tight truncate">
+                  {primaryProcessState.process.name}
+                </span>
 
-          {/* Rich HTML Guidance if configured in MA dashboard */}
-          {latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.htmlContent && (
-            <div
-              className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{
-                __html: latestUpdatedProcessState.currentStageObj.portalReceptionSettings.htmlContent,
-              }}
-            />
-          )}
-
-          {/* Media Links if configured in process settings */}
-          {latestUpdatedProcessState.currentStageObj.portalReceptionSettings?.videos &&
-            latestUpdatedProcessState.currentStageObj.portalReceptionSettings.videos.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {latestUpdatedProcessState.currentStageObj.portalReceptionSettings.videos.map((vid) => (
-                  <a
-                    key={vid.id}
-                    href={vid.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
-                  >
-                    <span>📺 {vid.title || "Watch Video Guide"}</span>
-                  </a>
-                ))}
+                {/* Top-Right Mini Stepper Blocks */}
+                <MiniStageStepper
+                  steps={primaryProcessState.stageSteps}
+                  currentStageIndex={currentIdx}
+                  selectedStageIndex={selectedIdx}
+                  onStageClick={(idx) => handleStageClick(primaryProcessState, idx)}
+                />
               </div>
-            )}
 
-          {/* Single Action Button */}
-          <div className="pt-2">
-            {isTodayApptCompleted &&
-            latestUpdatedProcessState.process.name === "Patient Care Journey" ? (
-              matchedInvoice?.status === "paid" ? (
-                <button
-                  type="button"
-                  onClick={() => navigate("/patient/bill")}
-                  className="w-full py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99]"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>View Paid Receipt</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/patient/pay?invoiceId=${matchedInvoice?.id || ""}`)}
-                  className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-blue-500/25 active:scale-[0.99]"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Pay Invoice (${(matchedInvoice?.total || 78.75).toFixed(2)})</span>
-                </button>
-              )
-            ) : (
-              <button
-                type="button"
-                onClick={() =>
-                  setDrawerTarget({
-                    stage: latestUpdatedProcessState.currentStageObj,
-                    processName: latestUpdatedProcessState.process.name,
-                  })
-                }
-                className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-blue-500/25 active:scale-[0.99]"
-              >
-                <span>Stage Details &amp; Guidance</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+              {/* Main Stage Headline & Description (sleek, zero preview banners) */}
+              <div className="space-y-1.5 pt-1">
+                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+                  {displayedStage.portalReceptionSettings?.cardTitle || displayedStage.name}
+                </h2>
 
-      {/* ─────────────────────────────────────────────────────────── */}
-      {/* ── MODE 2: ALL PIPELINES (Stacked, Identical, Not Collapsible) ── */}
-      {/* ─────────────────────────────────────────────────────────── */}
-      {devViewMode === "all" && (
-        <div className="space-y-4">
-          {assignedPortalProcesses.map((pState, index) => {
-            const isFirstPipeline = index === 0;
-
-            return (
-              <div
-                key={pState.process.id}
-                className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs relative overflow-hidden transition-all hover:border-slate-300 space-y-4"
-              >
-                {/* Top Badge & Stage Bar */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
-                    <span>{pState.process.name}</span>
-                  </div>
-
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    <span>
-                      Step {pState.currentStageIndex + 1} of {pState.stageSteps.length}:{" "}
-                      <strong className="text-slate-800">{pState.currentStageName}</strong>
-                    </span>
-                  </span>
-                </div>
-
-                {/* Pipeline Headline / Summary */}
-                <div className="space-y-1">
-                  <h2 className="text-base sm:text-lg font-bold tracking-tight text-slate-900">
-                    {pState.process.name}
-                  </h2>
-                  <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-                    {pState.process.description ||
-                      (isFirstPipeline && todayAppt
-                        ? `Active clinical journey with ${todayAppt.employeeName || "assigned physician"}.`
-                        : "Active clinical care pathway synchronized live with your clinic care team.")}
+                {(displayedStage.portalReceptionSettings?.cardDescription ||
+                  displayedStage.portalReceptionSettings?.text ||
+                  displayedStage.description) && (
+                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                    {displayedStage.portalReceptionSettings?.cardDescription ||
+                      displayedStage.portalReceptionSettings?.text ||
+                      displayedStage.description}
                   </p>
-                </div>
+                )}
+              </div>
 
-                {/* Full Horizontal Stage Track */}
-                <div className="py-1">
-                  <StageTrack
-                    steps={pState.stageSteps}
-                    onSelectStep={(stageId) => {
-                      const matched = pState.process.stages.find((s) => s.id === stageId);
-                      if (matched) {
-                        setDrawerTarget({ stage: matched, processName: pState.process.name });
-                      }
-                    }}
-                  />
-                </div>
+              {/* Video guides if configured */}
+              {displayedStage.portalReceptionSettings?.videos &&
+                displayedStage.portalReceptionSettings.videos.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {displayedStage.portalReceptionSettings.videos.map((vid) => (
+                      <a
+                        key={vid.id}
+                        href={vid.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
+                      >
+                        <span>📺 {vid.title || "Watch Video Guide"}</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
 
-                {/* Action Button */}
-                <div>
-                  {isFirstPipeline && isTodayApptCompleted ? (
-                    matchedInvoice?.status === "paid" ? (
-                      <button
-                        type="button"
-                        onClick={() => navigate("/patient/bill")}
-                        className="w-full py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99]"
-                      >
-                        <FileText className="w-4 h-4" />
-                        <span>View Paid Receipt</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/patient/pay?invoiceId=${matchedInvoice?.id || ""}`)}
-                        className="w-full py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-blue-500/25 active:scale-[0.99]"
-                      >
-                        <CreditCard className="w-4 h-4" />
-                        <span>Pay Invoice (${(matchedInvoice?.total || 78.75).toFixed(2)})</span>
-                      </button>
-                    )
+              {/* Bottom Primary Action CTA: Single, Full-Width, Sleek (no split buttons/return) */}
+              <div className="pt-2">
+                {isTodayApptCompleted &&
+                !isPreviewingNonCurrent &&
+                primaryProcessState.process.name === "Patient Care Journey" ? (
+                  matchedInvoice?.status === "paid" ? (
+                    <button
+                      type="button"
+                      onClick={() => navigate("/patient/bill")}
+                      className="w-full py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-[0.99]"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>View Paid Receipt</span>
+                    </button>
                   ) : (
                     <button
                       type="button"
-                      onClick={() =>
-                        setDrawerTarget({
-                          stage: pState.currentStageObj,
-                          processName: pState.process.name,
-                        })
-                      }
-                      className="w-full py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-blue-500/25 active:scale-[0.99]"
+                      onClick={() => navigate(`/patient/pay?invoiceId=${matchedInvoice?.id || ""}`)}
+                      className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-blue-500/25 active:scale-[0.99]"
                     >
-                      <span>{isFirstPipeline ? "Visit Details & Guidance" : "Guidance & Documents"}</span>
-                      <ChevronRight className="w-4 h-4" />
+                      <CreditCard className="w-4 h-4" />
+                      <span>Pay Invoice (${(matchedInvoice?.total || 78.75).toFixed(2)})</span>
                     </button>
-                  )}
-                </div>
+                  )
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDrawerTarget({
+                        stage: displayedStage,
+                        processName: primaryProcessState.process.name,
+                      })
+                    }
+                    className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-blue-500/25 active:scale-[0.99]"
+                  >
+                    <span>Stage Details &amp; Guidance</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
 
-      {/* ── 3. ACTION NEEDED CARD (Max 1, Zero Footprint When Clear) ── */}
-      {!consentSigned && (
-        <ActionCard
-          label="Action Needed"
-          description="Informed consent and baseline medical intake form pending your digital signature."
-          actionText="Review & Sign"
-          onAction={() => {
-            const targetProcess =
-              devViewMode === "latest" && latestUpdatedProcessState
-                ? latestUpdatedProcessState
-                : assignedPortalProcesses[0];
-            setDrawerTarget({
-              stage: targetProcess.currentStageObj,
-              processName: targetProcess.process.name,
-            });
-          }}
-          variant="blue"
-        />
-      )}
+            {/* ── 2b. OTHER PLANNED PIPELINES (Sleek Collapsible Dropdown) ── */}
+            {otherProcesses.length > 0 && (
+              <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden transition-all">
+                <button
+                  type="button"
+                  onClick={() => setIsOtherPipelinesOpen((prev) => !prev)}
+                  className="w-full px-5 py-3.5 sm:py-4 flex items-center justify-between text-left hover:bg-slate-50/70 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs sm:text-sm font-bold text-slate-800">
+                      Other Care Pathways
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/60 px-2 py-0.5 rounded-full">
+                      {otherProcesses.length}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                    <span>{isOtherPipelinesOpen ? "Collapse" : "View"}</span>
+                    <ChevronDown
+                      className={`w-4 h-4 transition-transform duration-200 ${
+                        isOtherPipelinesOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </div>
+                </button>
 
-      {totalBalanceDue > 0 && isTodayApptCompleted === false && (
-        <ActionCard
-          label="Billing Notice"
-          description={`You have $${totalBalanceDue.toFixed(2)} pending across ${
-            pendingInvoices.length
-          } clinical invoice${pendingInvoices.length > 1 ? "s" : ""}.`}
-          actionText="Pay Now"
-          onAction={() => navigate("/patient/pay")}
-          variant="amber"
-          icon="alert"
-        />
-      )}
+                {isOtherPipelinesOpen && (
+                  <div className="px-5 pb-5 pt-1 border-t border-slate-100 space-y-3">
+                    {otherProcesses.map((pState) => {
+                      const pId = pState.process.id;
+                      const pCurrentIdx = pState.currentStageIndex;
+                      const pSelectedIdx =
+                        selectedStageIndexMap[pId] !== undefined
+                          ? selectedStageIndexMap[pId]
+                          : pCurrentIdx;
+                      const pDisplayedStage =
+                        pState.process.stages?.[pSelectedIdx] || pState.currentStageObj;
 
-      {/* ── 4. QUIET LIST (Secondary Essentials Without Visual Clutter) ── */}
-      <QuietList title="Clinic Highlights">
+                      return (
+                        <div
+                          key={pState.process.id}
+                          className="p-4 rounded-2xl bg-slate-50/70 border border-slate-200/80 hover:border-slate-300 transition-all space-y-3"
+                        >
+                          {/* Pipeline Title + Mini Stepper */}
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <h3 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                                {pState.process.name}
+                              </h3>
+                            </div>
+                            <MiniStageStepper
+                              steps={pState.stageSteps}
+                              currentStageIndex={pCurrentIdx}
+                              selectedStageIndex={pSelectedIdx}
+                              onStageClick={(idx) => handleStageClick(pState, idx)}
+                            />
+                          </div>
+
+                          {/* Stage Title & Short Description */}
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-semibold text-slate-800">
+                              {pDisplayedStage.portalReceptionSettings?.cardTitle || pDisplayedStage.name}
+                            </h4>
+                            {(pDisplayedStage.portalReceptionSettings?.cardDescription ||
+                              pDisplayedStage.description) && (
+                              <p className="text-xs text-slate-500 line-clamp-2 mt-0.5 leading-relaxed">
+                                {pDisplayedStage.portalReceptionSettings?.cardDescription ||
+                                  pDisplayedStage.description}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Action */}
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDrawerTarget({
+                                  stage: pDisplayedStage,
+                                  processName: pState.process.name,
+                                })
+                              }
+                              className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-[0.99]"
+                            >
+                              <span>Details</span>
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ── 4. QUICK CLINIC ESSENTIALS ── */}
+      <QuietList title="Clinic Essentials">
         {/* Next Appointment Row */}
         {nextAppt ? (
           <QuietRow
@@ -808,22 +753,33 @@ export default function PatientStatusScreen() {
             icon={<Calendar className="w-4 h-4" />}
             iconBg="#f1f5f9"
             iconColor="#64748b"
-            title="No upcoming visits scheduled"
-            subtitle="Book routine follow-ups or specialist consultations"
+            title="Book an Appointment"
+            subtitle="Follow-up visits & specialist care"
             right="Book"
             onClick={() => navigate("/patient/book")}
           />
         )}
 
-        {/* Documents & Rx Row */}
+        {/* Documents & Records Row */}
         <QuietRow
-          icon={<Pill className="w-4 h-4" />}
+          icon={<FileText className="w-4 h-4" />}
+          iconBg="#eff6ff"
+          iconColor="#2563eb"
+          title="Documents & Records"
+          subtitle="Consultation notes, active Rx, and reports"
+          right="View"
+          onClick={() => navigate("/patient/documents")}
+        />
+
+        {/* Forms & Questionnaires Row */}
+        <QuietRow
+          icon={<ClipboardList className="w-4 h-4" />}
           iconBg="#f5f3ff"
           iconColor="#7c3aed"
-          title="Clinical Summary &amp; Active Rx"
-          subtitle="Consultation notes, prescriptions, and lab results"
-          right="Documents"
-          onClick={() => navigate("/patient/documents")}
+          title="Forms & Questionnaires"
+          subtitle="Clinical intake, health history & consents"
+          right="View"
+          onClick={() => navigate("/patient/forms")}
         />
 
         {/* Account Balance Row */}
@@ -834,13 +790,13 @@ export default function PatientStatusScreen() {
           title={
             totalBalanceDue > 0
               ? `$${totalBalanceDue.toFixed(2)} Balance Due`
-              : "$0.00 — All Paid Up"
+              : "Account Settled ($0.00)"
           }
           subtitle={
-            totalBalanceDue > 0 ? "Pending digital settlement" : "No outstanding clinic bills"
+            totalBalanceDue > 0 ? "Click to pay online" : "No pending clinic invoices"
           }
-          right={totalBalanceDue > 0 ? "Pay" : "Statements"}
-          onClick={() => navigate("/patient/bill")}
+          right={totalBalanceDue > 0 ? "Pay" : "Invoices"}
+          onClick={() => navigate(totalBalanceDue > 0 ? "/patient/pay" : "/patient/bill")}
         />
       </QuietList>
 

@@ -15,6 +15,9 @@ import {
   Sparkles,
   ShieldCheck,
   FlaskConical,
+  Menu,
+  X,
+  ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 import maLogo from "../../../imports/ma_logo-1.png";
@@ -48,11 +51,16 @@ export default function PatientPortalLayout() {
   const isAuthPage = location.pathname === "/patient/login";
 
   const [isDevSwitcherOpen, setIsDevSwitcherOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [isNavDrawerOpen, setIsNavDrawerOpen] = useState(false);
   const [showOrgDropdown, setShowOrgDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const orgMenuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close drawer on page route navigation
+  useEffect(() => {
+    setIsNavDrawerOpen(false);
+  }, [location.pathname]);
 
   // Close org dropdown or user menu when clicking outside
   useEffect(() => {
@@ -94,7 +102,9 @@ export default function PatientPortalLayout() {
   const [selectedClientId, setSelectedClientId] = useState<string>(() => {
     if (routeClientId) return routeClientId;
     const pathParts = window.location.pathname.split("/patient/");
-    if (pathParts[1] && !["login", "book", "documents", "pharmacy", "bill", "pay", "status"].includes(pathParts[1])) {
+    const firstSegment = pathParts[1]?.split("/")[0]?.toLowerCase();
+    const reservedRoutes = ["login", "book", "documents", "forms", "pharmacy", "bill", "pay", "status", "profile", "checkin"];
+    if (firstSegment && !reservedRoutes.includes(firstSegment)) {
       return pathParts[1];
     }
     const params = new URLSearchParams(window.location.search);
@@ -111,7 +121,9 @@ export default function PatientPortalLayout() {
       localStorage.setItem("patient_portal_active_client_id", routeClientId);
     } else {
       const pathParts = location.pathname.split("/patient/");
-      if (pathParts[1] && !["login", "book", "documents", "pharmacy", "bill", "pay", "status"].includes(pathParts[1])) {
+      const firstSegment = pathParts[1]?.split("/")[0]?.toLowerCase();
+      const reservedRoutes = ["login", "book", "documents", "forms", "pharmacy", "bill", "pay", "status", "profile", "checkin"];
+      if (firstSegment && !reservedRoutes.includes(firstSegment)) {
         if (pathParts[1] !== selectedClientId) {
           setSelectedClientId(pathParts[1]);
           sessionStorage.setItem("patient_portal_active_client_id", pathParts[1]);
@@ -222,16 +234,14 @@ export default function PatientPortalLayout() {
     return <Outlet context={outletContext} />;
   }
 
-  const isOverviewPage = location.pathname === "/patient" || location.pathname === "/patient/" || (routeClientId && location.pathname === `/patient/${routeClientId}`);
-  const isSubPage = !isOverviewPage;
   const overviewPath = activeClient?.id ? `/patient/${activeClient.id}` : "/patient";
 
   const navItems = [
     { to: overviewPath, label: "Today", icon: LayoutDashboard, exact: true },
     { to: "/patient/book", label: "Visits", icon: Calendar },
     { to: "/patient/documents", label: "Documents", icon: FileText },
+    { to: "/patient/forms", label: "Forms", icon: ClipboardList },
     { to: "/patient/bill", label: "Billing", icon: Receipt },
-    { to: "/patient/profile", label: "Profile", icon: User },
   ];
 
   const clientInitials = (activeClient.name || "Patient")
@@ -242,236 +252,242 @@ export default function PatientPortalLayout() {
     .slice(0, 2);
 
   return (
-    <div className="h-screen flex flex-col md:flex-row overflow-hidden bg-[#F8FAFC] text-[#0F172A] font-sans antialiased selection:bg-[#E0E7FF] selection:text-[#1D4ED8]">
-      {/* ── Desktop & Tablet Sidebar (Slim, Modern, Navodya-Styled) ── */}
-      <aside
-        className={`hidden md:flex flex-col bg-white border-r border-slate-200/80 h-full select-none z-30 shrink-0 relative transition-[width] duration-250 ease-in-out ${
-          collapsed ? "w-[72px]" : "w-64"
-        }`}
-      >
-        {/* Collapse / Expand floating button */}
-        <button
-          type="button"
-          onClick={() => setCollapsed(!collapsed)}
-          className="absolute -right-3 top-[52px] w-6 h-6 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-800 hover:bg-slate-50 transition-all z-40 cursor-pointer"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
-        </button>
+    <div className="min-h-screen h-screen flex flex-col overflow-hidden bg-[#F8FAFC] text-[#0F172A] font-sans antialiased selection:bg-[#E0E7FF] selection:text-[#1D4ED8]">
+      {/* ── Slide-Out Navigation Drawer (Both Web and Mobile) ── */}
+      {isNavDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop overlay */}
+          <div
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+            onClick={() => setIsNavDrawerOpen(false)}
+          />
 
-        {/* Brand Header */}
-        <div className="h-16 px-4 flex items-center border-b border-slate-100 shrink-0 justify-between">
-          {collapsed ? (
-            <button
-              type="button"
-              onClick={() => setCollapsed(false)}
-              className="w-full flex items-center justify-center p-1 rounded-xl hover:bg-slate-100 transition-colors"
-            >
-              <img src={symbolLogo} alt="MantraAssist" className="h-7 w-7 object-contain" />
-            </button>
-          ) : (
-            <NavLink to={overviewPath} className="flex items-center gap-2.5">
-              <img src={maLogo} alt="MantraAssist" className="h-6 w-auto object-contain" />
-              <div className="h-4 w-px bg-slate-200" />
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider font-display">
-                Companion
-              </span>
-            </NavLink>
-          )}
-        </div>
+          {/* Drawer Panel */}
+          <div className="relative w-72 sm:w-80 bg-white h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-left duration-250 ease-out select-none">
+            {/* Drawer Header */}
+            <div className="h-16 px-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+              <NavLink
+                to={overviewPath}
+                onClick={() => setIsNavDrawerOpen(false)}
+                className="flex items-center gap-2.5"
+              >
+                <img src={maLogo} alt="MantraAssist" className="h-6 w-auto object-contain" />
+                <div className="h-4 w-px bg-slate-200" />
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider font-display">
+                  Companion
+                </span>
+              </NavLink>
+              <button
+                type="button"
+                onClick={() => setIsNavDrawerOpen(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                aria-label="Close navigation"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-        {/* Organization Badge & Dropdown */}
-        <div className="p-3" ref={orgMenuRef}>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowOrgDropdown(!showOrgDropdown)}
-              className={`w-full flex items-center rounded-2xl p-2.5 transition-all cursor-pointer ${
-                collapsed
-                  ? "justify-center bg-slate-50 hover:bg-slate-100"
-                  : "justify-between bg-slate-50/80 hover:bg-slate-100/90 border border-slate-200/70"
-              }`}
-              title={activeOrganization?.name || "Demo Mantra Care"}
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-7 h-7 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-                  {activeOrganization?.name ? activeOrganization.name.charAt(0).toUpperCase() : "M"}
-                </div>
-                {!collapsed && (
-                  <div className="flex flex-col text-left min-w-0">
-                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">
-                      Clinic
-                    </span>
-                    <span className="text-xs font-bold text-slate-900 truncate mt-0.5">
-                      {activeOrganization?.name || "Demo Mantra Care"}
-                    </span>
+            {/* Clinic Switcher / Organization Badge */}
+            <div className="p-3" ref={orgMenuRef}>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowOrgDropdown(!showOrgDropdown)}
+                  className="w-full flex items-center justify-between rounded-2xl p-2.5 bg-slate-50/80 hover:bg-slate-100/90 border border-slate-200/70 transition-all cursor-pointer"
+                  title={activeOrganization?.name || "Demo Mantra Care"}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                      {activeOrganization?.name ? activeOrganization.name.charAt(0).toUpperCase() : "M"}
+                    </div>
+                    <div className="flex flex-col text-left min-w-0">
+                      <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">
+                        Clinic
+                      </span>
+                      <span className="text-xs font-bold text-slate-900 truncate mt-0.5">
+                        {activeOrganization?.name || "Demo Mantra Care"}
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                </button>
+
+                {/* Org Switcher Menu */}
+                {showOrgDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-1">
+                      Switch Clinic
+                    </p>
+                    {organizations.map((org) => {
+                      const isCurrent = activeOrganization?.id === org.id;
+                      return (
+                        <button
+                          key={org.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveOrganization(org);
+                            setShowOrgDropdown(false);
+                          }}
+                          className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                            isCurrent ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <div className="w-5 h-5 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold">
+                              {org.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="truncate">{org.name}</span>
+                          </div>
+                          {isCurrent && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
-              {!collapsed && <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
-            </button>
-
-            {/* Org Switcher Menu */}
-            {showOrgDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-150">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-1">
-                  Switch Clinic
-                </p>
-                {organizations.map((org) => {
-                  const isCurrent = activeOrganization?.id === org.id;
-                  return (
-                    <button
-                      key={org.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveOrganization(org);
-                        setShowOrgDropdown(false);
-                      }}
-                      className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                        isCurrent ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <div className="w-5 h-5 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold">
-                          {org.name.charAt(0).toUpperCase()}
-                        </div>
-                        <span className="truncate">{org.name}</span>
-                      </div>
-                      {isCurrent && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Primary Navigation Links */}
-        <div className={`flex-1 overflow-y-auto py-2 space-y-1.5 ${collapsed ? "px-2.5 flex flex-col items-center" : "px-3"}`}>
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.exact}
-                className={({ isActive }) =>
-                  `flex items-center rounded-2xl text-xs font-bold transition-all relative ${
-                    collapsed
-                      ? "w-11 h-11 justify-center"
-                      : "justify-between px-3.5 py-3"
-                  } ${
-                    isActive
-                      ? "bg-blue-600 text-white shadow-sm shadow-blue-500/25"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
-                  }`
-                }
-                title={item.label}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <Icon className="w-4 h-4 shrink-0" />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
-                </div>
-              </NavLink>
-            );
-          })}
-        </div>
-
-        {/* Bottom Profile & Dev Switcher Footer */}
-        <div className="p-3 border-t border-slate-100 bg-white relative space-y-2" ref={userMenuRef}>
-          {/* Dev Switcher Pill */}
-          <button
-            type="button"
-            onClick={() => setIsDevSwitcherOpen(true)}
-            className={`w-full py-2 px-2.5 rounded-xl border border-dashed border-amber-200 bg-amber-50/70 hover:bg-amber-100/80 text-amber-800 text-[11px] font-bold flex items-center transition-colors cursor-pointer ${
-              collapsed ? "justify-center" : "justify-between"
-            }`}
-            title="Fast switch patient profile (Dev tool)"
-          >
-            <div className="flex items-center gap-1.5">
-              <FlaskConical className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              {!collapsed && <span>Switch Patient</span>}
             </div>
-            {!collapsed && <span className="text-[9px] uppercase tracking-wider font-mono bg-amber-200/80 px-1.5 py-0.2 rounded-md">Dev</span>}
-          </button>
 
-          {/* User Upward Dropdown */}
-          {showUserMenu && (
-            <div className="absolute bottom-full left-3 right-3 mb-2 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+            {/* Screen Switcher Navigation Links */}
+            <div className="flex-1 overflow-y-auto py-2 px-3 space-y-1.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1">
+                Navigation
+              </p>
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.exact}
+                    onClick={() => setIsNavDrawerOpen(false)}
+                    className={({ isActive }) =>
+                      `flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all ${
+                        isActive
+                          ? "bg-blue-600 text-white shadow-sm shadow-blue-500/25"
+                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
+                      }`
+                    }
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                  </NavLink>
+                );
+              })}
+            </div>
+
+            {/* Drawer Bottom Profile & Dev Switcher Footer */}
+            <div className="p-3 border-t border-slate-100 bg-white relative space-y-2" ref={userMenuRef}>
+              {/* Dev Switcher Pill */}
               <button
                 type="button"
                 onClick={() => {
-                  setShowUserMenu(false);
-                  navigate("/patient/profile");
+                  setIsNavDrawerOpen(false);
+                  setIsDevSwitcherOpen(true);
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="w-full py-2 px-2.5 rounded-xl border border-dashed border-amber-200 bg-amber-50/70 hover:bg-amber-100/80 text-amber-800 text-[11px] font-bold flex items-center justify-between transition-colors cursor-pointer"
+                title="Fast switch patient profile (Dev tool)"
               >
-                <User className="w-4 h-4 text-slate-500" />
-                <span>Profile Settings</span>
+                <div className="flex items-center gap-1.5">
+                  <FlaskConical className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Switch Patient</span>
+                </div>
+                <span className="text-[9px] uppercase tracking-wider font-mono bg-amber-200/80 px-1.5 py-0.2 rounded-md">
+                  Dev
+                </span>
               </button>
 
-              <div className="border-t border-slate-100 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowUserMenu(false);
-                    handleLogout();
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                >
-                  <LogOut className="w-4 h-4 text-red-500" />
-                  <span>Sign Out</span>
-                </button>
-              </div>
-            </div>
-          )}
+              {/* User Upward Dropdown */}
+              {showUserMenu && (
+                <div className="absolute bottom-full left-3 right-3 mb-2 bg-white/95 backdrop-blur-xl border border-slate-200 rounded-2xl shadow-xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      setIsNavDrawerOpen(false);
+                      navigate("/patient/profile");
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    <User className="w-4 h-4 text-slate-500" />
+                    <span>Profile Settings</span>
+                  </button>
 
-          {/* Patient Card Trigger */}
-          <button
-            type="button"
-            onClick={() => setShowUserMenu(!showUserMenu)}
-            className={`w-full flex items-center p-2 rounded-2xl hover:bg-slate-100/80 transition-all cursor-pointer group ${
-              collapsed ? "justify-center" : "justify-between"
-            }`}
-            aria-label="Patient user menu"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-                {clientInitials}
-              </div>
-              {!collapsed && (
-                <div className="flex flex-col text-left min-w-0">
-                  <span className="text-xs font-bold text-slate-900 truncate">
-                    {activeClient.name}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono truncate">
-                    #{activeClient.id}
-                  </span>
+                  <div className="border-t border-slate-100 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        setIsNavDrawerOpen(false);
+                        handleLogout();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4 text-red-500" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
                 </div>
               )}
+
+              {/* Patient Card Trigger */}
+              <button
+                type="button"
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="w-full flex items-center justify-between p-2 rounded-2xl hover:bg-slate-100/80 transition-all cursor-pointer group"
+                aria-label="Patient user menu"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                    {clientInitials}
+                  </div>
+                  <div className="flex flex-col text-left min-w-0">
+                    <span className="text-xs font-bold text-slate-900 truncate">
+                      {activeClient.name}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono truncate">
+                      #{activeClient.id}
+                    </span>
+                  </div>
+                </div>
+                <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 shrink-0" />
+              </button>
             </div>
-            {!collapsed && <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 shrink-0" />}
-          </button>
+          </div>
         </div>
-      </aside>
+      )}
 
       {/* ── Main Viewport Area ── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        {/* Top Header */}
+        {/* Top Header with Hamburger on Top Left (Both Web and Mobile) */}
         <header className="h-16 bg-white/90 backdrop-blur-md border-b border-slate-200/80 flex items-center justify-between px-4 sm:px-6 lg:px-8 shrink-0 z-20">
           <div className="flex items-center gap-3">
-            {/* Mobile Brand / Hospital Badge */}
-            <div className="md:hidden flex items-center gap-2">
-              <img src={maLogo} alt="MantraAssist" className="h-6 w-auto object-contain" />
-              <div className="h-3 w-px bg-slate-200" />
-              <span className="text-xs font-bold text-slate-800 truncate max-w-[140px]">
+            {/* Top-Left Hamburger Button */}
+            <button
+              type="button"
+              onClick={() => setIsNavDrawerOpen(true)}
+              className="p-2 -ml-2 rounded-xl text-slate-700 hover:text-slate-950 hover:bg-slate-100 transition-colors cursor-pointer"
+              aria-label="Open navigation menu"
+              title="Open navigation menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            {/* Brand / Clinic Badge */}
+            <div className="flex items-center gap-2">
+              <NavLink to={overviewPath} className="flex items-center gap-2">
+                <img src={maLogo} alt="MantraAssist" className="h-6 w-auto object-contain" />
+              </NavLink>
+              <div className="h-3.5 w-px bg-slate-200" />
+              <span className="text-xs font-bold text-slate-800 truncate max-w-[140px] sm:max-w-xs">
                 {activeOrganization?.name || "Mantra Care"}
               </span>
             </div>
 
             {/* Desktop Breadcrumb */}
-            <div className="hidden md:flex items-center gap-2 text-xs">
-              <span className="text-slate-400 font-medium">Patient Companion</span>
+            <div className="hidden md:flex items-center gap-2 text-xs pl-2 border-l border-slate-200">
+              <span className="text-slate-400 font-medium">Companion</span>
               <span className="text-slate-300">/</span>
               <span className="font-bold text-slate-900">
                 {location.pathname.includes("profile")
@@ -482,6 +498,8 @@ export default function PatientPortalLayout() {
                   ? "Billing"
                   : location.pathname.includes("documents")
                   ? "Documents"
+                  : location.pathname.includes("forms")
+                  ? "Forms"
                   : location.pathname.includes("pharmacy")
                   ? "Dispensary & Pharmacy"
                   : "Today"}
@@ -489,70 +507,37 @@ export default function PatientPortalLayout() {
             </div>
           </div>
 
-          {/* Right Header: Back link on sub-pages + Mobile Dev Switcher */}
+          {/* Right Header items */}
           <div className="flex items-center gap-2.5">
-            {isSubPage && (
-              <NavLink
-                to={overviewPath}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 transition-colors px-2 py-1"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Today</span>
-              </NavLink>
-            )}
-
-            {/* Mobile Dev Patient Switcher Trigger */}
-            <button
-              type="button"
-              onClick={() => setIsDevSwitcherOpen(true)}
-              className="md:hidden p-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold flex items-center gap-1"
-              title="Dev: Switch Patient"
+            {/* Patient Avatar Trigger -> Directly navigates to Profile */}
+            <NavLink
+              to="/patient/profile"
+              className={({ isActive }) =>
+                `flex items-center gap-2 p-1 pl-2.5 rounded-full transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-blue-100 text-blue-900 ring-2 ring-blue-500/20"
+                    : "bg-slate-100 hover:bg-slate-200/80 text-slate-700"
+                }`
+              }
+              title={`${activeClient.name} - View Profile`}
+              aria-label="View Profile"
             >
-              <FlaskConical className="w-3.5 h-3.5" />
-            </button>
+              <span className="hidden sm:inline text-xs font-bold pr-0.5 truncate max-w-[120px]">
+                {activeClient.name.split(" ")[0]}
+              </span>
+              <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+                {clientInitials}
+              </div>
+            </NavLink>
           </div>
         </header>
 
-        {/* ── Main Scrollable Viewport (with bottom padding for mobile bar) ── */}
-        <main className="flex-1 overflow-y-auto bg-[#F8FAFC] p-4 sm:p-6 lg:p-8 pb-24 md:pb-8">
+        {/* ── Main Scrollable Viewport (No extra bottom padding needed without footer) ── */}
+        <main className="flex-1 overflow-y-auto bg-[#F8FAFC] p-4 sm:p-6 lg:p-8 pb-10 sm:pb-12">
           <div className="max-w-4xl mx-auto w-full">
             <Outlet context={outletContext} />
           </div>
         </main>
-
-        {/* ── Mobile Fixed Bottom Navigation Bar (4-Tab Thumb Layout) ── */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-xl border-t border-slate-200/90 flex items-center justify-around px-2 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.exact}
-                className={({ isActive }) =>
-                  `flex flex-col items-center justify-center gap-1 flex-1 py-1 px-2 rounded-2xl transition-all ${
-                    isActive
-                      ? "text-blue-600 font-bold"
-                      : "text-slate-400 font-medium hover:text-slate-600"
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <div
-                      className={`w-9 h-7 rounded-xl flex items-center justify-center transition-all ${
-                        isActive ? "bg-blue-50 text-blue-600" : ""
-                      }`}
-                    >
-                      <Icon className="w-4.5 h-4.5" />
-                    </div>
-                    <span className="text-[10px] tracking-tight">{item.label}</span>
-                  </>
-                )}
-              </NavLink>
-            );
-          })}
-        </nav>
       </div>
 
       {/* Dev Patient Switcher Modal */}
