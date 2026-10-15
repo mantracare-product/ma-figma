@@ -64,6 +64,7 @@ export interface ScribeSession {
   id: string;
   clientId: string;
   clientName: string;
+  title?: string;
   patientAge?: number;
   patientGender?: string;
   appointmentId?: string;
@@ -407,6 +408,7 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     id: "scribe-101",
     clientId: "CL-001",
     clientName: "Sarah Johnson",
+    title: "Sarah Johnson_Appointment_2026-08-24",
     patientAge: 34,
     patientGender: "Female",
     appointmentId: "apt-101",
@@ -431,6 +433,7 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     id: "scribe-102",
     clientId: "CL-002",
     clientName: "Michael Chen",
+    title: "Michael Chen_Appointment_2026-08-24",
     patientAge: 42,
     patientGender: "Male",
     appointmentId: "apt-102",
@@ -455,6 +458,7 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     id: "scribe-103",
     clientId: "CL-003",
     clientName: "Emily Davis",
+    title: "Emily Davis_Appointment_2026-08-23",
     patientAge: 38,
     patientGender: "Female",
     appointmentId: "apt-103",
@@ -479,6 +483,7 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     id: "scribe-104",
     clientId: "CL-004",
     clientName: "Robert Wilson",
+    title: "Robert Wilson_Appointment_2026-08-23",
     patientAge: 45,
     patientGender: "Male",
     appointmentId: "apt-104",
@@ -525,6 +530,7 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     id: "scribe-105",
     clientId: "CL-005",
     clientName: "Jessica Brown",
+    title: "Jessica Brown_Appointment_2026-08-22",
     patientAge: 39,
     patientGender: "Female",
     doctorId: "doc-4",
@@ -592,7 +598,18 @@ export function getScribeSessions(clientId?: string, doctorId?: string): ScribeS
   try {
     const raw = sessionStorage.getItem("scribeSessionsData");
     const all: ScribeSession[] = raw ? JSON.parse(raw) : INITIAL_SCRIBE_SESSIONS;
-    let filtered = all;
+    const mapped = all.map(s => {
+      if (!s.title) {
+        const ent = s.entityType ? (s.entityType.charAt(0).toUpperCase() + s.entityType.slice(1)) : "Appointment";
+        const d = (s.sessionDate || (s.createdAt ? new Date(s.createdAt).toISOString() : "2026-10-15")).slice(0, 10);
+        return {
+          ...s,
+          title: `${s.clientName}_${ent}_${d}`,
+        };
+      }
+      return s;
+    });
+    let filtered = mapped;
     if (clientId) {
       filtered = filtered.filter(s => s.clientId === clientId);
     }

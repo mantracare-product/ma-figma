@@ -1427,6 +1427,8 @@ export default function Settings() {
   };
 
   const FIELD_TYPE_MAP: Record<string, any> = {
+    "Text": "text",
+    "String": "string",
     "String / Text": "text",
     "Table": "table",
     "Drawing / Signature": "signature",
@@ -1449,6 +1451,7 @@ export default function Settings() {
 
   const FIELD_TYPE_REVERSE_MAP: Record<string, string> = {
     text: "Text",
+    string: "String",
     table: "Group Field (Table)",
     signature: "Digital Signature",
     drawing: "Digital Signature",
@@ -1464,8 +1467,8 @@ export default function Settings() {
     date_time: "Date & Time",
     number: "Number",
     money: "Money / Currency",
-    textarea: "Text (Paragraph)",
-    richtext: "Text (Rich Text)",
+    textarea: "String (Paragraph)",
+    richtext: "String (Rich Text)",
     link: "Link",
     whatsapp_link: "WhatsApp Link",
     yes_no: "Yes / No",

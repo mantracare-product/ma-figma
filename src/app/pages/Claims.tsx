@@ -380,6 +380,25 @@ export default function Claims() {
               ),
             },
             {
+              id: "title",
+              header: "Title",
+              align: "left",
+              render: (claim) => {
+                const clientName = claim.patientName || "Client";
+                const dateStr = claim.serviceDate || (claim.createdAt ? claim.createdAt.slice(0, 10) : "2026-10-15");
+                const titleStr = `${clientName}_Claim_${dateStr}`;
+                return (
+                  <span
+                    className="font-medium text-xs text-slate-800 truncate max-w-[220px] inline-block"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                    title={titleStr}
+                  >
+                    {titleStr}
+                  </span>
+                );
+              },
+            },
+            {
               id: "payer",
               header: "Insurance Payer",
               align: "left",

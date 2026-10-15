@@ -2502,6 +2502,24 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     },
                   },
                   {
+                    key: "title",
+                    header: "Title",
+                    render: (log) => {
+                      const clientName = log.client || client.name || "Client";
+                      const dateStr = log.date || (log as any).timestamp?.slice(0, 10) || "2026-10-15";
+                      const titleStr = `${clientName}_Process_${dateStr}`;
+                      return (
+                        <span
+                          className="font-medium text-xs text-slate-800"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                          title={titleStr}
+                        >
+                          {titleStr}
+                        </span>
+                      );
+                    },
+                  },
+                  {
                     key: "currentStage",
                     header: "Stage",
                     render: (log) => {
@@ -3152,6 +3170,26 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 },
               },
               {
+                header: "Title",
+                accessorKey: "title",
+                align: "left",
+                minWidth: 180,
+                render: (apt) => {
+                  const clientName = apt.clientName || client.name || "Client";
+                  const dateStr = apt.date || (apt.createdAt ? apt.createdAt.slice(0, 10) : "2026-10-15");
+                  const titleStr = `${clientName}_Appointment_${dateStr}`;
+                  return (
+                    <span
+                      className="font-medium text-xs text-slate-800"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                      title={titleStr}
+                    >
+                      {titleStr}
+                    </span>
+                  );
+                },
+              },
+              {
                 header: "Stages",
                 accessorKey: "currentStageId",
                 align: "left",
@@ -3513,6 +3551,25 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       style={{ fontFamily: "JetBrains Mono, monospace" }}
                     >
                       {procId}
+                    </span>
+                  );
+                },
+              },
+              {
+                id: "title",
+                header: "Title",
+                align: "left",
+                render: (inv) => {
+                  const clientName = inv.clientName || client.name || "Client";
+                  const dateStr = inv.issueDate || (inv.createdAt ? inv.createdAt.slice(0, 10) : "2026-10-15");
+                  const titleStr = `${clientName}_Invoice_${dateStr}`;
+                  return (
+                    <span
+                      className="font-medium text-xs text-slate-800 truncate max-w-[200px] inline-block"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                      title={titleStr}
+                    >
+                      {titleStr}
                     </span>
                   );
                 },

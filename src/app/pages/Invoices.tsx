@@ -506,6 +506,25 @@ export default function Invoices() {
                 },
               },
               {
+                id: "title",
+                header: "Title",
+                align: "left",
+                render: (inv) => {
+                  const clientName = inv.clientName || "Client";
+                  const dateStr = inv.issueDate || (inv.createdAt ? inv.createdAt.slice(0, 10) : "2026-10-15");
+                  const titleStr = `${clientName}_Invoice_${dateStr}`;
+                  return (
+                    <span
+                      className="font-medium text-xs text-slate-800 truncate max-w-[220px] inline-block"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                      title={titleStr}
+                    >
+                      {titleStr}
+                    </span>
+                  );
+                },
+              },
+              {
                 id: "client",
                 header: "Client",
                 align: "left",

@@ -1230,6 +1230,26 @@ export default function Appointments() {
                   },
                 },
                 {
+                  header: "Title",
+                  accessorKey: "title",
+                  align: "left",
+                  minWidth: 180,
+                  render: (apt) => {
+                    const clientName = apt.clientName || "Client";
+                    const dateStr = apt.date || (apt.createdAt ? apt.createdAt.slice(0, 10) : "2026-10-15");
+                    const titleStr = `${clientName}_Appointment_${dateStr}`;
+                    return (
+                      <span
+                        className="font-medium text-xs text-slate-800"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                        title={titleStr}
+                      >
+                        {titleStr}
+                      </span>
+                    );
+                  },
+                },
+                {
                   header: "Stages",
                   accessorKey: "currentStageId",
                   align: "left",

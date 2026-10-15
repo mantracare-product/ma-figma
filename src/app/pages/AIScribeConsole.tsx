@@ -239,12 +239,16 @@ export default function AIScribeConsole() {
               header: "WORKFLOW",
               align: "left",
               render: (s) => {
-                const idVal = s.recordId || s.appointmentId || s.id;
-                if (!idVal) return <span className="text-xs text-muted-foreground">—</span>;
-                const cleanId = idVal.startsWith("#") ? idVal : `#${idVal}`;
+                const titleStr =
+                  s.title ||
+                  `${s.clientName}_${s.entityType ? s.entityType.charAt(0).toUpperCase() + s.entityType.slice(1) : "Appointment"}_${(s.sessionDate || (s.createdAt ? new Date(s.createdAt).toISOString() : "2026-10-15")).slice(0, 10)}`;
                 return (
-                  <span className="font-mono text-xs font-medium text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    {cleanId}
+                  <span
+                    className="font-medium text-xs text-slate-800"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                    title={titleStr}
+                  >
+                    {titleStr}
                   </span>
                 );
               },

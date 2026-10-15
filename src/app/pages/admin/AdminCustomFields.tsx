@@ -204,6 +204,7 @@ const MODULE_TABS: { label: string; value: Exclude<FieldModule, "deal"> }[] = [
 
 const FIELD_TYPES: { label: string; value: FieldInputType }[] = [
   { label: "Text", value: "text" },
+  { label: "String", value: "string" },
   { label: "Number", value: "number" },
   { label: "Money / Currency", value: "money" },
   { label: "Date & Time", value: "date_time" },
@@ -223,6 +224,7 @@ const FIELD_TYPES: { label: string; value: FieldInputType }[] = [
 
 const FIELD_TYPE_REVERSE_MAP: Record<string, string> = {
   text: "Text",
+  string: "String",
   table: "Group Field (Table)",
   signature: "Digital Signature",
   drawing: "Digital Signature",
@@ -238,8 +240,8 @@ const FIELD_TYPE_REVERSE_MAP: Record<string, string> = {
   date_time: "Date & Time",
   number: "Number",
   money: "Money / Currency",
-  textarea: "Text (Paragraph)",
-  richtext: "Text (Rich Text)",
+  textarea: "String (Paragraph)",
+  richtext: "String (Rich Text)",
   link: "Link",
   whatsapp_link: "WhatsApp Link",
   yes_no: "Yes / No",

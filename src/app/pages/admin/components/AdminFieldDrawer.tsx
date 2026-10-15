@@ -114,6 +114,7 @@ export const MODULE_OPTIONS: { label: string; value: Exclude<FieldModule, "deal"
 
 export type PrimaryFieldTypeCategory =
   | "text"
+  | "string"
   | "number"
   | "date_time"
   | "money"
@@ -143,6 +144,7 @@ const CONSOLIDATED_FIELD_TYPES: {
     category: "Text & Content",
     items: [
       { id: "text", label: "Text", description: "Short text inputs or formatted multiline paragraphs" },
+      { id: "string", label: "String", description: "Dynamic field concatenation using custom separators" },
       { id: "tel", label: "Phone Number", description: "Phone number with country codes and formatting" },
       { id: "email", label: "Email", description: "Standard email address input" },
       { id: "link", label: "Link / URL", description: "Web links and external URLs" },
@@ -1160,6 +1162,7 @@ function resolvePrimaryCategory(f: FieldDefinition): PrimaryFieldTypeCategory {
     return "composite";
   }
   if (t === "text" || t === "textarea" || t === "richtext") return "text";
+  if ((t as any) === "string") return "string";
   if (t === "number") return "number";
   if (t === "date" || t === "date_time" || t === "time") return "date_time";
   if (t === "money") return "money";
@@ -2029,6 +2032,8 @@ export function AdminFieldDrawer({
           return form.richText ? "richtext" : "textarea";
         }
         return "text";
+      case "string":
+        return "string";
       case "number":
         return "number";
       case "date_time":
@@ -2113,10 +2118,10 @@ export function AdminFieldDrawer({
       locations: legacyLocations,
 
       // Text Config
-      textConfig: form.primaryCategory === "text" ? {
-        textMode: form.textMode,
-        maxChars: form.textMode === "short" ? form.maxChars : undefined,
-        richText: form.textMode === "paragraph" ? form.richText : undefined,
+      textConfig: (form.primaryCategory === "text" || form.primaryCategory === "string") ? {
+        textMode: form.primaryCategory === "string" ? "short" : form.textMode,
+        maxChars: form.primaryCategory === "string" ? form.maxChars : (form.textMode === "short" ? form.maxChars : undefined),
+        richText: form.primaryCategory === "text" && form.textMode === "paragraph" ? form.richText : undefined,
       } : undefined,
 
       // Date Config
@@ -2207,7 +2212,7 @@ export function AdminFieldDrawer({
         isPrimaryLookup: Boolean(form.crmBindIsPrimaryLookup),
       } : undefined,
 
-      formulaConfig: (form.primaryCategory === "number" || form.primaryCategory === "money") && form.numberValueMode === "formula" ? {
+      formulaConfig: (form.primaryCategory === "number" || form.primaryCategory === "money" || form.primaryCategory === "string") && form.numberValueMode === "formula" ? {
         mode: "formula",
         terms: form.formulaTerms || [],
       } : undefined,
@@ -2698,7 +2703,7 @@ export function AdminFieldDrawer({
           {/* TYPE-SPECIFIC FIELD CONFIGURATION PANELS */}
           {/* ═══════════════════════════════════════════════════════════ */}
 
-          {/* 3A. Text Configuration (Short Text vs Paragraph) */}
+          {/* 3A. Text Configuration (Short Text vs Paragraph) - No formula */}
           {form.primaryCategory === "text" && (
             <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
               <div>
@@ -2775,6 +2780,187 @@ export function AdminFieldDrawer({
                       />
                       <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 3A-2. String Configuration (with custom separator Apply Formula) */}
+          {form.primaryCategory === "string" && (
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Max Characters (Optional)
+                  </label>
+                  <InfoTooltip text="Limit the maximum number of characters allowed in this string field. Leave blank for unlimited." size="sm" />
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  value={form.maxChars || ""}
+                  disabled={isReadOnly}
+                  onChange={(e) => setForm((p) => ({ ...p, maxChars: e.target.value ? Number(e.target.value) : undefined }))}
+                  placeholder="e.g. 255"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Apply Formula Toggle (for String) */}
+              <div className="flex items-center justify-between pt-2.5 border-t border-slate-200">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs font-semibold text-slate-700">Apply Formula</label>
+                  <InfoTooltip text="Automatically concatenate this string value using other fields and custom separators." size="sm" />
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.numberValueMode === "formula"}
+                    disabled={isReadOnly}
+                    onChange={(e) => {
+                      const isFormula = e.target.checked;
+                      if (isFormula) {
+                        const avail = getAllFields(form.module).filter(
+                          (f) => f.key !== form.key
+                        );
+                        setForm((p) => ({
+                          ...p,
+                          numberValueMode: "formula",
+                          formulaTerms: p.formulaTerms && p.formulaTerms.length > 0 ? p.formulaTerms : [
+                            { fieldKey: avail[0]?.key || "", operator: ", " },
+                            { fieldKey: avail[1]?.key || avail[0]?.key || "", operator: undefined }
+                          ]
+                        }));
+                      } else {
+                        setForm((p) => ({
+                          ...p,
+                          numberValueMode: "static"
+                        }));
+                      }
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              {/* Formula applying functionality shown only if toggle is enabled (in same row with reduced width) */}
+              {form.numberValueMode === "formula" && (
+                <div className="space-y-3 pt-2 border-t border-slate-200">
+                  {/* Select fields and separators in the same row */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {(form.formulaTerms || []).map((term, tIdx) => {
+                      const availFields = getAllFields(form.module).filter(
+                        (f) => f.key !== form.key
+                      );
+                      const isLast = tIdx === (form.formulaTerms || []).length - 1;
+
+                      return (
+                        <div key={tIdx} className="flex items-center gap-1.5">
+                          <div className="w-[145px] sm:w-[165px]">
+                            <select
+                              value={term.fieldKey}
+                              disabled={isReadOnly}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setForm((p) => ({
+                                  ...p,
+                                  formulaTerms: (p.formulaTerms || []).map((tm, idx) => idx === tIdx ? { ...tm, fieldKey: val } : tm)
+                                }));
+                              }}
+                              className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                            >
+                              <option value="">Select field...</option>
+                              {availFields.map((f) => (
+                                <option key={f.key} value={f.key}>{f.label} ({f.inputType})</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {!isLast && (
+                            <select
+                              value={term.operator !== undefined ? term.operator : ", "}
+                              disabled={isReadOnly}
+                              onChange={(e) => {
+                                const sep = e.target.value;
+                                setForm((p) => ({
+                                  ...p,
+                                  formulaTerms: (p.formulaTerms || []).map((tm, idx) => idx === tIdx ? { ...tm, operator: sep } : tm)
+                                }));
+                              }}
+                              className="w-24 sm:w-28 px-1.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-blue-600 text-center outline-none focus:border-blue-500 cursor-pointer"
+                            >
+                              <option value=", ">Comma (, )</option>
+                              <option value="-">Hyphen (-)</option>
+                              <option value=" - ">- (spaced)</option>
+                              <option value="_">Underscore (_)</option>
+                              <option value=" ">Space</option>
+                              <option value="/">Slash (/)</option>
+                              <option value="">None</option>
+                            </select>
+                          )}
+
+                          {!isReadOnly && (form.formulaTerms || []).length > 2 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForm((p) => {
+                                  const filtered = (p.formulaTerms || []).filter((_, idx) => idx !== tIdx);
+                                  const normalized = filtered.map((item, idx) => idx === filtered.length - 1 ? { ...item, operator: undefined } : item);
+                                  return { ...p, formulaTerms: normalized };
+                                });
+                              }}
+                              className="p-1 text-slate-400 hover:text-red-500 cursor-pointer"
+                              title="Remove operand"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const avail = getAllFields(form.module).filter(
+                          (f) => f.key !== form.key
+                        );
+                        setForm((p) => {
+                          const current = p.formulaTerms || [];
+                          const updated = current.map((tm, idx) => idx === current.length - 1 ? { ...tm, operator: tm.operator !== undefined ? tm.operator : ", " } : tm);
+                          return {
+                            ...p,
+                            formulaTerms: [...updated, { fieldKey: avail[0]?.key || "", operator: undefined }]
+                          };
+                        });
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Operand / Field</span>
+                    </button>
+                  )}
+
+                  {/* Formula Preview Box */}
+                  <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 font-mono flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-blue-700">Preview:</span>
+                    <span className="font-semibold">
+                      {(form.formulaTerms || []).map((t) => {
+                        const fKey = t.fieldKey || "?";
+                        const sepDisplay = t.operator !== undefined
+                          ? t.operator === " "
+                            ? " [space] "
+                            : t.operator === ""
+                            ? ""
+                            : ` ${t.operator} `
+                          : "";
+                        return `{${fKey}}${sepDisplay}`;
+                      }).join("")}
+                    </span>
                   </div>
                 </div>
               )}

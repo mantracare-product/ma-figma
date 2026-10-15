@@ -444,6 +444,52 @@ export default function DraggableOverviewSections({
           }
         }
       }
+
+      // String formula concatenation using custom separators
+      if (
+        (field.inputType === "string" || (field as any).inputType === "string") &&
+        field.formulaConfig?.mode === "formula" &&
+        Array.isArray(field.formulaConfig.terms) &&
+        field.formulaConfig.terms.length >= 2
+      ) {
+        const terms = field.formulaConfig.terms;
+        const getStringVal = (fKey: string): string => {
+          if (!fKey) return "";
+          if (fieldValues[fKey] !== undefined && fieldValues[fKey] !== null) {
+            return String(fieldValues[fKey]);
+          }
+          for (const [k, v] of Object.entries(fieldValues)) {
+            if ((k === fKey || k.endsWith(`_${fKey}`)) && v !== undefined && v !== null) {
+              return String(v);
+            }
+          }
+          return "";
+        };
+
+        let combined = "";
+        let hasAnyValue = false;
+        for (let i = 0; i < terms.length; i++) {
+          const val = getStringVal(terms[i].fieldKey);
+          if (val) hasAnyValue = true;
+          combined += val;
+          if (i < terms.length - 1) {
+            const sep = terms[i].operator !== undefined ? terms[i].operator : " ";
+            combined += sep;
+          }
+        }
+
+        const currentVal = fieldValues[field.key] || "";
+        if (hasAnyValue && combined && currentVal !== combined) {
+          let targetKey = field.key;
+          for (const k of Object.keys(fieldValues)) {
+            if (k.endsWith(`_${field.key}`)) {
+              targetKey = k;
+              break;
+            }
+          }
+          onFieldValueChange(targetKey, combined);
+        }
+      }
     });
   }, [fieldValues, allRegistryFields, onFieldValueChange]);
 

@@ -1764,6 +1764,24 @@ export default function Deals() {
       }
     },
     {
+      key: "title",
+      header: "Title",
+      render: (log) => {
+        const clientName = log.client || (log as any).client_name || "Client";
+        const dateStr = log.date || (log as any).timestamp?.slice(0, 10) || "2026-10-15";
+        const titleStr = `${clientName}_Process_${dateStr}`;
+        return (
+          <span
+            className="font-medium text-xs text-slate-800"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+            title={titleStr}
+          >
+            {titleStr}
+          </span>
+        );
+      }
+    },
+    {
       key: "currentStage",
       header: "Stage",
       render: (log) => {

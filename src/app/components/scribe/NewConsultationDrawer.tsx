@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Mic,
   Square,
@@ -23,6 +23,7 @@ import {
   GitBranch,
   Hash,
   Layers,
+  Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 import DrawerShell from "../ui/DrawerShell";
@@ -35,6 +36,10 @@ import {
 } from "../../../lib/scribeSessionStore";
 import { useClients } from "../../../lib/clientsStore";
 import { useProcessStore, Process, EntityType } from "../../../lib/useProcessStore";
+import { appointmentService } from "../../../lib/appointmentService";
+import { invoiceService } from "../../../lib/invoiceService";
+import { getStoredClaims } from "../../../lib/claimsStore";
+import { getStoredCallLogs } from "../../../lib/processLogsStore";
 
 export interface NewConsultationDrawerProps {
   isOpen: boolean;
@@ -102,6 +107,10 @@ export default function NewConsultationDrawer({
   // Record / Process ID state
   const [recordId, setRecordId] = useState<string>("");
 
+  // Title selection state based on chosen entity (identity)
+  const [selectedTitle, setSelectedTitle] = useState<string>("");
+  const [isTitleDropdownOpen, setIsTitleDropdownOpen] = useState(false);
+
   // Audio mode: "live" | "upload"
   const [audioInputMode, setAudioInputMode] = useState<"live" | "upload">("live");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -120,6 +129,7 @@ export default function NewConsultationDrawer({
   const clientDropdownRef = useRef<HTMLDivElement>(null);
   const entityDropdownRef = useRef<HTMLDivElement>(null);
   const processDropdownRef = useRef<HTMLDivElement>(null);
+  const titleDropdownRef = useRef<HTMLDivElement>(null);
 
   const getSelectedClient = () => {
     if (selectedClientId === "custom") {
@@ -171,10 +181,156 @@ export default function NewConsultationDrawer({
     SCRIBE_ENTITIES.find((e) => e.id === selectedEntityId) || SCRIBE_ENTITIES[0];
 
   const selectedProcess: Process =
-    entityProcesses.find((p) => p.id === selectedProcessId) ||
-    sortedEntityProcesses[0] ||
-    liveProcesses[0] ||
-    ({ id: "default", name: "Default Process", entityType: "client", stages: [] } as any);
+  entityProcesses.find((p) => p.id === selectedProcessId) ||
+  sortedEntityProcesses[0] ||
+  liveProcesses[0] ||
+  ({ id: "default", name: "Default Process", entityType: "client", stages: [] } as any);
+
+  // Title options computed dynamically based on selected identity/entity & client formula: {client_name}_{Entity}_{created_on_date}
+  const titleOptions = useMemo(() => {
+    const client = getSelectedClient();
+    const clientName = client.name || "Client";
+    const today = new Date().toISOString().slice(0, 10);
+    const options: { id: string; title: string; subtitle: string; isNew?: boolean }[] = [];
+
+    if (selectedEntityId === "appointment") {
+      try {
+        const apts = appointmentService.getAppointments();
+        const clientApts = apts.filter(
+          (a) =>
+            (a as any).clientId === client.id ||
+            (a.clientName && a.clientName.toLowerCase().trim() === clientName.toLowerCase().trim())
+        );
+        clientApts.forEach((apt) => {
+          const d = apt.date || (apt.createdAt ? apt.createdAt.slice(0, 10) : today);
+          const t = `${apt.clientName || clientName}_Appointment_${d}`;
+          options.push({
+            id: String(apt.id).startsWith("APT-") ? String(apt.id) : `APT-${apt.id}`,
+            title: t,
+            subtitle: `Apt #${apt.id} • ${apt.time || "Scheduled"} • ${apt.statusLabel || apt.status || ""}`,
+          });
+        });
+      } catch {}
+      const newTitle = `${clientName}_Appointment_${today}`;
+      if (!options.some((o) => o.title === newTitle)) {
+        options.unshift({
+          id: `APT-${client.id || "001"}-${Date.now().toString().slice(-4)}`,
+          title: newTitle,
+          subtitle: `Auto-generated • Today's Appointment`,
+          isNew: true,
+        });
+      }
+    } else if (selectedEntityId === "invoice") {
+      try {
+        const invs = invoiceService.getInvoices();
+        const clientInvs = invs.filter(
+          (inv) =>
+            inv.clientId === client.id ||
+            (inv.clientName && inv.clientName.toLowerCase().trim() === clientName.toLowerCase().trim())
+        );
+        clientInvs.forEach((inv) => {
+          const d = inv.issueDate || today;
+          const t = `${inv.clientName || clientName}_Invoice_${d}`;
+          options.push({
+            id: inv.id,
+            title: t,
+            subtitle: `${inv.invoiceNumber || inv.id} • $${inv.total || 0} • ${inv.status || "Pending"}`,
+          });
+        });
+      } catch {}
+      const newTitle = `${clientName}_Invoice_${today}`;
+      if (!options.some((o) => o.title === newTitle)) {
+        options.unshift({
+          id: `INV-${client.id || "001"}-${Date.now().toString().slice(-4)}`,
+          title: newTitle,
+          subtitle: `Auto-generated • Today's Invoice`,
+          isNew: true,
+        });
+      }
+    } else if (selectedEntityId === "claim") {
+      try {
+        const claims = getStoredClaims();
+        const clientClaims = claims.filter(
+          (c) =>
+            c.patientId === client.id ||
+            (c.patientName && c.patientName.toLowerCase().trim() === clientName.toLowerCase().trim())
+        );
+        clientClaims.forEach((c) => {
+          const d = c.serviceDate || (c.createdAt ? c.createdAt.slice(0, 10) : today);
+          const t = `${c.patientName || clientName}_Claim_${d}`;
+          options.push({
+            id: c.claimNumber || c.id,
+            title: t,
+            subtitle: `${c.claimNumber} • ${c.payer?.name || "Insurance Payer"}`,
+          });
+        });
+      } catch {}
+      const newTitle = `${clientName}_Claim_${today}`;
+      if (!options.some((o) => o.title === newTitle)) {
+        options.unshift({
+          id: `CLM-${client.id || "001"}-${Date.now().toString().slice(-4)}`,
+          title: newTitle,
+          subtitle: `Auto-generated • Today's Claim`,
+          isNew: true,
+        });
+      }
+    } else if (selectedEntityId === "insurance") {
+      const newTitle = `${clientName}_Insurance_${today}`;
+      options.push({
+        id: `INS-${client.id || "001"}-${Date.now().toString().slice(-4)}`,
+        title: newTitle,
+        subtitle: `Policy & Eligibility Coverage • ${today}`,
+        isNew: true,
+      });
+    } else {
+      // client / process
+      try {
+        const logs = getStoredCallLogs();
+        const clientLogs = logs.filter(
+          (l) =>
+            l.clientId === client.id ||
+            (l.client && l.client.toLowerCase().trim() === clientName.toLowerCase().trim())
+        );
+        clientLogs.forEach((l) => {
+          const d = l.date ? l.date.slice(0, 10) : today;
+          const t = `${l.client || clientName}_Process_${d}`;
+          options.push({
+            id: l.id,
+            title: t,
+            subtitle: `${l.process} • Stage: ${l.currentStage}`,
+          });
+        });
+      } catch {}
+      const newTitle = `${clientName}_Process_${today}`;
+      if (!options.some((o) => o.title === newTitle)) {
+        options.unshift({
+          id: `PRC-${client.id || "001"}-${Date.now().toString().slice(-4)}`,
+          title: newTitle,
+          subtitle: `Auto-generated • ${selectedProcess?.name || "Process Journey"}`,
+          isNew: true,
+        });
+      }
+    }
+
+    return options;
+  }, [selectedEntityId, selectedClientId, customClientName, liveClients, selectedProcess]);
+
+  const handleSelectTitle = (opt: { id: string; title: string }) => {
+    setSelectedTitle(opt.title);
+    setRecordId(opt.id);
+    setIsTitleDropdownOpen(false);
+  };
+
+  // Sync title and recordId whenever titleOptions changes
+  useEffect(() => {
+    if (titleOptions.length > 0) {
+      const match = titleOptions.find((o) => o.title === selectedTitle);
+      if (!match) {
+        setSelectedTitle(titleOptions[0].title);
+        setRecordId(titleOptions[0].id);
+      }
+    }
+  }, [titleOptions, selectedTitle]);
 
   // Initialize or reset on open/close
   useEffect(() => {
@@ -269,6 +425,7 @@ export default function NewConsultationDrawer({
       setIsClientDropdownOpen(false);
       setIsEntityDropdownOpen(false);
       setIsProcessDropdownOpen(false);
+      setIsTitleDropdownOpen(false);
       setUploadedFile(null);
       setClientSearchQuery("");
       setAudioInputMode("live");
@@ -305,6 +462,12 @@ export default function NewConsultationDrawer({
         !processDropdownRef.current.contains(e.target as HTMLElement)
       ) {
         setIsProcessDropdownOpen(false);
+      }
+      if (
+        titleDropdownRef.current &&
+        !titleDropdownRef.current.contains(e.target as HTMLElement)
+      ) {
+        setIsTitleDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -464,10 +627,15 @@ export default function NewConsultationDrawer({
         .replace(/Rajesh/gi, firstName),
     }));
 
+    const finalTitle =
+      selectedTitle.trim() ||
+      `${client.name}_${selectedEntity.label}_${new Date().toISOString().slice(0, 10)}`;
+
     const session: ScribeSession = {
       id: `scribe-${Date.now()}`,
       clientId: client.id,
       clientName: client.name,
+      title: finalTitle,
       patientAge: client.age || 45,
       patientGender: client.gender || "Female",
       entityType: selectedEntityId,
@@ -833,26 +1001,77 @@ export default function NewConsultationDrawer({
                 )}
               </div>
 
-              {/* Process / Record ID (in same row as Entity) */}
-              <div>
-                <label
-                  className="block text-xs font-semibold text-foreground mb-1.5"
+              {/* Select Title Dropdown (based on Identity / Entity) */}
+              <div className="relative" ref={titleDropdownRef}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label
+                    className="block text-xs font-semibold text-foreground"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Select Title ({selectedEntity.label}) <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    Identity: {selectedEntity.label}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsTitleDropdownOpen(!isTitleDropdownOpen)}
+                  className="w-full h-11 px-3 bg-white border border-border hover:border-slate-400 rounded-xl text-left flex items-center justify-between transition-colors shadow-2xs cursor-pointer"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  Process / Record ID <span className="text-red-500">*</span>
-                </label>
+                  <div className="flex items-center gap-2 truncate pr-2">
+                    <Tag className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                    <div className="truncate">
+                      <div className="text-xs font-semibold text-foreground truncate">
+                        {selectedTitle || titleOptions[0]?.title || `${selectedClient.name}_${selectedEntity.label}_${new Date().toISOString().slice(0, 10)}`}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground font-mono truncate">
+                        {recordId ? `#${recordId}` : "Identity record"}
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform flex-shrink-0 ${isTitleDropdownOpen ? "rotate-180" : ""}`} />
+                </button>
 
-                <div className="relative flex items-center">
-                  <Hash className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
-                  <input
-                    type="text"
-                    placeholder={`e.g. ${selectedEntity.prefix}-${selectedClient.id || "001"}-9214`}
-                    value={recordId}
-                    onChange={(e) => setRecordId(e.target.value)}
-                    className="w-full h-11 pl-8 pr-3 bg-white border border-border rounded-xl text-xs font-mono text-foreground outline-none focus:border-[#181e25] shadow-2xs"
-                    style={{ fontFamily: "Outfit, monospace" }}
-                  />
-                </div>
+                {isTitleDropdownOpen && (
+                  <div className="absolute z-50 left-0 right-0 mt-1.5 bg-white border border-border rounded-xl shadow-xl max-h-60 overflow-y-auto py-1 divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-muted-foreground bg-slate-50 tracking-wider flex items-center justify-between">
+                      <span>Available Titles ({titleOptions.length})</span>
+                      <span className="text-[9px] font-mono lowercase">{selectedEntity.label}</span>
+                    </div>
+                    {titleOptions.map((opt) => {
+                      const isSelected = selectedTitle === opt.title;
+                      return (
+                        <button
+                          key={opt.id + opt.title}
+                          type="button"
+                          onClick={() => handleSelectTitle(opt)}
+                          className={`w-full px-3 py-2 text-left text-xs flex items-center justify-between transition-colors ${
+                            isSelected ? "bg-slate-100 text-[#181e25] font-semibold" : "hover:bg-slate-50 text-foreground"
+                          }`}
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <div className="truncate pr-2">
+                            <div className="font-semibold text-xs text-foreground truncate flex items-center gap-1.5">
+                              <span>{opt.title}</span>
+                              {opt.isNew && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                  Auto
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground truncate font-mono mt-0.5">
+                              {opt.subtitle}
+                            </div>
+                          </div>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-[#181e25] flex-shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 

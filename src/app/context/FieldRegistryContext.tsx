@@ -35,6 +35,7 @@ export const CURRENCY_SYMBOLS: Record<string, string> = {
 export type FieldInputType =
   // Primitives
   | "text"
+  | "string"
   | "email"
   | "tel"
   | "textarea"
@@ -169,7 +170,7 @@ export const CRM_MODULE_COLUMNS: Record<CrmBindModule, { key: string; label: str
 
 export interface FormulaTerm {
   fieldKey: string;
-  operator?: "+" | "-" | "*" | "/";
+  operator?: "+" | "-" | "*" | "/" | string;
 }
 
 export interface FormulaConfig {
@@ -1422,10 +1423,48 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
   ],
   process: [
     { key: "process_name", label: "Process Name", module: "process", inputType: "text", placeholder: "Process name", showAlways: true },
+    { key: "client_name", label: "Client Name", module: "process", inputType: "text", placeholder: "Client name", showAlways: true },
+    { key: "entity", label: "Entity", module: "process", inputType: "text", placeholder: "Process", defaultValue: "Process", showAlways: true },
+    { key: "created_on_date", label: "Created On Date", module: "process", inputType: "date", placeholder: "YYYY-MM-DD", showAlways: true },
+    {
+      key: "title",
+      label: "Title",
+      module: "process",
+      inputType: "string",
+      placeholder: "e.g. John Doe_Process_2026-10-15",
+      showAlways: true,
+      formulaConfig: {
+        mode: "formula",
+        terms: [
+          { fieldKey: "client_name", operator: "_" },
+          { fieldKey: "entity", operator: "_" },
+          { fieldKey: "created_on_date", operator: undefined },
+        ],
+      },
+    },
     { key: "stage", label: "Stage", module: "process", inputType: "text", placeholder: "Stage", showAlways: true },
     { key: "responsible", label: "Responsible Person", module: "process", inputType: "select", placeholder: "Unassigned", showAlways: true },
   ],
   appointment: [
+    { key: "client_name", label: "Client Name", module: "appointment", inputType: "text", placeholder: "Client name", showAlways: true },
+    { key: "entity", label: "Entity", module: "appointment", inputType: "text", placeholder: "Appointment", defaultValue: "Appointment", showAlways: true },
+    { key: "created_on_date", label: "Created On Date", module: "appointment", inputType: "date", placeholder: "YYYY-MM-DD", showAlways: true },
+    {
+      key: "title",
+      label: "Title",
+      module: "appointment",
+      inputType: "string",
+      placeholder: "e.g. John Doe_Appointment_2026-10-15",
+      showAlways: true,
+      formulaConfig: {
+        mode: "formula",
+        terms: [
+          { fieldKey: "client_name", operator: "_" },
+          { fieldKey: "entity", operator: "_" },
+          { fieldKey: "created_on_date", operator: undefined },
+        ],
+      },
+    },
     { key: "appointment_date", label: "Appointment Date", module: "appointment", inputType: "date", showAlways: true },
     { key: "appointment_time", label: "Appointment Time", module: "appointment", inputType: "text", placeholder: "HH:MM", showAlways: true },
     {
@@ -1672,6 +1711,25 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
       placeholder: "Select client...",
       required: true,
       showAlways: true,
+    },
+    { key: "entity", label: "Entity", module: "invoice", sectionId: "sec-inv-details", inputType: "text", placeholder: "Invoice", defaultValue: "Invoice", showAlways: true },
+    { key: "created_on_date", label: "Created On Date", module: "invoice", sectionId: "sec-inv-details", inputType: "date", placeholder: "YYYY-MM-DD", showAlways: true },
+    {
+      key: "title",
+      label: "Title",
+      module: "invoice",
+      sectionId: "sec-inv-details",
+      inputType: "string",
+      placeholder: "e.g. John Doe_Invoice_2026-10-15",
+      showAlways: true,
+      formulaConfig: {
+        mode: "formula",
+        terms: [
+          { fieldKey: "client_name", operator: "_" },
+          { fieldKey: "entity", operator: "_" },
+          { fieldKey: "created_on_date", operator: undefined },
+        ],
+      },
     },
     { key: "client_email", label: "Client Email", module: "invoice", sectionId: "sec-inv-details", inputType: "email", placeholder: "client@example.com", showAlways: true },
     { key: "client_phone", label: "Client Phone", module: "invoice", sectionId: "sec-inv-details", inputType: "tel", placeholder: "+1 (555) 000-0000", showAlways: true },
