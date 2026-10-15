@@ -46,11 +46,7 @@ export const ALL_WORKFLOW_STEPS: StepItem[] = [
   { key: "send-invoice", name: "Send Invoice", desc: "Send the generated invoice to the client via WhatsApp, SMS, or Email.", iconKey: "filetext", cats: ["all", "communication"], popular: false },
   { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "data"], popular: false },
   { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this record.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
-  { key: "wh_trigger", name: "API Automation", desc: "Trigger actions in external systems using your connected API integrations.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
   { key: "webhook_trigger", name: "Webhook Automation", desc: "Send an event payload to a connected webhook when this step runs.", iconKey: "webhook", cats: ["all", "webhook"], popular: false },
-  { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "callerengagement"], popular: false },
-  { key: "idlemessages", name: "Idle Messages", desc: "Configure messages the AI speaks when the caller has not responded.", iconKey: "messagesquare", cats: ["all", "callerengagement"], popular: false },
-  { key: "callhangup", name: "Auto Hangup", desc: "Automatically end the call after the AI completes its interaction.", iconKey: "phoneoff", cats: ["all", "callerengagement"], popular: false },
 ];
 
 export const STEP_ICON_MAP: Record<string, React.ReactNode> = {
@@ -100,8 +96,7 @@ export default function StepCatalogDrawer({
     { key: "records", icon: <FileText className="w-4 h-4" />, name: "Records" },
     { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
     { key: "data", icon: <Database className="w-4 h-4" />, name: "Data & Assignment" },
-    { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
-    { key: "callerengagement", icon: <Phone className="w-4 h-4" />, name: "Caller Engagement" },
+    { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook" },
   ];
 
   const filteredSteps = ALL_WORKFLOW_STEPS.filter((s) => {

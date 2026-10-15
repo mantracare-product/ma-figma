@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import {
   ChevronDown, Plus, Trash2, Info, Sliders, Star, Volume2, Play, ArrowRight,
   User, PhoneForwarded, PhoneOff, Mail, MessageSquare, Paperclip, ExternalLink,
-  ChevronRight, X, Copy, Pencil, Sparkles, Calendar, Receipt, Briefcase, FileCheck, Check, GitBranch, Split
+  ChevronRight, X, Copy, Pencil, Sparkles, Calendar, Receipt, Briefcase, FileCheck, Check, GitBranch, Split, Clock, Link2, Zap
 } from "lucide-react";
 import VariablePickerButton, { FETCH_FIELD_SOURCES } from "./VariablePickerButton";
 import VariableSelectorModal from "./VariableSelectorModal";
@@ -21,6 +21,8 @@ import {
   DocumentTemplate,
   TemplateEntity,
 } from "../../../lib/documentTemplatesStore";
+import { AdminControlAccordion } from "../../pages/admin/components/AdminControlAccordion";
+import { SelectFieldsModal } from "../help/FieldManager";
 
 const availableEmployees = [
   { id: "1", name: "Sarah Johnson" },
@@ -56,6 +58,7 @@ interface StepParametersFieldsProps {
   processes?: ProcessOption[];
   stepTrigger?: string;
   scopingRules?: ScopingRule[];
+  isAdmin?: boolean;
 }
 
 export default function StepParametersFields({
@@ -65,6 +68,7 @@ export default function StepParametersFields({
   processes = [],
   stepTrigger,
   scopingRules = [],
+  isAdmin = false,
 }: StepParametersFieldsProps) {
   const allAvailableProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
   const effectiveProcesses = useMemo(() => {
@@ -115,6 +119,7 @@ export default function StepParametersFields({
 
   const [customApiIntegrations, setCustomApiIntegrations] = useState<any[]>([]);
   const [customWebhookIntegrations, setCustomWebhookIntegrations] = useState<any[]>([]);
+  const [webhookFieldModalIndex, setWebhookFieldModalIndex] = useState<number | null>(null);
   const [jsonPaste, setJsonPaste] = useState("");
   const [jsonError, setJsonError] = useState("");
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -1000,6 +1005,90 @@ export default function StepParametersFields({
     );
   };
 
+  if (stepKey === "automation_overview") {
+    return (
+      <div className="space-y-5 text-left">
+        {/* Automation Name */}
+        <div>
+          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+            Automation Name
+          </label>
+          <input
+            type="text"
+            value={params.name || params.automationName || ""}
+            onChange={(e) => onChange({ name: e.target.value, automationName: e.target.value })}
+            placeholder="e.g. Appointment Booking and Invoice Generation"
+            className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-gray-900"
+          />
+        </div>
+
+        {/* Description */}
+        <div>
+          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+            Description
+          </label>
+          <textarea
+            value={params.description || params.automationDescription || ""}
+            onChange={(e) => onChange({ description: e.target.value, automationDescription: e.target.value })}
+            placeholder="Explain why this automation exists and what it accomplishes..."
+            rows={3}
+            className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-gray-900 resize-none"
+          />
+        </div>
+
+        {/* Status */}
+        <div>
+          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+            Status
+          </label>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onChange({ status: "active", automationStatus: "active" })}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                (params.status ?? params.automationStatus ?? "active") === "active"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              Active
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange({ status: "draft", automationStatus: "draft" })}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                (params.status ?? params.automationStatus) === "draft"
+                  ? "bg-amber-600 text-white shadow-xs"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              Draft
+            </button>
+          </div>
+        </div>
+
+        {/* Admin Scope Components */}
+        {(isAdmin || params.isAdmin) && (
+          <div className="space-y-2 pt-2 border-t border-gray-100">
+            <AdminControlAccordion
+              scopingRules={params.scopingRules || scopingRules || []}
+              onScopingRulesChange={(newRules) => {
+                onChange({ scopingRules: newRules });
+              }}
+              defaultAdminControlOpen={true}
+              defaultScopeOpen={true}
+              defaultPermissionsOpen={false}
+              scopeTooltip="Define tenant scope rules. Visibility by tenant industry category, industries, and locations."
+              permissionsTooltip="Configure what tenant users are permitted to do with this automation rule."
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 text-left">
       {/* ───────────── CONDITIONS EDITOR (Trigger Config) ───────────── */}
@@ -1025,6 +1114,88 @@ export default function StepParametersFields({
 
         {parametersSectionExpanded && (
           <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
+            {(stepKey === "wait" || stepKey === "delay") && (() => {
+              const delayVal = params.delayValue ?? params.duration ?? 5;
+              const delayUnit = (params.delayUnit ?? params.unit ?? "minutes").toLowerCase();
+
+              const unitOptions = [
+                { value: "seconds", label: "Seconds (sec)" },
+                { value: "minutes", label: "Minutes (min)" },
+                { value: "hours", label: "Hours (hour)" },
+                { value: "days", label: "Days (day)" },
+                { value: "weeks", label: "Weeks (week)" },
+                { value: "months", label: "Months (month)" },
+              ];
+
+              const normalizedUnit = unitOptions.some((u) => u.value === delayUnit)
+                ? delayUnit
+                : delayUnit.startsWith("sec")
+                ? "seconds"
+                : delayUnit.startsWith("hour")
+                ? "hours"
+                : delayUnit.startsWith("day")
+                ? "days"
+                : delayUnit.startsWith("week")
+                ? "weeks"
+                : delayUnit.startsWith("month")
+                ? "months"
+                : "minutes";
+
+              return (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    {renderField(
+                      "Wait Quantity / Value",
+                      <input
+                        type="number"
+                        min="1"
+                        value={delayVal}
+                        onChange={(e) => {
+                          const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+                          onChange({ delayValue: val, duration: val });
+                        }}
+                        className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                        placeholder="e.g. 5"
+                      />
+                    )}
+
+                    {renderField(
+                      "Wait Unit",
+                      <select
+                        value={normalizedUnit}
+                        onChange={(e) => {
+                          onChange({ delayUnit: e.target.value, unit: e.target.value });
+                        }}
+                        className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors cursor-pointer"
+                      >
+                        {unitOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  <div className="p-3 bg-blue-50/60 border border-blue-200/70 rounded-xl flex items-start gap-2.5 text-blue-900 text-xs">
+                    <Clock className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-semibold text-blue-950">
+                        Workflow Execution Pause
+                      </p>
+                      <p className="mt-0.5 text-blue-800/80 leading-relaxed">
+                        Execution will pause for{" "}
+                        <span className="font-bold underline">
+                          {delayVal} {normalizedUnit}
+                        </span>{" "}
+                        before continuing to the next action step.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {(stepKey === "fieldupdate" || stepKey === "field-update") && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between pb-1">
@@ -1982,121 +2153,178 @@ export default function StepParametersFields({
             )}
 
             {(stepKey === "webhook_trigger" || stepKey === "webhook") && (
-              <div className="space-y-4 border p-4 rounded-xl bg-white shadow-sm">
-                {customWebhookIntegrations.length === 0 ? (
+              <div className="space-y-5 bg-white">
+                {/* Row 1: Name & Target URL */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Name */}
                   <div className="space-y-1.5">
-                    <label className="block text-sm font-semibold text-[#020817]">Select Integration</label>
-                    <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
-                      <span>No Webhook integrations yet — create one in Settings → Integrations</span>
-                      <Link to="/settings?tab=integrations" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
-                        CRM/Data Source → Custom Webhook
-                      </Link>
+                    <div className="flex items-center gap-1.5">
+                      <Pencil className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                      <label className="text-xs font-bold text-gray-700 tracking-wide">Name</label>
+                      <InfoTooltip text="A recognizable name for this webhook." />
                     </div>
+                    <input
+                      type="text"
+                      value={params.name || params.webhookName || ""}
+                      onChange={(e) => onChange({ name: e.target.value, webhookName: e.target.value })}
+                      placeholder="e.g. Sync to CRM"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                    />
                   </div>
-                ) : (
-                  renderField("Select Integration",
-                    <select
-                      value={webhookSelectedIntegrationId}
-                      onChange={e => {
-                        const id = e.target.value;
-                        const integration = customWebhookIntegrations.find(i => i.id === id);
-                        const schemaFields = integration ? (integration.fieldMappings || []).map((fm: any) => ({
-                          key: fm.key,
-                          value: ""
-                        })) : [];
-                        onChange({
-                          webhookSelectedIntegrationId: id,
-                          webhookParsedFields: schemaFields
-                        });
-                      }}
-                      className="w-full px-3 py-2.5 border rounded-md bg-white text-sm"
-                    >
-                      <option value="">Select integration...</option>
-                      {customWebhookIntegrations.map(i => (
-                        <option key={i.id} value={i.id}>{i.name} ({i.webhookUrl})</option>
-                      ))}
-                    </select>
-                  )
-                )}
 
+                  {/* Target URL */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Link2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      <label className="text-xs font-bold text-gray-700 tracking-wide">Target URL</label>
+                      <InfoTooltip text="The endpoint URL that will receive the payload." />
+                    </div>
+                    <input
+                      type="text"
+                      value={params.targetUrl || params.url || params.webhookUrl || ""}
+                      onChange={(e) => onChange({ targetUrl: e.target.value, url: e.target.value, webhookUrl: e.target.value })}
+                      placeholder="https://api.example.com/webhook"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono"
+                    />
+                  </div>
+                </div>
+
+
+                {/* Parameters */}
                 {(() => {
-                  const selectedWhInt = customWebhookIntegrations.find(i => i.id === webhookSelectedIntegrationId);
-                  if (!selectedWhInt) return null;
+                  const webhookParamsList: Array<{ key: string; value: string }> = Array.isArray(params.webhookParameters)
+                    ? params.webhookParameters
+                    : Array.isArray(params.parameters)
+                    ? params.parameters
+                    : [
+                        { key: "", value: "" },
+                        { key: "", value: "" },
+                      ];
 
-                  const handleParseJson = () => {
-                    try {
-                      const parsed = JSON.parse(jsonPaste);
-                      if (typeof parsed !== "object" || parsed === null) {
-                        setJsonError("Must be a valid JSON object");
-                        return;
-                      }
-                      const newFields = Object.keys(parsed).map(k => ({
-                        key: k,
-                        value: typeof parsed[k] === "string" ? parsed[k] : JSON.stringify(parsed[k])
-                      }));
-                      onChange({ webhookParsedFields: newFields });
-                      setJsonError("");
-                      setJsonPaste("");
-                    } catch (err: any) {
-                      setJsonError(err.message || "Invalid JSON syntax");
-                    }
+                  const handleAddWebhookParam = () => {
+                    const updated = [...webhookParamsList, { key: "", value: "" }];
+                    onChange({ webhookParameters: updated, parameters: updated });
                   };
+
+                  const handleWebhookParamKeyChange = (index: number, newKey: string) => {
+                    const updated = webhookParamsList.map((p, i) => (i === index ? { ...p, key: newKey } : p));
+                    onChange({ webhookParameters: updated, parameters: updated });
+                  };
+
+                  const handleWebhookParamValueChange = (index: number, newValue: string) => {
+                    const updated = webhookParamsList.map((p, i) => (i === index ? { ...p, value: newValue } : p));
+                    onChange({ webhookParameters: updated, parameters: updated });
+                  };
+
+                  const handleRemoveWebhookParam = (index: number) => {
+                    const updated = webhookParamsList.filter((_, i) => i !== index);
+                    onChange({ webhookParameters: updated, parameters: updated });
+                  };
+
+                  const targetUrl = (params.targetUrl || params.url || params.webhookUrl || "").trim();
+                  let urlPreview = "";
+                  if (targetUrl) {
+                    const validParams = webhookParamsList.filter((p) => p.key.trim().length > 0);
+                    if (validParams.length === 0) {
+                      urlPreview = targetUrl;
+                    } else {
+                      const query = validParams
+                        .map((p) => `${encodeURIComponent(p.key.trim())}=${encodeURIComponent(p.value.trim() || "")}`)
+                        .join("&");
+                      const separator = targetUrl.includes("?")
+                        ? targetUrl.endsWith("?") || targetUrl.endsWith("&")
+                          ? ""
+                          : "&"
+                        : "?";
+                      urlPreview = `${targetUrl}${separator}${query}`;
+                    }
+                  }
 
                   return (
                     <div className="space-y-4">
-                      {webhookParsedFields && webhookParsedFields.length > 0 && (
-                        <div className="space-y-3">
-                          <span className="text-xs font-bold text-gray-700 uppercase tracking-wide block">Payload Parameters</span>
-                          {webhookParsedFields.map((field: any) => (
-                            <div key={field.key} className="flex flex-col gap-1.5 p-2 bg-gray-50/50 rounded-lg border">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-semibold text-gray-700 font-mono">{field.key}</span>
-                                <VariablePickerButton
-                                  targetRef={getRefForField(`webhook-${field.key}`)}
-                                  value={field.value}
-                                  onChange={newValue => {
-                                    const updated = webhookParsedFields.map((f: any) => f.key === field.key ? { ...f, value: newValue } : f);
-                                    onChange({ webhookParsedFields: updated });
-                                  }}
-                                />
-                              </div>
-                              <input
-                                ref={el => { inputRefs.current[`webhook-${field.key}`] = el; }}
-                                type="text"
-                                value={field.value}
-                                onChange={e => {
-                                  const updated = webhookParsedFields.map((f: any) => f.key === field.key ? { ...f, value: e.target.value } : f);
-                                  onChange({ webhookParsedFields: updated });
-                                }}
-                                placeholder="Enter value..."
-                                className="w-full px-3 py-1.5 border rounded-md text-xs"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="p-3 bg-gray-50 rounded-lg border space-y-3">
+                      {/* Parameters Header */}
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Parse Sample JSON Payload</span>
-                          <InfoTooltip text="Paste an example JSON response from this webhook and Claude will turn each key into an editable field below — saves you from typing field names by hand." />
+                          <Split className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                          <label className="text-xs font-bold text-gray-700 tracking-wide">Parameters</label>
+                          <InfoTooltip text="Key-value pairs to append to the target URL." />
                         </div>
-                        <textarea
-                          value={jsonPaste}
-                          onChange={e => setJsonPaste(e.target.value)}
-                          placeholder='{"name": "John Doe", "email": "john@example.com"}'
-                          rows={3}
-                          className="w-full px-3 py-2.5 border rounded-md bg-white font-mono text-xs"
-                        />
-                        {jsonError && <p className="text-xs text-red-500">{jsonError}</p>}
                         <button
                           type="button"
-                          onClick={handleParseJson}
-                          className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold"
+                          onClick={handleAddWebhookParam}
+                          className="px-3 py-1 rounded-full border border-gray-900 hover:bg-gray-100 text-[11px] font-bold uppercase tracking-wider text-gray-900 flex items-center gap-1 cursor-pointer transition-colors"
                         >
-                          Parse JSON & Populate Fields
+                          <Plus className="w-3 h-3" />
+                          <span>Add Parameter</span>
                         </button>
                       </div>
+
+                      {/* Parameter Rows */}
+                      <div className="space-y-2">
+                        {webhookParamsList.map((param, index) => (
+                          <div key={index} className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              placeholder="Key"
+                              value={param.key}
+                              onChange={(e) => handleWebhookParamKeyChange(index, e.target.value)}
+                              className="flex-1 px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setWebhookFieldModalIndex(index)}
+                              className="flex-1 px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-medium flex items-center justify-between cursor-pointer hover:border-blue-400 hover:bg-blue-50/20 transition-all text-left"
+                            >
+                              <span className={param.value ? "text-blue-600 font-mono font-medium truncate" : "text-gray-400"}>
+                                {param.value || "Variable"}
+                              </span>
+                              <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0 ml-1.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveWebhookParam(index)}
+                              className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors shrink-0"
+                              title="Delete parameter"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* URL Preview */}
+                      <div className="space-y-1.5 pt-2">
+                        <div className="flex items-center gap-1.5">
+                          <Link2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                          <label className="text-xs font-bold text-gray-700 tracking-wide">URL Preview</label>
+                          <InfoTooltip text="The final endpoint with all parameters attached." />
+                        </div>
+                        <div className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 bg-gray-50/70 text-xs font-mono text-gray-700 min-h-[42px] flex items-center break-all select-all">
+                          {urlPreview ? (
+                            <span className="text-gray-900">{urlPreview}</span>
+                          ) : (
+                            <span className="text-gray-400 font-sans">URL Preview</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* SelectFieldsModal for Variable Picking */}
+                      {webhookFieldModalIndex !== null && (
+                        <SelectFieldsModal
+                          initiallySelected={
+                            webhookParamsList[webhookFieldModalIndex]?.value
+                              ? [webhookParamsList[webhookFieldModalIndex].value.replace(/[{}]/g, "")]
+                              : []
+                          }
+                          onClose={() => setWebhookFieldModalIndex(null)}
+                          onApply={(keys) => {
+                            if (keys.length > 0 && webhookFieldModalIndex !== null) {
+                              handleWebhookParamValueChange(webhookFieldModalIndex, `{{${keys[0]}}}`);
+                            }
+                            setWebhookFieldModalIndex(null);
+                          }}
+                        />
+                      )}
                     </div>
                   );
                 })()}

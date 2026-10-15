@@ -488,10 +488,38 @@ export function toggleRule(id: string): boolean {
 export function getStagesTargetedByAutomation(): Set<string> {
   const rules = getStoredRules();
   const targeted = new Set<string>();
-  rules.forEach((r) => {
-    if (r.enabled && r.action?.stageId) {
-      targeted.add(r.action.stageId);
+
+  const scanSteps = (steps?: any[]) => {
+    if (!steps || !Array.isArray(steps)) return;
+    for (const step of steps) {
+      const isMove =
+        step.stepKey === "update_to_stage" ||
+        step.stepKey === "update-stage" ||
+        step.stepKey === "movetostage" ||
+        step.stepKey === "stagemovement" ||
+        step.stepKey === "processmovement" ||
+        step.stepKey === "move-stage" ||
+        step.stepKey === "move-process";
+      if (isMove) {
+        const sId = step.params?.stageId || step.params?.stepDetailStage;
+        if (sId) targeted.add(sId);
+      }
+      if (step.branches && Array.isArray(step.branches)) {
+        for (const b of step.branches) {
+          scanSteps(b.steps);
+        }
+      }
     }
+  };
+
+  rules.forEach((r) => {
+    if (!r.enabled) return;
+    if (r.action?.stageId) targeted.add(r.action.stageId);
+    const trigStageId = r.trigger?.params?.stageId || r.trigger?.params?.triggerStageId;
+    if (trigStageId && trigStageId !== "all") {
+      targeted.add(trigStageId);
+    }
+    scanSteps(r.actions);
   });
   return targeted;
 }

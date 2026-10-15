@@ -444,3 +444,88 @@ export function flattenRuleSteps(steps: any[]): any[] {
   }
   return flattened;
 }
+
+/**
+ * Checks if targetId is contained inside parent step or any of its nested branches.
+ */
+export function isStepAncestor(parent: WorkflowStep, targetId: string): boolean {
+  if (parent.id === targetId) return true;
+  if (isParallelStep(parent) && parent.branches) {
+    for (const b of parent.branches) {
+      for (const s of b.steps || []) {
+        if (isStepAncestor(s, targetId)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Connects fromId -> toId in the workflow steps tree.
+ * Moves toId immediately after fromId in fromId's sequence or branch.
+ */
+export function connectStepsInTree(
+  steps: WorkflowStep[],
+  fromId: string,
+  toId: string,
+  fromPort?: string
+): WorkflowStep[] {
+  if (fromId === toId) return steps;
+
+  // 1. Locate toStep
+  const toCtx = findStepInTree(steps, toId);
+  if (!toCtx) return steps;
+  const stepToMove = cloneWorkflowTree([toCtx.step])[0];
+
+  // 2. Prevent cycles: toStep cannot be an ancestor of fromId
+  if (isStepAncestor(stepToMove, fromId)) {
+    return steps;
+  }
+
+  // 3. Remove toStep from its current position
+  const treeWithoutTo = deleteStepFromTree(steps, toId);
+
+  // 4. Handle connecting from 'start'
+  if (fromId === "start") {
+    return [stepToMove, ...treeWithoutTo];
+  }
+
+  // 5. Handle connecting from a Parallel branch port (e.g. 'branch-0', 'branch-1')
+  if (fromPort && fromPort.startsWith("branch-")) {
+    const branchIdx = parseInt(fromPort.replace("branch-", ""), 10) || 0;
+    const tree = cloneWorkflowTree(treeWithoutTo);
+    const pCtx = findStepInTree(tree, fromId);
+    if (pCtx && isParallelStep(pCtx.step) && pCtx.step.branches && pCtx.step.branches[branchIdx]) {
+      pCtx.step.branches[branchIdx].steps = pCtx.step.branches[branchIdx].steps || [];
+      pCtx.step.branches[branchIdx].steps.unshift(stepToMove);
+      return tree;
+    }
+  }
+
+  // 6. Connect from a step (insert immediately after fromId in that sequence/branch)
+  const tree = cloneWorkflowTree(treeWithoutTo);
+  const fromCtx = findStepInTree(tree, fromId);
+  if (fromCtx) {
+    if (fromCtx.parentBranch) {
+      fromCtx.parentSequence.splice(fromCtx.index + 1, 0, stepToMove);
+      return tree;
+    } else {
+      // fromStep is in root sequence
+      if (
+        isParallelStep(fromCtx.step) &&
+        fromCtx.step.branches &&
+        fromCtx.step.branches.length > 0
+      ) {
+        fromCtx.step.branches[0].steps = fromCtx.step.branches[0].steps || [];
+        fromCtx.step.branches[0].steps.push(stepToMove);
+        return tree;
+      }
+      fromCtx.parentSequence.splice(fromCtx.index + 1, 0, stepToMove);
+      return tree;
+    }
+  }
+
+  // Fallback: append to end
+  return [...tree, stepToMove];
+}
+

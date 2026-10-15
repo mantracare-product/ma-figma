@@ -497,7 +497,7 @@ export default function AdminAutomations() {
           initialScopingRules={drawerInitialScopingRules}
           onScopingRulesChange={(newRules) => setPendingScopingRules(newRules)}
           scope="global"
-          defaultView="library"
+          defaultView="flowbuilder"
           processes={processes}
           initialAutomation={drawerInitialAutomation}
           processName={!isCreatingNewRule && activeRule ? activeRule.name : "New Global Automation"}
@@ -539,6 +539,75 @@ export default function AdminAutomations() {
               ? pendingScopingRules
               : activeRule?.scopingRules || [];
 
+          // Find any update_to_stage / stage movement action in the steps tree
+          let stageMovementStep: WorkflowStep | undefined;
+          const findStageMovement = (stepsList: WorkflowStep[]): WorkflowStep | undefined => {
+            for (const s of stepsList) {
+              if (
+                s.stepKey === "update_to_stage" ||
+                s.stepKey === "update-stage" ||
+                s.stepKey === "movetostage" ||
+                s.stepKey === "stagemovement" ||
+                s.stepKey === "processmovement" ||
+                s.stepKey === "move-process" ||
+                s.stepKey === "move-stage" ||
+                s.stepKey === "move-new-process"
+              ) {
+                return s;
+              }
+              if (s.branches && s.branches.length > 0) {
+                for (const b of s.branches) {
+                  const found = findStageMovement(b.steps || []);
+                  if (found) return found;
+                }
+              }
+            }
+            return undefined;
+          };
+          stageMovementStep = findStageMovement(mappedActions);
+
+          const trigParams = (saved.trigger as any)?.params || {};
+          const isStageTrigger =
+            triggerEvtStr.startsWith("stage.") ||
+            triggerEvtStr.includes("stage") ||
+            (saved.trigger as any)?.type === "stage" ||
+            trigParams?.category === "stage";
+
+          // If trigger is a stage trigger, resolve process/stage from trigger params
+          const trigStageId = trigParams.stageId || trigParams.triggerStageId || (saved.trigger as any)?.stage?.stageId || "";
+          const trigStageName = trigParams.stageName || trigParams.triggerStageName || "";
+          const trigProcessId = trigParams.processId || trigParams.triggerProcessId || (saved.trigger as any)?.stage?.processId || "";
+          const trigProcessName = trigParams.processName || trigParams.triggerProcessName || "";
+
+          // Resolve destination stage/process from movement step if present
+          const actionStageId = stageMovementStep?.params?.stageId || stageMovementStep?.params?.stepDetailStage || trigStageId;
+          const actionStageName = stageMovementStep?.params?.stageName || stageMovementStep?.params?.stepDetailStageName || trigStageName;
+          const actionProcessId = stageMovementStep?.params?.processId || stageMovementStep?.params?.stepDetailProcess || trigProcessId;
+          const actionProcessName = stageMovementStep?.params?.processName || stageMovementStep?.params?.stepDetailProcessName || trigProcessName;
+
+          // Normalized trigger params ensuring stageId and processId are populated
+          const normalizedTriggerParams = {
+            ...trigParams,
+            ...(isStageTrigger || trigStageId ? {
+              stageId: trigStageId || actionStageId,
+              stageName: trigStageName || actionStageName,
+              processId: trigProcessId || actionProcessId,
+              processName: trigProcessName || actionProcessName,
+              triggerStageId: trigStageId || actionStageId,
+              triggerStageName: trigStageName || actionStageName,
+              triggerProcessId: trigProcessId || actionProcessId,
+              triggerProcessName: trigProcessName || actionProcessName,
+            } : {}),
+          };
+
+          const actionPayload = {
+            type: "moveToStage" as const,
+            processId: actionProcessId || "",
+            stageId: actionStageId || "",
+            processName: actionProcessName || "",
+            stageName: actionStageName || "",
+          };
+
           if (isCreatingNewRule || !activeRule) {
             try {
               const created = createRule({
@@ -554,15 +623,9 @@ export default function AdminAutomations() {
                   event: (saved.trigger as any).event || "call.inbound",
                   label: catalogEvt?.label || (saved.trigger as any).event || "Inbound call",
                   source: "any",
-                  params: (saved.trigger as any).params || {},
+                  params: normalizedTriggerParams,
                 },
-                action: {
-                  type: "moveToStage",
-                  processId: "",
-                  stageId: "",
-                  processName: "",
-                  stageName: "",
-                },
+                action: actionPayload,
                 actions: mappedActions,
                 enabled: saved.status === "active",
                 health: "ok",
@@ -592,8 +655,9 @@ export default function AdminAutomations() {
                   event: (saved.trigger as any).event,
                   label: catalogEvt?.label || (saved.trigger as any).event,
                   source: "any",
-                  params: (saved.trigger as any).params || {},
+                  params: normalizedTriggerParams,
                 },
+                action: actionPayload,
                 actions: mappedActions,
                 scopingRules: ruleScopingRules,
                 updatedAt: new Date().toISOString(),

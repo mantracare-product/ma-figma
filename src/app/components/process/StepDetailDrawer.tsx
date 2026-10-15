@@ -43,6 +43,7 @@ export interface StepDetailDrawerProps {
   onSave?: () => void;
   onShowInFlowBuilder?: () => void;
   onlyParameters?: boolean;
+  isAdmin?: boolean;
 }
 
 function InfoTooltip({ text }: { text: string }) {
@@ -83,6 +84,7 @@ export default function StepDetailDrawer({
   onSave,
   onShowInFlowBuilder,
   onlyParameters = false,
+  isAdmin = false,
 }: StepDetailDrawerProps) {
   // Local UI-only state — neither caller needs to own this
   const [executionTimingModalOpen, setExecutionTimingModalOpen] = useState(false);
@@ -428,6 +430,7 @@ export default function StepDetailDrawer({
               processes={processes}
               stepTrigger={stepTrigger}
               scopingRules={scopingRules}
+              isAdmin={isAdmin}
             />
           )}
         </div>

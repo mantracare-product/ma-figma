@@ -65,10 +65,20 @@ export default function StageAutomationsTab({
           <tbody className="divide-y divide-gray-100 text-xs">
             {rules.map((rule) => {
               const evt = (rule.trigger?.event || "").toLowerCase();
+              const isStageTrigger =
+                evt.startsWith("stage.") ||
+                evt.includes("stage") ||
+                evt.endsWith(".entered_stage") ||
+                rule.trigger?.params?.category === "stage" ||
+                rule.trigger?.params?.triggerType === "stage";
               const isExit = evt.includes("exit");
               const conds = (rule.trigger?.params?.conditions || rule.conditions || []);
               const condsCount = Array.isArray(conds) ? conds.length : 0;
               const actions = rule.actions || [];
+
+              const triggerLabel = isStageTrigger
+                ? (isExit ? "On Stage Exit" : "On Stage Entry")
+                : (rule.trigger?.label || rule.trigger?.event || "Global Trigger");
 
               return (
                 <tr key={rule.id} className="hover:bg-blue-50/20 transition-colors">
@@ -81,6 +91,11 @@ export default function StageAutomationsTab({
                           Product
                         </span>
                       )}
+                      {!isStageTrigger && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Global
+                        </span>
+                      )}
                     </div>
                     {rule.description ? (
                       <p className="text-[11px] text-gray-500 mt-0.5 truncate max-w-xs">
@@ -88,7 +103,9 @@ export default function StageAutomationsTab({
                       </p>
                     ) : (
                       <p className="text-[11px] text-gray-400 mt-0.5">
-                        Triggered on {isExit ? "exit" : "entry"} of {stage.name}
+                        {isStageTrigger
+                          ? `Triggered on ${isExit ? "exit" : "entry"} of ${stage.name}`
+                          : `Fires on ${triggerLabel} and moves to ${stage.name}`}
                       </p>
                     )}
                   </td>
@@ -97,13 +114,19 @@ export default function StageAutomationsTab({
                   <td className="py-3.5 px-4 whitespace-nowrap">
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                       <GitBranch className="w-3.5 h-3.5 text-blue-600" />
-                      <span>{isExit ? "On Stage Exit" : "On Stage Entry"}</span>
+                      <span>{triggerLabel}</span>
                       {condsCount > 0 && (
                         <span className="ml-1 text-[10px] text-blue-500 bg-blue-100/70 px-1.5 py-0.2 rounded-full">
                           {condsCount} cond.
                         </span>
                       )}
                     </div>
+                    {!isStageTrigger && (
+                      <div className="mt-1 flex items-center gap-1 text-[10px] text-emerald-600 font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span>Updates to this stage</span>
+                      </div>
+                    )}
                   </td>
 
                   {/* Actions summary */}

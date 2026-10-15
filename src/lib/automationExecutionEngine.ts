@@ -39,6 +39,15 @@ export function getStepDelayMs(step: WorkflowStep): number {
     if (unit.startsWith("hour") || unit.startsWith("hr") || unit === "h") {
       return val * 60 * 60 * 1000;
     }
+    if (unit.startsWith("day") || unit === "d") {
+      return val * 24 * 60 * 60 * 1000;
+    }
+    if (unit.startsWith("week") || unit === "w") {
+      return val * 7 * 24 * 60 * 60 * 1000;
+    }
+    if (unit.startsWith("month") || unit === "mo") {
+      return val * 30 * 24 * 60 * 60 * 1000;
+    }
     return val * 1000;
   }
   return 0;

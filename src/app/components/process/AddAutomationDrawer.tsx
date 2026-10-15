@@ -220,29 +220,6 @@ export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
     cats: ["all", "communication"],
   },
 
-  // Caller Engagement
-  {
-    key: "callaction",
-    name: "Transfer Call",
-    desc: "Transfer active call to a human agent or queue.",
-    iconKey: "phonecall",
-    cats: ["all", "callerengagement"],
-  },
-  {
-    key: "idlemessages",
-    name: "Idle Messages",
-    desc: "Speak prompt if caller remains unresponsive.",
-    iconKey: "messagesquare",
-    cats: ["all", "callerengagement"],
-  },
-  {
-    key: "callhangup",
-    name: "Auto Hangup",
-    desc: "Automatically end call after interaction concludes.",
-    iconKey: "phoneoff",
-    cats: ["all", "callerengagement"],
-  },
-
   // Data & Assignment
   {
     key: "fieldupdate",
@@ -259,14 +236,7 @@ export const WORKFLOW_CATALOG_STEPS: CatalogStepItem[] = [
     cats: ["all", "data"],
   },
 
-  // Webhook / API
-  {
-    key: "wh_trigger",
-    name: "API Automation",
-    desc: "Execute external HTTP REST API request.",
-    iconKey: "globe",
-    cats: ["all", "webhook"],
-  },
+  // Webhook
   {
     key: "webhook_trigger",
     name: "Webhook Automation",
@@ -411,9 +381,6 @@ export default function AddAutomationDrawer({
   const effectiveScope: AutomationScope =
     propScope || (stageRef ? "stage" : "global");
 
-  // View state: Canvas View toggle
-  const [isCanvasView, setIsCanvasView] = useState(false);
-
   // Automation Form State
   const [automationName, setAutomationName] = useState("");
   const [automationDescription, setAutomationDescription] = useState("");
@@ -461,12 +428,14 @@ export default function AddAutomationDrawer({
   const popoverRef = useRef<HTMLDivElement>(null);
 
   const wasOpenRef = useRef(false);
+  const lastAutomationIdRef = useRef<string | null>(null);
 
-  // Initialize or reset ONLY on drawer open
+  // Initialize or reset ONLY on drawer open or target change
   useEffect(() => {
     if (isOpen) {
-      if (!wasOpenRef.current) {
-        setIsCanvasView(defaultView === "flowbuilder");
+      const isNewTarget = !wasOpenRef.current || lastAutomationIdRef.current !== (initialAutomation?.id || null);
+      if (isNewTarget) {
+        lastAutomationIdRef.current = initialAutomation?.id || null;
         setIsAddStepOpen(false);
         setIsChoosingGlobalTrigger(false);
         let initRules: ScopingRule[] =
@@ -508,20 +477,28 @@ export default function AddAutomationDrawer({
             setGlobalTriggerEvent(trigEvt);
             setGlobalTriggerParams((initialAutomation.trigger as any).params || {});
           }
+
+          const rawSteps =
+            initialAutomation.steps && initialAutomation.steps.length > 0
+              ? initialAutomation.steps
+              : (workflowSteps && workflowSteps.length > 0 ? workflowSteps : []);
+
           setSteps(
-            workflowSteps && workflowSteps.length > 0
-              ? workflowSteps
-              : (initialAutomation.steps || []).map((s) => ({
-                  id: s.id,
-                  name: s.name,
-                  description: s.description || "",
-                  iconKey: s.iconKey || "zap",
-                  stepKey: s.stepKey,
-                  params: s.params || {},
-                  delayValue: s.delay?.value || 0,
-                  delayUnit: s.delay?.unit || "minutes",
-                  executionType: s.kind === "wait" ? "wait" : "wait",
-                }))
+            rawSteps.map((s: any) => ({
+              ...s,
+              id: s.id,
+              name: s.name,
+              description: s.description || "",
+              iconKey: s.iconKey || "zap",
+              stepKey: s.stepKey,
+              params: s.params || {},
+              delayValue: s.delay?.value ?? s.delayValue ?? 0,
+              delayUnit: (s.delay?.unit as any) ?? s.delayUnit ?? "minutes",
+              executionType: s.executionType || (s.branches?.length > 0 ? "parallel" : "wait"),
+              branches: s.branches,
+              outputAlias: s.outputAlias,
+              connectAfterId: s.connectAfterId,
+            }))
           );
         } else {
           const defaultName =
@@ -794,13 +771,23 @@ export default function AddAutomationDrawer({
           : {
               type: globalTriggerType,
               event: globalTriggerEvent,
-              params: globalTriggerParams,
+              params: {
+                ...globalTriggerParams,
+                stageId: globalTriggerParams.stageId || globalTriggerParams.triggerStageId || selectedTriggerStageId,
+                stageName: globalTriggerParams.stageName || globalTriggerParams.triggerStageName,
+                processId: globalTriggerParams.processId || globalTriggerParams.triggerProcessId || selectedTriggerProcessId,
+                processName: globalTriggerParams.processName || globalTriggerParams.triggerProcessName,
+                triggerStageId: globalTriggerParams.triggerStageId || globalTriggerParams.stageId || selectedTriggerStageId,
+                triggerStageName: globalTriggerParams.triggerStageName || globalTriggerParams.stageName,
+                triggerProcessId: globalTriggerParams.triggerProcessId || globalTriggerParams.processId || selectedTriggerProcessId,
+                triggerProcessName: globalTriggerParams.triggerProcessName || globalTriggerParams.processName,
+              },
               stage:
-                globalTriggerType === "stage"
+                globalTriggerType === "stage" || globalTriggerEvent.startsWith("stage.")
                   ? {
                       entity: (selectedTriggerEntity as any) || "client",
-                      processId: selectedTriggerProcessId,
-                      stageId: selectedTriggerStageId,
+                      processId: selectedTriggerProcessId || globalTriggerParams.triggerProcessId || globalTriggerParams.processId,
+                      stageId: selectedTriggerStageId || globalTriggerParams.triggerStageId || globalTriggerParams.stageId,
                       when: selectedTriggerStageWhen,
                     }
                   : undefined,
@@ -858,7 +845,7 @@ export default function AddAutomationDrawer({
           aria-hidden="true"
         />
 
-        {/* Sliding Drawer Container */}
+        {/* Sliding Drawer Container (Visual Flow Builder Canvas Only) */}
         <motion.div
           ref={drawerRef}
           role="dialog"
@@ -867,36 +854,20 @@ export default function AddAutomationDrawer({
           animate={{ x: 0 }}
           exit={{ x: "100%" }}
           transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-          className={`relative h-screen bg-white shadow-2xl flex flex-col z-50 border-l border-gray-200 outline-none transition-all duration-300 ${
-            isCanvasView
-              ? "w-[75vw] min-w-[75vw] max-w-[75vw]"
-              : "w-[500px] min-w-[480px] max-w-[540px]"
-          }`}
+          className="relative h-screen bg-white shadow-2xl flex flex-col z-50 border-l border-gray-200 outline-none w-[88vw] min-w-[85vw] max-w-[1550px]"
           style={{ fontFamily: "DM Sans, sans-serif" }}
         >
           {/* Header */}
-          <div className="flex-shrink-0 px-6 pt-5 pb-4 border-b border-gray-200 bg-white">
+          <div className="flex-shrink-0 px-6 pt-4 pb-3.5 border-b border-gray-200 bg-white">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
-                {isCanvasView ? (
-                  <button
-                    type="button"
-                    onClick={() => setIsCanvasView(false)}
-                    className="p-1.5 -ml-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1 text-xs font-semibold cursor-pointer"
-                    title="Return to Automation Library"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    <span>Back to library</span>
-                  </button>
-                ) : (
-                  <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0">
-                    {effectiveScope === "stage" ? (
-                      <GitBranch className="w-4 h-4" />
-                    ) : (
-                      <Zap className="w-4 h-4" />
-                    )}
-                  </div>
-                )}
+                <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0">
+                  {effectiveScope === "stage" ? (
+                    <GitBranch className="w-4 h-4" />
+                  ) : (
+                    <Zap className="w-4 h-4" />
+                  )}
+                </div>
 
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -904,7 +875,7 @@ export default function AddAutomationDrawer({
                       className="text-base font-bold text-gray-950 truncate"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      {isCanvasView ? "Automation Canvas" : initialStepIdToConfigure || initialAutomation ? "Edit Automation" : "Automation Library"}
+                      {automationName || (initialAutomation?.name || "Automation Canvas")}
                     </h2>
 
                     {/* Scope Chip */}
@@ -920,6 +891,17 @@ export default function AddAutomationDrawer({
                         Global
                       </span>
                     )}
+
+                    {/* Status Chip */}
+                    <span
+                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                        automationStatus === "draft"
+                          ? "bg-amber-100 text-amber-800 border border-amber-200"
+                          : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                      }`}
+                    >
+                      {automationStatus === "draft" ? "Draft" : "Active"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -938,11 +920,9 @@ export default function AddAutomationDrawer({
             </div>
           </div>
 
-          {/* Body Content */}
-          {isCanvasView ? (
-            /* ── Canvas View (Expanded 75vw) ── */
-            <div className="flex-1 overflow-hidden relative bg-[#FAFBFD]">
-              <FlowBuilderTab
+          {/* Body Content — Visual Flow Builder Canvas */}
+          <div className="flex-1 overflow-hidden relative bg-[#FAFBFD]">
+            <FlowBuilderTab
                 processName={processName}
                 stageName={stageName}
                 processes={effectiveProcesses}
@@ -993,6 +973,10 @@ export default function AddAutomationDrawer({
                     setGlobalTriggerEvent(trig.event);
                     if (trig.params) {
                       setGlobalTriggerParams(trig.params);
+                      const pId = trig.params.processId || trig.params.triggerProcessId;
+                      const sId = trig.params.stageId || trig.params.triggerStageId;
+                      if (pId && pId !== "all") setSelectedTriggerProcessId(pId);
+                      if (sId && sId !== "all") setSelectedTriggerStageId(sId);
                     }
                   } else {
                     if (trig.type === "stage" || trig.event === "stage.exit" || trig.event === "stage.entry" || trig.event === "stage.entered" || trig.event === "stage.exited") {
@@ -1007,495 +991,17 @@ export default function AddAutomationDrawer({
                     }
                   }
                 }}
+                automationName={automationName}
+                onAutomationNameChange={setAutomationName}
+                automationDescription={automationDescription}
+                onAutomationDescriptionChange={setAutomationDescription}
+                automationStatus={automationStatus}
+                onAutomationStatusChange={setAutomationStatus}
+                isAdmin={isAdmin}
+                initialStepIdToConfigure={initialStepIdToConfigure}
                 onSave={() => handleSaveAutomation("active")}
               />
             </div>
-          ) : (
-            /* ── Automation Library Form View ── */
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* 1. Automation Name */}
-              <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                  Automation Name
-                </label>
-                <input
-                  type="text"
-                  value={automationName}
-                  onChange={(e) => setAutomationName(e.target.value)}
-                  placeholder={
-                    effectiveScope === "stage"
-                      ? `On ${stageTriggerWhen === "exit" ? "exit" : "entry"}: ${stageName}`
-                      : "e.g. Appointment Confirmation Flow"
-                  }
-                  className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-gray-900"
-                />
-              </div>
-
-              {/* 2. Automation Description */}
-              <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                  Description
-                </label>
-                <textarea
-                  value={automationDescription}
-                  onChange={(e) => setAutomationDescription(e.target.value)}
-                  placeholder="Explain why this automation exists and what it accomplishes..."
-                  rows={2}
-                  className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all text-gray-900 resize-none"
-                />
-              </div>
-
-              {/* 2b. Admin Control (Scope Rules & Permissions) */}
-              {isAdmin && (
-                <div className="space-y-2">
-                  {effectiveScope === "stage" && (
-                    <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50/90 border border-blue-200/80 text-xs text-blue-700 font-semibold shadow-2xs">
-                      <Sparkles className="w-3.5 h-3.5 shrink-0 text-blue-600" />
-                      <span>Pre-applied from Process &gt; Stage scope rule</span>
-                    </div>
-                  )}
-                  <AdminControlAccordion
-                    scopingRules={drawerScopingRules}
-                    onScopingRulesChange={(newRules) => {
-                      setDrawerScopingRules(newRules);
-                      onScopingRulesChange?.(newRules);
-                    }}
-                    defaultAdminControlOpen={true}
-                    defaultScopeOpen={true}
-                    defaultPermissionsOpen={false}
-                    scopeTooltip={effectiveScope === "stage" ? "Pre-applied from Process > Stage scope rules. Restricts visibility by tenant industry category, industries, and locations." : "Define tenant scope rules. Configurations below (processes, appointments, invoices, and fields) will automatically adapt to this scope."}
-                    permissionsTooltip="Configure what tenant users are permitted to do with this automation rule."
-                  />
-                </div>
-              )}
-
-              {/* 3. Trigger Configuration */}
-              <div className="space-y-3.5">
-                {/* 3a. Trigger Category */}
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <LayoutGrid className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Trigger Category</span>
-                  </label>
-                  {effectiveScope === "stage" ? (
-                    <div>
-                      <select
-                        value={stageTriggerCategory}
-                        onChange={(e) => {
-                          const cat = e.target.value as "stage" | "client" | "appointment";
-                          setStageTriggerCategory(cat);
-                          if (cat === "client") {
-                            setStageTriggerEvent("client.created");
-                            setAutomationName(`On Client Created: ${stageName}`);
-                          } else if (cat === "appointment") {
-                            setStageTriggerEvent("appointment.booked");
-                            setAutomationName(`On Appointment Booked: ${stageName}`);
-                          } else {
-                            setStageTriggerWhen("entry");
-                            setAutomationName(`On entry: ${stageName}`);
-                          }
-                        }}
-                        className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
-                      >
-                        <option value="stage">Stage (Movement)</option>
-                        <option value="client">Client (Profile & Lifecycle)</option>
-                        <option value="appointment">Appointment (Booking & Status)</option>
-                      </select>
-                      <p className="text-[11px] text-gray-500 mt-1">
-                        {stageTriggerCategory === "stage"
-                          ? `Scoped directly to movements in "${stageName}".`
-                          : stageTriggerCategory === "client"
-                          ? `Trigger on client events such as creation or profile updates.`
-                          : `Trigger on appointment events such as check-in or completion.`}
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <select
-                        value={globalTriggerType}
-                        onChange={(e) => {
-                          const newType = e.target.value as EventTriggerType;
-                          setGlobalTriggerType(newType);
-                          const catDef = GLOBAL_TRIGGER_CATALOG.find((t) => t.type === newType);
-                          if (catDef && catDef.events.length > 0) {
-                            setGlobalTriggerEvent(catDef.events[0].event);
-                          }
-                        }}
-                        className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
-                      >
-                        {GLOBAL_TRIGGER_CATALOG.map((cat) => (
-                          <option key={cat.type} value={cat.type}>
-                            {cat.label}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-[11px] text-gray-500 mt-1">
-                        {currentGlobalTriggerDef?.description ||
-                          "Select a category to filter available trigger events."}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* 3b. Trigger Event */}
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Trigger</span>
-                  </label>
-                  {effectiveScope === "stage" ? (
-                    <div className="space-y-1.5">
-                      <div className="relative">
-                        {stageTriggerCategory === "stage" ? (
-                          <select
-                            value={stageTriggerWhen}
-                            onChange={(e) => {
-                              const val = e.target.value as "entry" | "exit";
-                              setStageTriggerWhen(val);
-                              if (
-                                automationName.startsWith("On entry:") ||
-                                automationName.startsWith("On exit:") ||
-                                automationName.startsWith("On Entry:") ||
-                                automationName.startsWith("On Exit:")
-                              ) {
-                                setAutomationName(`On ${val === "exit" ? "exit" : "entry"}: ${stageName}`);
-                              }
-                            }}
-                            className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
-                          >
-                            <option value="entry">On Stage Enter</option>
-                            <option value="exit">On Stage Exit</option>
-                          </select>
-                        ) : (
-                          <select
-                            value={stageTriggerEvent}
-                            onChange={(e) => {
-                              const newEvt = e.target.value;
-                              setStageTriggerEvent(newEvt);
-                              const matchEvt = GLOBAL_TRIGGER_CATALOG.flatMap(c => c.events).find(ev => ev.event === newEvt);
-                              if (matchEvt) {
-                                setAutomationName(`${matchEvt.label}: ${stageName}`);
-                              }
-                            }}
-                            className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
-                          >
-                            {(GLOBAL_TRIGGER_CATALOG.find(c => c.type === stageTriggerCategory)?.events || []).map((evt) => (
-                              <option key={evt.event} value={evt.event}>
-                                {evt.label}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-gray-500">
-                        {stageTriggerCategory === "stage"
-                          ? stageTriggerWhen === "entry"
-                            ? `Fires automatically when a record transitions into "${stageName}".`
-                            : `Fires automatically when a record transitions out of "${stageName}".`
-                          : GLOBAL_TRIGGER_CATALOG.flatMap(c => c.events).find(ev => ev.event === stageTriggerEvent)?.description ||
-                            "Fires automatically when this event occurs."}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <div className="relative">
-                        <select
-                          value={globalTriggerEvent}
-                          onChange={(e) => {
-                            setGlobalTriggerEvent(e.target.value);
-                          }}
-                          className="w-full text-xs font-semibold px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white outline-none focus:border-blue-500 cursor-pointer text-gray-900 shadow-2xs hover:border-gray-300 transition-colors"
-                        >
-                          {(currentGlobalTriggerDef?.events || []).map((evt) => (
-                            <option key={evt.event} value={evt.event}>
-                              {evt.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <p className="text-[11px] text-gray-500">
-                        {currentGlobalEventDef?.description ||
-                          "Fires automatically when this event occurs."}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 4. Then do these actions (Numbered Step Cards) */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-gray-600 flex items-center gap-1.5">
-                    <ArrowRight className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Then do these actions ({sequentialSteps.length})</span>
-                  </span>
-                </div>
-
-                {hasParallelSteps && (
-                  <div className="flex items-center justify-between p-3 bg-purple-50/80 border border-purple-200 rounded-xl text-xs text-purple-900 mb-2.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Layers className="w-4 h-4 text-purple-600 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="font-semibold text-purple-900">Parallel branches active</p>
-                        <p className="text-[11px] text-purple-700 truncate">
-                          Branched workflows are visual — open Flow Builder canvas to view and edit them.
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsCanvasView(true)}
-                      className="px-2.5 py-1 text-[11px] font-bold bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shrink-0 cursor-pointer"
-                    >
-                      Open Canvas
-                    </button>
-                  </div>
-                )}
-
-                {sequentialSteps.length === 0 ? (
-                  <div className="border border-dashed border-gray-200 rounded-xl p-5 text-center text-xs text-gray-500 space-y-1">
-                    <p className="font-semibold text-gray-700">No sequential actions added yet</p>
-                    <p className="text-[11px]">Click "Add next step" below to start chaining actions.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {sequentialSteps.map((step, idx) => {
-                      const isHighlighted = initialStepIdToConfigure === step.id;
-                      return (
-                        <div
-                          key={step.id}
-                          className={`flex items-center justify-between p-3 bg-white border rounded-xl shadow-2xs transition-all ${
-                            isHighlighted
-                              ? "border-blue-400 bg-blue-50/25 ring-1 ring-blue-300"
-                              : "border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            {/* Step Index Bubble */}
-                            <div className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 ${
-                              isHighlighted ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"
-                            }`}>
-                              {idx + 1}
-                            </div>
-
-                            {/* Step Icon */}
-                            <div
-                              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 shadow-2xs"
-                              style={{ backgroundColor: "#2563EB" }}
-                            >
-                              {STEP_ICON_MAP[step.iconKey] || <Zap className="w-3.5 h-3.5 text-white" />}
-                            </div>
-
-                            {/* Step Title & Summary */}
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="text-xs font-bold text-gray-900 truncate"
-                                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                                >
-                                  {step.name}
-                                </span>
-                                {(step as any).outputAlias && (
-                                  <span className="text-[9px] font-semibold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
-                                    Output: {(step as any).outputAlias}
-                                  </span>
-                                )}
-                                {(step.stepKey === "wait" || step.stepKey === "delay") && (
-                                  <span className="text-[10px] font-semibold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                                    {step.delayValue || step.params?.delayValue || 15}{" "}
-                                    {step.delayUnit || step.params?.delayUnit || "minutes"}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-gray-500 truncate">
-                                {step.description || "Action configured"}
-                              </p>
-                            </div>
-                          </div>                          {/* Actions: Settings (Gear Box) & Delete */}
-                          <div className="flex items-center gap-1 shrink-0 ml-2">
-                            <button
-                              type="button"
-                              onClick={() => handleConfigureStep(step, idx)}
-                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                isHighlighted
-                                  ? "text-blue-600 bg-blue-100/80 hover:bg-blue-200"
-                                  : "text-gray-500 hover:text-blue-600 hover:bg-blue-50"
-                              }`}
-                              title="Configure parameters"
-                              aria-label="Configure parameters"
-                            >
-                              <Settings2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteStepById(step.id)}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                              title="Remove action"
-                              aria-label="Remove action"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* 4. "Add next step..." Trigger & Popover */}
-              <div className="relative" ref={popoverRef}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAddStepTargetBranchId(null);
-                    setIsAddStepOpen((v) => !v);
-                  }}
-                  className="w-full py-2.5 px-4 border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-xl text-xs font-bold text-gray-600 hover:text-blue-600 transition-colors flex items-center justify-center gap-2 cursor-pointer bg-gray-50/50 hover:bg-blue-50/20"
-                >
-                  <Plus className="w-4 h-4 text-blue-600" />
-                  <span>Add next step...</span>
-                </button>
-
-                {/* Popover Menu */}
-                {isAddStepOpen && (
-                  <div className="absolute left-0 bottom-full mb-2 w-full bg-white border border-gray-200 rounded-2xl shadow-xl z-50 p-3 space-y-3 max-h-[380px] flex flex-col">
-                    {/* Popover Header & Search */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-xs font-bold text-gray-900">
-                        <span>Select next step</span>
-                        <button
-                          type="button"
-                          onClick={() => setIsAddStepOpen(false)}
-                          className="text-gray-400 hover:text-gray-600 p-0.5"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                        <input
-                          type="text"
-                          value={addStepSearch}
-                          onChange={(e) => setAddStepSearch(e.target.value)}
-                          placeholder="Search actions, waits, conditions..."
-                          className="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border border-gray-200 outline-none focus:border-blue-500"
-                        />
-                      </div>
-
-                      {/* Category Pills */}
-                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-[11px]">
-                        {[
-                          { key: "all", label: "All" },
-                          { key: "workflow", label: "Logic" },
-                          { key: "records", label: "Records" },
-                          { key: "communication", label: "Comms" },
-                          { key: "callerengagement", label: "Voice" },
-                          { key: "data", label: "Data" },
-                          { key: "webhook", label: "API" },
-                        ].map((cat) => (
-                          <button
-                            key={cat.key}
-                            type="button"
-                            onClick={() => setAddStepCategory(cat.key)}
-                            className={`px-2.5 py-0.5 rounded-full font-medium whitespace-nowrap cursor-pointer transition-colors ${
-                              addStepCategory === cat.key
-                                ? "bg-[#1E293B] text-white"
-                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                            }`}
-                          >
-                            {cat.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Step Options List */}
-                    <div className="flex-1 overflow-y-auto divide-y divide-gray-100 pr-1">
-                      {availableCatalogSteps.length === 0 ? (
-                        <div className="py-6 text-center text-xs text-gray-500">
-                          No matching actions found.
-                        </div>
-                      ) : (
-                        availableCatalogSteps.map((item) => (
-                          <button
-                            key={item.key}
-                            type="button"
-                            onClick={() => handleAddStepFromCatalog(item)}
-                            className="w-full flex items-start gap-3 py-2.5 px-2 hover:bg-blue-50/50 rounded-lg text-left transition-colors cursor-pointer"
-                          >
-                            <div
-                              className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-0.5 shadow-2xs"
-                              style={{ backgroundColor: "#2563EB" }}
-                            >
-                              {STEP_ICON_MAP[item.iconKey] || <Zap className="w-3.5 h-3.5 text-white" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs font-bold text-gray-900">
-                                  {item.name}
-                                </span>
-                                {item.popular && (
-                                  <span className="text-[9px] font-semibold bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded">
-                                    Popular
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-gray-500 line-clamp-1">
-                                {item.desc}
-                              </p>
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Footer (Automation Library Mode) */}
-          {!isCanvasView && (
-            <div className="flex-shrink-0 px-6 py-4 border-t border-gray-200 bg-white flex items-center justify-between">
-              {/* Left: Open in flow builder */}
-              <button
-                type="button"
-                onClick={() => setIsCanvasView(true)}
-                className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer transition-colors"
-                title="Expand to visual flow builder canvas"
-              >
-                <GitBranch className="w-4 h-4 text-blue-600" />
-                <span>Open in flow builder</span>
-              </button>
-
-              {/* Right: Actions */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-100 border border-gray-200 cursor-pointer transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSaveAutomation("draft")}
-                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-100 border border-gray-200 cursor-pointer transition-colors"
-                >
-                  Save Draft
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSaveAutomation("active")}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-xs cursor-pointer transition-colors"
-                >
-                  {initialStepIdToConfigure || initialAutomation ? "Save Changes" : "Save Automation"}
-                </button>
-              </div>
-            </div>
-          )}
         </motion.div>
 
         {/* Step Detail Drawer: Configures ONLY parameters for selected step */}

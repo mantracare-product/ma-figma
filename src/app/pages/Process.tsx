@@ -1395,39 +1395,102 @@ export default function Process() {
 
     return allAutomationRules.filter((r) => {
       const trigEvt = (r.trigger?.event || "").toLowerCase();
-      const isStageTrigger = trigEvt.startsWith("stage.") || trigEvt.includes("stage") || trigEvt.endsWith(".entered_stage") || r.trigger?.params?.category === "stage";
+      const isStageTrigger =
+        trigEvt.startsWith("stage.") ||
+        trigEvt.includes("stage") ||
+        trigEvt.endsWith(".entered_stage") ||
+        r.trigger?.params?.category === "stage" ||
+        r.trigger?.params?.triggerType === "stage";
 
-      const ruleStageId = r.trigger?.params?.stageId || r.trigger?.params?.triggerStageId || r.action?.stageId || (r as any).params?.stageId;
-      const ruleStageName = r.trigger?.params?.stageName || r.trigger?.params?.triggerStageName || r.action?.stageName;
-      const ruleProcId = r.trigger?.params?.processId || r.trigger?.params?.triggerProcessId || r.action?.processId;
+      const triggerStageId = r.trigger?.params?.stageId || r.trigger?.params?.triggerStageId;
+      const triggerStageName = r.trigger?.params?.stageName || r.trigger?.params?.triggerStageName;
+      const triggerProcId = r.trigger?.params?.processId || r.trigger?.params?.triggerProcessId;
 
-      const matchesStage = ruleStageId === stage.id || 
-        (ruleStageName && ruleStageName.toLowerCase() === stage.name.toLowerCase()) ||
-        r.action?.stageId === stage.id;
+      const triggerMatchesStage =
+        triggerStageId === stage.id ||
+        (triggerStageName && triggerStageName.toLowerCase() === stage.name.toLowerCase());
 
-      const matchesProcess = !ruleProcId || ruleProcId === "all" || ruleProcId === selectedProcess || (selectedProcessData && r.trigger?.params?.processName === selectedProcessData.name);
+      const triggerMatchesProcess =
+        !triggerProcId ||
+        triggerProcId === "all" ||
+        triggerProcId === selectedProcess ||
+        (selectedProcessData && r.trigger?.params?.processName === selectedProcessData.name);
 
-      return isStageTrigger && matchesStage && matchesProcess;
+      const isStageTriggerForRule = isStageTrigger && triggerMatchesStage && triggerMatchesProcess;
+
+      // Check if action or any step inside actions moves/updates to this stage
+      const actionStageId = r.action?.stageId || (r as any).params?.stageId;
+      const actionStageName = r.action?.stageName;
+      const actionMatchesDirectly =
+        actionStageId === stage.id ||
+        (actionStageName && actionStageName.toLowerCase() === stage.name.toLowerCase());
+
+      const hasStepTargetingStage = (stepsList?: any[]): boolean => {
+        if (!stepsList || !Array.isArray(stepsList)) return false;
+        return stepsList.some((step) => {
+          const isMove =
+            step.stepKey === "update_to_stage" ||
+            step.stepKey === "update-stage" ||
+            step.stepKey === "movetostage" ||
+            step.stepKey === "stagemovement" ||
+            step.stepKey === "processmovement" ||
+            step.stepKey === "move-stage" ||
+            step.stepKey === "move-process";
+          if (isMove) {
+            const stepStageId = step.params?.stageId || step.params?.stepDetailStage;
+            const stepStageName = step.params?.stageName || step.params?.stepDetailStageName;
+            if (
+              stepStageId === stage.id ||
+              (stepStageName && stepStageName.toLowerCase() === stage.name.toLowerCase())
+            ) {
+              return true;
+            }
+          }
+          if (step.branches && Array.isArray(step.branches)) {
+            return step.branches.some((b: any) => hasStepTargetingStage(b.steps));
+          }
+          return false;
+        });
+      };
+
+      const hasActionMovingToStage = actionMatchesDirectly || hasStepTargetingStage(r.actions);
+
+      return isStageTriggerForRule || hasActionMovingToStage;
     });
   }, [allAutomationRules, expandedStage, selectedProcess, selectedProcessData]);
 
   const editingRuleInitialAutomation = useMemo(() => {
     if (!editingAutomationRule) return null;
-    const isExit = (editingAutomationRule.trigger?.event || "").includes("exit");
+    const trigEvt = (editingAutomationRule.trigger?.event || "").toLowerCase();
+    const isStageTrigger =
+      trigEvt.startsWith("stage.") ||
+      trigEvt.includes("stage") ||
+      trigEvt.endsWith(".entered_stage") ||
+      editingAutomationRule.trigger?.params?.category === "stage" ||
+      editingAutomationRule.trigger?.params?.triggerType === "stage";
+    const isExit = trigEvt.includes("exit");
+
     return {
       id: editingAutomationRule.id,
       orgId: editingAutomationRule.orgId || "default",
       name: editingAutomationRule.name,
       description: editingAutomationRule.description,
-      scope: "stage" as const,
+      scope: isStageTrigger ? ("stage" as const) : ("global" as const),
       status: editingAutomationRule.enabled ? ("active" as const) : ("draft" as const),
-      trigger: {
-        type: "stage" as const,
-        when: isExit ? ("exit" as const) : ("entry" as const),
-        category: "stage",
-        event: editingAutomationRule.trigger?.event || (isExit ? "stage.exit" : "stage.entry"),
-        params: editingAutomationRule.trigger?.params || {},
-      },
+      trigger: isStageTrigger
+        ? {
+            type: "stage" as const,
+            when: isExit ? ("exit" as const) : ("entry" as const),
+            category: "stage",
+            event: editingAutomationRule.trigger?.event || (isExit ? "stage.exit" : "stage.entry"),
+            params: editingAutomationRule.trigger?.params || {},
+          }
+        : {
+            type: (editingAutomationRule.entityType || "client") as any,
+            event: editingAutomationRule.trigger?.event || "appointment.booked",
+            label: editingAutomationRule.trigger?.label,
+            params: editingAutomationRule.trigger?.params || {},
+          },
       steps: (editingAutomationRule.actions || []).map((s: any) => ({
         ...s,
         id: s.id,
@@ -1447,7 +1510,7 @@ export default function Process() {
     };
   }, [editingAutomationRule]);
   const [editingAutomationStepId, setEditingAutomationStepId] = useState<string | undefined>(undefined);
-  const [automationDrawerView, setAutomationDrawerView] = useState<"library" | "flowbuilder">("library");
+  const [automationDrawerView, setAutomationDrawerView] = useState<"library" | "flowbuilder">("flowbuilder");
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
   const [workflowStepCategory, setWorkflowStepCategory] = useState("all");
   const [workflowStepSearch, setWorkflowStepSearch] = useState("");
@@ -4302,6 +4365,7 @@ export default function Process() {
                             type="button"
                             onClick={() => {
                               setEditingAutomationRule(null);
+                              setWorkflowSteps([]);
                               setSelectedWorkflowStepCard(null);
                               setEditingAutomationStepId(undefined);
                               setAutomationDrawerView("flowbuilder");
@@ -4359,6 +4423,7 @@ export default function Process() {
                           onToggleRule={toggleRule}
                           onEditRule={(rule) => {
                             setEditingAutomationRule(rule);
+                            setWorkflowSteps(rule.actions || []);
                             setSelectedWorkflowStepCard(null);
                             setEditingAutomationStepId(undefined);
                             setAutomationDrawerView("flowbuilder");
@@ -4370,6 +4435,7 @@ export default function Process() {
                           }}
                           onAddRule={() => {
                             setEditingAutomationRule(null);
+                            setWorkflowSteps([]);
                             setSelectedWorkflowStepCard(null);
                             setEditingAutomationStepId(undefined);
                             setAutomationDrawerView("flowbuilder");
@@ -5201,7 +5267,16 @@ export default function Process() {
                           setEditingAutomationStepId(undefined);
                           setEditingAutomationRule(null);
                         }}
-                        scope="stage"
+                        scope={
+                          editingAutomationRule &&
+                          !(
+                            (editingAutomationRule.trigger?.event || "").startsWith("stage.") ||
+                            (editingAutomationRule.trigger?.event || "").includes("stage") ||
+                            editingAutomationRule.trigger?.params?.category === "stage"
+                          )
+                            ? "global"
+                            : "stage"
+                        }
                         defaultView={automationDrawerView}
                         initialAutomation={editingRuleInitialAutomation}
                         stageRef={{
@@ -5216,7 +5291,7 @@ export default function Process() {
                         stageType={selectedProcessData?.stages.find((s) => s.id === expandedStage)?.stageType}
                         processes={processes}
                         currentProcessId={selectedProcess || undefined}
-                        workflowSteps={workflowSteps}
+                        workflowSteps={editingAutomationRule ? (editingAutomationRule.actions || []) : workflowSteps}
                         onWorkflowStepsChange={(newSteps) => {
                           setWorkflowSteps(newSteps);
                           if (selectedProcess && expandedStage) {
@@ -5269,20 +5344,31 @@ export default function Process() {
                           // Bidirectional sync with global automation store
                           const stageObj = selectedProcessData?.stages.find((s) => s.id === expandedStage);
                           if (stageObj && selectedProcess) {
+                            const isStageTrig =
+                              savedAuto.trigger.type === "stage" ||
+                              String((savedAuto.trigger as any)?.event || "").startsWith("stage.");
+                            const triggerEventToSave = isStageTrig
+                              ? (isExit ? "stage.exit" : "stage.entry")
+                              : ((savedAuto.trigger as any)?.event || editingAutomationRule?.trigger?.event || "appointment.booked");
+                            const triggerLabelToSave = isStageTrig
+                              ? (savedAuto.name || `On Stage ${isExit ? "Exit" : "Entry"}: ${stageObj.name}`)
+                              : ((savedAuto.trigger as any)?.label || editingAutomationRule?.trigger?.label || savedAuto.name || "Global Trigger");
+
                             const rulePayload = {
                               orgId: organization?.id || "default",
-                              name: savedAuto.name || `On ${isExit ? "Exit" : "Entry"}: ${stageObj.name}`,
+                              name: savedAuto.name || (isStageTrig ? `On ${isExit ? "Exit" : "Entry"}: ${stageObj.name}` : `Automation for ${stageObj.name}`),
                               description: savedAuto.description || `Automation for stage ${stageObj.name}`,
-                              entityType: (selectedProcessData?.entityType as any) || "client",
+                              entityType: (editingAutomationRule?.entityType || selectedProcessData?.entityType as any) || "client",
                               isAdmin: false,
                               createdIn: "client" as const,
                               isClientCustomization: true,
                               source: "custom" as const,
                               trigger: {
-                                event: isExit ? "stage.exit" : "stage.entry",
-                                label: savedAuto.name || `On Stage ${isExit ? "Exit" : "Entry"}: ${stageObj.name}`,
+                                event: triggerEventToSave,
+                                label: triggerLabelToSave,
                                 source: "any" as const,
                                 params: {
+                                  ...((savedAuto.trigger as any)?.params || {}),
                                   processId: selectedProcess,
                                   processName: selectedProcessData?.name,
                                   stageId: stageObj.id,

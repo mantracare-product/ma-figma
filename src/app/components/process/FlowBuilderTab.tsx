@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
   GitBranch, Clock, Split, XCircle, Phone, User, PhoneForwarded, PhoneOff,
   Eye, Hash, Calendar, Mail, MessageSquare, Settings2, ArrowRight, Workflow,
-  Zap, Webhook, Search, ChevronDown, ChevronRight, Plus, Trash2, X,
+  Zap, Webhook, Search, ChevronDown, ChevronUp, ChevronRight, Plus, Trash2, X,
   ZoomIn, ZoomOut, Maximize2, Undo2, Redo2, CheckCircle2, AlertCircle,
   Code2, Activity, Layers, PhoneCall, Save, AlignCenter, Hand, Sparkles,
   CreditCard, FileText, Receipt, ShieldCheck, Briefcase, Sliders, QrCode,
@@ -20,6 +20,8 @@ import {
   removeBranchFromStep,
   findStepInTree,
   findBranchInTree,
+  connectStepsInTree,
+  isStepAncestor,
 } from "../../../lib/automationTree";
 import {
   computeTreeCanvasLayout,
@@ -35,6 +37,7 @@ import { toast } from "sonner";
 import { HowItWorksModal, HowItWorksButton } from "../help/HowItWorksModal";
 import { InfoTooltip } from "../help/InfoTooltip";
 import { ScopingRule } from "../../context/FieldRegistryContext";
+import { AdminControlAccordion } from "../../pages/admin/components/AdminControlAccordion";
 
 const buildConditionSummary = (step: WorkflowStep, laneKey: string): string => {
   if (laneKey === "incall") {
@@ -73,7 +76,7 @@ const getStepFirstNodeId = (step: WorkflowStep): string => {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type NodeType =
-  | "start" | "end"
+  | "start" | "end" | "overview"
   | "condition" | "wait" | "parallel" | "empty-branch"
   | "call-transfer" | "call-transfer-human" | "call-transfer-ai" | "call-hangup"
   | "fetch-availability" | "fetch-field-value"
@@ -126,6 +129,15 @@ interface FlowBuilderTabProps {
   onTriggerClick?: () => void;
   onSave?: () => void;
   scopingRules?: ScopingRule[];
+  automationName?: string;
+  onAutomationNameChange?: (name: string) => void;
+  automationDescription?: string;
+  onAutomationDescriptionChange?: (desc: string) => void;
+  automationStatus?: "active" | "draft";
+  onAutomationStatusChange?: (status: "active" | "draft") => void;
+  isAdmin?: boolean;
+  onScopingRulesChange?: (rules: ScopingRule[]) => void;
+  initialStepIdToConfigure?: string;
 }
 
 export interface TriggerCatalogItem {
@@ -228,16 +240,6 @@ const NODE_CATEGORIES = [
     ],
   },
   {
-    id: "call",
-    label: "Caller Engagement",
-    icon: <Phone className="w-3.5 h-3.5" />,
-    nodes: [
-      { type: "call-transfer" as NodeType, label: "Transfer Call", icon: <PhoneCall className="w-4 h-4" />, desc: "Transfer active call to a human agent or queue" },
-      { type: "call-hangup" as NodeType, label: "Call Hangup", icon: <PhoneOff className="w-4 h-4" />, desc: "End the active call" },
-      { type: "idle-messages" as NodeType, label: "Idle Messages", icon: <MessageSquare className="w-4 h-4" />, desc: "Speak a message if caller remains idle" },
-    ],
-  },
-  {
     id: "communication",
     label: "Communication",
     icon: <MessageSquare className="w-3.5 h-3.5" />,
@@ -254,15 +256,7 @@ const NODE_CATEGORIES = [
     nodes: [
       { type: "field-update" as NodeType, label: "Field Update", icon: <Settings2 className="w-4 h-4" />, desc: "Update record attributes or custom field values" },
       { type: "assign-responsible" as NodeType, label: "Assign Responsible", icon: <User className="w-4 h-4" />, desc: "Assign a team member to handle this record" },
-    ],
-  },
-  {
-    id: "integrations",
-    label: "Integrations",
-    icon: <Webhook className="w-3.5 h-3.5" />,
-    nodes: [
       { type: "webhook" as NodeType, label: "Webhook", icon: <Webhook className="w-4 h-4" />, desc: "Send data payload via webhook" },
-      { type: "api" as NodeType, label: "API", icon: <Zap className="w-4 h-4" />, desc: "Execute external HTTP REST API request" },
     ],
   },
 ];
@@ -579,6 +573,15 @@ export default function FlowBuilderTab({
   onTriggerClick,
   onSave,
   scopingRules = [],
+  automationName = "",
+  onAutomationNameChange,
+  automationDescription = "",
+  onAutomationDescriptionChange,
+  automationStatus = "active",
+  onAutomationStatusChange,
+  isAdmin = false,
+  onScopingRulesChange,
+  initialStepIdToConfigure,
 }: FlowBuilderTabProps) {
   const effectiveProcesses = (processes && processes.length > 0) ? processes : getStoredProcesses();
   // Drawer execution/timing controls (seeded on openConfig)
@@ -719,6 +722,7 @@ export default function FlowBuilderTab({
   const [showVariableModal, setShowVariableModal] = useState(false);
   const [activeVarSetter, setActiveVarSetter] = useState<((v: string) => void) | null>(null);
   const [showFlowBuilderHelp, setShowFlowBuilderHelp] = useState(false);
+  const [isOverviewExpanded, setIsOverviewExpanded] = useState(true);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -743,20 +747,38 @@ export default function FlowBuilderTab({
 
   const selectTrigger = (item: TriggerCatalogItem) => {
     setActiveTriggerEvent(item.triggerEvent);
+    const existingStart = nodes.find((n) => n.id === "start");
+    const existingConfig = existingStart?.config || {};
+    const defaultProc = effectiveProcesses.find((p) => p.id === currentProcessId || p.name === processName) || effectiveProcesses[0];
+    const defaultStage = defaultProc?.stages?.find((s: any) => s.name === stageName || s.id === stageName) || defaultProc?.stages?.[0];
+
+    const isStage = item.triggerType === "stage" || item.triggerEvent.startsWith("stage.");
+    const updatedConfig = {
+      ...existingConfig,
+      triggerType: item.triggerType,
+      triggerEvent: item.triggerEvent,
+      triggerLabel: item.label,
+      triggerDescription: item.desc,
+      triggerIconKey: item.iconKey,
+      ...(isStage ? {
+        triggerProcessId: existingConfig.triggerProcessId || defaultProc?.id || "all",
+        triggerProcessName: existingConfig.triggerProcessName || defaultProc?.name || "Any Process",
+        triggerStageId: existingConfig.triggerStageId || defaultStage?.id || "all",
+        triggerStageName: existingConfig.triggerStageName || defaultStage?.name || "Any Stage",
+        stageId: existingConfig.stageId || existingConfig.triggerStageId || defaultStage?.id || "all",
+        stageName: existingConfig.stageName || existingConfig.triggerStageName || defaultStage?.name || "Any Stage",
+        processId: existingConfig.processId || existingConfig.triggerProcessId || defaultProc?.id || "all",
+        processName: existingConfig.processName || existingConfig.triggerProcessName || defaultProc?.name || "Any Process",
+      } : {}),
+    };
+
     setNodes((prev) =>
       prev.map((n) => {
         if (n.id === "start") {
           return {
             ...n,
             label: item.label,
-            config: {
-              ...n.config,
-              triggerType: item.triggerType,
-              triggerEvent: item.triggerEvent,
-              triggerLabel: item.label,
-              triggerDescription: item.desc,
-              triggerIconKey: item.iconKey,
-            },
+            config: updatedConfig,
           };
         }
         return n;
@@ -769,6 +791,7 @@ export default function FlowBuilderTab({
         label: item.label,
         description: item.desc,
         iconKey: item.iconKey,
+        params: updatedConfig,
       });
     }
     toast.success(`Trigger set to "${item.label}"`);
@@ -992,7 +1015,62 @@ export default function FlowBuilderTab({
     }
 
     if (type === "wait") {
-      addLogicToSelectedNode(type);
+      const stepKey = "wait";
+      const catalogEntry = NODE_CATEGORIES
+        .flatMap(c => c.nodes)
+        .find(n => n.type === type);
+
+      const newStepId = `wait-${Date.now()}`;
+      const newStep: WorkflowStep = {
+        id: newStepId,
+        name: "Wait / Delay",
+        description: catalogEntry?.desc ?? "Delay workflow execution before proceeding to next action",
+        iconKey: "clock",
+        stepKey: "wait",
+        trigger: "stage",
+        executionType: "wait",
+        delayValue: 5,
+        delayUnit: "minutes",
+        params: {
+          delayValue: 5,
+          delayUnit: "minutes",
+        },
+      };
+
+      snapshot();
+      const targetBranchId = selectedBranchId;
+      const afterStepId = selectedId;
+      const updated = appendStepToTree(workflowSteps, newStep, targetBranchId, afterStepId);
+      if (targetBranchId || (afterStepId && findStepInTree(workflowSteps, afterStepId)?.parentBranch)) {
+        toast.success(`Added ${newStep.name} to branch.`);
+      } else {
+        toast.success(`Added ${newStep.name} to flow.`);
+      }
+      onWorkflowStepsChange?.(updated);
+      setSelectedId(newStepId);
+      const newCtx = findStepInTree(updated, newStepId);
+      if (newCtx?.parentBranch) {
+        setSelectedBranchId(newCtx.parentBranch.id);
+      } else {
+        setSelectedBranchId(null);
+      }
+      setTimeout(() => {
+        openConfig({
+          id: newStepId,
+          type: "wait",
+          label: newStep.name,
+          stepKey: "wait",
+          x: 400,
+          y: 200,
+          config: {
+            ...newStep.params,
+            delayValue: 5,
+            delayUnit: "minutes",
+            sourceStepId: newStepId,
+            autoGenerated: true,
+          },
+        });
+      }, 50);
       return;
     }
 
@@ -1028,7 +1106,12 @@ export default function FlowBuilderTab({
       }
       onWorkflowStepsChange(updated);
       setSelectedId(newStepId);
-      setSelectedBranchId(null);
+      const newCtx = findStepInTree(updated, newStepId);
+      if (newCtx?.parentBranch) {
+        setSelectedBranchId(newCtx.parentBranch.id);
+      } else {
+        setSelectedBranchId(null);
+      }
       return;
     }
 
@@ -1121,25 +1204,23 @@ export default function FlowBuilderTab({
   const addConnection = (fromId: string, fromPort: string, toId: string) => {
     if (fromId === toId) return;
 
-    // Check if either node belongs to a branch and prohibit cross-branch connections
-    const fromStep = findStepInTree(workflowSteps, fromId);
-    const toStep = findStepInTree(workflowSteps, toId);
-    if (fromStep && toStep) {
-      if (fromStep.parentBranch?.id !== toStep.parentBranch?.id) {
-        toast.error("Cannot connect across branches. Branch steps run independently.");
-        return;
-      }
+    // Prohibit circular connections (cannot connect a node to one of its ancestors)
+    const toStepCtx = findStepInTree(workflowSteps, toId);
+    if (toStepCtx && isStepAncestor(toStepCtx.step, fromId)) {
+      toast.error("Cannot create a circular connection.");
+      return;
     }
 
-    if (fromPort.startsWith("branch-")) {
-      const branchIdx = parseInt(fromPort.replace("branch-", ""), 10) || 0;
-      const pStep = findStepInTree(workflowSteps, fromId)?.step;
-      if (pStep && pStep.branches && pStep.branches[branchIdx]) {
-        const targetBranch = pStep.branches[branchIdx];
-        setSelectedBranchId(targetBranch.id);
-        toast.info(`Selected ${targetBranch.name || `Branch ${branchIdx + 1}`}.`);
-        return;
+    if (onWorkflowStepsChange) {
+      snapshot();
+      const updated = connectStepsInTree(workflowSteps, fromId, toId, fromPort);
+      onWorkflowStepsChange(updated);
+      setSelectedId(toId);
+      const updatedToCtx = findStepInTree(updated, toId);
+      if (updatedToCtx?.parentBranch) {
+        setSelectedBranchId(updatedToCtx.parentBranch.id);
       }
+      toast.success("Connected steps in sequence.");
     }
   };
 
@@ -1581,15 +1662,21 @@ export default function FlowBuilderTab({
     }
 
     if (realStep) {
+      const isWait = realStep.stepKey === "wait" || realStep.stepKey === "delay" || node.type === "wait";
+      const waitVal = realStep.params?.delayValue ?? realStep.params?.duration ?? realStep.delayValue ?? 5;
+      const waitUnit = realStep.params?.delayUnit ?? realStep.params?.unit ?? realStep.delayUnit ?? "minutes";
+
       setDrawerTrigger((realStep.trigger ?? (node.config?.lane ?? "stage")) as "stage" | "incall" | "postcall");
       setDrawerExecType((realStep.executionType ?? "wait") as "wait" | "parallel");
-      setDrawerDelayValue(realStep.delayValue ?? 0);
-      setDrawerDelayUnit(realStep.delayUnit ?? "Minute");
+      setDrawerDelayValue(isWait ? waitVal : (realStep.delayValue ?? 0));
+      setDrawerDelayUnit(isWait ? waitUnit : (realStep.delayUnit ?? "Minute"));
       setDrawerConnectAfterId(realStep.connectAfterId);
       setConfigNode({
         ...realNode,
+        label: realStep.name || (isWait ? "Wait / Delay" : getNodeLabel(node.type)),
         stepKey: realStep.stepKey,
         config: {
+          ...(isWait ? { delayValue: waitVal, delayUnit: waitUnit } : {}),
           ...(realStep.params ?? {}),
           ...(realNode.config ?? {}),
           sourceStepId: realStep.id,
@@ -1601,8 +1688,48 @@ export default function FlowBuilderTab({
     }
   };
 
+  const openOverviewConfig = () => {
+    const startNode = nodes.find((n) => n.type === "start" || n.id === "start");
+    setSelectedId("automation_overview");
+    setSelectedBranchId(null);
+    setConfigNode({
+      id: "automation_overview",
+      type: "overview" as NodeType,
+      label: automationName || "Automation Overview",
+      x: startNode ? startNode.x : 400,
+      y: startNode ? startNode.y - 95 : 45,
+      stepKey: "automation_overview",
+      config: {
+        name: automationName,
+        automationName: automationName,
+        description: automationDescription,
+        automationDescription: automationDescription,
+        status: automationStatus,
+        automationStatus: automationStatus,
+        isAdmin: isAdmin,
+        scopingRules: scopingRules,
+      },
+    });
+  };
+
   const saveConfig = () => {
     if (!configNode) return;
+
+    if (configNode.stepKey === "automation_overview" || configNode.type === "overview" || configNode.id === "automation_overview") {
+      const newName = configNode.config?.name || configNode.config?.automationName || configNode.label;
+      const newDesc = configNode.config?.description || configNode.config?.automationDescription || "";
+      const newStatus = configNode.config?.status || configNode.config?.automationStatus || "active";
+      const newRules = configNode.config?.scopingRules || scopingRules;
+
+      if (onAutomationNameChange && newName) onAutomationNameChange(newName);
+      if (onAutomationDescriptionChange) onAutomationDescriptionChange(newDesc);
+      if (onAutomationStatusChange) onAutomationStatusChange(newStatus);
+      if (onScopingRulesChange && newRules) onScopingRulesChange(newRules);
+
+      toast.success("Automation overview updated");
+      setConfigNode(null);
+      return;
+    }
 
     if (configNode.type === "start") {
       const selectedEvent = configNode.config?.selectedEvent;
@@ -1621,11 +1748,23 @@ export default function FlowBuilderTab({
       if (catalogItem) {
         selectTrigger(catalogItem);
       }
+      const triggerParams = {
+        ...(configNode.config || {}),
+        triggerEvent: selectedEvent,
+        stageId: configNode.config?.stageId || configNode.config?.triggerStageId,
+        stageName: configNode.config?.stageName || configNode.config?.triggerStageName,
+        processId: configNode.config?.processId || configNode.config?.triggerProcessId,
+        processName: configNode.config?.processName || configNode.config?.triggerProcessName,
+        triggerStageId: configNode.config?.triggerStageId || configNode.config?.stageId,
+        triggerStageName: configNode.config?.triggerStageName || configNode.config?.stageName,
+        triggerProcessId: configNode.config?.triggerProcessId || configNode.config?.processId,
+        triggerProcessName: configNode.config?.triggerProcessName || configNode.config?.processName,
+      };
+
       updateNode(configNode.id, {
         label: newLabel,
         config: {
-          ...configNode.config,
-          triggerEvent: selectedEvent,
+          ...triggerParams,
           triggerType: catalogItem?.triggerType || trigCategory || (selectedEvent?.startsWith("stage") ? "stage" : "client"),
           triggerLabel: newLabel,
           triggerDescription: newDesc,
@@ -1639,7 +1778,7 @@ export default function FlowBuilderTab({
           label: newLabel,
           description: newDesc,
           iconKey: newIconKey,
-          params: configNode.config || {},
+          params: triggerParams,
         });
       }
       toast.success(`Trigger configured: "${newLabel}"`);
@@ -1654,17 +1793,21 @@ export default function FlowBuilderTab({
 
     if (stepCtx && onWorkflowStepsChange) {
       const { autoGenerated: _a, sourceStepId: _s, lane: _l, syntheticFor: _syn, ...params } = configNode.config || {};
+      const isWait = stepCtx.step.stepKey === "wait" || stepCtx.step.stepKey === "delay" || configNode.stepKey === "wait";
+      const finalDelayVal = isWait ? (configNode.config?.delayValue ?? drawerDelayValue) : drawerDelayValue;
+      const finalDelayUnit = isWait ? (configNode.config?.delayUnit ?? drawerDelayUnit) : drawerDelayUnit;
       const finalConnectAfterId = drawerTrigger !== "incall" && drawerExecType === "wait" ? drawerConnectAfterId : undefined;
       const updatedSteps = updateStepInTree(workflowSteps, targetStepId, {
         name: configNode.label || stepCtx.step.name,
         trigger: drawerTrigger,
         executionType: drawerExecType,
-        delayValue: drawerDelayValue,
-        delayUnit: drawerDelayUnit,
+        delayValue: finalDelayVal,
+        delayUnit: finalDelayUnit,
         connectAfterId: finalConnectAfterId,
         params: {
           ...(stepCtx.step.params ?? {}),
           ...params,
+          ...(isWait ? { delayValue: finalDelayVal, delayUnit: finalDelayUnit } : {}),
         }
       });
       onWorkflowStepsChange(updatedSteps);
@@ -1675,7 +1818,24 @@ export default function FlowBuilderTab({
 
   const patchConfig = (patch: Record<string, any>) => {
     if (!configNode) return;
-    setConfigNode((prev) => prev ? { ...prev, config: { ...prev.config, ...patch } } : prev);
+    setConfigNode((prev) => {
+      if (!prev) return prev;
+      const nextLabel = patch.name || patch.automationName || prev.label;
+      return {
+        ...prev,
+        label: nextLabel,
+        config: { ...prev.config, ...patch },
+      };
+    });
+    if (configNode.stepKey === "automation_overview" || configNode.type === "overview" || configNode.id === "automation_overview") {
+      if (patch.name !== undefined && onAutomationNameChange) onAutomationNameChange(patch.name);
+      if (patch.automationName !== undefined && onAutomationNameChange) onAutomationNameChange(patch.automationName);
+      if (patch.description !== undefined && onAutomationDescriptionChange) onAutomationDescriptionChange(patch.description);
+      if (patch.automationDescription !== undefined && onAutomationDescriptionChange) onAutomationDescriptionChange(patch.automationDescription);
+      if (patch.status !== undefined && onAutomationStatusChange) onAutomationStatusChange(patch.status);
+      if (patch.automationStatus !== undefined && onAutomationStatusChange) onAutomationStatusChange(patch.automationStatus);
+      if (patch.scopingRules !== undefined && onScopingRulesChange) onScopingRulesChange(patch.scopingRules);
+    }
   };
 
   // ── Variable insertion ────────────────────────────────────────────────────────
@@ -1695,8 +1855,120 @@ export default function FlowBuilderTab({
   return (
     <div className="flex h-full overflow-hidden bg-muted/20">
 
-      {/* ── LEFT: Node Library ─────────────────────────────────────────────── */}
-      <div className="w-60 bg-card border-r border-border flex flex-col flex-shrink-0 overflow-hidden">
+      {/* ── LEFT: Overview & Node Library ──────────────────────────────────── */}
+      <div className="w-80 bg-card border-r border-border flex flex-col flex-shrink-0 overflow-hidden">
+        {/* Overview Section */}
+        <div className="p-3 border-b border-border bg-card/60">
+          <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => setIsOverviewExpanded(!isOverviewExpanded)}
+              className="flex items-center gap-1.5 text-left cursor-pointer group flex-1"
+            >
+              <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider group-hover:text-foreground transition-colors">
+                Overview
+              </span>
+              {isOverviewExpanded ? (
+                <ChevronUp className="w-3.5 h-3.5 text-muted-foreground ml-auto" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-auto" />
+              )}
+            </button>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase ml-2 ${
+                automationStatus === "draft"
+                  ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300"
+              }`}
+            >
+              {automationStatus === "draft" ? "Draft" : "Active"}
+            </span>
+          </div>
+
+
+          {isOverviewExpanded && (
+            <div className="space-y-3 mt-2.5 max-h-[360px] overflow-y-auto pr-1">
+              {/* Automation Name */}
+              <div>
+                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                  Automation Name
+                </label>
+                <input
+                  type="text"
+                  value={automationName}
+                  onChange={(e) => onAutomationNameChange?.(e.target.value)}
+                  placeholder="e.g. Appointment Booking and Invoice"
+                  className="w-full px-2.5 py-1.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={automationDescription}
+                  onChange={(e) => onAutomationDescriptionChange?.(e.target.value)}
+                  placeholder="Explain what this automation accomplishes..."
+                  rows={2}
+                  className="w-full px-2.5 py-1.5 bg-input-background border border-input rounded-lg text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                />
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                  Status
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onAutomationStatusChange?.("active")}
+                    className={`flex-1 py-1 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                      automationStatus === "active"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />
+                    Active
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onAutomationStatusChange?.("draft")}
+                    className={`flex-1 py-1 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                      automationStatus === "draft"
+                        ? "bg-amber-600 text-white shadow-xs"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-300" />
+                    Draft
+                  </button>
+                </div>
+              </div>
+
+              {/* Admin Scope (Only when isAdmin === true) */}
+              {isAdmin && (
+                <div className="pt-2 border-t border-border">
+                  <AdminControlAccordion
+                    scopingRules={scopingRules || []}
+                    onScopingRulesChange={(newRules) => onScopingRulesChange?.(newRules)}
+                    defaultAdminControlOpen={false}
+                    defaultScopeOpen={false}
+                    defaultPermissionsOpen={false}
+                    scopeTooltip="Define tenant scope rules. Visibility by tenant industry category, industries, and locations."
+                    permissionsTooltip="Configure what tenant users are permitted to do with this automation rule."
+                    className="w-full text-xs"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Search */}
         <div className="p-3 border-b border-border">
           <div className="flex items-center gap-1.5 mb-2">
@@ -2263,6 +2535,8 @@ export default function FlowBuilderTab({
               );
             })()}
 
+
+
             {/* Nodes */}
             {nodes.map((node) => {
               const style = NODE_STYLE[node.type] || NODE_STYLE.start;
@@ -2532,9 +2806,9 @@ export default function FlowBuilderTab({
                               {node.config.conditionSummary || `${node.config.fieldSource} · ${node.config.operator} · ${node.config.value}`}
                             </p>
                           )}
-                          {node.type === "wait" && node.config.duration && (
+                          {node.type === "wait" && (
                             <p className="text-[10px] text-muted-foreground">
-                              {node.config.duration} {node.config.unit || "seconds"}
+                              Wait {node.config.delayValue ?? node.config.duration ?? 5} {node.config.delayUnit ?? node.config.unit ?? "minutes"}
                             </p>
                           )}
                           {node.type === "send-email" && node.config.subject && (
@@ -2689,9 +2963,33 @@ export default function FlowBuilderTab({
 
       {/* StepDetailDrawer for step configuration & Fallback Config Drawer */}
       {(() => {
+        const isOverviewNode = configNode?.stepKey === "automation_overview" || configNode?.type === "overview" || configNode?.id === "automation_overview";
         const isTriggerNode = configNode?.type === "start";
         const targetStepId = configNode ? (configNode.config?.sourceStepId ?? configNode.config?.syntheticFor ?? configNode.id) : null;
-        const targetStep = isTriggerNode
+        const targetStep = isOverviewNode
+          ? {
+              id: "automation_overview",
+              name: "Automation Overview",
+              description: "Configure name, description, status, and admin scoping rules.",
+              iconKey: "sliders",
+              stepKey: "automation_overview",
+              trigger: "stage",
+              executionType: "wait" as const,
+              delayValue: 0,
+              delayUnit: "Minute",
+              params: {
+                name: automationName,
+                automationName: automationName,
+                description: automationDescription,
+                automationDescription: automationDescription,
+                status: automationStatus,
+                automationStatus: automationStatus,
+                isAdmin: isAdmin,
+                scopingRules: scopingRules,
+                ...(configNode.config || {}),
+              },
+            }
+          : isTriggerNode
           ? {
               id: configNode.id,
               name: configNode.label || "Trigger Configuration",
@@ -2778,6 +3076,7 @@ export default function FlowBuilderTab({
               onClose={() => setConfigNode(null)}
               onSave={saveConfig}
               onlyParameters={true}
+              isAdmin={isAdmin}
             />
           </>
         );
