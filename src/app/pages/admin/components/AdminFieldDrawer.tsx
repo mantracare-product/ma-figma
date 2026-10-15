@@ -2210,10 +2210,6 @@ export function AdminFieldDrawer({
       formulaConfig: (form.primaryCategory === "number" || form.primaryCategory === "money") && form.numberValueMode === "formula" ? {
         mode: "formula",
         terms: form.formulaTerms || [],
-      } : (form.primaryCategory === "number" || form.primaryCategory === "money") && form.staticNumberValue !== "" && form.staticNumberValue !== undefined ? {
-        mode: "static",
-        staticValue: Number(form.staticNumberValue),
-        terms: [],
       } : undefined,
 
       primarySubFieldId: form.primaryCategory === "composite" ? (form.primarySubFieldId || form.tableColumns[0]?.id || undefined) : undefined,
@@ -2785,85 +2781,113 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* 3B. Number Configuration */}
+          {/* 3B. Number & Currency / Money Configuration */}
           {(form.primaryCategory === "number" || form.primaryCategory === "money") && (
-            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3.5">
-              {/* Value Mode Toggle: Static vs Formula */}
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                <div className="flex items-center gap-1.5">
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Value Configuration</label>
-                  <InfoTooltip text="Choose whether to enter a static number or apply a mathematical formula between other number/money fields." size="sm" />
-                </div>
-                <div className="flex bg-slate-200/80 p-0.5 rounded-lg text-xs">
-                  <button
-                    type="button"
-                    disabled={isReadOnly}
-                    onClick={() => setForm((p) => ({ ...p, numberValueMode: "static" }))}
-                    className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                      (form.numberValueMode || "static") === "static"
-                        ? "bg-white text-slate-900 shadow-xs font-bold"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Static Value
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isReadOnly}
-                    onClick={() => {
-                      const avail = getAllFields(form.module).filter(
-                        (f) => (f.inputType === "number" || f.inputType === "money") && f.key !== form.key
-                      );
-                      setForm((p) => ({
-                        ...p,
-                        numberValueMode: "formula",
-                        formulaTerms: p.formulaTerms && p.formulaTerms.length > 0 ? p.formulaTerms : [
-                          { fieldKey: avail[0]?.key || "", operator: "+" },
-                          { fieldKey: avail[1]?.key || avail[0]?.key || "", operator: undefined }
-                        ]
-                      }));
-                    }}
-                    className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                      form.numberValueMode === "formula"
-                        ? "bg-blue-600 text-white shadow-xs font-bold"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Apply Formula
-                  </button>
-                </div>
-              </div>
-
-              {(form.numberValueMode || "static") === "static" ? (
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
+              {/* Currency Selector (for Money / Currency fields) */}
+              {form.primaryCategory === "money" && (
                 <div>
                   <div className="flex items-center gap-1.5 mb-1.5">
-                    <label className="block text-xs font-semibold text-slate-700">Static Default Value (Optional)</label>
-                    <InfoTooltip text="Set a static numerical value for this field." size="sm" />
+                    <label className="block text-xs font-semibold text-slate-700">Currency</label>
+                    <InfoTooltip text="Select the currency denomination displayed alongside monetary amounts." size="sm" />
+                  </div>
+                  <AdminSelect
+                    value={form.currency || "INR"}
+                    disabled={isReadOnly}
+                    onChange={(val) => setForm((p) => ({ ...p, currency: val }))}
+                    options={Object.entries(CURRENCY_SYMBOLS).map(([code, symbol]) => ({
+                      value: code,
+                      label: `${code} (${symbol})`,
+                      badge: symbol,
+                    }))}
+                  />
+                </div>
+              )}
+
+              {/* Min & Max Bounds Configuration for numbers & currency */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">Min Value (Optional)</label>
+                    <InfoTooltip text="Optional minimum allowed value." size="sm" />
                   </div>
                   <input
                     type="number"
-                    value={form.staticNumberValue ?? ""}
+                    value={form.minRange ?? ""}
                     disabled={isReadOnly}
-                    onChange={(e) => setForm((p) => ({ ...p, staticNumberValue: e.target.value !== "" ? Number(e.target.value) : "" }))}
-                    placeholder="Enter default number, e.g. 0"
+                    onChange={(e) => setForm((p) => ({ ...p, minRange: e.target.value !== "" ? Number(e.target.value) : undefined }))}
+                    placeholder="e.g. 0"
                     className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
                   />
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="text-[11px] text-slate-500">
-                    The value of this field will be automatically derived through mathematical operations (+, −, ×, ÷) between other numeric fields.
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">Max Value (Optional)</label>
+                    <InfoTooltip text="Optional maximum allowed value." size="sm" />
                   </div>
+                  <input
+                    type="number"
+                    value={form.maxRange ?? ""}
+                    disabled={isReadOnly}
+                    onChange={(e) => setForm((p) => ({ ...p, maxRange: e.target.value !== "" ? Number(e.target.value) : undefined }))}
+                    placeholder="e.g. 100"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
 
-                  {/* Formula Terms List */}
-                  <div className="space-y-2">
+              {/* Apply Formula Toggle (Positioned below Min Value / Max Value) */}
+              <div className="flex items-center justify-between pt-2.5 border-t border-slate-200">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs font-semibold text-slate-700">Apply Formula</label>
+                  <InfoTooltip text="Automatically calculate this field value using a mathematical formula from other numeric/currency fields." size="sm" />
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.numberValueMode === "formula"}
+                    disabled={isReadOnly}
+                    onChange={(e) => {
+                      const isFormula = e.target.checked;
+                      if (isFormula) {
+                        const avail = getAllFields(form.module).filter(
+                          (f) => (f.inputType === "number" || f.inputType === "money") && f.key !== form.key
+                        );
+                        setForm((p) => ({
+                          ...p,
+                          numberValueMode: "formula",
+                          formulaTerms: p.formulaTerms && p.formulaTerms.length > 0 ? p.formulaTerms : [
+                            { fieldKey: avail[0]?.key || "", operator: "+" },
+                            { fieldKey: avail[1]?.key || avail[0]?.key || "", operator: undefined }
+                          ]
+                        }));
+                      } else {
+                        setForm((p) => ({
+                          ...p,
+                          numberValueMode: "static"
+                        }));
+                      }
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              {/* Formula applying functionality shown only if toggle is enabled (in same row with reduced width) */}
+              {form.numberValueMode === "formula" && (
+                <div className="space-y-3 pt-2 border-t border-slate-200">
+                  {/* Select number fields and operators in the same row */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     {(form.formulaTerms || []).map((term, tIdx) => {
                       const availFields = getAllFields(form.module).filter(
                         (f) => (f.inputType === "number" || f.inputType === "money") && f.key !== form.key
                       );
+                      const isLast = tIdx === (form.formulaTerms || []).length - 1;
+
                       return (
-                        <div key={tIdx} className="flex items-center gap-2">
-                          <div className="flex-1">
+                        <div key={tIdx} className="flex items-center gap-1.5">
+                          <div className="w-[145px] sm:w-[165px]">
                             <select
                               value={term.fieldKey}
                               disabled={isReadOnly}
@@ -2874,15 +2898,16 @@ export function AdminFieldDrawer({
                                   formulaTerms: (p.formulaTerms || []).map((tm, idx) => idx === tIdx ? { ...tm, fieldKey: val } : tm)
                                 }));
                               }}
-                              className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                              className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
                             >
-                              <option value="">Select numeric field...</option>
+                              <option value="">Select field...</option>
                               {availFields.map((f) => (
                                 <option key={f.key} value={f.key}>{f.label} ({f.inputType})</option>
                               ))}
                             </select>
                           </div>
-                          {tIdx < (form.formulaTerms || []).length - 1 && (
+
+                          {!isLast && (
                             <select
                               value={term.operator || "+"}
                               disabled={isReadOnly}
@@ -2893,7 +2918,7 @@ export function AdminFieldDrawer({
                                   formulaTerms: (p.formulaTerms || []).map((tm, idx) => idx === tIdx ? { ...tm, operator: op } : tm)
                                 }));
                               }}
-                              className="w-14 px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-blue-600 text-center outline-none focus:border-blue-500 cursor-pointer"
+                              className="w-11 px-1 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-blue-600 text-center outline-none focus:border-blue-500 cursor-pointer"
                             >
                               <option value="+">+</option>
                               <option value="-">−</option>
@@ -2901,16 +2926,19 @@ export function AdminFieldDrawer({
                               <option value="/">÷</option>
                             </select>
                           )}
+
                           {!isReadOnly && (form.formulaTerms || []).length > 2 && (
                             <button
                               type="button"
                               onClick={() => {
-                                setForm((p) => ({
-                                  ...p,
-                                  formulaTerms: (p.formulaTerms || []).filter((_, idx) => idx !== tIdx)
-                                }));
+                                setForm((p) => {
+                                  const filtered = (p.formulaTerms || []).filter((_, idx) => idx !== tIdx);
+                                  const normalized = filtered.map((item, idx) => idx === filtered.length - 1 ? { ...item, operator: undefined } : item);
+                                  return { ...p, formulaTerms: normalized };
+                                });
                               }}
-                              className="p-1 text-slate-400 hover:text-red-500"
+                              className="p-1 text-slate-400 hover:text-red-500 cursor-pointer"
+                              title="Remove operand"
                             >
                               <X className="w-3.5 h-3.5" />
                             </button>
@@ -2949,40 +2977,6 @@ export function AdminFieldDrawer({
                     <span className="font-semibold">
                       {(form.formulaTerms || []).map((t) => `${t.fieldKey || "?"} ${t.operator ? `${t.operator} ` : ""}`).join("")}
                     </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Min & Max Bounds Configuration for numbers */}
-              {form.primaryCategory === "number" && (
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <label className="block text-xs font-semibold text-slate-700">Min Value (Optional)</label>
-                      <InfoTooltip text="Optional minimum allowed number." size="sm" />
-                    </div>
-                    <input
-                      type="number"
-                      value={form.minRange ?? ""}
-                      disabled={isReadOnly}
-                      onChange={(e) => setForm((p) => ({ ...p, minRange: e.target.value !== "" ? Number(e.target.value) : undefined }))}
-                      placeholder="e.g. 0"
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <label className="block text-xs font-semibold text-slate-700">Max Value (Optional)</label>
-                      <InfoTooltip text="Optional maximum allowed number." size="sm" />
-                    </div>
-                    <input
-                      type="number"
-                      value={form.maxRange ?? ""}
-                      disabled={isReadOnly}
-                      onChange={(e) => setForm((p) => ({ ...p, maxRange: e.target.value !== "" ? Number(e.target.value) : undefined }))}
-                      placeholder="e.g. 100"
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
-                    />
                   </div>
                 </div>
               )}
@@ -5219,25 +5213,6 @@ export function AdminFieldDrawer({
             </>
           )}
 
-          {/* 3I. Currency Picker for Money fields */}
-          {form.primaryCategory === "money" && (
-            <div>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <label className="block text-xs font-semibold text-slate-700">Currency</label>
-                <InfoTooltip text="Select the currency denomination displayed alongside monetary amounts." size="sm" />
-              </div>
-              <AdminSelect
-                value={form.currency || "INR"}
-                disabled={isReadOnly}
-                onChange={(val) => setForm((p) => ({ ...p, currency: val }))}
-                options={Object.entries(CURRENCY_SYMBOLS).map(([code, symbol]) => ({
-                  value: code,
-                  label: `${code} (${symbol})`,
-                  badge: symbol,
-                }))}
-              />
-            </div>
-          )}
 
           {/* 3J. Rating Max Stars */}
           {form.primaryCategory === "rating" && (
