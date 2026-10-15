@@ -25,7 +25,7 @@ export interface SidebarMenuConfig {
 }
 
 export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
-  version: 5,
+  version: 6,
   defaultStartPage: "/",
   sections: [
     {
@@ -38,8 +38,8 @@ export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
         { id: "call-logs", label: "Call Logs", iconName: "Phone", path: "/call-logs", visible: true, isFeatured: true },
         { id: "chats", label: "Chats", iconName: "MessageCircle", path: "/chats", visible: true, isFeatured: true },
         { id: "processes", label: "Process", iconName: "RefreshCw", path: "/deals", visible: true, isFeatured: true },
-        { id: "scribe", label: "AI Scribe", iconName: "Stethoscope", path: "/scribe", visible: true, isFeatured: true },
         { id: "appointments", label: "Appointments", iconName: "Calendar", path: "/appointments", visible: true, isFeatured: true },
+        { id: "scribe", label: "AI Scribe", iconName: "Stethoscope", path: "/scribe", visible: true, isFeatured: true },
       ],
     },
     {
@@ -105,8 +105,8 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (parsed.sections && Array.isArray(parsed.sections)) {
-        if (!parsed.version || parsed.version < 5) {
-          // Migrate: ensure workspace items default to isFeatured: true, remove legacy settings-numbers item, update billing to REVENUE & INSIGHTS, and automation to CUSTOMIZATIONS
+        if (!parsed.version || parsed.version < 6) {
+          // Migrate: ensure workspace items default to isFeatured: true, appointments above scribe, remove legacy settings-numbers item, update billing to REVENUE & INSIGHTS, and automation to CUSTOMIZATIONS
           const migratedSections = parsed.sections.map((sec: NavSectionConfig) => {
             if (sec.id === "billing") {
               return {
@@ -121,9 +121,17 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
               };
             }
             if (sec.id === "workspace") {
+              const items = [...sec.items];
+              const apptIdx = items.findIndex((it) => it.id === "appointments");
+              const scribeIdx = items.findIndex((it) => it.id === "scribe");
+              if (apptIdx !== -1 && scribeIdx !== -1 && apptIdx > scribeIdx) {
+                const [apptItem] = items.splice(apptIdx, 1);
+                const newScribeIdx = items.findIndex((it) => it.id === "scribe");
+                items.splice(newScribeIdx, 0, apptItem);
+              }
               return {
                 ...sec,
-                items: sec.items.map((it: NavItemConfig) => ({
+                items: items.map((it: NavItemConfig) => ({
                   ...it,
                   isFeatured: it.isFeatured !== undefined ? it.isFeatured : true,
                 })),
@@ -137,7 +145,7 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
             }
             return sec;
           });
-          const migrated = { ...parsed, version: 5, sections: migratedSections };
+          const migrated = { ...parsed, version: 6, sections: migratedSections };
           localStorage.setItem(storageKey, JSON.stringify(migrated));
           return migrated;
         }
@@ -150,6 +158,17 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
             return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
           });
           parsed.sections = parsed.sections.map((sec: NavSectionConfig) => {
+            if (sec.id === "workspace") {
+              const items = [...sec.items];
+              const apptIdx = items.findIndex((it) => it.id === "appointments");
+              const scribeIdx = items.findIndex((it) => it.id === "scribe");
+              if (apptIdx !== -1 && scribeIdx !== -1 && apptIdx > scribeIdx) {
+                const [apptItem] = items.splice(apptIdx, 1);
+                const newScribeIdx = items.findIndex((it) => it.id === "scribe");
+                items.splice(newScribeIdx, 0, apptItem);
+              }
+              return { ...sec, items };
+            }
             if (sec.id === "billing") return { ...sec, title: "REVENUE & INSIGHTS" };
             if (sec.id === "automation") {
               const hasAuto = sec.items.some((it) => it.id === "global-automation");

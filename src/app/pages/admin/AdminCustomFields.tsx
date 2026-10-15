@@ -200,7 +200,6 @@ const MODULE_TABS: { label: string; value: Exclude<FieldModule, "deal"> }[] = [
   { label: "Invoices",      value: "invoice" },
   { label: "Organizations", value: "organization" },
   { label: "Team Members",  value: "teamMember" },
-  { label: "AI Scribe",     value: "scribe" },
 ];
 
 const FIELD_TYPES: { label: string; value: FieldInputType }[] = [

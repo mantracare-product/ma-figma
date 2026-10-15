@@ -59,7 +59,7 @@ import { DEFAULT_ENTITY_PROCESSES } from "../../lib/useProcessStore";
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import PageTopBar from "../components/layout/PageTopBar";
 import { Modal } from "../components/ui/Modal";
-import AIScribeModal from "../components/scribe/AIScribeModal";
+import NewConsultationDrawer from "../components/scribe/NewConsultationDrawer";
 import TranscriptDetailDrawer from "../components/scribe/TranscriptDetailDrawer";
 import {
   ScribeSession,
@@ -802,6 +802,36 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     try {
       window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
     } catch {}
+  };
+
+  const handleFillFromScribe = (scribeData: {
+    transcriptPreview?: string;
+    diagnosis?: string;
+    chiefComplaint?: string;
+    extractedData?: any;
+    scribeSessionId?: string;
+  }) => {
+    const ext = scribeData.extractedData || {};
+    const notesSummary = [
+      scribeData.transcriptPreview ? `Transcript: ${scribeData.transcriptPreview}` : "",
+      ext.chiefComplaint ? `Chief Complaint: ${ext.chiefComplaint}` : "",
+      ext.assessment ? `Diagnosis / Assessment: ${ext.assessment}` : "",
+      ext.symptoms?.length ? `Symptoms: ${ext.symptoms.join(", ")}` : "",
+      ext.plan?.length ? `Treatment Plan: ${ext.plan.join("; ")}` : "",
+      ext.medications?.length ? `Medications: ${ext.medications.join(", ")}` : "",
+    ].filter(Boolean).join("\n\n");
+
+    handleFieldValueChange("notes", notesSummary);
+    if (ext.assessment || scribeData.diagnosis) {
+      handleFieldValueChange("diagnosis", ext.assessment || scribeData.diagnosis);
+    }
+    if (ext.chiefComplaint || scribeData.chiefComplaint) {
+      handleFieldValueChange("chief_complaint", ext.chiefComplaint || scribeData.chiefComplaint);
+    }
+    if (ext.symptoms?.length) {
+      handleFieldValueChange("symptoms", ext.symptoms.join(", "));
+    }
+    toast.success("✨ Client fields populated with AI Scribe clinical data!");
   };
 
   const handleSectionsChange = (newSections: OverviewSection[]) => {
@@ -2332,6 +2362,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       clientName={client.name}
                       clientEmail={client.email}
                       clientPhone={client.phone}
+                      processId={activeProcessTabDrawer !== "all" ? activeProcessTabDrawer : undefined}
+                      processName={activeProcessTabDrawer !== "all" ? activeProcessTabDrawer : undefined}
+                      onFillWithAi={handleFillFromScribe}
                       emptyMessage="No activity for this client yet"
                       onOpenScheduleAppointment={() => {
                         setActivityBookingValues((prev) => ({
@@ -4321,14 +4354,19 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             }}
           />
 
-          {/* AI Scribe Modal */}
-          <AIScribeModal
+          {/* AI Scribe Drawer (Unified with Scribe Page) */}
+          <NewConsultationDrawer
             isOpen={showScribeModal}
             onClose={() => setShowScribeModal(false)}
-            clientId={String(client.id)}
-            clientName={client.name}
-            patientAge={client.age || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? 34 : 45)}
-            patientGender={client.gender || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? "Female" : "Male")}
+            initialClientId={String(client.id)}
+            initialClientName={client.name}
+            initialEntityType="client"
+            zIndex={700}
+            onSessionCreated={(session) => {
+              setShowScribeModal(false);
+              setScribeSessions(getScribeSessions());
+              toast.success(`AI Scribe consultation recorded for ${session.clientName}!`);
+            }}
             onViewTranscript={(newSession) => {
               setShowScribeModal(false);
               setScribeSessions(getScribeSessions());

@@ -24,8 +24,12 @@ export interface ActivityBase {
   processName?: string;
   clientId?: string;
   appointmentId?: string;
+  invoiceId?: string;
   createdBy?: "system" | "ai" | "user";
   sourceStepName?: string;
+  clientName?: string;
+  title?: string;
+  audioInputMode?: "live" | "upload";
   /** Backward-compat fallback rendered when no type-specific block applies */
   details?: { primary: string; secondary?: string };
 }
@@ -103,6 +107,17 @@ export interface NoteActivityEntry extends ActivityBase {
   category?: string;
 }
 
+export interface ScribeActivityEntry extends ActivityBase {
+  type: "scribe";
+  scribeSessionId: string;
+  doctorName?: string;
+  durationSeconds?: number;
+  chiefComplaint?: string;
+  diagnosis?: string;
+  transcriptPreview?: string;
+  extractedData?: any;
+}
+
 export interface SystemActivityEntry extends ActivityBase {
   type: "process_entry" | "webhook_trigger" | "process_completed" | "website_message" | "website";
   status?: string;
@@ -122,6 +137,7 @@ export type ActivityEntry =
   | StageActivityEntry
   | FieldUpdateActivityEntry
   | NoteActivityEntry
+  | ScribeActivityEntry
   | SystemActivityEntry;
 
 /**
@@ -165,6 +181,9 @@ export function isFieldUpdateEntry(e: ActivityEntry): e is FieldUpdateActivityEn
 export function isNoteEntry(e: ActivityEntry): e is NoteActivityEntry {
   return e.type === "note";
 }
+export function isScribeEntry(e: ActivityEntry): e is ScribeActivityEntry {
+  return e.type === "scribe";
+}
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 
@@ -200,7 +219,7 @@ function writeAll(entries: ActivityEntry[]): void {
 export function getActivity(
   clientId: string | string[],
   processId?: string,
-  options?: { appointmentId?: string }
+  options?: { appointmentId?: string; invoiceId?: string }
 ): ActivityEntry[] {
   const all = readAll();
   const rawList = Array.isArray(clientId) ? clientId : [clientId];
@@ -211,6 +230,9 @@ export function getActivity(
   const targetApptId = options?.appointmentId
     ? String(options.appointmentId).toLowerCase().trim()
     : undefined;
+  const targetInvId = options?.invoiceId
+    ? String(options.invoiceId).toLowerCase().trim()
+    : undefined;
 
   const filtered = all.filter((e) => {
     // 1. Direct appointmentId match
@@ -219,6 +241,16 @@ export function getActivity(
       const normTarget = targetApptId.replace(/[^0-9]/g, "");
       const normEntry = entryApptId.replace(/[^0-9]/g, "");
       if (entryApptId === targetApptId || (normTarget && normEntry && normTarget === normEntry)) {
+        return true;
+      }
+    }
+
+    // 1b. Direct invoiceId match
+    if (targetInvId && (e as any).invoiceId) {
+      const entryInvId = String((e as any).invoiceId).toLowerCase().trim();
+      const normTarget = targetInvId.replace(/[^0-9]/g, "");
+      const normEntry = entryInvId.replace(/[^0-9]/g, "");
+      if (entryInvId === targetInvId || (normTarget && normEntry && normTarget === normEntry)) {
         return true;
       }
     }
@@ -299,7 +331,7 @@ export function appendActivity(
 export function subscribeToActivity(
   clientId: string | string[],
   callback: (entries: ActivityEntry[]) => void,
-  options?: { appointmentId?: string }
+  options?: { appointmentId?: string; invoiceId?: string }
 ): () => void {
   const handler = () => {
     callback(getActivity(clientId, undefined, options));

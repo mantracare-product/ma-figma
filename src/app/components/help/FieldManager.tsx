@@ -18,7 +18,7 @@ const MODULE_LABELS: Record<Exclude<FieldModule, "deal">, string> = {
   scribe: "AI Scribe Fields",
 };
 
-const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "invoice", "call", "service", "organization", "teamMember", "scribe"];
+const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "invoice", "call", "service", "organization", "teamMember"];
 
 // Module → singular noun for prose labels
 const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plural: string }> = {

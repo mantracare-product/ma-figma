@@ -110,7 +110,6 @@ export const MODULE_OPTIONS: { label: string; value: Exclude<FieldModule, "deal"
   { label: "Invoice",      value: "invoice" },
   { label: "Organization", value: "organization" },
   { label: "Team Member",  value: "teamMember" },
-  { label: "AI Scribe",    value: "scribe" },
 ];
 
 export type PrimaryFieldTypeCategory =
@@ -3562,7 +3561,6 @@ export function AdminFieldDrawer({
                     { value: "invoice", label: "Invoices (Billing & Receipts)" },
                     { value: "organization", label: "Organizations (Accounts & Companies)" },
                     { value: "teamMember", label: "Team Members (Staff & Providers)" },
-                    { value: "scribe", label: "AI Scribe (Clinical Documentation)" },
                   ]}
                 />
               </div>

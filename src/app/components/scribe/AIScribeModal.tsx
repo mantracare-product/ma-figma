@@ -30,7 +30,12 @@ interface AIScribeModalProps {
   clientName?: string;
   patientAge?: number;
   patientGender?: string;
+  appointmentId?: string;
+  invoiceId?: string;
+  processId?: string;
+  processName?: string;
   onViewTranscript?: (session: ScribeSession) => void;
+  onSessionSaved?: (session: ScribeSession) => void;
 }
 
 export default function AIScribeModal({
@@ -40,7 +45,12 @@ export default function AIScribeModal({
   clientName = "Rajesh Kumar",
   patientAge = 54,
   patientGender = "Male",
+  appointmentId,
+  invoiceId,
+  processId,
+  processName,
   onViewTranscript,
+  onSessionSaved,
 }: AIScribeModalProps) {
   const [workflowState, setWorkflowState] = useState<"idle" | "recording" | "processing" | "review" | "prescribed">("idle");
   const [recordingTime, setRecordingTime] = useState(0);
@@ -83,6 +93,10 @@ export default function AIScribeModal({
       clientName: clientName,
       patientAge: patientAge,
       patientGender: patientGender,
+      appointmentId: appointmentId,
+      invoiceId: invoiceId,
+      processId: processId,
+      processName: processName,
       doctorId: "doc-1",
       doctorName: "Dr. Priya Sharma",
       sessionDate: new Date().toISOString(),
@@ -98,8 +112,11 @@ export default function AIScribeModal({
 
     saveScribeSession(newSession);
     issuePrescriptionDocument(newSession);
-    toast.success(`Transcript ready for ${clientName}!`);
+    toast.success(`AI Scribe consultation recorded for ${clientName}!`);
 
+    if (onSessionSaved) {
+      onSessionSaved(newSession);
+    }
     if (onViewTranscript) {
       onViewTranscript(newSession);
     }

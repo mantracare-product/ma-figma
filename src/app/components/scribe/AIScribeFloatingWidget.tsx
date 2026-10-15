@@ -23,34 +23,35 @@ export default function AIScribeFloatingWidget() {
 
   return (
     <>
-      {/* Simple Clean Circular Floating Action Widget */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <button
-          type="button"
-          onClick={() => setIsNewConsultationOpen(true)}
-          className="group relative flex flex-col items-center justify-center h-14 w-14 rounded-full bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#11161c] hover:to-[#22303e] text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer border border-white/15"
-          title="Open AI Scribe"
-        >
-          {/* Live Indicator Dot */}
-          <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-          </span>
-
-          <Mic className="h-4 w-4 text-white group-hover:scale-110 transition-transform" />
-          <span
-            className="text-[9px] font-bold tracking-tight text-slate-200 mt-0.5 leading-none"
+      {/* Capsule Slim Floating Scribe Widget (Toppest z-index above all drawers) */}
+      {!isNewConsultationOpen && !isDetailDrawerOpen && (
+        <div className="fixed bottom-5 right-5 pointer-events-auto" style={{ zIndex: 2147483647 }}>
+          <button
+            type="button"
+            onClick={() => setIsNewConsultationOpen(true)}
+            className="group flex items-center gap-1.5 h-8 px-3 rounded-full bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#11161c] hover:to-[#22303e] text-white shadow-[0_4px_16px_rgba(0,0,0,0.35)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.45)] transition-all duration-200 hover:scale-[1.03] active:scale-[0.97] cursor-pointer border border-white/20 select-none backdrop-blur-md"
+            title="Open AI Scribe"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
-            Scribe
-          </span>
-        </button>
-      </div>
+            {/* Live Indicator Dot */}
+            <span className="relative flex h-2 w-2 flex-shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+
+            <Mic className="h-3.5 w-3.5 text-white group-hover:scale-110 transition-transform flex-shrink-0" />
+            <span className="text-xs font-semibold tracking-wide text-white leading-none">
+              Scribe
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* New Consultation / Recording Drawer */}
       <NewConsultationDrawer
         isOpen={isNewConsultationOpen}
         onClose={() => setIsNewConsultationOpen(false)}
+        zIndex={2147483640}
         onSessionCreated={() => {
           window.dispatchEvent(new Event("scribe-store-updated"));
         }}
@@ -66,6 +67,7 @@ export default function AIScribeFloatingWidget() {
         isOpen={isDetailDrawerOpen}
         onClose={() => setIsDetailDrawerOpen(false)}
         session={selectedDetailSession}
+        zIndex={2147483645}
       />
     </>
   );

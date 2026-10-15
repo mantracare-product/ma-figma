@@ -5,7 +5,6 @@ import {
   Play,
   Pause,
   UploadCloud,
-  Calendar,
   User,
   Clock,
   Search,
@@ -17,6 +16,13 @@ import {
   Sparkles,
   Eye,
   FileText,
+  Calendar,
+  Receipt,
+  ShieldCheck,
+  FileCheck,
+  GitBranch,
+  Hash,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import DrawerShell from "../ui/DrawerShell";
@@ -27,30 +33,37 @@ import {
   issuePrescriptionDocument,
   SCRIBE_DOCTORS,
 } from "../../../lib/scribeSessionStore";
+import { useClients } from "../../../lib/clientsStore";
+import { useProcessStore, Process, EntityType } from "../../../lib/useProcessStore";
 
 export interface NewConsultationDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onSessionCreated?: (session: ScribeSession) => void;
   onViewTranscript?: (session: ScribeSession) => void;
+  initialClientId?: string;
+  initialClientName?: string;
+  initialEntityType?: EntityType;
+  initialProcessId?: string;
+  initialProcessName?: string;
+  initialRecordId?: string;
+  zIndex?: number;
 }
 
-const AVAILABLE_CLIENTS = [
-  { id: "1", name: "Rajesh Kumar", age: 54, gender: "Male" },
-  { id: "2", name: "Sunita Devi", age: 48, gender: "Female" },
-  { id: "3", name: "Amit Singhania", age: 62, gender: "Male" },
-  { id: "4", name: "Pooja Sharma", age: 32, gender: "Female" },
-  { id: "CL-001", name: "Sarah Johnson", age: 42, gender: "Female" },
-  { id: "CL-002", name: "Michael Chen", age: 38, gender: "Male" },
-  { id: "CL-003", name: "Emily Davis", age: 50, gender: "Female" },
-];
+export interface ScribeEntityOption {
+  id: EntityType;
+  label: string;
+  description: string;
+  prefix: string;
+  icon: any;
+}
 
-const AVAILABLE_APPOINTMENTS = [
-  { id: "none", label: "None / Walk-in Consultation" },
-  { id: "apt-1", label: "Today 10:00 AM — Cataract Post-Op Evaluation" },
-  { id: "apt-2", label: "Today 11:30 AM — Knee Osteoarthritis Review" },
-  { id: "apt-3", label: "Today 02:15 PM — General Medicine & Infection Check" },
-  { id: "apt-4", label: "Today 04:00 PM — Chronic Care Follow-up" },
+export const SCRIBE_ENTITIES: ScribeEntityOption[] = [
+  { id: "client", label: "Client / Patient", description: "Client care journeys & lead workflows", prefix: "REC", icon: User },
+  { id: "appointment", label: "Appointment", description: "Clinical consultations & visits", prefix: "APT", icon: Calendar },
+  { id: "invoice", label: "Invoice", description: "Billing, services & payment lifecycle", prefix: "INV", icon: Receipt },
+  { id: "insurance", label: "Insurance", description: "Payer policies & eligibility verification", prefix: "INS", icon: ShieldCheck },
+  { id: "claim", label: "Claim", description: "Insurance claim filing & adjudication", prefix: "CLM", icon: FileCheck },
 ];
 
 export default function NewConsultationDrawer({
@@ -58,16 +71,36 @@ export default function NewConsultationDrawer({
   onClose,
   onSessionCreated,
   onViewTranscript,
+  initialClientId,
+  initialClientName,
+  initialEntityType,
+  initialProcessId,
+  initialProcessName,
+  initialRecordId,
+  zIndex = 650,
 }: NewConsultationDrawerProps) {
+  // Live reactive client store (matches Clients.tsx and reflects newly created clients instantly)
+  const { clients: liveClients } = useClients();
+
+  // Live reactive process store
+  const { processes: liveProcesses } = useProcessStore();
+
   // Client selection state
-  const [selectedClientId, setSelectedClientId] = useState<string>("1");
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [clientSearchQuery, setClientSearchQuery] = useState("");
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
   const [customClientName, setCustomClientName] = useState("");
 
-  // Appointment selection state
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>("none");
-  const [isAppointmentDropdownOpen, setIsAppointmentDropdownOpen] = useState(false);
+  // Entity selection state (Choose Entity)
+  const [selectedEntityId, setSelectedEntityId] = useState<EntityType>("client");
+  const [isEntityDropdownOpen, setIsEntityDropdownOpen] = useState(false);
+
+  // Process selection state (Choose Process mapped to chosen entity & client)
+  const [selectedProcessId, setSelectedProcessId] = useState<string>("");
+  const [isProcessDropdownOpen, setIsProcessDropdownOpen] = useState(false);
+
+  // Record / Process ID state
+  const [recordId, setRecordId] = useState<string>("");
 
   // Audio mode: "live" | "upload"
   const [audioInputMode, setAudioInputMode] = useState<"live" | "upload">("live");
@@ -85,23 +118,172 @@ export default function NewConsultationDrawer({
   const timerRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const clientDropdownRef = useRef<HTMLDivElement>(null);
-  const appointmentDropdownRef = useRef<HTMLDivElement>(null);
+  const entityDropdownRef = useRef<HTMLDivElement>(null);
+  const processDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Reset on open/close
+  const getSelectedClient = () => {
+    if (selectedClientId === "custom") {
+      return {
+        id: `WALK-${Date.now().toString().slice(-4)}`,
+        name: customClientName.trim() || "Walk-in Patient",
+        age: 45,
+        gender: "Male",
+        phone: "",
+        email: "",
+        processes: [] as string[],
+      };
+    }
+    const match = liveClients.find((c) => c.id === selectedClientId);
+    if (match) return match;
+    if (liveClients.length > 0) return liveClients[0];
+    return { id: "CL-001", name: "Sarah Johnson", age: 42, gender: "Female", phone: "", email: "", processes: [] as string[] };
+  };
+
+  const selectedClient = getSelectedClient();
+  const clientProcessesList: string[] = Array.isArray(selectedClient.processes)
+    ? selectedClient.processes
+    : [];
+
+  // Processes filtered for the chosen Entity
+  const entityProcesses = liveProcesses.filter((p) => {
+    const pEntity = p.entityType || "client";
+    return pEntity === selectedEntityId;
+  });
+
+  // Check if a process is enrolled for the currently selected client
+  const isProcessEnrolledForClient = (proc?: Process | null) => {
+    if (!proc) return false;
+    return clientProcessesList.some(
+      (cp) =>
+        cp.toLowerCase().trim() === (proc.name || "").toLowerCase().trim() ||
+        cp.toLowerCase().trim() === (proc.id || "").toLowerCase().trim()
+    );
+  };
+
+  // Sort entity processes so enrolled processes are at the top
+  const sortedEntityProcesses = [...entityProcesses].sort((a, b) => {
+    const aEnrolled = isProcessEnrolledForClient(a) ? 1 : 0;
+    const bEnrolled = isProcessEnrolledForClient(b) ? 1 : 0;
+    return bEnrolled - aEnrolled;
+  });
+
+  const selectedEntity =
+    SCRIBE_ENTITIES.find((e) => e.id === selectedEntityId) || SCRIBE_ENTITIES[0];
+
+  const selectedProcess: Process =
+    entityProcesses.find((p) => p.id === selectedProcessId) ||
+    sortedEntityProcesses[0] ||
+    liveProcesses[0] ||
+    ({ id: "default", name: "Default Process", entityType: "client", stages: [] } as any);
+
+  // Initialize or reset on open/close
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      // 1. Client prefill / fallback
+      let targetCid = initialClientId;
+      if (initialClientId) {
+        const match = liveClients.find((c) => c.id === initialClientId || String(c.id) === String(initialClientId));
+        if (match) {
+          targetCid = match.id;
+          setSelectedClientId(match.id);
+        } else if (initialClientName) {
+          targetCid = "custom";
+          setSelectedClientId("custom");
+          setCustomClientName(initialClientName);
+        } else {
+          setSelectedClientId(initialClientId);
+        }
+      } else if (initialClientName) {
+        const match = liveClients.find((c) => (c.name || "").toLowerCase().trim() === initialClientName.toLowerCase().trim());
+        if (match) {
+          targetCid = match.id;
+          setSelectedClientId(match.id);
+        } else {
+          targetCid = "custom";
+          setSelectedClientId("custom");
+          setCustomClientName(initialClientName);
+        }
+      } else if (liveClients.length > 0 && (!selectedClientId || !liveClients.some((c) => c.id === selectedClientId))) {
+        targetCid = liveClients[0].id;
+        setSelectedClientId(targetCid);
+      } else {
+        targetCid = selectedClientId;
+      }
+
+      // 2. Entity prefill / mapping
+      let targetEntity: EntityType = initialEntityType || "client";
+      if (!initialEntityType && (initialProcessId || initialProcessName)) {
+        const pMatch = liveProcesses.find((p) => p.id === initialProcessId || p.name === initialProcessName);
+        if (pMatch && pMatch.entityType) {
+          targetEntity = pMatch.entityType;
+        }
+      }
+      setSelectedEntityId(targetEntity);
+
+      // 3. Process prefill / mapping based on chosen entity & client enrollment
+      const procsForEntity = liveProcesses.filter((p) => (p.entityType || "client") === targetEntity);
+      let targetProcId = initialProcessId;
+      if (!targetProcId && initialProcessName) {
+        const pMatch = procsForEntity.find((p) => p.name.toLowerCase() === initialProcessName.toLowerCase()) ||
+          liveProcesses.find((p) => p.name.toLowerCase() === initialProcessName.toLowerCase());
+        if (pMatch) targetProcId = pMatch.id;
+      }
+
+      if (!targetProcId) {
+        const clientObj = liveClients.find((c) => c.id === targetCid);
+        const cProcs = clientObj?.processes || [];
+        const enrolled = procsForEntity.find((p) =>
+          cProcs.some(
+            (cp) =>
+              cp.toLowerCase().trim() === (p.name || "").toLowerCase().trim() ||
+              cp.toLowerCase().trim() === (p.id || "").toLowerCase().trim()
+          )
+        );
+        if (enrolled) {
+          targetProcId = enrolled.id;
+        } else if (procsForEntity.length > 0) {
+          targetProcId = procsForEntity[0].id;
+        }
+      }
+
+      if (targetProcId) {
+        setSelectedProcessId(targetProcId);
+      } else if (procsForEntity.length > 0) {
+        setSelectedProcessId(procsForEntity[0].id);
+      }
+
+      // 4. Record ID prefill / calculation
+      if (initialRecordId) {
+        setRecordId(initialRecordId);
+      } else {
+        const entOption = SCRIBE_ENTITIES.find((e) => e.id === targetEntity) || SCRIBE_ENTITIES[0];
+        const cid = targetCid || "CL";
+        setRecordId(`${entOption.prefix}-${cid}-${Date.now().toString().slice(-4)}`);
+      }
+    } else {
       setIsRecording(false);
       setIsPaused(false);
       setRecordingSec(0);
       setIsProcessing(false);
       setGeneratedSession(null);
       setIsClientDropdownOpen(false);
-      setIsAppointmentDropdownOpen(false);
+      setIsEntityDropdownOpen(false);
+      setIsProcessDropdownOpen(false);
       setUploadedFile(null);
       setClientSearchQuery("");
       setAudioInputMode("live");
     }
-  }, [isOpen]);
+  }, [
+    isOpen,
+    liveClients,
+    liveProcesses,
+    initialClientId,
+    initialClientName,
+    initialEntityType,
+    initialProcessId,
+    initialProcessName,
+    initialRecordId,
+  ]);
 
   // Click outside dropdowns
   useEffect(() => {
@@ -113,10 +295,16 @@ export default function NewConsultationDrawer({
         setIsClientDropdownOpen(false);
       }
       if (
-        appointmentDropdownRef.current &&
-        !appointmentDropdownRef.current.contains(e.target as HTMLElement)
+        entityDropdownRef.current &&
+        !entityDropdownRef.current.contains(e.target as HTMLElement)
       ) {
-        setIsAppointmentDropdownOpen(false);
+        setIsEntityDropdownOpen(false);
+      }
+      if (
+        processDropdownRef.current &&
+        !processDropdownRef.current.contains(e.target as HTMLElement)
+      ) {
+        setIsProcessDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -143,24 +331,83 @@ export default function NewConsultationDrawer({
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const getSelectedClient = () => {
-    if (selectedClientId === "custom") {
-      return {
-        id: `c-${Date.now()}`,
-        name: customClientName.trim() || "Walk-in Patient",
-        age: 45,
-        gender: "Male",
-      };
+  const filteredClients = liveClients.filter((c) => {
+    const q = clientSearchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      (c.name || "").toLowerCase().includes(q) ||
+      (c.id || "").toLowerCase().includes(q) ||
+      (c.phone || "").toLowerCase().includes(q) ||
+      (c.email || "").toLowerCase().includes(q)
+    );
+  });
+
+  const handleSelectEntity = (entityId: EntityType) => {
+    setSelectedEntityId(entityId);
+    setIsEntityDropdownOpen(false);
+
+    const entOption = SCRIBE_ENTITIES.find((e) => e.id === entityId) || SCRIBE_ENTITIES[0];
+    const cid = selectedClientId === "custom" ? "WALK" : selectedClientId || "CL";
+    setRecordId(`${entOption.prefix}-${cid}-${Date.now().toString().slice(-4)}`);
+
+    // Map to enrolled process of that entity if client is enrolled!
+    const procsForEntity = liveProcesses.filter((p) => (p.entityType || "client") === entityId);
+    const enrolledProc = procsForEntity.find((p) =>
+      clientProcessesList.some(
+        (cp) =>
+          cp.toLowerCase().trim() === (p.name || "").toLowerCase().trim() ||
+          cp.toLowerCase().trim() === (p.id || "").toLowerCase().trim()
+      )
+    );
+    if (enrolledProc) {
+      setSelectedProcessId(enrolledProc.id);
+    } else if (procsForEntity.length > 0) {
+      setSelectedProcessId(procsForEntity[0].id);
     }
-    return AVAILABLE_CLIENTS.find((c) => c.id === selectedClientId) || AVAILABLE_CLIENTS[0];
   };
 
-  const filteredClients = AVAILABLE_CLIENTS.filter((c) =>
-    c.name.toLowerCase().includes(clientSearchQuery.toLowerCase())
-  );
+  const handleSelectClient = (clientId: string) => {
+    setSelectedClientId(clientId);
+    setIsClientDropdownOpen(false);
 
-  const selectedAppointment =
-    AVAILABLE_APPOINTMENTS.find((a) => a.id === selectedAppointmentId) || AVAILABLE_APPOINTMENTS[0];
+    const entOption = SCRIBE_ENTITIES.find((e) => e.id === selectedEntityId) || SCRIBE_ENTITIES[0];
+    if (clientId === "custom") {
+      setRecordId(`${entOption.prefix}-WALK-${Date.now().toString().slice(-4)}`);
+    } else {
+      const c = liveClients.find((cl) => cl.id === clientId);
+      if (c) {
+        setRecordId(`${entOption.prefix}-${c.id}-${Date.now().toString().slice(-4)}`);
+        const cProcs = c.processes || [];
+
+        // Check if client is enrolled in a process for the current entity
+        const procsForCurrentEntity = liveProcesses.filter(
+          (p) => (p.entityType || "client") === selectedEntityId
+        );
+        const enrolledCurrent = procsForCurrentEntity.find((p) =>
+          cProcs.some(
+            (cp) =>
+              cp.toLowerCase().trim() === (p.name || "").toLowerCase().trim() ||
+              cp.toLowerCase().trim() === (p.id || "").toLowerCase().trim()
+          )
+        );
+
+        if (enrolledCurrent) {
+          setSelectedProcessId(enrolledCurrent.id);
+        } else if (cProcs.length > 0) {
+          // If not enrolled in current entity but enrolled in another entity's process, map to that!
+          const matchAny = liveProcesses.find((p) =>
+            cProcs.some((cp) => cp.toLowerCase().trim() === (p.name || "").toLowerCase().trim())
+          );
+          if (matchAny) {
+            setSelectedEntityId((matchAny.entityType || "client") as EntityType);
+            setSelectedProcessId(matchAny.id);
+            const newEnt = SCRIBE_ENTITIES.find((e) => e.id === matchAny.entityType) || SCRIBE_ENTITIES[0];
+            setRecordId(`${newEnt.prefix}-${c.id}-${Date.now().toString().slice(-4)}`);
+          }
+        }
+      }
+    }
+  };
 
   const handleStartRecording = () => {
     setIsRecording(true);
@@ -199,25 +446,44 @@ export default function NewConsultationDrawer({
     const client = getSelectedClient();
     const scenario = PRESET_SCENARIOS[0];
     const doctor = SCRIBE_DOCTORS[0];
+    const finalRecordId = recordId.trim() || `REC-${client.id}-${Date.now().toString().slice(-4)}`;
+
+    const firstName = client.name.split(" ")[0] || client.name;
+    const lastName = client.name.split(" ").slice(1).join(" ") || firstName;
+    const prefix = client.gender === "Female" ? "Ms." : "Mr.";
+    const personalizedText = scenario.transcriptText
+      .replace(/Mr\.\s*Rajesh(\s+Kumar)?/gi, `${prefix} ${lastName}`)
+      .replace(/Rajesh\s+Kumar/gi, client.name)
+      .replace(/Rajesh/gi, firstName);
+
+    const personalizedUtterances = scenario.utterances.map((u) => ({
+      ...u,
+      text: u.text
+        .replace(/Mr\.\s*Rajesh(\s+Kumar)?/gi, `${prefix} ${lastName}`)
+        .replace(/Rajesh\s+Kumar/gi, client.name)
+        .replace(/Rajesh/gi, firstName),
+    }));
 
     const session: ScribeSession = {
       id: `scribe-${Date.now()}`,
       clientId: client.id,
       clientName: client.name,
-      patientAge: client.age,
-      patientGender: client.gender,
-      appointmentId: selectedAppointmentId !== "none" ? selectedAppointmentId : undefined,
-      sessionName:
-        selectedAppointmentId !== "none"
-          ? selectedAppointment.label.split("—")[1]?.trim() || "Client Session"
-          : undefined,
+      patientAge: client.age || 45,
+      patientGender: client.gender || "Female",
+      entityType: selectedEntityId,
+      workflow: selectedEntity.label,
+      processId: selectedProcess?.id,
+      processName: selectedProcess?.name,
+      recordId: finalRecordId,
+      sessionName: `${selectedEntity.label} • ${selectedProcess?.name || client.name}`,
       doctorId: doctor.id,
       doctorName: doctor.name,
       sessionDate: new Date().toISOString(),
       durationSeconds: recordingSec || 76,
+      audioInputMode: audioInputMode,
       transcript: {
-        fullText: scenario.transcriptText,
-        utterances: scenario.utterances,
+        fullText: personalizedText,
+        utterances: personalizedUtterances,
       },
       extractedData: JSON.parse(JSON.stringify(scenario.extractedData)),
       status: "completed",
@@ -259,11 +525,11 @@ export default function NewConsultationDrawer({
     <DrawerShell
       isOpen={isOpen}
       onClose={onClose}
-      title="New AI Scribe Consultation"
-      subtitle="Ambient medical speech-to-text with automated clinical entity extraction"
+      title="Add New Scribe"
+      subtitle=""
       icon={<Mic className="w-5 h-5 text-[#2c3e50]" />}
       width="max-w-2xl"
-      zIndex={650}
+      zIndex={zIndex}
       footer={
         <div className="flex items-center justify-between w-full">
           <button
@@ -334,17 +600,22 @@ export default function NewConsultationDrawer({
           </div>
         )}
 
-        {/* Setup Form (Client & Appointment) */}
+        {/* Setup Form (Client, Workflow, Process, and Record ID) */}
         {!isProcessing && (
-          <div className="space-y-5">
+          <div className="space-y-4">
             {/* 1. Client / Patient Searchable Dropdown */}
             <div className="relative" ref={clientDropdownRef}>
-              <label
-                className="block text-xs font-semibold text-foreground mb-1.5"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                Select Client / Patient <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  className="block text-xs font-semibold text-foreground"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  Select Client / Patient <span className="text-red-500">*</span>
+                </label>
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  {liveClients.length} clients registered
+                </span>
+              </div>
 
               <button
                 type="button"
@@ -352,7 +623,8 @@ export default function NewConsultationDrawer({
                 onClick={() => {
                   if (!isRecording && !generatedSession) {
                     setIsClientDropdownOpen(!isClientDropdownOpen);
-                    setIsAppointmentDropdownOpen(false);
+                    setIsEntityDropdownOpen(false);
+                    setIsProcessDropdownOpen(false);
                   }
                 }}
                 className={`w-full h-11 px-3.5 bg-white border rounded-xl text-left flex items-center justify-between text-xs font-medium text-foreground transition-all shadow-2xs ${
@@ -362,13 +634,22 @@ export default function NewConsultationDrawer({
                 }`}
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <div className="flex items-center gap-2 truncate">
-                  <User className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                  <span className="truncate">
-                    {selectedClientId === "custom"
-                      ? customClientName || "+ Add / Enter Walk-in Patient"
-                      : getSelectedClient().name}
-                  </span>
+                <div className="flex items-center gap-2.5 truncate">
+                  <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-600">
+                    <User className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="font-semibold text-foreground truncate">
+                      {selectedClientId === "custom"
+                        ? customClientName || "+ Add / Enter Walk-in Patient"
+                        : getSelectedClient().name}
+                    </span>
+                    {selectedClientId !== "custom" && getSelectedClient().id && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                        {getSelectedClient().id}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <ChevronDown
                   className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
@@ -388,7 +669,7 @@ export default function NewConsultationDrawer({
                       <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
                       <input
                         type="text"
-                        placeholder="Search client by name..."
+                        placeholder="Search client by name, ID, phone..."
                         value={clientSearchQuery}
                         onChange={(e) => setClientSearchQuery(e.target.value)}
                         autoFocus
@@ -398,9 +679,9 @@ export default function NewConsultationDrawer({
                     </div>
                   </div>
 
-                  <div className="max-h-52 overflow-y-auto py-1">
+                  <div className="max-h-56 overflow-y-auto py-1 divide-y divide-slate-100">
                     {filteredClients.length === 0 ? (
-                      <div className="px-3 py-3 text-center text-muted-foreground text-xs">
+                      <div className="px-3 py-4 text-center text-muted-foreground text-xs">
                         No clients matching "{clientSearchQuery}"
                       </div>
                     ) : (
@@ -410,37 +691,46 @@ export default function NewConsultationDrawer({
                           <button
                             key={client.id}
                             type="button"
-                            onClick={() => {
-                              setSelectedClientId(client.id);
-                              setIsClientDropdownOpen(false);
-                            }}
+                            onClick={() => handleSelectClient(client.id)}
                             className={`w-full px-3.5 py-2.5 text-left text-xs flex items-center justify-between transition-colors ${
-                              isSelected ? "bg-slate-100 text-[#181e25] font-semibold" : "hover:bg-slate-50 text-foreground"
+                              isSelected ? "bg-slate-100/80 text-[#181e25] font-semibold" : "hover:bg-slate-50 text-foreground"
                             }`}
                             style={{ fontFamily: "Outfit, sans-serif" }}
                           >
-                            <span>{client.name}</span>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-[#181e25]" />}
+                            <div className="flex flex-col gap-0.5 truncate pr-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-foreground">{client.name}</span>
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                  {client.id}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                {client.phone && <span>{client.phone}</span>}
+                                {client.email && <span>• {client.email}</span>}
+                              </div>
+                            </div>
+                            {isSelected && <Check className="w-4 h-4 text-[#181e25] flex-shrink-0" />}
                           </button>
                         );
                       })
                     )}
 
-                    <div className="border-t border-border mt-1 pt-1">
+                    <div className="p-1.5 bg-slate-50">
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedClientId("custom");
                           setIsClientDropdownOpen(false);
+                          setRecordId(`REC-WALK-${Date.now().toString().slice(-4)}`);
                         }}
-                        className={`w-full px-3.5 py-2 text-left text-xs font-semibold flex items-center gap-2 transition-colors ${
+                        className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-lg flex items-center gap-2 transition-colors ${
                           selectedClientId === "custom"
-                            ? "bg-slate-100 text-[#181e25]"
-                            : "text-[#181e25] hover:bg-slate-50"
+                            ? "bg-slate-200/70 text-[#181e25]"
+                            : "text-[#181e25] hover:bg-slate-200/50"
                         }`}
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       >
-                        <Plus className="w-3.5 h-3.5" /> Add New Walk-in Patient
+                        <Plus className="w-3.5 h-3.5" /> + Add / Enter Walk-in Patient
                       </button>
                     </div>
                   </div>
@@ -455,7 +745,7 @@ export default function NewConsultationDrawer({
                   className="block text-xs font-semibold text-foreground mb-1.5"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  Enter Patient Full Name
+                  Enter Patient Full Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -468,73 +758,102 @@ export default function NewConsultationDrawer({
               </div>
             )}
 
-            {/* 2. Select Appointment (Optional) */}
-            <div className="relative" ref={appointmentDropdownRef}>
-              <div className="flex items-center justify-between mb-1.5">
+            {/* 2. Entity & Process / Record ID (2 Columns in same row) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              {/* Choose Entity */}
+              <div className="relative" ref={entityDropdownRef}>
                 <label
-                  className="block text-xs font-semibold text-foreground"
+                  className="block text-xs font-semibold text-foreground mb-1.5"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  Select Appointment
+                  Choose Entity <span className="text-red-500">*</span>
                 </label>
-                <span className="text-[10px] text-muted-foreground font-normal">(Optional)</span>
+
+                <button
+                  type="button"
+                  disabled={isRecording || !!generatedSession}
+                  onClick={() => {
+                    if (!isRecording && !generatedSession) {
+                      setIsEntityDropdownOpen(!isEntityDropdownOpen);
+                      setIsClientDropdownOpen(false);
+                      setIsProcessDropdownOpen(false);
+                    }
+                  }}
+                  className={`w-full h-11 px-3 bg-white border rounded-xl text-left flex items-center justify-between text-xs font-medium text-foreground transition-all shadow-2xs ${
+                    isRecording || !!generatedSession
+                      ? "opacity-75 cursor-not-allowed border-border"
+                      : "hover:border-[#181e25] border-border"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    {(() => {
+                      const IconComp = selectedEntity.icon || Layers;
+                      return <IconComp className="w-4 h-4 text-slate-600 flex-shrink-0" />;
+                    })()}
+                    <span className="truncate font-semibold">{selectedEntity.label}</span>
+                  </div>
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-400 transition-transform duration-200 flex-shrink-0 ${
+                      isEntityDropdownOpen ? "rotate-180 text-[#181e25]" : ""
+                    }`}
+                  />
+                </button>
+
+                {isEntityDropdownOpen && (
+                  <div
+                    className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-border rounded-xl shadow-xl z-50 overflow-hidden py-1 max-h-56 overflow-y-auto"
+                    style={{ boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" }}
+                  >
+                    {SCRIBE_ENTITIES.map((ent) => {
+                      const isSelected = selectedEntityId === ent.id;
+                      const IconComp = ent.icon;
+                      return (
+                        <button
+                          key={ent.id}
+                          type="button"
+                          onClick={() => handleSelectEntity(ent.id)}
+                          className={`w-full px-3 py-2 text-left text-xs flex items-center justify-between transition-colors ${
+                            isSelected ? "bg-slate-100 text-[#181e25] font-semibold" : "hover:bg-slate-50 text-foreground"
+                          }`}
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <div className="flex items-center gap-2 truncate pr-2">
+                            <IconComp className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                            <div className="truncate">
+                              <div className="truncate font-medium">{ent.label}</div>
+                              <div className="text-[10px] text-muted-foreground truncate">{ent.description}</div>
+                            </div>
+                          </div>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-[#181e25] flex-shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
-              <button
-                type="button"
-                disabled={isRecording || !!generatedSession}
-                onClick={() => {
-                  if (!isRecording && !generatedSession) {
-                    setIsAppointmentDropdownOpen(!isAppointmentDropdownOpen);
-                    setIsClientDropdownOpen(false);
-                  }
-                }}
-                className={`w-full h-11 px-3.5 bg-white border rounded-xl text-left flex items-center justify-between text-xs font-medium text-foreground transition-all shadow-2xs ${
-                  isRecording || !!generatedSession
-                    ? "opacity-75 cursor-not-allowed border-border"
-                    : "hover:border-[#181e25] border-border"
-                }`}
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <Calendar className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                  <span className="truncate">{selectedAppointment.label}</span>
-                </div>
-                <ChevronDown
-                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                    isAppointmentDropdownOpen ? "rotate-180 text-[#181e25]" : ""
-                  }`}
-                />
-              </button>
-
-              {/* Custom Appointment Dropdown */}
-              {isAppointmentDropdownOpen && (
-                <div
-                  className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-border rounded-xl shadow-xl z-50 overflow-hidden py-1"
-                  style={{ boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)" }}
+              {/* Process / Record ID (in same row as Entity) */}
+              <div>
+                <label
+                  className="block text-xs font-semibold text-foreground mb-1.5"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  {AVAILABLE_APPOINTMENTS.map((apt) => {
-                    const isSelected = selectedAppointmentId === apt.id;
-                    return (
-                      <button
-                        key={apt.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedAppointmentId(apt.id);
-                          setIsAppointmentDropdownOpen(false);
-                        }}
-                        className={`w-full px-3.5 py-2.5 text-left text-xs flex items-center justify-between transition-colors ${
-                          isSelected ? "bg-slate-100 text-[#181e25] font-semibold" : "hover:bg-slate-50 text-foreground"
-                        }`}
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        <span className="truncate">{apt.label}</span>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-[#181e25] flex-shrink-0 ml-2" />}
-                      </button>
-                    );
-                  })}
+                  Process / Record ID <span className="text-red-500">*</span>
+                </label>
+
+                <div className="relative flex items-center">
+                  <Hash className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder={`e.g. ${selectedEntity.prefix}-${selectedClient.id || "001"}-9214`}
+                    value={recordId}
+                    onChange={(e) => setRecordId(e.target.value)}
+                    className="w-full h-11 pl-8 pr-3 bg-white border border-border rounded-xl text-xs font-mono text-foreground outline-none focus:border-[#181e25] shadow-2xs"
+                    style={{ fontFamily: "Outfit, monospace" }}
+                  />
                 </div>
-              )}
+              </div>
             </div>
 
             {/* ─── AFTER FINISH: CLEAN MINIMAL TRANSCRIPT CARD ─── */}

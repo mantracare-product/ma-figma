@@ -482,6 +482,57 @@ export default function InvoiceDetailDrawer({
     }
   };
 
+  const handleFillFromScribe = (scribeData: {
+    transcriptPreview?: string;
+    diagnosis?: string;
+    chiefComplaint?: string;
+    extractedData?: any;
+    scribeSessionId?: string;
+  }) => {
+    const ext = scribeData.extractedData || {};
+    const notesSummary = [
+      scribeData.transcriptPreview ? `Transcript Excerpt: ${scribeData.transcriptPreview}` : "",
+      ext.chiefComplaint ? `Chief Complaint: ${ext.chiefComplaint}` : "",
+      ext.assessment ? `Diagnosis / Assessment: ${ext.assessment}` : "",
+    ].filter(Boolean).join("\n\n");
+
+    const patch: Record<string, any> = {
+      notes: notesSummary,
+      diagnosis: ext.assessment || scribeData.diagnosis || "",
+      chief_complaint: ext.chiefComplaint || scribeData.chiefComplaint || "",
+    };
+
+    if (ext.billingCodes && ext.billingCodes.length > 0) {
+      const newLineItems = ext.billingCodes.map((bc: any, idx: number) => ({
+        id: `bc_${idx + 1}`,
+        product_name: `${bc.code} - ${bc.desc}`,
+        quantity: 1,
+        unit_price: bc.fee || 120,
+        tax_rate: 5,
+        col_item_name: `${bc.code} - ${bc.desc}`,
+        col_quantity: 1,
+        col_unit_price: bc.fee || 120,
+        col_tax_rate: 5,
+      }));
+      patch.line_items_summary = newLineItems;
+      const sub = ext.billingCodes.reduce((acc: number, c: any) => acc + (c.fee || 120), 0);
+      patch.subtotal = `$${sub.toFixed(2)}`;
+      patch.total_amount = `$${(sub * 1.05).toFixed(2)}`;
+    }
+
+    setFieldValues((prev) => {
+      const updated = { ...prev, ...patch };
+      if (liveInvoice) {
+        try {
+          localStorage.setItem(`mantra_inv_fields_${liveInvoice.id}`, JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
+
+    toast.success("✨ Invoice fields populated with AI Scribe clinical data!");
+  };
+
   // Stage Progression Handler
   const handleStageSelect = (targetStage: Stage) => {
     if (!liveInvoice || targetStage.id === currentInvoiceStage?.id) return;
@@ -684,7 +735,14 @@ export default function InvoiceDetailDrawer({
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden flex justify-end bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="w-full max-w-5xl bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 overflow-hidden animate-in slide-in-from-right duration-300">
+      <div
+        className="w-full bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 overflow-hidden animate-in slide-in-from-right duration-300"
+        style={{
+          width: "68vw",
+          minWidth: "780px",
+          maxWidth: "1150px",
+        }}
+      >
         
         {/* ── Top Header (DESIGN.md Light Architectural Standard) ── */}
         <div className="flex-shrink-0 bg-white px-7 py-3.5 border-b border-slate-200 flex items-center justify-between">
@@ -893,7 +951,7 @@ export default function InvoiceDetailDrawer({
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
                 {/* LEFT COLUMN: Draggable Sections & Custom Fields */}
-                <div className="lg:col-span-6 space-y-4">
+                <div className="lg:col-span-5 space-y-5">
                   <DraggableOverviewSections
                     mode="invoice"
                     customFieldsModule="invoice"
@@ -911,7 +969,7 @@ export default function InvoiceDetailDrawer({
                 </div>
 
                 {/* RIGHT COLUMN: Real-Time Activity Feed */}
-                <div className="lg:col-span-6">
+                <div className="lg:col-span-7">
                   <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
                     <ActivityTab
                       activity={activities}
@@ -919,6 +977,10 @@ export default function InvoiceDetailDrawer({
                       clientName={liveInvoice.clientName}
                       clientEmail={liveInvoice.clientEmail}
                       clientPhone={liveInvoice.clientPhone}
+                      invoiceId={liveInvoice.id}
+                      processId={liveInvoice.processId}
+                      processName="Billing & Invoicing"
+                      onFillWithAi={handleFillFromScribe}
                       onCloseParentDrawer={onClose}
                       emptyMessage="No activity logs yet for this invoice"
                     />

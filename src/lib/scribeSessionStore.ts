@@ -67,6 +67,12 @@ export interface ScribeSession {
   patientAge?: number;
   patientGender?: string;
   appointmentId?: string;
+  invoiceId?: string;
+  processId?: string;
+  processName?: string;
+  entityType?: string;
+  workflow?: string;
+  recordId?: string;
   sessionName?: string;
   dealId?: string;
   doctorId: string;
@@ -80,6 +86,7 @@ export interface ScribeSession {
   };
   extractedData: ExtractedClinicalData;
   generatedDocumentId?: string;
+  audioInputMode?: "live" | "upload";
   status: "recording" | "transcribed" | "extracted" | "completed" | "discarded";
   createdAt: number;
 }
@@ -408,11 +415,15 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     doctorName: "Dr. Priya Sharma",
     sessionDate: "2026-08-24T10:45:00.000Z",
     durationSeconds: 76,
+    audioInputMode: "live",
     status: "completed",
     createdAt: Date.now() - 1000 * 60 * 120,
     transcript: {
-      fullText: PRESET_SCENARIOS[0].transcriptText,
-      utterances: PRESET_SCENARIOS[0].utterances,
+      fullText: PRESET_SCENARIOS[0].transcriptText.replace(/Mr\.\s*Rajesh/gi, "Ms. Johnson").replace(/Rajesh/gi, "Sarah"),
+      utterances: PRESET_SCENARIOS[0].utterances.map(u => ({
+        ...u,
+        text: u.text.replace(/Mr\.\s*Rajesh/gi, "Ms. Johnson").replace(/Rajesh/gi, "Sarah"),
+      })),
     },
     extractedData: PRESET_SCENARIOS[0].extractedData,
   },
@@ -428,11 +439,15 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     doctorName: "Dr. Ananya Sen",
     sessionDate: "2026-08-24T09:30:00.000Z",
     durationSeconds: 68,
+    audioInputMode: "live",
     status: "completed",
     createdAt: Date.now() - 1000 * 60 * 240,
     transcript: {
-      fullText: PRESET_SCENARIOS[1].transcriptText,
-      utterances: PRESET_SCENARIOS[1].utterances,
+      fullText: PRESET_SCENARIOS[1].transcriptText.replace(/Mrs\.\s*Sunita/gi, "Mr. Chen").replace(/Sunita/gi, "Michael"),
+      utterances: PRESET_SCENARIOS[1].utterances.map(u => ({
+        ...u,
+        text: u.text.replace(/Mrs\.\s*Sunita/gi, "Mr. Chen").replace(/Sunita/gi, "Michael"),
+      })),
     },
     extractedData: PRESET_SCENARIOS[1].extractedData,
   },
@@ -448,11 +463,15 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     doctorName: "Dr. Rohan Mehta",
     sessionDate: "2026-08-23T16:15:00.000Z",
     durationSeconds: 94,
+    audioInputMode: "live",
     status: "completed",
     createdAt: Date.now() - 1000 * 60 * 60 * 20,
     transcript: {
-      fullText: PRESET_SCENARIOS[2].transcriptText,
-      utterances: PRESET_SCENARIOS[2].utterances,
+      fullText: PRESET_SCENARIOS[2].transcriptText.replace(/Mr\.\s*Amit/gi, "Ms. Davis").replace(/Amit/gi, "Emily"),
+      utterances: PRESET_SCENARIOS[2].utterances.map(u => ({
+        ...u,
+        text: u.text.replace(/Mr\.\s*Amit/gi, "Ms. Davis").replace(/Amit/gi, "Emily"),
+      })),
     },
     extractedData: PRESET_SCENARIOS[2].extractedData,
   },
@@ -468,6 +487,7 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     doctorName: "Dr. Priya Sharma",
     sessionDate: "2026-08-23T14:00:00.000Z",
     durationSeconds: 82,
+    audioInputMode: "live",
     status: "completed",
     createdAt: Date.now() - 1000 * 60 * 60 * 24,
     transcript: {
@@ -511,6 +531,7 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     doctorName: "Dr. Vikram Malhotra",
     sessionDate: "2026-08-22T11:20:00.000Z",
     durationSeconds: 105,
+    audioInputMode: "upload",
     status: "completed",
     createdAt: Date.now() - 1000 * 60 * 60 * 48,
     transcript: {
@@ -595,15 +616,31 @@ export function saveScribeSession(session: ScribeSession): void {
   const updated = [session, ...filtered];
   sessionStorage.setItem("scribeSessionsData", JSON.stringify(updated));
   
-  // Sync to Activity Timeline
+  const isUpload = session.audioInputMode === "upload";
   appendActivity({
     clientId: session.clientId,
-    type: "note",
+    type: "scribe" as any,
+    scribeSessionId: session.id,
+    appointmentId: session.appointmentId,
+    invoiceId: session.invoiceId,
+    processId: session.processId,
+    processName: session.processName,
+    doctorName: session.doctorName || "Dr. Priya Sharma",
+    durationSeconds: session.durationSeconds || 60,
+    chiefComplaint: session.extractedData?.chiefComplaint,
+    diagnosis: session.extractedData?.diagnosis,
+    transcriptPreview: session.transcript?.fullText?.slice(0, 320),
+    extractedData: session.extractedData,
     createdBy: "ai",
     sourceStepName: "AI Scribe",
+    clientName: session.clientName,
+    audioInputMode: session.audioInputMode || "live",
+    title: isUpload ? "Scribe Uploaded" : "Scribe Recorded",
     details: {
-      primary: `🎙 AI Scribe Consultation Completed — ${session.doctorName || "Dr. Priya Sharma"}`,
-      secondary: `Diagnosis: ${session.extractedData.diagnosis}. Prescribed ${session.extractedData.medications.length} medications. Consultation duration: ${Math.floor(session.durationSeconds / 60)}m ${session.durationSeconds % 60}s.`,
+      primary: isUpload
+        ? `📁 Scribe Audio Uploaded — ${session.doctorName || "Dr. Priya Sharma"}`
+        : `🎙️ Scribe Consultation Recorded — ${session.doctorName || "Dr. Priya Sharma"}`,
+      secondary: `Diagnosis: ${session.extractedData?.diagnosis || "Consultation Completed"}. ${session.extractedData?.medications?.length ? `Prescribed ${session.extractedData.medications.length} medications.` : ""} Duration: ${Math.floor((session.durationSeconds || 0) / 60)}m ${(session.durationSeconds || 0) % 60}s.`,
     },
   });
 

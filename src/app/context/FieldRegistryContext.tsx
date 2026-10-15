@@ -11,7 +11,6 @@ export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
   "service",
   "organization",
   "teamMember",
-  "scribe",
   "invoice"
 ];
 

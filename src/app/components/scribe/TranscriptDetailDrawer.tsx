@@ -9,11 +9,9 @@ import {
   FileText,
   MessageSquare,
   Volume2,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ScribeSession } from "../../../lib/scribeSessionStore";
-import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
 
 export interface TranscriptDetailDrawerProps {
   isOpen: boolean;
@@ -21,7 +19,10 @@ export interface TranscriptDetailDrawerProps {
   session: ScribeSession | null;
   client?: any;
   onOpenWhatsApp?: (session: ScribeSession) => void;
+  zIndex?: number;
 }
+
+type OverviewSection = any;
 
 const STORAGE_SECTIONS_KEY = "mantra_scribe_ehr_clean_titles_v5";
 
@@ -109,6 +110,8 @@ export default function TranscriptDetailDrawer({
   onClose,
   session,
   client,
+  onOpenWhatsApp,
+  zIndex = 750,
 }: TranscriptDetailDrawerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSec, setPlaybackSec] = useState(0);
@@ -370,7 +373,10 @@ export default function TranscriptDetailDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end overflow-hidden">
+    <div
+      className="fixed inset-0 flex justify-end overflow-hidden"
+      style={{ zIndex }}
+    >
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/40 backdrop-blur-2xs transition-opacity"
@@ -400,25 +406,9 @@ export default function TranscriptDetailDrawer({
 
         {/* Drawer Body */}
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* ─── LEFT COLUMN: CLINICAL EHR SECTIONS (5 cols) ─────────────── */}
-            <div className="lg:col-span-5 space-y-4 pb-12">
-              {/* Interactive Draggable Overview Sections Component */}
-              <DraggableOverviewSections
-                mode="scribe"
-                customFieldsModule="scribe"
-                sections={sections}
-                onSectionsChange={handleSectionsChange}
-                fieldValues={fieldValues}
-                onFieldValueChange={handleFieldValueChange}
-                onSaveChanges={() => {
-                  toast.success("Prescription & EHR notes saved!");
-                }}
-              />
-            </div>
-
-            {/* ─── RIGHT COLUMN: RECORDING + SUMMARY + TRANSCRIPTION (7 cols) ─ */}
-            <div className="lg:col-span-7 space-y-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+            {/* Column 1: Recording & Summary */}
+            <div className="space-y-5">
               {/* 1. Recording Card */}
               <div className="rounded-2xl bg-white p-5 border border-border shadow-xs space-y-4">
                 <div className="flex items-center justify-between">
@@ -528,9 +518,11 @@ export default function TranscriptDetailDrawer({
                   {getClinicalSummary()}
                 </p>
               </div>
+            </div>
 
-              {/* 3. Transcription Speech Timeline (Sticky when scrolled into view) */}
-              <div className="rounded-2xl bg-white p-5 border border-border shadow-xs flex flex-col sticky top-0 z-10 max-h-[calc(100vh-140px)]">
+            {/* Column 2: Transcription Speech Timeline */}
+            <div className="space-y-5">
+              <div className="rounded-2xl bg-white p-5 border border-border shadow-xs flex flex-col h-full min-h-[500px]">
                 <div className="flex items-center justify-between pb-4 border-b border-border mb-4 flex-shrink-0">
                   <div className="flex items-center gap-2 text-foreground font-semibold text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
                     <MessageSquare className="w-4 h-4 text-[#181e25]" />
@@ -542,7 +534,7 @@ export default function TranscriptDetailDrawer({
                 </div>
 
                 {/* Speech Turns Timeline */}
-                <div className="space-y-4 overflow-y-auto pr-1 flex-1">
+                <div className="space-y-4 overflow-y-auto pr-1 flex-1 max-h-[580px]">
                   {session.transcript.utterances.map((u) => {
                     const isDoctor = u.speaker === "doctor";
 

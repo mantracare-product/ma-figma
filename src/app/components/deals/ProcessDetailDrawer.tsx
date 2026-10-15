@@ -864,6 +864,34 @@ export default function ProcessDetailDrawer({
     setNoteContent("");
   };
 
+  const handleFillFromScribe = (scribeData: {
+    transcriptPreview?: string;
+    diagnosis?: string;
+    chiefComplaint?: string;
+    extractedData?: any;
+    scribeSessionId?: string;
+  }) => {
+    const ext = scribeData.extractedData || {};
+    const notesSummary = [
+      scribeData.transcriptPreview ? `Transcript: ${scribeData.transcriptPreview}` : "",
+      ext.chiefComplaint ? `Chief Complaint: ${ext.chiefComplaint}` : "",
+      ext.assessment ? `Diagnosis: ${ext.assessment}` : "",
+      ext.symptoms?.length ? `Symptoms: ${ext.symptoms.join(", ")}` : "",
+      ext.plan?.length ? `Plan: ${ext.plan.join("; ")}` : "",
+    ].filter(Boolean).join("\n\n");
+
+    if (notesSummary && onFieldSave) {
+      onFieldSave("notes", notesSummary);
+    }
+    if ((ext.assessment || scribeData.diagnosis) && onFieldSave) {
+      onFieldSave("diagnosis", ext.assessment || scribeData.diagnosis);
+    }
+    if ((ext.chiefComplaint || scribeData.chiefComplaint) && onFieldSave) {
+      onFieldSave("chief_complaint", ext.chiefComplaint || scribeData.chiefComplaint);
+    }
+    toast.success("✨ Process fields populated with AI Scribe clinical data!");
+  };
+
   const mockHistory = [
     {
       date: "26.05.2024 14:32",
@@ -1195,6 +1223,9 @@ export default function ProcessDetailDrawer({
                           clientName={clientName}
                           clientEmail={client?.email}
                           clientPhone={client?.phone}
+                          processId={(log as any)?.processId || log?.process}
+                          processName={log?.process}
+                          onFillWithAi={handleFillFromScribe}
                           onCloseParentDrawer={onClose}
                           emptyMessage="No activity yet for this process"
                           onOpenScheduleAppointment={onOpenScheduleAppointment}

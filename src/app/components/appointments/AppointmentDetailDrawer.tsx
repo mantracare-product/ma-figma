@@ -364,6 +364,79 @@ export default function AppointmentDetailDrawer({
     }
   };
 
+  const handleFillFromScribe = (scribeData: {
+    transcriptPreview?: string;
+    diagnosis?: string;
+    chiefComplaint?: string;
+    extractedData?: any;
+    scribeSessionId?: string;
+  }) => {
+    const ext = scribeData.extractedData || {};
+    const symText = Array.isArray(ext.symptoms)
+      ? ext.symptoms.map((s: any) => typeof s === "string" ? s : (s?.name || s?.symptom || "")).filter(Boolean).join(", ")
+      : (typeof ext.symptoms === "string" ? ext.symptoms : "");
+
+    const planText = Array.isArray(ext.plan)
+      ? ext.plan.map((p: any) => typeof p === "string" ? p : (p?.action || p?.title || "")).filter(Boolean).join("; ")
+      : (typeof ext.plan === "string" ? ext.plan : "");
+
+    const medText = Array.isArray(ext.medications)
+      ? ext.medications.map((m: any) => typeof m === "string" ? m : `${m?.drugName || m?.name || "Med"} ${m?.dosage || ""}`).filter(Boolean).join(", ")
+      : (typeof ext.medications === "string" ? ext.medications : "");
+
+    const rawComplaint = ext.chiefComplaint || scribeData.chiefComplaint;
+    const complaintText = typeof rawComplaint === "string" ? rawComplaint : (rawComplaint?.complaint || "");
+
+    const rawDiag = ext.assessment || scribeData.diagnosis;
+    const diagText = typeof rawDiag === "string" ? rawDiag : (rawDiag?.summary || "");
+
+    const notesSummary = [
+      scribeData.transcriptPreview ? `Transcript: ${scribeData.transcriptPreview}` : "",
+      complaintText ? `Chief Complaint: ${complaintText}` : "",
+      diagText ? `Diagnosis / Impression: ${diagText}` : "",
+      symText ? `Symptoms: ${symText}` : "",
+      planText ? `Treatment Plan: ${planText}` : "",
+      medText ? `Medications: ${medText}` : "",
+    ].filter(Boolean).join("\n\n");
+
+    const patch: Record<string, any> = {
+      notes: notesSummary || fieldValues.notes || "",
+      diagnosis: diagText || fieldValues.diagnosis || "",
+      chief_complaint: complaintText || fieldValues.chief_complaint || "",
+      symptoms: symText || fieldValues.symptoms || "",
+      treatment_plan: planText || fieldValues.treatment_plan || "",
+      clinical_impression: diagText || fieldValues.clinical_impression || "",
+      recommendations: planText || fieldValues.recommendations || "",
+    };
+
+    setFieldValues((prev) => {
+      const updated = { ...prev, ...patch };
+      if (appointment) {
+        try {
+          localStorage.setItem(`mantra_appt_fields_${appointment.id}`, JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
+
+    if (effectiveAppt) {
+      const updatedNotes = notesSummary || effectiveAppt.notes;
+      const updatedDesc = ext.assessment || scribeData.diagnosis || effectiveAppt.description;
+      const updated = { ...effectiveAppt, notes: updatedNotes, description: updatedDesc };
+      setLiveAppointment(updated);
+      if (onUpdateAppointment) onUpdateAppointment(updated);
+      try {
+        appointmentService.saveAppointments(
+          appointmentService.getAppointments().map((a) => (a.id === updated.id ? updated : a))
+        );
+      } catch (err) {
+        console.warn("[AppointmentDetailDrawer] saveAppointments error:", err);
+      }
+    }
+
+    toast.success("✨ Form fields filled with AI Scribe clinical data!");
+  };
+
   // Stage Progression Handler
   const handleStageSelect = (targetStage: Stage) => {
     if (!effectiveAppt || targetStage.id === currentStage?.id) return;
@@ -614,7 +687,14 @@ export default function AppointmentDetailDrawer({
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden flex justify-end bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="w-full max-w-5xl bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 overflow-hidden animate-in slide-in-from-right duration-300">
+      <div
+        className="w-full bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 overflow-hidden animate-in slide-in-from-right duration-300"
+        style={{
+          width: "68vw",
+          minWidth: "780px",
+          maxWidth: "1150px",
+        }}
+      >
         {/* ── Top Header (DESIGN.md Light Architectural Standard) ── */}
         <div className="flex-shrink-0 bg-white px-7 py-3.5 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -786,7 +866,7 @@ export default function AppointmentDetailDrawer({
             <div className="p-6">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 {/* LEFT COLUMN: Draggable Sections & Custom Fields */}
-                <div className="lg:col-span-6 space-y-4">
+                <div className="lg:col-span-5 space-y-5">
 
                   <DraggableOverviewSections
                     mode="appointment"
@@ -800,7 +880,7 @@ export default function AppointmentDetailDrawer({
                 </div>
 
                 {/* RIGHT COLUMN: Real-Time Activity Feed */}
-                <div className="lg:col-span-6">
+                <div className="lg:col-span-7">
                   <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
                     <ActivityTab
                       activity={activities}
@@ -808,6 +888,10 @@ export default function AppointmentDetailDrawer({
                       clientName={appointment.clientName}
                       clientEmail={appointment.clientEmail}
                       clientPhone={appointment.clientPhone}
+                      appointmentId={String(effectiveAppt?.id || appointment?.id || "")}
+                      processId={appointmentProcess?.id}
+                      processName={appointmentProcess?.name}
+                      onFillWithAi={handleFillFromScribe}
                       onCloseParentDrawer={onClose}
                       emptyMessage="No activity logs yet for this appointment"
                     />

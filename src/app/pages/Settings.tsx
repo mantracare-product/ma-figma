@@ -1414,7 +1414,7 @@ export default function Settings() {
     deleteCustomSection,
   } = useFieldRegistry();
 
-  const tabToModule: Record<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe" | "services" | "invoices", FieldModule> = {
+  const tabToModule: Record<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "services" | "invoices", FieldModule> = {
     "organization": "organization",
     "clients": "client",
     "call-logs": "call",
@@ -1422,7 +1422,6 @@ export default function Settings() {
     "appointments": "appointment",
     "forms": "appointment",
     "team": "teamMember",
-    "scribe": "scribe",
     "services": "service",
     "invoices": "invoice",
   };
@@ -1542,7 +1541,7 @@ export default function Settings() {
   const [tablePreviewRows, setTablePreviewRows] = useState<Record<string, string>[]>([{}]);
 
   // Module filter tab
-  const [customFieldsTab, setCustomFieldsTab] = useState<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe" | "services" | "invoices">("clients");
+  const [customFieldsTab, setCustomFieldsTab] = useState<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "services" | "invoices">("clients");
 
   const currentModule = tabToModule[customFieldsTab || "clients"];
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
@@ -6836,7 +6835,6 @@ export default function Settings() {
                       <option value="invoices">Invoices</option>
                       <option value="forms">Forms</option>
                       <option value="team">Team</option>
-                      <option value="scribe">AI Scribe</option>
                     </select>
                   }
                   searchQuery={layoutSearchQuery}
@@ -6909,7 +6907,6 @@ export default function Settings() {
                               { label: "Invoices", value: "invoices" },
                               { label: "Forms", value: "forms" },
                               { label: "Team", value: "team" },
-                              { label: "AI Scribe", value: "scribe" },
                             ],
                           },
                         ]

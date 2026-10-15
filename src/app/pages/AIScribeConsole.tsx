@@ -235,26 +235,19 @@ export default function AIScribeConsole() {
               ),
             },
             {
-              id: "session",
-              header: "SESSION",
-              align: "center",
-              render: (s) => (
-                <span className="text-xs text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  {s.appointmentId && s.appointmentId !== "none"
-                    ? new Date(s.sessionDate || s.createdAt).toLocaleDateString("en-IN", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })
-                    : (s.sessionDate
-                        ? new Date(s.sessionDate).toLocaleDateString("en-IN", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })
-                        : "—")}
-                </span>
-              ),
+              id: "workflow",
+              header: "WORKFLOW",
+              align: "left",
+              render: (s) => {
+                const idVal = s.recordId || s.appointmentId || s.id;
+                if (!idVal) return <span className="text-xs text-muted-foreground">—</span>;
+                const cleanId = idVal.startsWith("#") ? idVal : `#${idVal}`;
+                return (
+                  <span className="font-mono text-xs font-medium text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {cleanId}
+                  </span>
+                );
+              },
             },
             {
               id: "duration",

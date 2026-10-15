@@ -5,8 +5,12 @@ import {
   LogIn, ArrowRightCircle, CheckCircle2, Phone, MessageCircle, MessageSquare,
   Mail, Zap, Calendar, Pencil, Globe, PhoneIncoming, PhoneOutgoing, PhoneOff,
   MoreVertical, X, Clock, CalendarClock, ChevronRight, Send, FileText, Paperclip, Settings,
-  Receipt, FileCheck, CreditCard
+  Receipt, FileCheck, CreditCard, Mic, Sparkles, Stethoscope
 } from "lucide-react";
+import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
+import { EntityType } from "../../../lib/useProcessStore";
+import TranscriptDetailDrawer from "../scribe/TranscriptDetailDrawer";
+import { getScribeSessionById, ScribeSession } from "../../../lib/scribeSessionStore";
 import {
   appendActivity,
   subscribeToActivity,
@@ -35,7 +39,8 @@ export type ActivityType =
   | "process_entry" | "whatsapp" | "sms" | "email" | "webhook_trigger"
   | "field_update" | "appointment_booked" | "call" | "outbound_call"
   | "inbound_call" | "failed_call" | "stage_update" | "stage_change"
-  | "process_completed" | "website_message" | "website" | "form_submitted" | "note";
+  | "process_completed" | "website_message" | "website" | "form_submitted" | "note"
+  | "scribe";
 
 export interface ActivityLogEntry {
   id: string;
@@ -57,6 +62,27 @@ export interface ActivityLogEntry {
   clientId?: string;
   clientActionId?: string;
   seq?: number;
+  clientName?: string;
+  audioInputMode?: "live" | "upload";
+  // Scribe-specific fields
+  scribeSessionId?: string;
+  doctorName?: string;
+  chiefComplaint?: string;
+  diagnosis?: string;
+  transcriptPreview?: string;
+  appointmentId?: string;
+  invoiceId?: string;
+  extractedData?: {
+    chiefComplaint?: string;
+    symptoms?: string[];
+    vitals?: Record<string, string>;
+    medications?: string[];
+    allergies?: string[];
+    assessment?: string;
+    plan?: string[];
+    followUp?: string;
+    billingCodes?: { code: string; desc: string; fee?: number }[];
+  };
   // New typed fields (all optional for backward compat)
   messageText?: string;
   phoneNumber?: string;
@@ -86,7 +112,7 @@ const ACTIVITY_ICON_BG: Record<string, string> = {
   sms: "#1F2937", email: "#1F2937", stage_update: "#1F2937", stage_change: "#1F2937",
   webhook_trigger: "#1F2937", appointment_booked: "#1F2937", field_update: "#1F2937",
   process_completed: "#1F2937", website_message: "#1F2937", website: "#1F2937",
-  form_submitted: "#1F2937", note: "#1F2937",
+  form_submitted: "#1F2937", note: "#1F2937", scribe: "#1F2937",
   invoice_created: "#1F2937", document_generated: "#1F2937", payment_recorded: "#1F2937",
 };
 
@@ -103,6 +129,7 @@ const HEADING_BY_TYPE: Record<string, string> = {
   process_completed: "Process Completed",
   website_message: "Website Message", website: "Website Message",
   form_submitted: "Form Submitted", note: "Note",
+  scribe: "Scribe Recorded",
   invoice_created: "Invoice Created",
   document_generated: "Document Generated",
   payment_recorded: "Payment Recorded",
@@ -175,6 +202,7 @@ function ActivityIcon({ type, direction, status }: { type: string; direction?: s
     case "field_update":      return <Pencil className={cls} />;
     case "form_submitted":    return <FileText className={cls} />;
     case "note":              return <FileText className={cls} />;
+    case "scribe":            return <Mic className={cls} />;
     case "website_message":
     case "website":           return <Globe className={cls} />;
     default:                  return <Pencil className={cls} />;
@@ -655,6 +683,86 @@ function GenericBlock({ entry }: { entry: ActivityLogEntry }) {
   );
 }
 
+function ScribeBlock({
+  entry,
+  clientName,
+  onFillWithAi,
+  onViewTranscript,
+}: {
+  entry: ActivityLogEntry;
+  clientName?: string;
+  onFillWithAi?: (scribeData: {
+    transcriptPreview?: string;
+    diagnosis?: string;
+    chiefComplaint?: string;
+    extractedData?: any;
+    scribeSessionId?: string;
+  }) => void;
+  onViewTranscript?: (sessionId: string) => void;
+}) {
+  const [isFilling, setIsFilling] = useState(false);
+  const [isFilled, setIsFilled] = useState(false);
+  const session = entry.scribeSessionId ? getScribeSessionById(entry.scribeSessionId) : null;
+  const duration = entry.durationSeconds
+    ? formatDuration(entry.durationSeconds)
+    : session?.durationSeconds
+    ? formatDuration(session.durationSeconds)
+    : "";
+
+  const handleFill = () => {
+    if (!onFillWithAi) return;
+    setIsFilling(true);
+    onFillWithAi({
+      transcriptPreview: entry.transcriptPreview || session?.transcript?.fullText?.slice(0, 320),
+      diagnosis: entry.diagnosis || session?.extractedData?.diagnosis,
+      chiefComplaint: entry.chiefComplaint || session?.extractedData?.chiefComplaint,
+      extractedData: entry.extractedData || session?.extractedData,
+      scribeSessionId: entry.scribeSessionId,
+    });
+    setTimeout(() => {
+      setIsFilling(false);
+      setIsFilled(true);
+      toast.success("Fields filled from AI Scribe!");
+    }, 700);
+  };
+
+  return (
+    <div className="space-y-2 pt-0.5">
+      {duration && (
+        <div className="text-xs text-slate-500 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+          Duration: <span className="text-slate-700 font-semibold">{duration}</span>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        {onFillWithAi && (
+          <button
+            type="button"
+            onClick={handleFill}
+            disabled={isFilling}
+            className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1F2937] hover:bg-gray-800 text-white shadow-xs transition-all cursor-pointer active:scale-95"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <span>{isFilling ? "Filling Fields..." : isFilled ? "Filled with AI" : "Fill with AI"}</span>
+          </button>
+        )}
+
+        {entry.scribeSessionId && onViewTranscript && (
+          <button
+            type="button"
+            onClick={() => onViewTranscript(entry.scribeSessionId!)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 shadow-xs transition-all cursor-pointer active:scale-95"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <FileText className="w-3.5 h-3.5 text-gray-500" />
+            <span>View Scribe</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main card component ──────────────────────────────────────────────────────
 
 interface ActivityCardProps {
@@ -673,6 +781,14 @@ interface ActivityCardProps {
   onOpenComposePanel: (type: "whatsapp" | "sms" | "email") => void;
   onOpenThreadDrawer?: (conversationId: string, channel?: "whatsapp" | "sms" | "website") => void;
   onOpenEmailThreadDrawer?: (conversationId: string, subject?: string) => void;
+  onFillWithAi?: (scribeData: {
+    transcriptPreview?: string;
+    diagnosis?: string;
+    chiefComplaint?: string;
+    extractedData?: any;
+    scribeSessionId?: string;
+  }) => void;
+  onViewTranscript?: (sessionId: string) => void;
   navigate: ReturnType<typeof useNavigate>;
 }
 
@@ -692,11 +808,16 @@ function ActivityCard({
   onOpenComposePanel,
   onOpenThreadDrawer,
   onOpenEmailThreadDrawer,
+  onFillWithAi,
+  onViewTranscript,
   navigate,
 }: ActivityCardProps) {
   const rawType = (entry as any).rawType || entry.type;
   const isFailed = entry.status === "failed" || entry.status === "Failed";
   const isPending = entry.status === "pending" || entry.status === "Pending";
+
+  const session = rawType === "scribe" && entry.scribeSessionId ? getScribeSessionById(entry.scribeSessionId) : null;
+
 
   // Determine heading
   const heading = (() => {
@@ -706,6 +827,14 @@ function ActivityCard({
     }
     if (rawType === "inbound_call") return "Inbound Call Received";
     if (rawType === "failed_call") return "Outbound Call Failed";
+    if (rawType === "scribe") {
+      const isUpload =
+        (entry as any).audioInputMode === "upload" ||
+        (entry as any).inputMode === "upload" ||
+        (entry as any).audioMode === "upload" ||
+        session?.audioInputMode === "upload";
+      return isUpload ? "Scribe Uploaded" : "Scribe Recorded";
+    }
     return HEADING_BY_TYPE[rawType] || HEADING_BY_TYPE[entry.type] || entry.title || "Activity";
   })();
 
@@ -843,9 +972,44 @@ function ActivityCard({
     });
   }
 
+  if (rawType === "scribe") {
+    if (onFillWithAi) {
+      kebabActions.push({
+        label: "Fill with AI",
+        icon: <Sparkles className="w-3.5 h-3.5 text-amber-500" />,
+        onClick: () => {
+          onFillWithAi({
+            transcriptPreview: entry.transcriptPreview,
+            diagnosis: entry.diagnosis || entry.extractedData?.assessment,
+            chiefComplaint: entry.chiefComplaint || entry.extractedData?.chiefComplaint,
+            extractedData: entry.extractedData,
+            scribeSessionId: entry.scribeSessionId,
+          });
+          toast.success("Form fields filled from AI Scribe recording!");
+        },
+      });
+    }
+    if (entry.scribeSessionId && onViewTranscript) {
+      kebabActions.push({
+        label: "View Scribe",
+        icon: <FileText className="w-3.5 h-3.5" />,
+        onClick: () => onViewTranscript(entry.scribeSessionId!),
+      });
+    }
+  }
+
   // Render type-specific content
   const renderContent = () => {
     const t = rawType || entry.type;
+    if (t === "scribe")
+      return (
+        <ScribeBlock
+          entry={entry}
+          clientName={clientName}
+          onFillWithAi={onFillWithAi}
+          onViewTranscript={onViewTranscript}
+        />
+      );
     if (t === "call" || t === "outbound_call" || t === "inbound_call" || t === "failed_call")
       return <CallBlock entry={entry} />;
     if (t === "whatsapp" || t === "sms")
@@ -926,11 +1090,27 @@ function ActivityCard({
             </span>
             {/* Status pill + source step */}
             <div className="flex items-center gap-1.5 flex-wrap mt-1">
-              <StatusPill status={entry.status || "completed"} />
-              {entry.sourceStepName && (
-                <span className="text-[10px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  via {entry.sourceStepName}
-                </span>
+              {rawType === "scribe" ? (
+                <>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-2.5 py-0.5 rounded-full">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    Saved
+                  </span>
+                  {entry.sourceStepName && (
+                    <span className="text-[10px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      via {entry.sourceStepName}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <StatusPill status={entry.status || "completed"} />
+                  {entry.sourceStepName && (
+                    <span className="text-[10px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      via {entry.sourceStepName}
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -941,7 +1121,7 @@ function ActivityCard({
             >
               {displayTs}
             </span>
-            {!["process_entry", "stage_update", "stage_change", "process_completed"].includes(rawType) && kebabActions.length > 0 && (
+            {!["process_entry", "stage_update", "stage_change", "process_completed", "scribe"].includes(rawType) && kebabActions.length > 0 && (
               <KebabMenu actions={kebabActions} />
             )}
           </div>
@@ -1124,6 +1304,17 @@ export interface ActivityTabProps {
   emptyMessage?: string;
   /** Called when user clicks "Create New Appointment" in the Appointment compose panel */
   onOpenScheduleAppointment?: () => void;
+  processId?: string;
+  processName?: string;
+  appointmentId?: string;
+  invoiceId?: string;
+  onFillWithAi?: (scribeData: {
+    transcriptPreview?: string;
+    diagnosis?: string;
+    chiefComplaint?: string;
+    extractedData?: any;
+    scribeSessionId?: string;
+  }) => void;
 }
 
 // ─── Shared deduplicating merge helper ───────────────────────────────────────
@@ -1168,11 +1359,21 @@ export default function ActivityTab({
   onCloseParentDrawer,
   emptyMessage = "No activity yet",
   onOpenScheduleAppointment,
+  processId,
+  processName,
+  appointmentId,
+  invoiceId,
+  onFillWithAi,
 }: ActivityTabProps) {
   const navigate = useNavigate();
   const { findOrCreateConversationForClient, sendMessage, sendTemplate } = useConversations();
 
   const normalizedClientId = clientId ? String(clientId) : "";
+
+  // Scribe Modal & Transcript Drawer states
+  const [showScribeModal, setShowScribeModal] = useState(false);
+  const [showTranscriptDrawer, setShowTranscriptDrawer] = useState(false);
+  const [selectedTranscriptSession, setSelectedTranscriptSession] = useState<ScribeSession | null>(null);
 
   useEffect(() => {
     if (!normalizedClientId) {
@@ -1180,7 +1381,7 @@ export default function ActivityTab({
     }
   }, [normalizedClientId, clientId]);
 
-  const [activeCategoryTab, setActiveCategoryTab] = useState<string>("all");
+  const [activeActionTab, setActiveActionTab] = useState<string>("comment");
   const [actionText, setActionText] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
 
@@ -1413,14 +1614,12 @@ export default function ActivityTab({
     return unsub;
   }, [normalizedClientId]);
 
-  // When forced panel opens, also set the category tab
+  // When forced panel opens, also set the active action tab
   useEffect(() => {
     if (forcedPanel) {
-      setActiveCategoryTab(forcedPanel);
+      setActiveActionTab(forcedPanel);
     }
   }, [forcedPanel]);
-
-
 
   const getActiveProcessPayload = () => {
     if (!activeProcessTab || activeProcessTab === "all") return { processId: undefined, processName: undefined };
@@ -1454,28 +1653,6 @@ export default function ActivityTab({
     return created;
   };
 
-  const isMatchingCategory = (entry: ActivityLogEntry) => {
-    if (activeCategoryTab === "all") return true;
-    const rawType = (entry as any).rawType || entry.type;
-    if (activeCategoryTab === "whatsapp") return rawType === "whatsapp" || entry.type === "whatsapp";
-    if (activeCategoryTab === "call")
-      return ["call", "outbound_call", "inbound_call", "failed_call"].includes(rawType) ||
-        ["call", "outbound_call", "inbound_call", "failed_call"].includes(entry.type) ||
-        !!(entry as any).callId;
-    if (activeCategoryTab === "sms") return rawType === "sms" || entry.type === "sms";
-    if (activeCategoryTab === "email") return rawType === "email" || entry.type === "email";
-    if (activeCategoryTab === "appointment") {
-      const typeStr = String(rawType || entry.type || "").toLowerCase();
-      return (
-        typeStr.startsWith("appointment") ||
-        typeStr === "stage_change" ||
-        typeStr === "stage_update" ||
-        !!(entry as any).appointmentId
-      );
-    }
-    return false;
-  };
-
   // Helper to deduplicate items by ID
   const deduplicateActivities = (entries: ActivityLogEntry[]): ActivityLogEntry[] => {
     const seenIds = new Set<string>();
@@ -1493,7 +1670,10 @@ export default function ActivityTab({
     return ((b as any).seq ?? 0) - ((a as any).seq ?? 0);
   });
 
-  const displayed = sorted.filter(isMatchingCategory);
+  // Timeline shows all activities, filtered only by process if a specific process is selected
+  const displayed = activeProcessTab && activeProcessTab !== "all"
+    ? sorted.filter((e) => (e as any).processId === activeProcessTab || (e as any).processName === activeProcessTab || !(e as any).processId)
+    : sorted;
   const timelineItems = groupTimelineItems(displayed);
 
   const handleCardView = (entry: ActivityLogEntry) => {
@@ -1533,13 +1713,14 @@ export default function ActivityTab({
     if (onOpenActivity) onOpenActivity(entry);
   };
 
-  const CATEGORY_TABS = [
-    { id: "all", label: "All" },
+  const ACTION_TABS = [
+    { id: "comment", label: "Comment" },
     { id: "whatsapp", label: "WhatsApp" },
     { id: "call", label: "Call" },
     { id: "sms", label: "SMS" },
     { id: "email", label: "Email" },
     { id: "appointment", label: "Appointment" },
+    { id: "scribe", label: "Scribe" },
   ];
 
   const now = new Date().toISOString();
@@ -1562,31 +1743,93 @@ export default function ActivityTab({
             ))}
           </select>
         )}
-        <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
-          {CATEGORY_TABS.map((cat) => {
-            const isActive = activeCategoryTab === cat.id;
+        <div
+          className="flex items-center gap-1.5 flex-wrap py-0.5 flex-1"
+        >
+          {ACTION_TABS.map((tab) => {
+            const isActive = activeActionTab === tab.id;
             return (
               <button
-                key={cat.id}
+                key={tab.id}
                 type="button"
                 onClick={() => {
+                  if (tab.id === "scribe") {
+                    setShowScribeModal(true);
+                    return;
+                  }
                   setForcedPanel(null);
-                  setActiveCategoryTab(cat.id);
+                  setActiveActionTab(tab.id);
                 }}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
-                  isActive ? "bg-[#1F2937] text-white shadow-sm font-semibold" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  isActive ? "bg-[#1F2937] text-white shadow-sm font-semibold" : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900"
                 }`}
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                {cat.label}
+                {tab.label}
               </button>
             );
           })}
         </div>
       </div>
 
+      {/* ── Comment compose panel (Default action card) ── */}
+      {activeActionTab === "comment" && (
+        <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
+              <FileText className="w-4 h-4 text-[#1F2937]" />
+              <span>Add Comment / Note</span>
+            </div>
+            <span className="text-xs text-gray-800 font-medium bg-gray-200/80 px-2.5 py-0.5 rounded-full">
+              {clientName || "Client"} · Internal Note
+            </span>
+          </div>
+
+          <textarea
+            rows={2}
+            placeholder={`Add an internal comment or note for ${clientName || "client"}...`}
+            value={actionText}
+            onChange={(e) => setActionText(e.target.value)}
+            className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1F2937]/10 focus:border-[#1F2937] transition-all text-gray-800"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          />
+
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (!actionText.trim()) {
+                  toast.error("Please enter a comment or note");
+                  return;
+                }
+                const noteText = actionText.trim();
+                const created = handleAppend({
+                  type: "note" as any,
+                  notes: noteText,
+                  timestamp: new Date().toISOString(),
+                  details: {
+                    primary: noteText,
+                    secondary: "Comment by Clinician / Staff",
+                  },
+                });
+                if (!created) {
+                  toast.error("Couldn't save this activity — client context missing");
+                  return;
+                }
+                toast.success("Comment added successfully");
+                setActionText("");
+              }}
+              className="px-4 py-1.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <FileText className="w-3.5 h-3.5" /> Post Comment
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── WhatsApp compose panel ── */}
-      {activeCategoryTab === "whatsapp" && (
+      {activeActionTab === "whatsapp" && (
         <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
@@ -1784,7 +2027,7 @@ export default function ActivityTab({
       )}
 
       {/* ── Call panel ── */}
-      {activeCategoryTab === "call" && (
+      {activeActionTab === "call" && (
         <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
@@ -1834,7 +2077,7 @@ export default function ActivityTab({
       )}
 
       {/* ── SMS compose panel ── */}
-      {activeCategoryTab === "sms" && (
+      {activeActionTab === "sms" && (
         <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
@@ -1895,7 +2138,7 @@ export default function ActivityTab({
       )}
 
       {/* ── Email compose panel ── */}
-      {activeCategoryTab === "email" && (
+      {activeActionTab === "email" && (
         <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
@@ -1959,7 +2202,7 @@ export default function ActivityTab({
       )}
 
       {/* ── Appointment panel — opens real drawer ── */}
-      {activeCategoryTab === "appointment" && (
+      {activeActionTab === "appointment" && (
         <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
@@ -2007,7 +2250,7 @@ export default function ActivityTab({
                   isLast={isLast}
                   onOpenComposePanel={(type) => {
                     setForcedPanel(type);
-                    setActiveCategoryTab(type);
+                    setActiveActionTab(type);
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
                   onOpenThreadDrawer={(convId, channel = "whatsapp") => {
@@ -2036,7 +2279,7 @@ export default function ActivityTab({
                   onOpenRescheduleAppointment={() => handleOpenScheduleAppt("reschedule")}
                   onOpenComposePanel={(type) => {
                     setForcedPanel(type);
-                    setActiveCategoryTab(type);
+                    setActiveActionTab(type);
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
                   onOpenThreadDrawer={(convId, channel = "whatsapp") => {
@@ -2048,6 +2291,16 @@ export default function ActivityTab({
                     setEmailThreadId(convId);
                     setEmailThreadSubject(subject || "");
                     setShowEmailThreadDrawer(true);
+                  }}
+                  onFillWithAi={onFillWithAi}
+                  onViewTranscript={(sessionId) => {
+                    const sess = getScribeSessionById(sessionId);
+                    if (sess) {
+                      setSelectedTranscriptSession(sess);
+                      setShowTranscriptDrawer(true);
+                    } else {
+                      toast.error("Transcript session details not found");
+                    }
                   }}
                   navigate={navigate}
                 />
@@ -2116,6 +2369,54 @@ export default function ActivityTab({
         clientEmail={clientEmail}
         threadId={emailThreadId}
         initialSubject={emailThreadSubject}
+      />
+
+      {/* ── AI Scribe Drawer (Unified with Scribe Page) ── */}
+      <NewConsultationDrawer
+        isOpen={showScribeModal}
+        onClose={() => setShowScribeModal(false)}
+        initialClientId={normalizedClientId}
+        initialClientName={clientName}
+        initialEntityType={
+          appointmentId
+            ? "appointment"
+            : invoiceId
+            ? "invoice"
+            : "client"
+        }
+        initialProcessId={processId || (activeProcessTab && activeProcessTab !== "all" ? activeProcessTab : undefined)}
+        initialProcessName={processName}
+        initialRecordId={appointmentId || invoiceId || (processId ? `REC-${processId}` : undefined)}
+        zIndex={700}
+        onSessionCreated={(session) => {
+          setShowScribeModal(false);
+          toast.success(`AI Scribe consultation recorded for ${session.clientName}!`);
+          if (onFillWithAi) {
+            onFillWithAi({
+              transcriptPreview: session.transcript?.fullText?.slice(0, 300),
+              diagnosis: session.extractedData?.diagnosis,
+              chiefComplaint: session.extractedData?.chiefComplaint,
+              extractedData: session.extractedData,
+              scribeSessionId: session.id,
+            });
+          }
+        }}
+        onViewTranscript={(newSession) => {
+          setShowScribeModal(false);
+          setSelectedTranscriptSession(newSession);
+          setShowTranscriptDrawer(true);
+        }}
+      />
+
+      {/* ── Transcript Detail Drawer ── */}
+      <TranscriptDetailDrawer
+        isOpen={showTranscriptDrawer}
+        onClose={() => {
+          setShowTranscriptDrawer(false);
+          setSelectedTranscriptSession(null);
+        }}
+        session={selectedTranscriptSession}
+        zIndex={750}
       />
     </div>
   );
