@@ -369,22 +369,15 @@ export function getStoredRules(orgId?: string): AutomationRule[] {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    // Filter out hardcoded sample mock rules and check-in rules
+    // Filter out obsolete legacy mock rule IDs if any
     const legacyMockIds = new Set([
       "rule-client-intake-auto",
       "rule-appt-booked-auto",
       "rule-appt-rescheduled-auto",
       "rule-inv-sent-auto",
       "rule-inv-paid-auto",
-      "rule-patient-checkin-care-journey",
     ]);
-    let filtered = parsed.filter(
-      (r) =>
-        !legacyMockIds.has(r.id) &&
-        r.trigger?.event !== "client.checked_in" &&
-        r.trigger?.event !== "checked_in" &&
-        r.trigger?.event !== "appointment.checked_in"
-    );
+    let filtered = parsed.filter((r) => !legacyMockIds.has(r.id));
     if (filtered.length !== parsed.length) {
       localStorage.setItem(AUTOMATION_RULES_STORAGE_KEY, JSON.stringify(filtered));
     }

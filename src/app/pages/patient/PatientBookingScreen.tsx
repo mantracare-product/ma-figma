@@ -35,7 +35,7 @@ interface PortalContext {
 
 export default function PatientBookingScreen() {
   const navigate = useNavigate();
-  const { activeClient } = useOutletContext<PortalContext>();
+  const { activeClient, activeProcess, onStageChange } = useOutletContext<PortalContext>();
   const { activeOrganization } = useOrganization();
 
   // ── 1. Fetch User's Appointments ──
@@ -161,17 +161,21 @@ export default function PatientBookingScreen() {
       );
 
       // Update patient stage in clientsStore
+      const targetProcName = activeProcess?.name || "Patient Care Journey";
       const all = getStoredClients();
       const updated = all.map((c) =>
         c.id === activeClient.id
           ? {
               ...c,
               stage: "Appointment Booked",
-              processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])),
+              processes: Array.from(new Set([targetProcName, ...(c.processes || [])])),
             }
           : c
       );
       saveStoredClients(updated);
+      try {
+        onStageChange("Appointment Booked");
+      } catch {}
 
       toast.success("Appointment successfully booked!");
       setShowBookingModal(false);

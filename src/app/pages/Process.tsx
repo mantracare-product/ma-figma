@@ -2712,12 +2712,81 @@ export default function Process() {
     const isAppointment = selectedEntity === "appointment";
     const newProcessId = `proc-${selectedEntity}-${Date.now()}`;
 
+    const initialStages: Stage[] = [
+      {
+        id: `${newProcessId}-stg-1`,
+        name: "Initial Contact",
+        description: `Initial contact and intake for ${newProcess.name}`,
+        status: "active",
+        color: "#3B82F6",
+        isInitial: true,
+        stagePosition: "initial",
+        stageCategory: "in_progress",
+        connectedToPatientPortal: true,
+        connectedToAiReceptionist: true,
+        portalReceptionSettings: {
+          enabled: true,
+          enabledPortal: true,
+          enabledReception: true,
+          cardTitle: "Initial Contact",
+          cardDescription: `Welcome and intake for ${newProcess.name}`,
+          htmlContent: `<h3>Initial Contact</h3><p>Welcome! We are getting started with your ${newProcess.name}.</p>`,
+          text: `Welcome! We are getting started with your ${newProcess.name}.`,
+        },
+      },
+      {
+        id: `${newProcessId}-stg-2`,
+        name: "In Progress",
+        description: `Active review and processing for ${newProcess.name}`,
+        status: "active",
+        color: "#06B6D4",
+        stagePosition: "intermediate",
+        stageCategory: "in_progress",
+        connectedToPatientPortal: true,
+        connectedToAiReceptionist: true,
+        portalReceptionSettings: {
+          enabled: true,
+          enabledPortal: true,
+          enabledReception: true,
+          cardTitle: "In Progress",
+          cardDescription: `Your request is currently being processed.`,
+          htmlContent: `<h3>In Progress</h3><p>Your request is currently active and in progress.</p>`,
+          text: `Your request is currently active and in progress.`,
+        },
+      },
+      {
+        id: `${newProcessId}-stg-3`,
+        name: "Completed",
+        description: `Successfully completed ${newProcess.name}`,
+        status: "active",
+        color: "#10B981",
+        isFinal: true,
+        isFinalStage: true,
+        stagePosition: "final",
+        stageCategory: "success",
+        connectedToPatientPortal: true,
+        connectedToAiReceptionist: true,
+        portalReceptionSettings: {
+          enabled: true,
+          enabledPortal: true,
+          enabledReception: true,
+          cardTitle: "Completed",
+          cardDescription: `Your ${newProcess.name} has been completed successfully.`,
+          htmlContent: `<h3>Completed</h3><p>Thank you! Your ${newProcess.name} has concluded successfully.</p>`,
+          text: `Your ${newProcess.name} has concluded successfully.`,
+        },
+      },
+    ];
+
     const process: Process = {
       id: newProcessId,
       ...newProcess,
       assignedToUserId: 1,
-      stages: [], // Newly added process has no predefined stages
-      entityType: isAppointment ? "appointment" : "client",
+      stages: initialStages,
+      connectedToPatientPortal: true,
+      connectedToAiReceptionist: true,
+      receptionEnabled: true,
+      entityType: (selectedEntity as EntityType) || "client",
       industryCategory: organization?.industryCategory || "All",
       industry: organization?.industry || "All",
       locations: organization?.location ? [organization.location] : (organization?.locations || ["All"]),
@@ -2741,7 +2810,7 @@ export default function Process() {
       },
     };
 
-    setProcesses([...processes, process]);
+    setProcesses((prev) => [...prev, process]);
     setSelectedProcess(process.id);
     setExpandedProcesses([...expandedProcesses, process.id]);
     setExpandedStage(null);
@@ -2754,10 +2823,54 @@ export default function Process() {
   const handleUpdateProcess = (field: string, value: any) => {
     if (!selectedProcess) return;
 
-    setProcesses(
-      processes.map((p) =>
+    setProcesses((prev) =>
+      prev.map((p) =>
         p.id === selectedProcess ? { ...p, [field]: value } : p
       )
+    );
+  };
+
+  const handleToggleProcessPortalReception = (val: boolean) => {
+    if (!selectedProcess) return;
+
+    setProcesses((prev) =>
+      prev.map((p) => {
+        if (p.id !== selectedProcess) return p;
+        return {
+          ...p,
+          connectedToPatientPortal: val,
+          connectedToAiReceptionist: val,
+          receptionEnabled: val,
+          stages: p.stages.map((st) => ({
+            ...st,
+            connectedToPatientPortal: val,
+            connectedToAiReceptionist: val,
+            portalReceptionSettings: {
+              ...(st.portalReceptionSettings || {}),
+              enabled: val,
+              enabledPortal: val,
+              enabledReception: val,
+              cardTitle: st.portalReceptionSettings?.cardTitle || st.name,
+              cardDescription:
+                st.portalReceptionSettings?.cardDescription ||
+                st.description ||
+                `Information and guidance for ${st.name}`,
+              htmlContent:
+                st.portalReceptionSettings?.htmlContent ||
+                `<div class="stage-guide"><h3>${st.name}</h3><p>${st.description || `Guidance and activities for ${st.name}`}</p></div>`,
+              text:
+                st.portalReceptionSettings?.text ||
+                st.portalReceptionSettings?.htmlContent ||
+                `<div class="stage-guide"><h3>${st.name}</h3><p>${st.description || `Guidance and activities for ${st.name}`}</p></div>`,
+            },
+          })),
+        };
+      })
+    );
+    toast.success(
+      val
+        ? "Connected pipeline & all stages to Client Portal & AI Receptionist"
+        : "Disconnected pipeline from Client Portal & AI Receptionist"
     );
   };
 
@@ -3162,6 +3275,7 @@ export default function Process() {
     const isLost = targetCategory === "lost";
     const isSuccess = targetCategory === "success";
 
+    const isProcPortalConnected = Boolean(selectedProc.connectedToPatientPortal);
     const stage: Stage = {
       id: `${selectedProcess}-${Date.now()}`,
       name: newStage.name.trim(),
@@ -3174,6 +3288,17 @@ export default function Process() {
       isFinalStage: isLost,
       isFinal: isLost,
       stagePosition: isLost ? "final" : isSuccess ? "final" : (newStagePosition === "initial" ? "initial" : "intermediate"),
+      connectedToPatientPortal: isProcPortalConnected,
+      connectedToAiReceptionist: isProcPortalConnected,
+      portalReceptionSettings: {
+        enabled: isProcPortalConnected,
+        enabledPortal: isProcPortalConnected,
+        enabledReception: isProcPortalConnected,
+        cardTitle: newStage.name.trim(),
+        cardDescription: newStage.description.trim() || `Information and guidance for ${newStage.name.trim()}`,
+        htmlContent: `<div class="stage-guide"><h3>${newStage.name.trim()}</h3><p>${newStage.description.trim() || `Guidance for ${newStage.name.trim()}`}</p></div>`,
+        text: newStage.description.trim() || `Guidance for ${newStage.name.trim()}`,
+      },
     };
 
     let updatedStages: Stage[];
@@ -4207,11 +4332,7 @@ export default function Process() {
                                 )
                               }
                               onChange={(e) => {
-                                const val = e.target.checked;
-                                handleUpdateProcess("connectedToPatientPortal", val);
-                                handleUpdateProcess("connectedToAiReceptionist", val);
-                                handleUpdateProcess("receptionEnabled", val);
-                                toast.success(val ? "Connected pipeline to Client Portal & AI Receptionist" : "Disconnected pipeline from Client Portal & AI Receptionist");
+                                handleToggleProcessPortalReception(e.target.checked);
                               }}
                             />
                             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
@@ -4607,6 +4728,9 @@ export default function Process() {
                                                   ? p
                                                   : {
                                                     ...p,
+                                                    connectedToPatientPortal: newVal ? true : p.connectedToPatientPortal,
+                                                    connectedToAiReceptionist: newVal ? true : p.connectedToAiReceptionist,
+                                                    receptionEnabled: newVal ? true : p.receptionEnabled,
                                                     stages: p.stages.map((s) =>
                                                       s.id !== expandedStage
                                                         ? s
@@ -4619,6 +4743,18 @@ export default function Process() {
                                                             enabled: newVal,
                                                             enabledPortal: newVal,
                                                             enabledReception: newVal,
+                                                            cardTitle: s.portalReceptionSettings?.cardTitle || s.name,
+                                                            cardDescription:
+                                                              s.portalReceptionSettings?.cardDescription ||
+                                                              s.description ||
+                                                              `Information and guidance for ${s.name}`,
+                                                            htmlContent:
+                                                              s.portalReceptionSettings?.htmlContent ||
+                                                              `<div class="stage-guide"><h3>${s.name}</h3><p>${s.description || `Guidance for ${s.name}`}</p></div>`,
+                                                            text:
+                                                              s.portalReceptionSettings?.text ||
+                                                              s.portalReceptionSettings?.htmlContent ||
+                                                              `<div class="stage-guide"><h3>${s.name}</h3><p>${s.description || `Guidance for ${s.name}`}</p></div>`,
                                                           },
                                                         }
                                                     ),

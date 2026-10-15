@@ -543,8 +543,8 @@ export async function executeRulesForEvent(
           const isClientOrProcessTarget =
             rawTargetEntity === "client" ||
             (rawTargetEntity === "processes" && !targetInInvoice && !targetInAppt && event.recordType !== "invoice") ||
-            act.params?.processName === "Patient Care Journey" ||
-            act.params?.processId === "demo-patient-care-journey" ||
+            Boolean(act.params?.processName) ||
+            Boolean(act.params?.processId) ||
             (!rawTargetEntity && event.recordType === "client");
 
           if (isClientOrProcessTarget || (!isInvoiceTarget && !isAppointmentTarget)) {
@@ -563,11 +563,15 @@ export async function executeRulesForEvent(
               }
             }
             if (targetClientId) {
+              const allProcs = getStoredProcesses();
               const targetProcId =
                 act.params?.processId ||
                 act.params?.stepDetailProcess ||
                 act.params?.processName ||
+                allProcs.find((p) => p.connectedToPatientPortal)?.id ||
                 "demo-patient-care-journey";
+              const matchedProc = allProcs.find((p) => p.id === targetProcId || p.name === targetProcId);
+              const targetProcName = matchedProc?.name || act.params?.processName || targetProcId;
               const targetStageVal =
                 act.params?.stageName ||
                 act.params?.stepDetailStageName ||
@@ -589,7 +593,7 @@ export async function executeRulesForEvent(
                   toStageId: act.params?.stageId || updatedClient.stage,
                   toStageName: updatedClient.stage,
                   processId: targetProcId,
-                  processName: act.params?.processName || "Patient Care Journey",
+                  processName: targetProcName,
                   cause: {
                     type: "rule",
                     ruleId: rule.id,

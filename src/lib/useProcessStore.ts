@@ -382,6 +382,9 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
     description: "Standard scheduling, attendance, and completion lifecycle",
     assignedToUserId: 1,
     entityType: "appointment",
+    connectedToPatientPortal: true,
+    connectedToAiReceptionist: true,
+    receptionEnabled: true,
     aiSettings: {
       platform: "OpenAI - GPT-4o",
       voiceSpeed: 1.0,
@@ -390,11 +393,109 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
       style: "Balanced",
     },
     stages: [
-      { id: "appt-1", name: "Booked", description: "Appointment confirmed and scheduled", status: "active", color: "#3B82F6", systemCategory: "booked", isSystemCategoryRequired: true, isInitial: true, stagePosition: "initial" },
-      { id: "appt-2", name: "Rescheduled", description: "Appointment date or time moved", status: "active", color: "#F59E0B", systemCategory: "rescheduled", isSystemCategoryRequired: true, stagePosition: "intermediate" },
-      { id: "appt-3", name: "Reminder", description: "Reminder notification dispatched", status: "active", color: "#8B5CF6", systemCategory: "reminder", isSystemCategoryRequired: false, stagePosition: "intermediate" },
-      { id: "appt-4", name: "Checked In", description: "Patient arrived at facility or joined session", status: "active", color: "#06B6D4", systemCategory: "checked_in", isSystemCategoryRequired: false, stagePosition: "intermediate" },
-      { id: "appt-5", name: "Completed", description: "Consultation successfully completed", status: "active", color: "#10B981", systemCategory: "completed", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      {
+        id: "appt-1",
+        name: "Booked",
+        description: "Appointment confirmed and scheduled",
+        status: "active",
+        color: "#3B82F6",
+        systemCategory: "booked",
+        isSystemCategoryRequired: true,
+        isInitial: true,
+        stagePosition: "initial",
+        connectedToPatientPortal: true,
+        connectedToAiReceptionist: true,
+        portalReceptionSettings: {
+          enabled: true,
+          enabledPortal: true,
+          enabledReception: true,
+          cardTitle: "Booked",
+          cardDescription: "Appointment confirmed and scheduled",
+          htmlContent: "<h3>Appointment Confirmed</h3><p>Your appointment has been confirmed and scheduled with our clinical team.</p><p><strong>Doctor:</strong> {{appointment.provider}}<br/><strong>Date & Time:</strong> {{appointment.date}} at {{appointment.time}}<br/><strong>Service:</strong> {{appointment.service}}<br/><strong>Location:</strong> {{appointment.room}}</p>",
+        },
+      },
+      {
+        id: "appt-2",
+        name: "Rescheduled",
+        description: "Appointment date or time moved",
+        status: "active",
+        color: "#F59E0B",
+        systemCategory: "rescheduled",
+        isSystemCategoryRequired: true,
+        stagePosition: "intermediate",
+        connectedToPatientPortal: true,
+        connectedToAiReceptionist: true,
+        portalReceptionSettings: {
+          enabled: true,
+          enabledPortal: true,
+          enabledReception: true,
+          cardTitle: "Appointment Rescheduled",
+          cardDescription: "Your appointment has been updated to a new time slot.",
+          htmlContent: "<h3>Rescheduled Consultation</h3><p>Your appointment has been rescheduled. Please review the updated timing.</p><p><strong>New Time:</strong> {{appointment.date}} at {{appointment.time}}</p>",
+        },
+      },
+      {
+        id: "appt-3",
+        name: "Reminder",
+        description: "Reminder notification dispatched",
+        status: "active",
+        color: "#8B5CF6",
+        systemCategory: "reminder",
+        isSystemCategoryRequired: false,
+        stagePosition: "intermediate",
+        connectedToPatientPortal: true,
+        connectedToAiReceptionist: true,
+        portalReceptionSettings: {
+          enabled: true,
+          enabledPortal: true,
+          enabledReception: true,
+          cardTitle: "Appointment Reminder",
+          cardDescription: "Upcoming appointment notice and clinical instructions.",
+          htmlContent: "<h3>Upcoming Appointment</h3><p>Friendly reminder that your appointment is coming up today.</p>",
+        },
+      },
+      {
+        id: "appt-4",
+        name: "Checked In",
+        description: "Patient arrived at facility or joined session",
+        status: "active",
+        color: "#06B6D4",
+        systemCategory: "checked_in",
+        isSystemCategoryRequired: false,
+        stagePosition: "intermediate",
+        connectedToPatientPortal: true,
+        connectedToAiReceptionist: true,
+        portalReceptionSettings: {
+          enabled: true,
+          enabledPortal: true,
+          enabledReception: true,
+          cardTitle: "Checked In",
+          cardDescription: "Patient arrived at facility or joined session",
+          htmlContent: "<h3>Checked In</h3><p>You are checked in! Please have a seat in the waiting lounge. You will be called shortly.</p><p><strong>Room:</strong> {{appointment.room}}</p>",
+        },
+      },
+      {
+        id: "appt-5",
+        name: "Completed",
+        description: "Consultation successfully completed",
+        status: "active",
+        color: "#10B981",
+        systemCategory: "completed",
+        isSystemCategoryRequired: true,
+        isFinal: true,
+        isFinalStage: true,
+        stagePosition: "final",
+        connectedToPatientPortal: true,
+        connectedToAiReceptionist: true,
+        portalReceptionSettings: {
+          enabled: true,
+          enabledPortal: true,
+          enabledReception: true,
+          cardTitle: "Consultation Completed",
+          cardDescription: "Clinical consultation successfully concluded.",
+          htmlContent: "<h3>Consultation Concluded</h3><p>Your consultation is complete. Review any prescribed medications or follow-up instructions.</p>",
+        },
+      },
       { id: "appt-6", name: "Cancelled", description: "Appointment cancelled by patient or clinic", status: "active", color: "#EF4444", systemCategory: "cancelled", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
       { id: "appt-7", name: "No-show", description: "Patient did not attend scheduled time", status: "active", color: "#64748B", systemCategory: "no_show", isSystemCategoryRequired: false, isFinal: true, isFinalStage: true, stagePosition: "final" },
     ],
@@ -643,37 +744,47 @@ export const DEMO_PATIENT_PORTAL_PROCESS: Process = {
 };
 
 export function getProcessesForPatientPortal(): Process[] {
-  return getStoredProcesses().filter((p) => Boolean(p.connectedToPatientPortal));
+  return getStoredProcesses().filter(
+    (p) =>
+      Boolean(p.connectedToPatientPortal) ||
+      p.stages?.some((s) => isStageEnabledForPortal(s, p))
+  );
 }
 
 export function getProcessesForAiReceptionist(): Process[] {
   return getStoredProcesses().filter((p) => Boolean(p.connectedToAiReceptionist));
 }
 
-export function isStageEnabledForPortal(stage: Stage): boolean {
+export function isStageEnabledForPortal(stage: Stage, parentProcess?: Process): boolean {
   if (!stage) return false;
-  const isEnabled = Boolean(
+  // If explicitly disabled in settings
+  if (stage.portalReceptionSettings?.enabledPortal === false || stage.portalReceptionSettings?.enabled === false) {
+    return false;
+  }
+  const isExplicitlyEnabled = Boolean(
     stage.connectedToPatientPortal ||
     stage.portalReceptionSettings?.enabledPortal ||
     stage.portalReceptionSettings?.enabled
   );
-  return isEnabled;
+  if (isExplicitlyEnabled) return true;
+  if (parentProcess && Boolean(parentProcess.connectedToPatientPortal)) {
+    return true;
+  }
+  return false;
 }
 
-export function isStageEnabledForAiReceptionist(stage: Stage): boolean {
+export function isStageEnabledForAiReceptionist(stage: Stage, parentProcess?: Process): boolean {
   if (!stage) return false;
+  if (stage.portalReceptionSettings?.enabledReception === false || stage.portalReceptionSettings?.enabled === false) {
+    return false;
+  }
   const isEnabled = Boolean(
     stage.connectedToAiReceptionist ||
     stage.portalReceptionSettings?.enabledReception ||
-    stage.portalReceptionSettings?.enabled
+    stage.portalReceptionSettings?.enabled ||
+    (parentProcess && Boolean(parentProcess.connectedToAiReceptionist || parentProcess.receptionEnabled))
   );
-  if (!isEnabled) return false;
-  // Stage is only shown if configuration is actually done (has cardTitle or htmlContent configured)
-  const isConfigured = Boolean(
-    stage.portalReceptionSettings?.cardTitle?.trim() ||
-    stage.portalReceptionSettings?.htmlContent?.trim()
-  );
-  return isConfigured;
+  return isEnabled;
 }
 
 export const DEFAULT_INITIAL_PROCESSES: Process[] = [
@@ -987,16 +1098,27 @@ export function getStoredProcesses(): Process[] {
     if (p.entityType && p.entityType !== "client") {
       const defaultProc = DEFAULT_ENTITY_PROCESSES[p.entityType];
       if (defaultProc) {
+        const procPortalConnected = p.connectedToPatientPortal !== undefined ? p.connectedToPatientPortal : defaultProc.connectedToPatientPortal;
+        const procReceptionConnected = p.connectedToAiReceptionist !== undefined ? p.connectedToAiReceptionist : defaultProc.connectedToAiReceptionist;
         const updatedStages = p.stages.map((st) => {
           const defaultStage = defaultProc.stages.find((ds) => ds.id === st.id || ds.systemCategory === st.systemCategory);
           const req = isRequiredSystemCategory(p.entityType, st.systemCategory || defaultStage?.systemCategory);
+          const stagePortalSettings = st.portalReceptionSettings || defaultStage?.portalReceptionSettings;
           return {
             ...st,
             systemCategory: st.systemCategory || defaultStage?.systemCategory,
             isSystemCategoryRequired: req || defaultStage?.isSystemCategoryRequired || false,
+            connectedToPatientPortal: st.connectedToPatientPortal !== undefined ? st.connectedToPatientPortal : defaultStage?.connectedToPatientPortal,
+            connectedToAiReceptionist: st.connectedToAiReceptionist !== undefined ? st.connectedToAiReceptionist : defaultStage?.connectedToAiReceptionist,
+            portalReceptionSettings: stagePortalSettings,
           };
         });
-        return { ...p, stages: updatedStages };
+        return {
+          ...p,
+          connectedToPatientPortal: procPortalConnected,
+          connectedToAiReceptionist: procReceptionConnected,
+          stages: updatedStages,
+        };
       }
     }
     return p;

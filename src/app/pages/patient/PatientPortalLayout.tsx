@@ -17,16 +17,21 @@ import {
   LayoutDashboard,
   FileText,
   LogOut,
+  Layers,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import maLogo from "../../../imports/ma_logo-1.png";
 import symbolLogo from "../../../imports/Ma-symbol-mark.png";
-import { useClients, getStoredClients, saveStoredClients, Client, CLIENTS_STORE_EVENT } from "../../../lib/clientsStore";
+import { useClients, getStoredClients, saveStoredClients, moveClientToStage, Client, CLIENTS_STORE_EVENT } from "../../../lib/clientsStore";
 import {
   getProcessesForPatientPortal,
   Process,
   PROCESS_STORE_EVENT,
+  isStageEnabledForPortal,
 } from "../../../lib/useProcessStore";
+import { appointmentService } from "../../../lib/appointmentService";
+import { invoiceService } from "../../../lib/invoiceService";
 import { useOrganization } from "../../context/OrganizationContext";
 import DevPatientSwitcherModal from "./components/DevPatientSwitcherModal";
 
@@ -95,6 +100,27 @@ export default function PatientPortalLayout() {
       window.removeEventListener(PROCESS_STORE_EVENT, handleProcesses);
       window.removeEventListener("storage", handleProcesses);
     };
+  }, []);
+
+  // Active process selection state (persisted in sessionStorage)
+  const [selectedProcessId, setSelectedProcessId] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paramProc = params.get("processId") || params.get("process");
+    if (paramProc) return paramProc;
+    return sessionStorage.getItem("patient_portal_active_process_id") || "";
+  });
+  const [isProcessDropdownOpen, setIsProcessDropdownOpen] = useState(false);
+  const processDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close process dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (processDropdownRef.current && !processDropdownRef.current.contains(e.target as Node)) {
+        setIsProcessDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
 
@@ -177,22 +203,143 @@ export default function PatientPortalLayout() {
     navigate(`/patient/${id}`);
   };
 
-  const activeProcess = portalProcesses.find(
+  const handleSelectProcess = (procId: string) => {
+    setSelectedProcessId(procId);
+    sessionStorage.setItem("patient_portal_active_process_id", procId);
+    setIsProcessDropdownOpen(false);
+    const proc = portalProcesses.find((p) => p.id === procId || p.name === procId);
+    if (proc && activeClient) {
+      if (!proc.entityType || proc.entityType === "client") {
+        const all = getStoredClients();
+        const updated = all.map((c) =>
+          c.id === activeClient.id
+            ? {
+                ...c,
+                processes: Array.from(new Set([proc.name, ...(c.processes || [])])),
+                stage: proc.stages?.[0]?.name || c.stage,
+              }
+            : c
+        );
+        saveStoredClients(updated);
+      }
+      toast.success(`Switched to "${proc.name}"`);
+    }
+  };
+
+  // Inspect active appointment for this patient across all appointment workflows
+  const allAppts = appointmentService.getAppointments();
+  const patientPhoneDigits = (activeClient?.phone || "").replace(/\D/g, "");
+  const patientNameLower = (activeClient?.name || "").toLowerCase().trim();
+  const patientAppts = allAppts.filter((a) => {
+    if (a.clientId && String(a.clientId) === String(activeClient?.id)) return true;
+    const aPhoneDigits = (a.clientPhone || "").replace(/\D/g, "");
+    if (patientPhoneDigits && aPhoneDigits && (patientPhoneDigits === aPhoneDigits || patientPhoneDigits.slice(-10) === aPhoneDigits.slice(-10))) return true;
+    if (a.clientName && patientNameLower && a.clientName.toLowerCase().trim() === patientNameLower) return true;
+    return false;
+  });
+
+  const bookedAppt =
+    patientAppts.find(
+      (a) =>
+        a.status === "scheduled" ||
+        a.status === "pending-accept" ||
+        a.status === "checked-in" ||
+        (a.status as string) === "booked"
+    ) ||
+    patientAppts[0] ||
+    null;
+
+  // Find appointment portal process if patient has a booked/scheduled appointment
+  const apptPortalProcess = portalProcesses.find(
     (p) =>
-      Boolean(p.connectedToPatientPortal) &&
-      activeClient?.processes?.some((pNameOrId) => pNameOrId === p.name || pNameOrId === p.id)
+      (p.id === bookedAppt?.processId || p.entityType === "appointment" || p.id === "process-appointment-default") &&
+      (Boolean(p.connectedToPatientPortal) || p.stages?.some((s) => isStageEnabledForPortal(s, p)))
   );
 
+  const activeProcess: Process | undefined =
+    (selectedProcessId && portalProcesses.find((p) => p.id === selectedProcessId || p.name === selectedProcessId)) ||
+    (bookedAppt && apptPortalProcess) ||
+    portalProcesses.find(
+      (p) =>
+        Boolean(p.connectedToPatientPortal) &&
+        activeClient?.processes?.some((pNameOrId) => pNameOrId === p.name || pNameOrId === p.id)
+    ) ||
+    portalProcesses.find((p) =>
+      activeClient?.processes?.some((pNameOrId) => pNameOrId === p.name || pNameOrId === p.id)
+    ) ||
+    portalProcesses[0];
+
   const stages = activeProcess?.stages || [];
-  const currentStageName = activeClient?.stage;
-  const currentStageIndex = currentStageName
-    ? stages.findIndex(
+  let currentStageIndex = -1;
+  let currentStageName = "";
+
+  if (activeProcess?.entityType === "appointment") {
+    if (bookedAppt) {
+      currentStageIndex = stages.findIndex(
         (s) =>
-          s.name.toLowerCase() === currentStageName.toLowerCase() ||
-          s.id.toLowerCase() === currentStageName.toLowerCase()
-      )
-    : -1;
-  const activeIdx = currentStageIndex >= 0 ? currentStageIndex : -1;
+          s.id === bookedAppt.currentStageId ||
+          s.id === bookedAppt.stageId ||
+          (bookedAppt.statusLabel && s.name.toLowerCase() === bookedAppt.statusLabel.toLowerCase())
+      );
+      if (currentStageIndex === -1 && bookedAppt.status) {
+        const apptStatus = bookedAppt.status.toLowerCase();
+        if (apptStatus === "scheduled" || apptStatus === "pending-accept" || apptStatus === "booked") {
+          currentStageIndex = stages.findIndex(
+            (s) => s.systemCategory === "booked" || s.name.toLowerCase() === "booked" || s.isInitial
+          );
+        } else if (apptStatus === "checked-in") {
+          currentStageIndex = stages.findIndex(
+            (s) => s.systemCategory === "checked_in" || s.name.toLowerCase().includes("checked in")
+          );
+        } else if (apptStatus === "completed") {
+          currentStageIndex = stages.findIndex(
+            (s) => s.systemCategory === "completed" || s.name.toLowerCase().includes("completed")
+          );
+        } else if (apptStatus === "cancelled") {
+          currentStageIndex = stages.findIndex(
+            (s) => s.systemCategory === "cancelled" || s.name.toLowerCase().includes("cancelled")
+          );
+        } else if (apptStatus === "rescheduled") {
+          currentStageIndex = stages.findIndex(
+            (s) => s.systemCategory === "rescheduled" || s.name.toLowerCase().includes("rescheduled")
+          );
+        } else if (apptStatus === "no-show") {
+          currentStageIndex = stages.findIndex(
+            (s) => s.systemCategory === "no_show" || s.name.toLowerCase().includes("no-show")
+          );
+        }
+      }
+    }
+    if (currentStageIndex === -1) {
+      currentStageIndex = stages.findIndex((s) => s.isInitial || s.stagePosition === "initial");
+      if (currentStageIndex === -1) currentStageIndex = 0;
+    }
+    currentStageName = stages[currentStageIndex]?.name || "Booked";
+  } else if (activeProcess?.entityType === "invoice") {
+    const allInvoices = invoiceService.getInvoices();
+    const inv = allInvoices.find((i) => i.clientId === activeClient?.id) || allInvoices[0];
+    if (inv) {
+      const invStatus = (inv.status || "draft").toLowerCase();
+      currentStageIndex = stages.findIndex(
+        (s) => s.systemCategory === invStatus || s.name.toLowerCase() === invStatus
+      );
+    }
+    if (currentStageIndex === -1) currentStageIndex = 0;
+    currentStageName = stages[currentStageIndex]?.name || "Draft";
+  } else {
+    const rawStageName = activeClient?.stage;
+    currentStageIndex = rawStageName
+      ? stages.findIndex(
+          (s) =>
+            s.name.toLowerCase() === rawStageName.toLowerCase() ||
+            s.id.toLowerCase() === rawStageName.toLowerCase()
+        )
+      : -1;
+    if (currentStageIndex === -1) currentStageIndex = 0;
+    currentStageName = stages[currentStageIndex]?.name || stages[0]?.name || "Initial";
+  }
+
+  const activeIdx = currentStageIndex >= 0 ? currentStageIndex : 0;
 
   // If on login or register screen, render without portal wrapper/sidebar
   if (isAuthPage) {
@@ -565,7 +712,7 @@ export default function PatientPortalLayout() {
               <img src={maLogo} alt="MantraAssist" className="h-6 w-auto object-contain" />
             </div>
 
-            {/* Desktop Page Breadcrumb / Title */}
+            {/* Desktop Page Breadcrumb / Title & Process Switcher */}
             <div className="hidden md:flex items-center gap-2 text-xs">
               <span className="text-slate-400 font-medium">Patient Portal</span>
               <span className="text-slate-300">/</span>
@@ -584,6 +731,51 @@ export default function PatientPortalLayout() {
                     : "Overview"
                   : "Overview"}
               </span>
+
+              {/* Process Selector Badge */}
+              {portalProcesses.length > 0 && (
+                <div className="relative ml-2" ref={processDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsProcessDropdownOpen(!isProcessDropdownOpen)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+                    title="Switch active care journey / process"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-blue-600" />
+                    <span className="max-w-[150px] sm:max-w-[200px] truncate">{activeProcess?.name || "Care Journey"}</span>
+                    <ChevronDown className="w-3 h-3 text-slate-400" />
+                  </button>
+
+                  {isProcessDropdownOpen && (
+                    <div className="absolute left-0 mt-1.5 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                      <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Available Care Journeys ({portalProcesses.length})
+                      </div>
+                      <div className="space-y-0.5 max-h-56 overflow-y-auto">
+                        {portalProcesses.map((p) => {
+                          const isSelected = p.id === activeProcess?.id || p.name === activeProcess?.name;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => handleSelectProcess(p.id)}
+                              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs text-left transition-colors cursor-pointer ${
+                                isSelected ? "bg-blue-50 text-blue-700 font-bold" : "text-slate-700 hover:bg-slate-100"
+                              }`}
+                            >
+                              <div className="flex flex-col min-w-0">
+                                <span className="truncate">{p.name}</span>
+                                <span className="text-[10px] text-slate-400 truncate">{p.entityType || "client"} • {p.stages.length} stages</span>
+                              </div>
+                              {isSelected && <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -608,22 +800,34 @@ export default function PatientPortalLayout() {
               context={{
                 activeClient,
                 activeProcess,
+                selectedProcessId: activeProcess?.id,
                 currentStageName,
                 currentStageIndex: activeIdx,
                 stages,
                 onStageChange: (newStageName: string) => {
-                  if (!activeClient) return;
-                  const all = getStoredClients();
-                  const updated = all.map((c) =>
-                    c.id === activeClient.id
-                      ? {
-                          ...c,
-                          stage: newStageName,
-                          processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])),
-                        }
-                      : c
-                  );
-                  saveStoredClients(updated);
+                  if (activeProcess?.entityType === "appointment" && bookedAppt) {
+                    const targetStage = stages.find((s) => s.name === newStageName || s.id === newStageName);
+                    if (targetStage) {
+                      let newStatus: any = "scheduled";
+                      if (targetStage.systemCategory === "completed") newStatus = "completed";
+                      else if (targetStage.systemCategory === "cancelled") newStatus = "cancelled";
+                      else if (targetStage.systemCategory === "checked_in") newStatus = "checked-in";
+                      else if (targetStage.systemCategory === "rescheduled") newStatus = "rescheduled";
+                      else if (targetStage.systemCategory === "no_show") newStatus = "no-show";
+
+                      appointmentService.updateAppointment(bookedAppt.id, {
+                        currentStageId: targetStage.id,
+                        statusLabel: targetStage.name,
+                        status: newStatus,
+                      });
+                      window.dispatchEvent(new CustomEvent("mantra_appointments_updated"));
+                      toast.success(`Appointment moved to "${targetStage.name}"`);
+                    }
+                  } else {
+                    if (!activeClient) return;
+                    const procName = activeProcess?.name || "Patient Care Journey";
+                    moveClientToStage(activeClient.id, newStageName, procName);
+                  }
                 },
               }}
             />

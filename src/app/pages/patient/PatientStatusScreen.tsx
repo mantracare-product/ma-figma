@@ -136,35 +136,126 @@ export default function PatientStatusScreen() {
   const scheduledCount = appointments.filter((a) => a.status === "scheduled" || a.status === "pending-accept").length;
   const pendingInvoices = invoices.filter((i) => i.status !== "paid" && i.status !== "void");
 
-  // Retrieve current active process assigned to this client
+  // Primary upcoming appointment & invoice
+  const primaryAppt =
+    appointments.find(
+      (a) =>
+        a.status === "scheduled" ||
+        a.status === "pending-accept" ||
+        a.status === "checked-in" ||
+        (a.status as string) === "booked"
+    ) || appointments[0];
+  const primaryInvoice = invoices.find((i) => i.status !== "paid" && i.status !== "void") || invoices[0];
+
+  // Retrieve current active process assigned to this client, active appointment, or selected in portal
+  const outletCtx = useOutletContext<any>();
   const allProcesses = getStoredProcesses();
+
+  // Find appointment portal process if patient has a booked/scheduled appointment
+  const apptPortalProcess = allProcesses.find(
+    (p) =>
+      (p.id === primaryAppt?.processId || p.entityType === "appointment" || p.id === "process-appointment-default") &&
+      (Boolean(p.connectedToPatientPortal) || p.stages?.some((s) => isStageEnabledForPortal(s, p)))
+  );
+
   const activeProcess =
+    outletCtx?.activeProcess ||
+    (outletCtx?.selectedProcessId &&
+      allProcesses.find(
+        (p) => p.id === outletCtx.selectedProcessId || p.name === outletCtx.selectedProcessId
+      )) ||
+    (primaryAppt && primaryAppt.status !== "cancelled" && apptPortalProcess) ||
     allProcesses.find(
       (p) =>
+        Boolean(p.connectedToPatientPortal) &&
         activeClient.processes?.some((pNameOrId) => pNameOrId === p.name || pNameOrId === p.id)
     ) ||
-    allProcesses.find((p) => p.name === "Patient Care Journey" || p.id === "demo-patient-care-journey");
+    allProcesses.find((p) =>
+      activeClient.processes?.some((pNameOrId) => pNameOrId === p.name || pNameOrId === p.id)
+    ) ||
+    allProcesses.find((p) => Boolean(p.connectedToPatientPortal)) ||
+    allProcesses.find((p) => p.name === "Patient Care Journey" || p.id === "demo-patient-care-journey") ||
+    allProcesses[0];
 
   const allStages = activeProcess?.stages || [];
-  const rawStageName = activeClient.stage;
-  const currentStageIndex = rawStageName
-    ? allStages.findIndex(
-        (s) =>
-          s.name.toLowerCase() === rawStageName.toLowerCase() ||
-          s.id.toLowerCase() === rawStageName.toLowerCase()
-      )
-    : -1;
+  let currentStageIndex = -1;
+  let currentStageName = "";
 
-  const currentStageName = activeClient.stage;
+  if (activeProcess?.entityType === "appointment") {
+    if (primaryAppt) {
+      currentStageIndex = allStages.findIndex(
+        (s) =>
+          s.id === primaryAppt.currentStageId ||
+          s.id === primaryAppt.stageId ||
+          (primaryAppt.statusLabel && s.name.toLowerCase() === primaryAppt.statusLabel.toLowerCase())
+      );
+      if (currentStageIndex === -1 && primaryAppt.status) {
+        const apptStatus = primaryAppt.status.toLowerCase();
+        if (apptStatus === "scheduled" || apptStatus === "pending-accept" || apptStatus === "booked") {
+          currentStageIndex = allStages.findIndex(
+            (s) => s.systemCategory === "booked" || s.name.toLowerCase() === "booked" || s.isInitial
+          );
+        } else if (apptStatus === "checked-in") {
+          currentStageIndex = allStages.findIndex(
+            (s) => s.systemCategory === "checked_in" || s.name.toLowerCase().includes("checked in")
+          );
+        } else if (apptStatus === "completed") {
+          currentStageIndex = allStages.findIndex(
+            (s) => s.systemCategory === "completed" || s.name.toLowerCase().includes("completed")
+          );
+        } else if (apptStatus === "cancelled") {
+          currentStageIndex = allStages.findIndex(
+            (s) => s.systemCategory === "cancelled" || s.name.toLowerCase().includes("cancelled")
+          );
+        } else if (apptStatus === "rescheduled") {
+          currentStageIndex = allStages.findIndex(
+            (s) => s.systemCategory === "rescheduled" || s.name.toLowerCase().includes("rescheduled")
+          );
+        } else if (apptStatus === "no-show") {
+          currentStageIndex = allStages.findIndex(
+            (s) => s.systemCategory === "no_show" || s.name.toLowerCase().includes("no-show")
+          );
+        }
+      }
+    }
+    if (currentStageIndex === -1) {
+      currentStageIndex = allStages.findIndex((s) => s.isInitial || s.stagePosition === "initial");
+      if (currentStageIndex === -1) currentStageIndex = 0;
+    }
+    currentStageName = allStages[currentStageIndex]?.name || "Booked";
+  } else if (activeProcess?.entityType === "invoice") {
+    if (primaryInvoice) {
+      const invStatus = (primaryInvoice.status || "draft").toLowerCase();
+      currentStageIndex = allStages.findIndex(
+        (s) => s.systemCategory === invStatus || s.name.toLowerCase() === invStatus
+      );
+    }
+    if (currentStageIndex === -1) currentStageIndex = 0;
+    currentStageName = allStages[currentStageIndex]?.name || "Draft";
+  } else {
+    const rawStageName = activeClient.stage;
+    currentStageIndex = rawStageName
+      ? allStages.findIndex(
+          (s) =>
+            s.name.toLowerCase() === rawStageName.toLowerCase() ||
+            s.id.toLowerCase() === rawStageName.toLowerCase()
+        )
+      : -1;
+    if (currentStageIndex === -1) currentStageIndex = 0;
+    currentStageName = allStages[currentStageIndex]?.name || allStages[0]?.name || "Initial";
+  }
+
+  // Active stage index for timeline
+  const activeIdx = currentStageIndex >= 0 ? currentStageIndex : 0;
   const isAssignedToStage = currentStageIndex >= 0;
-  const activeIdx = currentStageIndex >= 0 ? currentStageIndex : -1;
 
   // Filter only stages where toggle is enabled AND configuration is done
-  const portalEnabledStages = activeProcess ? allStages.filter((st) => isStageEnabledForPortal(st)) : [];
-
-  // Primary upcoming appointment
-  const primaryAppt = appointments.find((a) => a.status === "scheduled" || a.status === "pending-accept") || appointments[0];
-  const primaryInvoice = invoices.find((i) => i.status !== "paid") || invoices[0];
+  let portalEnabledStages = activeProcess
+    ? allStages.filter((st) => isStageEnabledForPortal(st, activeProcess))
+    : [];
+  if (portalEnabledStages.length === 0 && allStages.length > 0) {
+    portalEnabledStages = allStages;
+  }
 
   // Substitute variables inside drawer HTML content
   const renderDrawerHtml = (stage: Stage) => {
@@ -504,6 +595,15 @@ export default function PatientStatusScreen() {
               </p>
             </div>
           </div>
+
+          {activeProcess && (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                <Layers className="w-3.5 h-3.5 text-blue-600" />
+                <span>{activeProcess.name}</span>
+              </span>
+            </div>
+          )}
         </div>
 
             <div className="p-6">

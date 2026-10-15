@@ -14,7 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Client, getStoredClients, saveStoredClients, moveClientToStage } from "../../../lib/clientsStore";
-import { Process, Stage } from "../../../lib/useProcessStore";
+import { Process, Stage, getProcessesForPatientPortal } from "../../../lib/useProcessStore";
 import { eventBus } from "../../../lib/eventBus";
 import { appointmentService } from "../../../lib/appointmentService";
 import { getStoredRules } from "../../../lib/useAutomationStore";
@@ -39,7 +39,7 @@ export default function PatientCheckinScreen() {
 
   const queryClientId = searchParams.get("clientId") || searchParams.get("id");
 
-  // Helper to determine the target stage and process from active automation rules
+  // Helper to determine the target stage and process from active automation rules or portal processes
   const getTargetStageAndProcess = () => {
     try {
       const rules = getStoredRules();
@@ -50,9 +50,12 @@ export default function PatientCheckinScreen() {
             r.trigger?.event === "checked_in" ||
             r.trigger?.label?.toLowerCase().includes("checked in"))
       );
+      const portalProcs = getProcessesForPatientPortal();
       const targetProcName =
         checkinRule?.action?.processName ||
         checkinRule?.actions?.[0]?.params?.processName ||
+        activeClient?.processes?.find((pName) => portalProcs.some((p) => p.name === pName || p.id === pName)) ||
+        portalProcs[0]?.name ||
         "Patient Care Journey";
       const targetStageName =
         checkinRule?.action?.stageName ||
@@ -60,7 +63,11 @@ export default function PatientCheckinScreen() {
         "Client Checked In";
       return { targetProcName, targetStageName };
     } catch {
-      return { targetProcName: "Patient Care Journey", targetStageName: "Client Checked In" };
+      const portalProcs = getProcessesForPatientPortal();
+      return {
+        targetProcName: portalProcs[0]?.name || "Patient Care Journey",
+        targetStageName: "Client Checked In",
+      };
     }
   };
 
@@ -108,7 +115,7 @@ export default function PatientCheckinScreen() {
       activeClient.stage !== "Confirmed" &&
       activeClient.stage !== "Not Assigned" &&
       activeClient.stage !== "Unregistered" &&
-      activeClient.processes?.includes("Patient Care Journey")
+      (activeClient.processes?.length || 0) > 0
     ) {
       setConfirmed(true);
     }

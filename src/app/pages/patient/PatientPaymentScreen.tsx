@@ -35,7 +35,7 @@ interface PortalContext {
 export default function PatientPaymentScreen() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { activeClient, onStageChange } = useOutletContext<PortalContext>();
+  const { activeClient, activeProcess, onStageChange } = useOutletContext<PortalContext>();
 
   const [invoices, setInvoices] = useState<ClientInvoice[]>(() => invoiceService.getInvoices());
   const [paymentDone, setPaymentDone] = useState(false);
@@ -169,10 +169,11 @@ export default function PatientPaymentScreen() {
       }
 
       // 4. Advance patient stage to "Payment Done" (Stage 5)
+      const targetProcName = activeProcess?.name || "Patient Care Journey";
       const all = getStoredClients();
       const updated = all.map((c) =>
         c.id === activeClient.id
-          ? { ...c, stage: "Payment Done", processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])) }
+          ? { ...c, stage: "Payment Done", processes: Array.from(new Set([targetProcName, ...(c.processes || [])])) }
           : c
       );
       saveStoredClients(updated);

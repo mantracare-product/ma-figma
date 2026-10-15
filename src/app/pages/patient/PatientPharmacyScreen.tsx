@@ -25,7 +25,7 @@ interface PortalContext {
 
 export default function PatientPharmacyScreen() {
   const navigate = useNavigate();
-  const { activeClient, onStageChange } = useOutletContext<PortalContext>();
+  const { activeClient, activeProcess, onStageChange } = useOutletContext<PortalContext>();
 
   const medications = [
     {
@@ -55,13 +55,17 @@ export default function PatientPharmacyScreen() {
     if (!activeClient) return;
 
     // Advance patient stage to "Pay Bill" in canonical clientsStore
+    const targetProcName = activeProcess?.name || "Patient Care Journey";
     const all = getStoredClients();
     const updated = all.map((c) =>
       c.id === activeClient.id
-        ? { ...c, stage: "Pay Bill", processes: Array.from(new Set(["Patient Care Journey", ...(c.processes || [])])) }
+        ? { ...c, stage: "Pay Bill", processes: Array.from(new Set([targetProcName, ...(c.processes || [])])) }
         : c
     );
     saveStoredClients(updated);
+    try {
+      onStageChange("Pay Bill");
+    } catch {}
 
     navigate("/patient/bill");
   };

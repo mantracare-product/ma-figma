@@ -95,6 +95,7 @@ export const GLOBAL_TRIGGER_CATALOG: GlobalTriggerDefinition[] = [
     events: [
       { event: "client.created", label: "Client created", description: "New client record added from any intake source" },
       { event: "client.updated", label: "Client updated", description: "Client demographic or medical records change" },
+      { event: "client.checked_in", label: "Checked in", description: "Patient checks in via AI Receptionist or Patient Portal" },
       { event: "client.product_assigned", label: "Assign Product", description: "Product or service is assigned to client in client profile" },
       { event: "client.deleted", label: "Client deleted", description: "Client record is archived or removed" },
     ],

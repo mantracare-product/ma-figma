@@ -129,11 +129,15 @@ export function saveStoredClients(clients: Client[]): void {
     window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT, { detail: clients }));
     broadcastChannel?.postMessage({ type: CLIENTS_STORE_EVENT, count: clients.length });
 
-    // Automatically synchronize process logs for any client enrolled in Patient Care Journey
+    // Automatically synchronize process logs for any client enrolled in any process
     try {
       clients.forEach(c => {
-        if (c.processes?.includes("Patient Care Journey") && c.stage) {
-          updateProcessCallLogStage(c.id, "Patient Care Journey", c.stage);
+        if (Array.isArray(c.processes) && c.stage) {
+          c.processes.forEach((procName: string) => {
+            if (procName) {
+              updateProcessCallLogStage(c.id, procName, c.stage);
+            }
+          });
         }
       });
     } catch {}
@@ -256,21 +260,22 @@ export function moveClientToStage(
   const client = currentClients[index];
 
   // Dynamically resolve target process and stage name
-  let targetProcessName = "Patient Care Journey";
+  let targetProcessName = typeof processIdOrName === "string" && processIdOrName.trim() ? processIdOrName.trim() : "Patient Care Journey";
   let targetStageName = targetStageIdOrName;
 
   try {
     const allProcesses = getStoredProcesses();
-    const targetProcess = allProcesses.find(
-      (p: any) =>
-        p.id === processIdOrName ||
-        p.name === processIdOrName ||
-        p.id === DEMO_PATIENT_PORTAL_PROCESS_ID ||
-        p.name === "Patient Care Journey"
-    );
+    const cleanLookup = typeof processIdOrName === "string" ? processIdOrName.trim().toLowerCase() : "";
+    const targetProcess = cleanLookup
+      ? allProcesses.find(
+          (p: any) =>
+            p.id?.toLowerCase() === cleanLookup ||
+            p.name?.toLowerCase() === cleanLookup
+        )
+      : (allProcesses.find((p: any) => Boolean(p.connectedToPatientPortal)) || allProcesses[0]);
 
     if (targetProcess) {
-      targetProcessName = targetProcess.name || "Patient Care Journey";
+      targetProcessName = targetProcess.name || targetProcessName;
       if (Array.isArray(targetProcess.stages)) {
         const q = targetStageIdOrName.trim().toLowerCase();
         const matched = targetProcess.stages.find(

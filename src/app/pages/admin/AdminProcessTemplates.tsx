@@ -2682,10 +2682,54 @@ export default function AdminProcessTemplates() {
   const handleUpdateProcess = (field: string, value: any) => {
     if (!selectedProcess) return;
 
-    setProcesses(
-      processes.map((p) =>
+    setProcesses((prev) =>
+      prev.map((p) =>
         p.id === selectedProcess ? { ...p, [field]: value } : p
       )
+    );
+  };
+
+  const handleToggleProcessPortalReception = (val: boolean) => {
+    if (!selectedProcess) return;
+
+    setProcesses((prev) =>
+      prev.map((p) => {
+        if (p.id !== selectedProcess) return p;
+        return {
+          ...p,
+          connectedToPatientPortal: val,
+          connectedToAiReceptionist: val,
+          receptionEnabled: val,
+          stages: p.stages.map((st) => ({
+            ...st,
+            connectedToPatientPortal: val,
+            connectedToAiReceptionist: val,
+            portalReceptionSettings: {
+              ...(st.portalReceptionSettings || {}),
+              enabled: val,
+              enabledPortal: val,
+              enabledReception: val,
+              cardTitle: st.portalReceptionSettings?.cardTitle || st.name,
+              cardDescription:
+                st.portalReceptionSettings?.cardDescription ||
+                st.description ||
+                `Information and guidance for ${st.name}`,
+              htmlContent:
+                st.portalReceptionSettings?.htmlContent ||
+                `<div class="stage-guide"><h3>${st.name}</h3><p>${st.description || `Guidance and activities for ${st.name}`}</p></div>`,
+              text:
+                st.portalReceptionSettings?.text ||
+                st.portalReceptionSettings?.htmlContent ||
+                `<div class="stage-guide"><h3>${st.name}</h3><p>${st.description || `Guidance and activities for ${st.name}`}</p></div>`,
+            },
+          })),
+        };
+      })
+    );
+    toast.success(
+      val
+        ? "Connected pipeline & all stages to Client Portal & AI Receptionist"
+        : "Disconnected pipeline from Client Portal & AI Receptionist"
     );
   };
 
@@ -3883,11 +3927,7 @@ export default function AdminProcessTemplates() {
                                 )
                               }
                               onChange={(e) => {
-                                const val = e.target.checked;
-                                handleUpdateProcess("connectedToPatientPortal", val);
-                                handleUpdateProcess("connectedToAiReceptionist", val);
-                                handleUpdateProcess("receptionEnabled", val);
-                                toast.success(val ? "Connected pipeline to Client Portal & AI Receptionist" : "Disconnected pipeline from Client Portal & AI Receptionist");
+                                handleToggleProcessPortalReception(e.target.checked);
                               }}
                             />
                             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
@@ -4266,6 +4306,9 @@ export default function AdminProcessTemplates() {
                                                   ? p
                                                   : {
                                                     ...p,
+                                                    connectedToPatientPortal: newVal ? true : p.connectedToPatientPortal,
+                                                    connectedToAiReceptionist: newVal ? true : p.connectedToAiReceptionist,
+                                                    receptionEnabled: newVal ? true : p.receptionEnabled,
                                                     stages: p.stages.map((s) =>
                                                       s.id !== expandedStage
                                                         ? s
@@ -4278,6 +4321,18 @@ export default function AdminProcessTemplates() {
                                                             enabled: newVal,
                                                             enabledPortal: newVal,
                                                             enabledReception: newVal,
+                                                            cardTitle: s.portalReceptionSettings?.cardTitle || s.name,
+                                                            cardDescription:
+                                                              s.portalReceptionSettings?.cardDescription ||
+                                                              s.description ||
+                                                              `Information and guidance for ${s.name}`,
+                                                            htmlContent:
+                                                              s.portalReceptionSettings?.htmlContent ||
+                                                              `<div class="stage-guide"><h3>${s.name}</h3><p>${s.description || `Guidance for ${s.name}`}</p></div>`,
+                                                            text:
+                                                              s.portalReceptionSettings?.text ||
+                                                              s.portalReceptionSettings?.htmlContent ||
+                                                              `<div class="stage-guide"><h3>${s.name}</h3><p>${s.description || `Guidance for ${s.name}`}</p></div>`,
                                                           },
                                                         }
                                                     ),
