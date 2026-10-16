@@ -150,12 +150,12 @@ export default function MessageComposerBar({
         /* Active Composer */
         <div className="space-y-2">
           {session.channel === "whatsapp" && session.freeFormAllowed && (
-            <div className="flex items-center justify-between text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
-              <span className="flex items-center gap-1.5 font-medium">
-                <Clock className="w-3.5 h-3.5" />
+            <div className="flex items-center justify-between text-xs text-[#1456f0] bg-blue-50/70 px-3 py-1.5 rounded-xl border border-blue-200/60">
+              <span className="flex items-center gap-1.5 font-semibold">
+                <Clock className="w-3.5 h-3.5 text-[#1456f0]" />
                 Reply window: {h}h {m}m left
               </span>
-              <span className="text-[11px] text-blue-500">Free-text enabled</span>
+              <span className="text-[11px] font-medium text-blue-600/80">Free-text enabled</span>
             </div>
           )}
 
@@ -164,7 +164,7 @@ export default function MessageComposerBar({
             <button
               type="button"
               onClick={() => toast.info("Attachment picker opened")}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               title="Attach File"
             >
               <Paperclip className="w-4 h-4" />
@@ -175,8 +175,8 @@ export default function MessageComposerBar({
               <button
                 type="button"
                 onClick={() => setShowGearMenu((prev) => !prev)}
-                className={`p-2 rounded-lg transition-colors ${
-                  showGearMenu ? "bg-blue-100 text-blue-600" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                  showGearMenu ? "bg-blue-50 text-[#1456f0]" : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
                 }`}
                 title="Message Actions & Settings"
               >
@@ -185,20 +185,20 @@ export default function MessageComposerBar({
 
               {/* Settings Dropdown Popover */}
               {showGearMenu && (
-                <div className="absolute bottom-10 left-0 z-50 w-56 bg-white border border-gray-200 rounded-xl shadow-xl py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute bottom-10 left-0 z-50 w-56 bg-white border border-border rounded-xl shadow-xl py-1 text-xs animate-in fade-in zoom-in-95 duration-150">
                   <button
                     type="button"
                     onClick={() => {
                       setShowTemplateModal(true);
                       setShowGearMenu(false);
                     }}
-                    className="w-full px-3 py-2 text-left hover:bg-blue-50 text-gray-700 flex items-center justify-between transition-colors"
+                    className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
                   >
                     <span className="flex items-center gap-2 font-medium">
-                      <FileText className="w-4 h-4 text-blue-600" />
+                      <FileText className="w-4 h-4 text-[#1456f0]" />
                       Share Template Message
                     </span>
-                    <ChevronRight className="w-3 h-3 text-gray-400" />
+                    <ChevronRight className="w-3 h-3 text-slate-400" />
                   </button>
 
                   <button
@@ -207,13 +207,13 @@ export default function MessageComposerBar({
                       setShowCampaignModal(true);
                       setShowGearMenu(false);
                     }}
-                    className="w-full px-3 py-2 text-left hover:bg-purple-50 text-gray-700 flex items-center justify-between transition-colors"
+                    className="w-full px-3 py-2 text-left hover:bg-slate-50 text-slate-700 flex items-center justify-between transition-colors cursor-pointer"
                   >
                     <span className="flex items-center gap-2 font-medium">
-                      <Zap className="w-4 h-4 text-purple-600" />
+                      <Zap className="w-4 h-4 text-[#1E293B]" />
                       Share Campaign
                     </span>
-                    <ChevronRight className="w-3 h-3 text-gray-400" />
+                    <ChevronRight className="w-3 h-3 text-slate-400" />
                   </button>
                 </div>
               )}
@@ -231,7 +231,7 @@ export default function MessageComposerBar({
                 }
               }}
               placeholder={`Type a message... (Press Enter to send)`}
-              className="flex-1 text-xs p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none text-gray-800"
+              className="flex-1 text-xs p-2.5 bg-slate-50/60 hover:bg-white focus:bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1456f0]/15 focus:border-[#1456f0] resize-none text-[#1E293B]"
               style={{ fontFamily: "Outfit, sans-serif" }}
             />
 
@@ -240,7 +240,7 @@ export default function MessageComposerBar({
               type="button"
               onClick={handleSendText}
               disabled={!inputText.trim()}
-              className="p-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl shadow-sm transition-colors flex items-center justify-center cursor-pointer"
+              className="w-10 h-10 bg-[#1456f0] hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl shadow-xs transition-colors flex items-center justify-center cursor-pointer shrink-0"
             >
               <Send className="w-4 h-4" />
             </button>

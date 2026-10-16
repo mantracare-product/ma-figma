@@ -54,8 +54,11 @@ import {
   Upload,
   LibraryBig,
   Sparkles,
+  Inbox,
+  Phone,
 } from "lucide-react";
 import TemplateLibraryDrawer from "../components/chats/TemplateLibraryDrawer";
+import DrawerShell from "../components/ui/DrawerShell";
 import { LibraryTemplate } from "../../lib/templateLibrary";
 import { useWhatsappTemplates } from "../../lib/useWhatsappTemplates";
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
@@ -66,6 +69,8 @@ import MessageComposerBar from "../components/chats/MessageComposerBar";
 export type Message = ConvMessage;
 export type Conversation = ConvConversation;
 import PageHeader from "../components/layout/PageHeader";
+import PageTopBar from "../components/layout/PageTopBar";
+import { useSidebar } from "../context/SidebarContext";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { Button } from "../components/ui/Button";
@@ -94,7 +99,6 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import ChatbotTab from "../components/chats/ChatbotTab";
-import InboxNavSidebar from "../components/chats/InboxNavSidebar";
 import WebsiteWidgetSettingsTab from "../components/chats/WebsiteWidgetSettingsTab";
 import TestWebsiteChatDrawer from "../components/chats/TestWebsiteChatDrawer";
 import { CHANNEL_LABELS, CHANNEL_CLASSES } from "../../constants/channels";
@@ -184,7 +188,18 @@ export interface EscalationRule {
   enabled: boolean;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+function formatChatTimestamp(ts?: string) {
+  if (!ts) return "";
+  if (ts.includes("T") && (ts.endsWith("Z") || ts.includes("+") || ts.includes("-"))) {
+    try {
+      const d = new Date(ts);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      }
+    } catch {}
+  }
+  return ts;
+}
 
 const LANGUAGES = ["English", "Hindi", "Spanish", "French", "German", "Mandarin", "Arabic", "Portuguese", "Russian", "Japanese"];
 
@@ -774,6 +789,12 @@ export default function Chats() {
   const navigate = useNavigate();
   const location = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { setCollapsed } = useSidebar();
+
+  // Auto-collapse navigation sidebar to rail mode on opening chats module
+  useEffect(() => {
+    setCollapsed(true);
+  }, [setCollapsed]);
 
   const TAB_ORDER = ["chats", "campaigns", "templates", "chatbot", "website-settings"] as const;
   type TabKey = typeof TAB_ORDER[number];
@@ -787,7 +808,6 @@ export default function Chats() {
       setActiveTab("templates");
       if (actionParam === "create") {
         handleCreateNewTemplate();
-        setTemplatesView("builder");
       }
     }
     else if (tabParam === "campaigns") setActiveTab("campaigns");
@@ -805,11 +825,7 @@ export default function Chats() {
   const [selectedConversationId, setSelectedConversationId] = useState<string>("conv-1");
   const [chatSearch, setChatSearch] = useState("");
   const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website" | null>("whatsapp");
-  const [numberFilter, setNumberFilter] = useState<string>("all");
-
-  useEffect(() => {
-    setNumberFilter("all");
-  }, [channelFilter]);
+  const [numberFilter, setNumberFilter] = useState<string>("");
 
   useEffect(() => {
     const state = location.state as {
@@ -871,7 +887,7 @@ export default function Chats() {
   const [templateCategoryFilter, setTemplateCategoryFilter] = useState<"all" | "Marketing" | "Utility" | "Authentication">("all");
   const [chatbotStatusFilter, setChatbotStatusFilter] = useState<"all" | "active" | "inactive">("all");
   type ViewFilter = "all" | "open" | "resolved" | "unread" | "assigned_to_me";
-  const [viewFilter, setViewFilter] = useState<ViewFilter>("open");
+  const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
   const [showTestWebsiteDrawer, setShowTestWebsiteDrawer] = useState(false);
   const [showViewFilterDropdown, setShowViewFilterDropdown] = useState(false);
   const [showNumberFilterDropdown, setShowNumberFilterDropdown] = useState(false);
@@ -882,10 +898,33 @@ export default function Chats() {
   const [showComposerGearMenu, setShowComposerGearMenu] = useState(false);
   const [assignAgentMenuOpen, setAssignAgentMenuOpen] = useState(false);
   const gearMenuRef = useRef<HTMLDivElement>(null);
+  const numberDropdownRef = useRef<HTMLDivElement>(null);
+  const viewFilterDropdownRef = useRef<HTMLDivElement>(null);
   const { processes, getWorkflowStepsForStage } = useProcessStore();
   const [showAssignBotModal, setShowAssignBotModal] = useState(false);
   const [showEnrollCampaignModal, setShowEnrollCampaignModal] = useState(false);
   const [showTestProcessDrawer, setShowTestProcessDrawer] = useState(false);
+
+  const handleChannelChange = (channel: "whatsapp" | "sms" | "website") => {
+    setChannelFilter(channel);
+    setActiveTab("chats");
+  };
+
+  const handleSubModeChange = (mode: "inbox" | "templates" | "settings") => {
+    if (mode === "inbox") {
+      setActiveTab("chats");
+    } else if (mode === "templates") {
+      setActiveTab("templates");
+    } else if (mode === "settings") {
+      setActiveTab("website-settings");
+    }
+  };
+
+  const subMode = useMemo(() => {
+    if (channelFilter === "whatsapp" && activeTab === "templates") return "templates";
+    if (channelFilter === "website" && activeTab === "website-settings") return "settings";
+    return "inbox";
+  }, [channelFilter, activeTab]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -893,12 +932,20 @@ export default function Chats() {
         setShowComposerGearMenu(false);
         setShowUseTemplateDropdown(false);
         setAssignAgentMenuOpen(false);
+        setShowNumberFilterDropdown(false);
+        setShowViewFilterDropdown(false);
       }
     };
     const handleClickOutside = (e: MouseEvent) => {
       if (gearMenuRef.current && !gearMenuRef.current.contains(e.target as Node)) {
         setShowComposerGearMenu(false);
         setAssignAgentMenuOpen(false);
+      }
+      if (numberDropdownRef.current && !numberDropdownRef.current.contains(e.target as Node)) {
+        setShowNumberFilterDropdown(false);
+      }
+      if (viewFilterDropdownRef.current && !viewFilterDropdownRef.current.contains(e.target as Node)) {
+        setShowViewFilterDropdown(false);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -1132,6 +1179,16 @@ export default function Chats() {
     return [];
   }, [channelFilter, conversations]);
 
+  useEffect(() => {
+    if (availableNumbersForChannel.length > 0) {
+      if (!numberFilter || !availableNumbersForChannel.includes(numberFilter)) {
+        setNumberFilter(availableNumbersForChannel[0]);
+      }
+    } else {
+      setNumberFilter("");
+    }
+  }, [availableNumbersForChannel, numberFilter]);
+
   const filteredConversations = conversations.filter(c => {
     const matchesSearch = c.contactName.toLowerCase().includes(chatSearch.toLowerCase()) || c.phoneNumber.includes(chatSearch) || c.lastMessage.toLowerCase().includes(chatSearch.toLowerCase());
     const matchesChannel = channelFilter === null ? false : channelFilter === "all" ? true : c.channel === channelFilter;
@@ -1140,14 +1197,36 @@ export default function Chats() {
         viewFilter === "unread" ? c.unreadCount > 0 :
           viewFilter === "assigned_to_me" ? c.assignedPersonId === CURRENT_USER_ID :
             c.status === viewFilter;
-    const matchesNumber = numberFilter === "all" ? true : c.inboxNumber === numberFilter;
+    const matchesNumber = numberFilter ? (c.inboxNumber ? c.inboxNumber === numberFilter : true) : true;
     return matchesSearch && matchesChannel && matchesView && matchesNumber;
   });
 
+  useEffect(() => {
+    if (filteredConversations.length > 0) {
+      const exists = filteredConversations.some(c => c.id === selectedConversationId);
+      if (!exists) {
+        setSelectedConversationId(filteredConversations[0].id);
+      }
+    }
+  }, [filteredConversations, selectedConversationId]);
+
   // ── Templates State ──
   const [globalTemplates, setGlobalTemplates] = useWhatsappTemplates();
+  const [templateSearch, setTemplateSearch] = useState("");
+  const filteredTemplates = useMemo(() => {
+    if (!templateSearch.trim()) return globalTemplates;
+    const q = templateSearch.toLowerCase().trim();
+    return globalTemplates.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.identifier.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q) ||
+        t.bodyText.toLowerCase().includes(q)
+    );
+  }, [globalTemplates, templateSearch]);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [templatesView, setTemplatesView] = useState<"table" | "builder">("table");
+  const [showTemplateDrawer, setShowTemplateDrawer] = useState(false);
   const [showVarMapping, setShowVarMapping] = useState(false);
   const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   const [templateForm, setTemplateForm] = useState<Omit<WhatsappTemplate, "id" | "createdAt">>({
@@ -1155,6 +1234,19 @@ export default function Chats() {
     header: { type: "none", content: "" }, bodyText: "", footerText: "", buttons: [], variableMappings: {},
     headerType: "none", headerText: "", headerMediaUrl: "", headerFileName: "",
   });
+
+  const mediaTypes = ["image", "video", "document"] as const;
+  const acceptForHeaderType =
+    templateForm.headerType === "image"
+      ? ".png,.jpg,.jpeg"
+      : templateForm.headerType === "video"
+      ? ".mp4"
+      : ".pdf,.doc,.docx";
+
+  const handleFileDrop = (file: File) => {
+    const objectUrl = URL.createObjectURL(file);
+    setTemplateForm(prev => ({ ...prev, headerMediaUrl: objectUrl, headerFileName: file.name }));
+  };
 
   const handleUseLibraryTemplate = (tpl: LibraryTemplate) => {
     setShowTemplateLibrary(false);
@@ -1179,21 +1271,15 @@ export default function Chats() {
       buttons: tpl.buttons || [],
       variableMappings: tpl.variableMappings || {},
       createdAt: new Date().toISOString(),
-      // Library templates are pre-vetted — mark approved immediately so they
-      // appear in all pickers (template node, message composer) without waiting
-      // for manual Meta submission.
       approvalStatus: "approved",
       metaTemplateId: `LIB_${Date.now()}`,
       submittedAt: new Date().toISOString(),
       reviewedAt: new Date().toISOString(),
     };
 
-    // Persist immediately — same key used everywhere
     setGlobalTemplates(prev => [...prev, newTemplate]);
-
-    // Open in edit mode so user can customise further
     handleEditTemplate(newTemplate);
-    setTemplatesView("builder");
+    setShowTemplateDrawer(true);
     setShowVarMapping(false);
     toast.success(`"${tpl.name}" cloned from library and ready to use`);
   };
@@ -1219,14 +1305,14 @@ export default function Chats() {
   const handleCreateNewTemplate = () => {
     setEditingTemplateId(null);
     setTemplateForm({ name: "", identifier: "", category: "Marketing", language: "English", header: { type: "none", content: "" }, bodyText: "", footerText: "", buttons: [], variableMappings: {}, headerType: "none", headerText: "", headerMediaUrl: "", headerFileName: "", approvalStatus: "pending" });
-    setTemplatesView("builder");
+    setShowTemplateDrawer(true);
     setShowVarMapping(false);
   };
 
   const handleEditTemplate = (tpl: WhatsappTemplate) => {
     setEditingTemplateId(tpl.id);
     setTemplateForm({ name: tpl.name, identifier: tpl.identifier, category: tpl.category, language: tpl.language, header: tpl.header || { type: "none", content: "" }, bodyText: tpl.bodyText, footerText: tpl.footerText || "", buttons: tpl.buttons || [], variableMappings: tpl.variableMappings || {}, headerType: tpl.headerType || "none", headerText: tpl.headerText || "", headerMediaUrl: tpl.headerMediaUrl || "", headerFileName: tpl.headerFileName || "", approvalStatus: tpl.approvalStatus || "pending", metaTemplateId: tpl.metaTemplateId, submittedAt: tpl.submittedAt, reviewedAt: tpl.reviewedAt, rejectionReason: tpl.rejectionReason });
-    setTemplatesView("builder");
+    setShowTemplateDrawer(true);
     setShowVarMapping(false);
   };
 
@@ -1234,16 +1320,15 @@ export default function Chats() {
     if (confirm("Are you sure you want to delete this template?")) {
       setGlobalTemplates(prev => prev.filter(t => t.id !== id));
       toast.success("Template deleted successfully");
-      if (editingTemplateId === id) { setTemplatesView("table"); setEditingTemplateId(null); }
+      if (editingTemplateId === id) { setShowTemplateDrawer(false); setEditingTemplateId(null); }
     }
   };
 
-  const handleSaveTemplate = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveTemplate = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!templateForm.name.trim()) { toast.error("Template name is required"); return; }
     if (!templateForm.identifier.trim()) { toast.error("Template identifier is required"); return; }
     if (!templateForm.bodyText.trim()) { toast.error("Template body text is required"); return; }
-    const mediaTypes = ["image", "video", "document"] as const;
     if (templateForm.headerType && mediaTypes.includes(templateForm.headerType as any) && !templateForm.headerMediaUrl?.trim()) {
       toast.error("Media header requires a file upload"); return;
     }
@@ -1257,15 +1342,11 @@ export default function Chats() {
       setGlobalTemplates(prev => [...prev, newTemplate]);
       toast.success("Template created successfully");
     }
-    setTemplatesView("table");
+    setShowTemplateDrawer(false);
     setEditingTemplateId(null);
   };
 
   // ── Action Dropdowns Position State & Refs ──
-  const [openMenuTemplateId, setOpenMenuTemplateId] = useState<string | null>(null);
-  const [templateMenuPos, setTemplateMenuPos] = useState<{ top: number; left: number } | null>(null);
-  const templateTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-
   const [openMenuCampaignId, setOpenMenuCampaignId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const campaignTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -1291,9 +1372,8 @@ export default function Chats() {
 
   // Close menus on scroll (page or container scroll) and screen resize
   useEffect(() => {
-    if (!openMenuTemplateId && !openMenuCampaignId) return;
+    if (!openMenuCampaignId) return;
     const handleScroll = () => {
-      setOpenMenuTemplateId(null);
       setOpenMenuCampaignId(null);
     };
     window.addEventListener("scroll", handleScroll, true);
@@ -1302,19 +1382,7 @@ export default function Chats() {
       window.removeEventListener("scroll", handleScroll, true);
       window.removeEventListener("resize", handleScroll);
     };
-  }, [openMenuTemplateId, openMenuCampaignId]);
-
-  const openTemplateMenu = (templateId: string) => {
-    const btn = templateTriggerRefs.current[templateId];
-    if (btn) {
-      const rect = btn.getBoundingClientRect();
-      setTemplateMenuPos({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.right + window.scrollX - 208, // right-align button (w-52 = 208px)
-      });
-    }
-    setOpenMenuTemplateId(templateId);
-  };
+  }, [openMenuCampaignId]);
 
   const openCampaignMenu = (campaignId: string) => {
     const btn = campaignTriggerRefs.current[campaignId];
@@ -1532,10 +1600,10 @@ export default function Chats() {
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
         <PageHeader
           title="Chats"
-          subtitle="Message clients over WhatsApp and SMS, and set up automated chat campaigns"
+          subtitle="Message clients over WhatsApp, SMS, and Website, and manage templates & settings"
           badge={
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
               Omnichannel
@@ -1545,1062 +1613,964 @@ export default function Chats() {
           <HowItWorksButton onClick={() => setShowHelp(true)} label="How Chats Works" />
         </PageHeader>
 
-        {/* Main Content Area with Collapsible Left Navigation Sidebar */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex min-h-[calc(100vh-180px)] overflow-hidden">
-          <InboxNavSidebar
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            channelFilter={channelFilter}
-            setChannelFilter={setChannelFilter}
-            showChatbotTab={LEGACY_CHATBOT_MODULE_ENABLED}
-          />
+        {/* ── Official PageTopBar matching DESIGN.md & other pages ── */}
+        <PageTopBar
+          modes={[
+            { id: "whatsapp", label: "WhatsApp" },
+            { id: "sms", label: "SMS" },
+            { id: "website", label: "Website" },
+          ]}
+          activeMode={channelFilter || "whatsapp"}
+          onModeChange={(mode) => handleChannelChange(mode as any)}
+          leftElement={
+            <div className="flex items-center gap-2">
+              {/* Sub-modes: Inbox vs Templates for WhatsApp, Inbox vs Settings for Website */}
+              {channelFilter === "whatsapp" && (
+                <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border/80 rounded-xl gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSubModeChange("inbox")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                      subMode === "inbox"
+                        ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                        : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                    }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <span>Inbox</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSubModeChange("templates")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                      subMode === "templates"
+                        ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                        : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                    }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <span>Templates</span>
+                  </button>
+                </div>
+              )}
 
-          <div className="flex-1 min-w-0 bg-white p-4 overflow-y-auto">
-            {/* ══════════════════════════════════════════════════════
-                TAB: CHATS INBOX
-            ══════════════════════════════════════════════════════ */}
-            {/* ══════════════════════════════════════════════════════
-                TAB: CHATS INBOX
-            ══════════════════════════════════════════════════════ */}
-            {activeTab === "chats" && (
-              <div className="flex h-[calc(100vh-230px)] overflow-hidden">
-                {/* Pane 1 — List Pane */}
-                {isListPaneCollapsed ? (
-                  <div className="w-12 shrink-0 border-r border-gray-200 flex flex-col items-center py-3 bg-slate-50 space-y-4">
-                    <button
-                      type="button"
-                      onClick={() => setIsListPaneCollapsed(false)}
-                      className="p-2 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
-                      title="Expand chat list"
+              {channelFilter === "website" && (
+                <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border/80 rounded-xl gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSubModeChange("inbox")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                      subMode === "inbox"
+                        ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                        : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                    }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <span>Inbox</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSubModeChange("settings")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                      subMode === "settings"
+                        ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                        : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                    }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <span>Widget Settings</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Phone Number Selector: Placed before search bar */}
+              {subMode === "inbox" && (channelFilter === "whatsapp" || channelFilter === "sms") && (
+                <div className="relative shrink-0" ref={numberDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNumberFilterDropdown((prev) => !prev);
+                      setShowViewFilterDropdown(false);
+                    }}
+                    className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-semibold text-[#1E293B] flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer font-mono tabular-nums"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                    title="Select phone number"
+                  >
+                    <span className="truncate max-w-[140px]">
+                      {numberFilter || availableNumbersForChannel[0] || "Select Number"}
+                    </span>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-[#94a3b8] transition-transform ${
+                        showNumberFilterDropdown ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {showNumberFilterDropdown && (
+                    <div
+                      className="absolute left-0 mt-1 w-56 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100 font-mono tabular-nums"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      <PanelLeftOpen className="w-4 h-4" />
-                    </button>
-                    {filteredConversations.filter(c => c.unreadCount > 0).length > 0 && (
-                      <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shadow-sm" title="Unread chats">
-                        {filteredConversations.filter(c => c.unreadCount > 0).length}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col h-full" style={{ backgroundColor: '#F8FAFC' }}>
-                    {/* Header */}
-                    <div className="px-4 py-3 border-b border-gray-200 bg-white space-y-2 relative">
-
-                      {/* Row 1 — Number switcher dropdown & Test Website Bot */}
-                      <div className="flex items-center justify-between gap-2 relative">
-                        <div className="relative flex-1 min-w-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowNumberFilterDropdown(prev => !prev);
-                              setShowViewFilterDropdown(false);
-                            }}
-                            className="flex items-center gap-1.5 text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors min-w-0 max-w-full"
-                            style={{ fontFamily: "DM Sans, sans-serif" }}
-                          >
-                            <span className="truncate">
-                              {numberFilter === "all" || availableNumbersForChannel.length === 0
-                                ? "All Numbers"
-                                : numberFilter}
-                            </span>
-                            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${showNumberFilterDropdown ? "rotate-180" : ""}`} />
-                          </button>
-                        </div>
-
+                      {availableNumbersForChannel.map((num) => (
                         <button
+                          key={num}
                           type="button"
                           onClick={() => {
-                            if (channelFilter === "website") {
-                              setShowTestWebsiteDrawer(true);
-                            } else {
-                              setShowTestProcessDrawer(true);
-                            }
+                            setNumberFilter(num);
+                            setShowNumberFilterDropdown(false);
                           }}
-                          className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors shrink-0 shadow-2xs cursor-pointer"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
+                          className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                            (numberFilter || availableNumbersForChannel[0]) === num
+                              ? "text-[#1456f0] font-bold bg-blue-50/60"
+                              : "text-[#1E293B]"
+                          }`}
                         >
-                          <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                          Test
-                        </button>
-                        {showNumberFilterDropdown && (
-                          <div className="absolute left-0 mt-1 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-30 py-1 space-y-0.5 text-xs font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                            <button
-                              type="button"
-                              onClick={() => { setNumberFilter("all"); setShowNumberFilterDropdown(false); }}
-                              className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors ${
-                                numberFilter === "all" ? "text-blue-700 font-bold bg-blue-50/50" : "text-gray-700"
-                              }`}
-                            >
-                              <span>All Numbers</span>
-                              {numberFilter === "all" && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                            </button>
-                            {availableNumbersForChannel.map(num => (
-                              <button
-                                key={num}
-                                type="button"
-                                onClick={() => { setNumberFilter(num); setShowNumberFilterDropdown(false); }}
-                                className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors ${
-                                  numberFilter === num ? "text-blue-700 font-bold bg-blue-50/50" : "text-gray-700"
-                                }`}
-                              >
-                                <span>{num}</span>
-                                {numberFilter === num && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Row 2 — Search + Filter funnel + Collapse */}
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex-1 min-w-0">
-                          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            value={chatSearch}
-                            onChange={e => setChatSearch(e.target.value)}
-                            placeholder="Search conversations..."
-                            className="w-full pl-8 pr-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          />
-                        </div>
-
-                        {/* View filter button */}
-                        <div className="relative shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowViewFilterDropdown(prev => !prev);
-                              setShowNumberFilterDropdown(false);
-                            }}
-                            className={`p-1.5 rounded-lg transition-colors relative ${
-                              viewFilter !== "all"
-                                ? "bg-green-50 text-green-700 hover:bg-green-100"
-                                : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                            }`}
-                            title="Filter view"
-                          >
-                            <Filter className="w-4 h-4" />
-                            {viewFilter !== "all" && (
-                              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-green-600" />
-                            )}
-                          </button>
-
-                          {showViewFilterDropdown && (
-                            <div className="absolute right-0 mt-1 w-44 bg-white border border-gray-200 rounded-xl shadow-lg z-30 py-1 space-y-0.5 text-xs font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                              {(["all", "open", "unread", "resolved", "assigned_to_me"] as const).map(v => (
-                                <button
-                                  key={v}
-                                  type="button"
-                                  onClick={() => { setViewFilter(v); setShowViewFilterDropdown(false); }}
-                                  className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors ${
-                                    viewFilter === v ? "text-green-700 font-bold bg-green-50/50" : "text-gray-700"
-                                  }`}
-                                >
-                                  <span>{v === "all" ? "All" : v === "open" ? "Open" : v === "unread" ? "Unread" : v === "resolved" ? "Resolved" : "Assigned to me"}</span>
-                                  {viewFilter === v && <Check className="w-3.5 h-3.5 text-green-600" />}
-                                </button>
-                              ))}
-                            </div>
+                          <span>{num}</span>
+                          {(numberFilter || availableNumbersForChannel[0]) === num && (
+                            <Check className="w-3.5 h-3.5 text-[#1456f0]" />
                           )}
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setIsListPaneCollapsed(true)}
-                          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 shrink-0"
-                          title="Collapse chat list"
-                        >
-                          <PanelLeftClose className="w-4 h-4" />
                         </button>
-                      </div>
-
-                      {/* Row 3 — Contextual chat count */}
-                      <p className="text-[11px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {filteredConversations.length}{" "}
-                        {viewFilter === "open" ? "Active Chats" :
-                          viewFilter === "resolved" ? "Solved Chats" :
-                          viewFilter === "unread" ? "Unread Chats" :
-                          viewFilter === "assigned_to_me" ? "Assigned Chats" :
-                          "Total Chats"}
-                        {filteredConversations.filter(c => c.unreadCount > 0).length > 0 && (
-                          <span className="ml-1.5 text-blue-500 font-semibold">
-                            · {filteredConversations.filter(c => c.unreadCount > 0).length} Unread
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  {/* Conversation List */}
-                  <div className="flex-1 overflow-y-auto">
-                    {channelFilter === null ? (
-                      <div className="p-10 flex flex-col items-center text-center gap-3">
-                        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                          <MessageCircle className="w-6 h-6 text-gray-400" />
-                        </div>
-                        <p className="text-sm font-semibold text-gray-600" style={{ fontFamily: "DM Sans, sans-serif" }}>Select a channel</p>
-                        <p className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>Choose WhatsApp, SMS, or Website from the sidebar to view conversations.</p>
-                      </div>
-                    ) : filteredConversations.length === 0 ? (
-                      <div className="p-8 text-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>No conversations found.</div>
-                    ) : filteredConversations.map(conv => {
-                      const isSelected = conv.id === selectedConversationId;
-                      const hasHuman = !!conv.assignedPersonId;
-                      const isBotActive = !hasHuman && conv.botStatus === "active";
-                      const isBotPausedOrHuman = hasHuman || conv.botStatus === "paused";
-                      const statusDotColor = isBotActive ? "bg-blue-500" : isBotPausedOrHuman ? "bg-amber-500" : "bg-gray-400";
-                      const statusDotTitle = isBotActive ? "Bot: Active" : isBotPausedOrHuman ? "Bot Paused / Assigned" : "Bot Off";
-                      const assignedPerson = conv.assignedPersonId ? AVAILABLE_EMPLOYEES.find(e => e.id === conv.assignedPersonId) : null;
-
-                      return (
-                        <div key={conv.id} onClick={() => setSelectedConversationId(conv.id)}
-                          className={`flex items-start gap-3 p-4 cursor-pointer hover:bg-blue-50/30 transition-all border-l-2 border-b border-gray-100 ${isSelected ? "bg-blue-50 border-l-blue-600" : "border-l-transparent bg-white"}`}>
-                          <div className="relative flex-shrink-0">
-                            <div className={`w-10 h-10 rounded-full font-bold flex items-center justify-center text-sm ${isSelected ? "bg-blue-600 text-white" : "bg-blue-100 text-blue-700"}`}>
-                              {getInitials(conv.contactName)}
-                            </div>
-                            <span className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full bg-white border border-gray-100 flex items-center justify-center shadow-sm" style={{ width: '18px', height: '18px' }}>
-                              {conv.channel === "whatsapp" ? <MessageCircle className="w-3 h-3 text-[#25D366]" /> :
-                                conv.channel === "sms" ? <MessageSquare className="w-3 h-3 text-blue-600" /> :
-                                  <Globe className="w-3 h-3 text-purple-600" />}
-                            </span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 mb-0.5">
-                              <span className={`w-2 h-2 rounded-full shrink-0 ${statusDotColor}`} title={statusDotTitle} />
-                              <h4 className={`text-sm font-semibold truncate ${isSelected ? "text-blue-700" : "text-gray-900"}`} style={{ fontFamily: "DM Sans, sans-serif" }}>{conv.contactName}</h4>
-                              {assignedPerson && (
-                                <span className="text-[9px] text-gray-500 font-semibold bg-gray-100 px-1.5 py-0.5 rounded-full shrink-0">
-                                  👤 {getInitials(assignedPerson.name)}
-                                </span>
-                              )}
-                              <span className="text-[10px] text-gray-400 flex-shrink-0 ml-auto" style={{ fontFamily: "Outfit, sans-serif" }}>{conv.timestamp}</span>
-                            </div>
-                            <p className="text-xs text-gray-500 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>{conv.lastMessage}</p>
-                            {conv.status === "resolved" && (
-                              <span className="inline-block mt-1 text-[9px] font-semibold text-green-600 bg-green-50 border border-green-100 px-1.5 py-0.5 rounded-full">Resolved</span>
-                            )}
-                          </div>
-                          {conv.unreadCount > 0 && (
-                            <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{conv.unreadCount}</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                )}
-
-                {/* Right Pane — Chat Window */}
-                <div className="flex-1 flex flex-col h-full bg-white">
-                  {activeConversation ? (
-                    <>
-                      {/* Shared Chat Subcomponents */}
-                      <ConversationHeader
-                        conversation={activeConversation}
-                        onToggleBotStatus={handleToggleBotStatus}
-                        onOpenAssignBotModal={() => setShowAssignBotModal(true)}
-                        onOpenAssignPersonModal={() => setAssignAgentMenuOpen(true)}
-                        availableEmployees={AVAILABLE_EMPLOYEES}
-                      />
-                      <MessageThreadList
-                        messages={activeConversation.messages}
-                        emptyMessage="No messages in this conversation yet."
-                      />
-                      <MessageComposerBar
-                        conversation={activeConversation}
-                        session={computeSessionWindow(activeConversation)}
-                        onSendMessage={handleSendMessage}
-                        onSendTemplate={handleSendTemplateDirectly}
-                        onEnrollCampaign={handleEnrollCampaign}
-                      />
-                    </>
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Select a conversation to start chatting
+                      ))}
                     </div>
                   )}
                 </div>
-              </div>
-            )}
-
-
-            {/* ══════════════════════════════════════════════════════
-            TAB: TEMPLATE BUILDER
-        ══════════════════════════════════════════════════════ */}
-            {activeTab === "templates" && templatesView === "table" && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>Templates</h2>
-                    <span className="bg-blue-50 text-blue-600 text-xs font-semibold px-2.5 py-1 rounded-full border border-blue-100">
-                      {globalTemplates.length} {globalTemplates.length === 1 ? "template" : "templates"}
+              )}
+            </div>
+          }
+          searchQuery={subMode === "templates" ? templateSearch : chatSearch}
+          onSearchChange={subMode === "templates" ? setTemplateSearch : setChatSearch}
+          searchPlaceholder={
+            subMode === "templates"
+              ? "Search templates..."
+              : channelFilter === "website"
+              ? "Search visitor chats..."
+              : "Search conversations..."
+          }
+          secondaryActions={
+            subMode === "inbox" ? (
+              <div className="flex items-center gap-2">
+                {/* View Filter Dropdown */}
+                <div className="relative shrink-0" ref={viewFilterDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowViewFilterDropdown((prev) => !prev);
+                      setShowNumberFilterDropdown(false);
+                    }}
+                    className={`h-[36px] px-3.5 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-all relative shadow-2xs cursor-pointer ${
+                      viewFilter !== "all"
+                        ? "bg-blue-50 text-[#1456f0] border-blue-200/80"
+                        : "bg-white text-slate-700 border-border hover:bg-slate-50"
+                    }`}
+                    title="Filter view"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Filter className="w-3.5 h-3.5" />
+                    <span className="hidden md:inline capitalize">
+                      {viewFilter === "all"
+                        ? "All"
+                        : viewFilter === "open"
+                        ? "Open"
+                        : viewFilter === "unread"
+                        ? "Unread"
+                        : viewFilter === "resolved"
+                        ? "Resolved"
+                        : "Assigned"}
                     </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Button variant="outline" onClick={() => setShowTemplateLibrary(true)}>
-                      <LibraryBig className="w-4 h-4" /> Browse Library
-                    </Button>
-                    <Button variant="primary" onClick={() => { handleCreateNewTemplate(); setTemplatesView("builder"); }}>
-                      <Plus className="w-4 h-4" /> Create Template
-                    </Button>
-                  </div>
+                    <ChevronDown className="w-3 h-3 text-[#94a3b8]" />
+                    {viewFilter !== "all" && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#1456f0] absolute top-1 right-1" />
+                    )}
+                  </button>
+
+                  {showViewFilterDropdown && (
+                    <div
+                      className="absolute right-0 mt-1 w-44 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {(["all", "open", "unread", "resolved", "assigned_to_me"] as const).map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => {
+                            setViewFilter(v);
+                            setShowViewFilterDropdown(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                            viewFilter === v
+                              ? "text-[#1456f0] font-bold bg-blue-50/60"
+                              : "text-[#1E293B]"
+                          }`}
+                        >
+                          <span>
+                            {v === "all"
+                              ? "All Chats"
+                              : v === "open"
+                              ? "Open"
+                              : v === "unread"
+                              ? "Unread"
+                              : v === "resolved"
+                              ? "Resolved"
+                              : "Assigned to me"}
+                          </span>
+                          {viewFilter === v && <Check className="w-3.5 h-3.5 text-[#1456f0]" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Templates Table — always rendered */}
-                {(() => {
-                  const templateColumns: TableColumn<WhatsappTemplate>[] = [
-                    {
-                      id: "name",
-                      header: "Name",
-                      align: "left",
-                      render: (tpl) => (
-                        <button
-                          onClick={() => {
-                            handleEditTemplate(tpl);
-                            setTemplatesView("builder");
-                          }}
-                          className="text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors text-left cursor-pointer"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          {tpl.name}
-                        </button>
-                      ),
-                    },
-                    {
-                      id: "identifier",
-                      header: "Identifier",
-                      align: "left",
-                      render: (tpl) => <span className="text-xs font-mono text-gray-500">{tpl.identifier}</span>,
-                    },
-                    {
-                      id: "category",
-                      header: "Category",
-                      align: "center",
-                      render: (tpl) => (
-                        <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5 uppercase">
-                          {tpl.category}
-                        </span>
-                      ),
-                    },
-                    {
-                      id: "status",
-                      header: "Status",
-                      align: "center",
-                      render: (tpl) => (
-                        (!tpl.approvalStatus || tpl.approvalStatus === "pending") ? (
-                          <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-100 rounded-full px-2 py-0.5 uppercase">Pending</span>
-                        ) : tpl.approvalStatus === "approved" ? (
-                          <span className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 rounded-full px-2 py-0.5 uppercase">Approved</span>
-                        ) : (
-                          <span title={tpl.rejectionReason || "Denied by Meta"} className="text-[10px] font-bold bg-red-50 text-red-700 border border-red-100 rounded-full px-2 py-0.5 uppercase cursor-help">Denied</span>
-                        )
-                      ),
-                    },
-                    {
-                      id: "language",
-                      header: "Language",
-                      align: "center",
-                      render: (tpl) => <span className="text-xs text-gray-500">{tpl.language}</span>,
-                    },
-                  ];
-
-                  const templateRowActions: TableRowAction<WhatsappTemplate>[] = [
-                    {
-                      label: "Edit",
-                      icon: <Pencil className="w-3.5 h-3.5 text-blue-500" />,
-                      onClick: (tpl) => {
-                        handleEditTemplate(tpl);
-                        setTemplatesView("builder");
-                      },
-                    },
-                    {
-                      label: "Get Approved",
-                      icon: <ShieldCheck className="w-3.5 h-3.5 text-green-600" />,
-                      hidden: (tpl) => tpl.approvalStatus === "approved",
-                      onClick: (tpl) => {
-                        setApprovingTemplate(tpl);
-                        setShowApprovalModal(true);
-                      },
-                    },
-                    {
-                      label: "Delete",
-                      icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
-                      isDanger: true,
-                      onClick: (tpl) => handleDeleteTemplate(tpl.id),
-                    },
-                  ];
-
-                  return (
-                    <TableComponent
-                      data={globalTemplates}
-                      columns={templateColumns}
-                      getRowId={(tpl) => tpl.id}
-                      rowActions={templateRowActions}
-                      selectedIds={selectedTemplates}
-                      onSelectionChange={(ids) => setSelectedTemplates(new Set(Array.from(ids) as string[]))}
-                      onRowClick={(tpl) => {
-                        handleEditTemplate(tpl);
-                        setTemplatesView("builder");
-                      }}
-                      defaultRowsPerPage={20}
-                      emptyMessage="No templates yet. Build a pre-approved WhatsApp message template to reuse in campaigns and chatbot flows."
-                    />
-                  );
-                })()}
+                {/* Test Simulator Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (channelFilter === "website") {
+                      setShowTestWebsiteDrawer(true);
+                    } else {
+                      setShowTestProcessDrawer(true);
+                    }
+                  }}
+                  className="h-[36px] px-3.5 bg-white hover:bg-slate-50 text-[#1E293B] border border-border rounded-full text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 shadow-2xs cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-[#1456f0]" />
+                  <span>Test</span>
+                </button>
               </div>
-            )}
+            ) : null
+          }
+          primaryAction={
+            subMode === "templates"
+              ? {
+                  label: "New Template",
+                  icon: <Plus className="w-4 h-4" />,
+                  onClick: () => {
+                    handleCreateNewTemplate();
+                  },
+                }
+              : undefined
+          }
+        />
 
-            {activeTab === "templates" && templatesView === "builder" && (() => {
-              // ── Drag-and-drop state for media header upload (scoped to builder render) ──
-              const mediaTypes = ["image", "video", "document"] as const;
-              const acceptForHeaderType =
-                templateForm.headerType === "image" ? ".png,.jpg,.jpeg"
-                  : templateForm.headerType === "video" ? ".mp4"
-                    : ".pdf,.doc,.docx";
-
-              const handleFileDrop = (file: File) => {
-                const objectUrl = URL.createObjectURL(file);
-                setTemplateForm(prev => ({ ...prev, headerMediaUrl: objectUrl, headerFileName: file.name }));
-              };
-
-              return (
-                <div className="flex gap-6 items-start">
-                  <form onSubmit={handleSaveTemplate} className="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-6 max-h-[calc(100vh-250px)] overflow-y-auto">
-                    <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-                      <h3 className="text-lg font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{editingTemplateId ? "Edit Template" : "New WhatsApp Template"}</h3>
-                      <button type="button" onClick={() => setTemplatesView("table")}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
+        {/* ── Main Content Area Below Topbar ── */}
+        {activeTab === "chats" && (
+          <div className="flex gap-5 sm:gap-6 h-[calc(100vh-230px)] min-h-[620px]">
+            {/* ── Left Side Panel: Contacts List (Separate Div / Card) ── */}
+            <div className="w-[330px] sm:w-[360px] shrink-0 bg-white rounded-2xl border border-gray-200/90 shadow-xs flex flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+                {channelFilter === null ? (
+                  <div className="p-10 flex flex-col items-center text-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                      <MessageCircle className="w-6 h-6 text-gray-400" />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Template Name *</label>
-                        <input type="text" required value={templateForm.name} onChange={e => handleNameChange(e.target.value)} placeholder="e.g. Appointment Reminder"
-                          className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ fontFamily: "Outfit, sans-serif" }} />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Template Identifier *</label>
-                        <input type="text" required value={templateForm.identifier} onChange={e => setTemplateForm({ ...templateForm, identifier: e.target.value })} placeholder="appointment_reminder"
-                          className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Category *</label>
-                        <Select value={templateForm.category} onValueChange={(val: any) => setTemplateForm({ ...templateForm, category: val })}>
-                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="Marketing">Marketing</SelectItem><SelectItem value="Utility">Utility</SelectItem><SelectItem value="Authentication">Authentication</SelectItem></SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Language *</label>
-                        <Select value={templateForm.language} onValueChange={(val: any) => setTemplateForm({ ...templateForm, language: val })}>
-                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                          <SelectContent>{LANGUAGES.map(lang => <SelectItem key={lang} value={lang}>{lang}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-                    </div>
+                    <p className="text-sm font-semibold text-gray-600" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Select a channel
+                    </p>
+                    <p className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Choose WhatsApp, SMS, or Website to view conversations.
+                    </p>
+                  </div>
+                ) : filteredConversations.length === 0 ? (
+                  <div className="p-8 text-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    No conversations found.
+                  </div>
+                ) : (
+                  filteredConversations.map((conv) => {
+                    const isSelected = conv.id === selectedConversationId;
+                    const assignedPerson = conv.assignedPersonId ? AVAILABLE_EMPLOYEES.find((e) => e.id === conv.assignedPersonId) : null;
 
-                    {/* ── HEADER (moved above Body) ── */}
-                    <div className="border border-gray-100 rounded-xl overflow-hidden">
-                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                        <label className="text-sm font-semibold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          Header <span className="text-xs text-gray-400 font-normal">(Optional)</span>
-                        </label>
-                        <div className="flex gap-1 text-[11px]">
-                          {(["none", "text", "image", "video", "document"] as const).map(ht => (
-                            <button
-                              key={ht}
-                              type="button"
-                              onClick={() => setTemplateForm(prev => ({ ...prev, headerType: ht, headerText: ht === "text" ? prev.headerText || "" : "", headerMediaUrl: ht !== "text" && ht !== "none" ? "" : "", headerFileName: "" }))}
-                              className={`px-2 py-0.5 rounded-full border capitalize transition-colors ${templateForm.headerType === ht ? "bg-blue-600 text-white border-blue-600" : "bg-white border-gray-200 text-gray-500 hover:border-blue-300"}`}
-                            >
-                              {ht}
-                            </button>
-                          ))}
+                    return (
+                      <div
+                        key={conv.id}
+                        onClick={() => setSelectedConversationId(conv.id)}
+                        className={`flex items-start gap-3 p-3.5 cursor-pointer hover:bg-[#F1F5F9] transition-all border-l-2 ${
+                          isSelected ? "bg-[#E8F0FE] border-l-[#1456f0]" : "border-l-transparent bg-white"
+                        }`}
+                      >
+                        {/* Profile Initials Avatar without channel icon */}
+                        <div
+                          className={`w-9 h-9 rounded-xl font-bold flex items-center justify-center text-xs shrink-0 shadow-2xs ${
+                            isSelected ? "bg-[#1E293B] text-white" : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {getInitials(conv.contactName)}
                         </div>
-                      </div>
-                      {templateForm.headerType && templateForm.headerType !== "none" && (
-                        <div className="p-4 space-y-3 bg-white">
-                          {templateForm.headerType === "text" ? (
-                            <div>
-                              <label className="text-xs font-semibold text-gray-600 mb-1 block">Header Text</label>
-                              <input
-                                type="text"
-                                value={templateForm.headerText || ""}
-                                onChange={e => setTemplateForm(prev => ({ ...prev, headerText: e.target.value }))}
-                                placeholder="Bold headline text..."
-                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              />
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              {/* File uploaded — show chip */}
-                              {templateForm.headerMediaUrl ? (
-                                <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                                  <FileText className="w-5 h-5 text-blue-500 shrink-0" />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-semibold text-blue-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                      {templateForm.headerFileName || "Uploaded file"}
-                                    </p>
-                                    <p className="text-[10px] text-blue-500" style={{ fontFamily: "Outfit, sans-serif" }}>Stored as local object URL</p>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => setTemplateForm(prev => ({ ...prev, headerMediaUrl: "", headerFileName: "" }))}
-                                    className="p-1 text-blue-400 hover:text-red-500 transition-colors"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              ) : (
-                                /* Drag-and-drop upload zone */
-                                <div
-                                  onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-blue-500', 'bg-blue-50'); }}
-                                  onDragLeave={e => { e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50'); }}
-                                  onDrop={e => {
-                                    e.preventDefault();
-                                    e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
-                                    const file = e.dataTransfer.files[0];
-                                    if (file) handleFileDrop(file);
-                                  }}
-                                  className="relative border-2 border-dashed border-gray-300 rounded-xl p-8 text-center transition-all hover:border-blue-400"
-                                >
-                                  <input
-                                    type="file"
-                                    accept={acceptForHeaderType}
-                                    onChange={e => { const f = e.target.files?.[0]; if (f) handleFileDrop(f); }}
-                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                  />
-                                  <div className="flex flex-col items-center gap-2 pointer-events-none">
-                                    <Upload className="w-8 h-8 text-gray-400" />
-                                    <p className="text-sm font-medium text-gray-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                      <span className="text-blue-600">Click to upload</span> or drag and drop
-                                    </p>
-                                    <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                      {templateForm.headerType === "image" ? "PNG, JPG up to 5MB" : templateForm.headerType === "video" ? "MP4 up to 16MB" : "PDF up to 100MB"}
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
 
-                    {/* ── Body Text ── */}
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <label className="block text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>Body Text *</label>
-                        <VariablePickerButton targetRef={textareaRef} value={templateForm.bodyText} onChange={val => setTemplateForm(prev => ({ ...prev, bodyText: val }))} label="{ } Insert Variable" />
-                      </div>
-                      <textarea ref={textareaRef} required value={templateForm.bodyText} onChange={e => setTemplateForm({ ...templateForm, bodyText: e.target.value })}
-                        placeholder="Hello {{contact_name}}, your appointment is confirmed for {{appointment_date}}." rows={4}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" style={{ fontFamily: "Outfit, sans-serif" }} />
-
-                      {/* ── Variable Field Mapping panel ── */}
-                      {(() => {
-                        const tokens = [...(templateForm.bodyText.matchAll(/\{\{([^}]+)\}\}/g))].map(m => m[1].trim()).filter((v, i, a) => a.indexOf(v) === i);
-                        if (tokens.length === 0) return null;
-                        return (
-                          <div className="border border-blue-100 rounded-xl overflow-hidden mt-2">
-                            <button
-                              type="button"
-                              onClick={() => setShowVarMapping(v => !v)}
-                              className="w-full flex items-center justify-between px-4 py-2.5 bg-blue-50 hover:bg-blue-100/60 transition-colors text-xs font-semibold text-blue-700"
+                        {/* Middle: Contact Name and Last Message */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <h4
+                              className={`text-sm truncate ${
+                                isSelected ? "text-[#1E293B] font-bold" : "text-[#1E293B] font-semibold"
+                              }`}
                               style={{ fontFamily: "DM Sans, sans-serif" }}
                             >
-                              <span>📌 Field Mapping — {tokens.length} variable{tokens.length !== 1 ? "s" : ""} detected</span>
-                              <ChevronDown className={`w-4 h-4 transition-transform ${showVarMapping ? "rotate-180" : ""}`} />
-                            </button>
-                            {showVarMapping && (
-                              <div className="p-3 space-y-3 bg-white">
-                                <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                  Map each <code className="bg-gray-100 px-1 rounded">&#123;&#123;variable&#125;&#125;</code> to a static value, a MantraAssist field, or live availability.
-                                </p>
-                                {tokens.map(token => {
-                                  const mapping = (templateForm.variableMappings || {})[token] || { source: "static" as const, staticValue: "", fieldKey: "" };
-                                  const setMapping = (patch: Partial<typeof mapping>) =>
-                                    setTemplateForm(prev => ({
-                                      ...prev,
-                                      variableMappings: {
-                                        ...(prev.variableMappings || {}),
-                                        [token]: { ...mapping, ...patch }
-                                      }
-                                    }));
-                                  return (
-                                    <div key={token} className="p-3 border border-gray-100 rounded-lg bg-gray-50 space-y-2">
-                                      <div className="flex items-center gap-2">
-                                        <code className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">&#123;&#123;{token}&#125;&#125;</code>
-                                        <div className="flex gap-1 ml-auto">
-                                          {(["static", "field", "availability"] as const).map(src => (
-                                            <button
-                                              key={src}
-                                              type="button"
-                                              onClick={() => setMapping({ source: src })}
-                                              className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold transition-colors capitalize ${mapping.source === src
-                                                  ? "bg-blue-600 text-white border-blue-600"
-                                                  : "bg-white text-gray-500 border-gray-200 hover:border-blue-400"
-                                                }`}
-                                            >
-                                              {src}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      </div>
-                                      {mapping.source === "static" && (
-                                        <input
-                                          type="text"
-                                          value={mapping.staticValue || ""}
-                                          onChange={e => setMapping({ staticValue: e.target.value })}
-                                          placeholder="Static replacement value"
-                                          className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
-                                          style={{ fontFamily: "Outfit, sans-serif" }}
-                                        />
-                                      )}
-                                      {mapping.source === "field" && (
-                                        <select
-                                          value={mapping.fieldKey || ""}
-                                          onChange={e => setMapping({ fieldKey: e.target.value })}
-                                          className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
-                                        >
-                                          <option value="">Select a MantraAssist field…</option>
-                                          <optgroup label="Client">
-                                            <option value="client.name">Client Name</option>
-                                            <option value="client.email">Client Email</option>
-                                            <option value="client.phone">Client Phone</option>
-                                          </optgroup>
-                                          <optgroup label="Appointment">
-                                            <option value="appointment.date">Appointment Date</option>
-                                            <option value="appointment.time">Appointment Time</option>
-                                            <option value="appointment.service">Service Name</option>
-                                          </optgroup>
-                                          <optgroup label="Team Member">
-                                            <option value="teamMember.name">Provider Name</option>
-                                            <option value="teamMember.phone">Provider Phone</option>
-                                          </optgroup>
-                                        </select>
-                                      )}
-                                      {mapping.source === "availability" && (
-                                        <p className="text-[11px] text-gray-500 italic" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                          Will resolve to the contact's next available slot at send time.
-                                        </p>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                              {conv.contactName}
+                            </h4>
+                            {assignedPerson && (
+                              <span className="text-[9px] text-[#64748b] font-semibold bg-slate-100 px-1.5 py-0.5 rounded-full shrink-0">
+                                👤 {getInitials(assignedPerson.name)}
+                              </span>
                             )}
                           </div>
-                        );
-                      })()}
-                    </div>
+                          <p
+                            className="text-xs text-[#64748b] truncate"
+                            style={{ fontFamily: "DM Sans, sans-serif" }}
+                          >
+                            {conv.lastMessage}
+                          </p>
+                        </div>
 
-                    {/* ── Header section removed from here (moved above Body) ── */}
-
-                    <div>
-                      <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Footer Text (Optional)</label>
-                      <input type="text" value={templateForm.footerText} onChange={e => setTemplateForm({ ...templateForm, footerText: e.target.value })} placeholder="e.g. Reply STOP to opt out"
-                        className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ fontFamily: "Outfit, sans-serif" }} />
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="block text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          Buttons (Optional)
-                        </label>
-                        <span className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {templateForm.buttons.length}/3
-                        </span>
-                      </div>
-
-                      {templateForm.buttons.map((btn, index) => (
-                        <div key={index} className="p-3 border border-gray-200 rounded-xl bg-gray-50/40 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-gray-500">Button {index + 1}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveButton(index)}
-                              className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" /> Remove
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2">
-                            <select
-                              value={btn.type}
-                              onChange={e => handleButtonChange(index, "type", e.target.value)}
-                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white"
-                            >
-                              <option value="quick_reply">Quick Reply</option>
-                              <option value="call">Call Phone Number</option>
-                              <option value="url">Visit Website</option>
-                              <option value="email">Send Email</option>
-                            </select>
-                            <input
-                              type="text"
-                              value={btn.label}
-                              onChange={e => handleButtonChange(index, "label", e.target.value)}
-                              placeholder="Button text..."
-                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg"
-                            />
-                          </div>
-
-                          {btn.type === "call" && (
-                            <input
-                              type="tel"
-                              value={btn.value || ""}
-                              onChange={e => handleButtonChange(index, "value", e.target.value)}
-                              placeholder="+1 555 123 4567"
-                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg"
-                            />
-                          )}
-                          {btn.type === "url" && (
-                            <input
-                              type="url"
-                              value={btn.value || ""}
-                              onChange={e => handleButtonChange(index, "value", e.target.value)}
-                              placeholder="https://..."
-                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg font-mono"
-                            />
-                          )}
-                          {btn.type === "email" && (
-                            <input
-                              type="email"
-                              value={btn.value || ""}
-                              onChange={e => handleButtonChange(index, "value", e.target.value)}
-                              placeholder="support@example.com"
-                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg font-mono"
-                            />
+                        {/* Right: Time on top, pending chats (unread badge) below it */}
+                        <div className="flex flex-col items-end shrink-0 gap-1.5 pt-0.5">
+                          <span
+                            className="text-[10px] text-[#94a3b8] font-mono tabular-nums leading-none"
+                            style={{ fontFamily: "JetBrains Mono, monospace" }}
+                          >
+                            {formatChatTimestamp(conv.timestamp)}
+                          </span>
+                          {conv.unreadCount > 0 && (
+                            <span className="w-5 h-5 rounded-full bg-[#1456f0] text-white text-[10px] font-bold flex items-center justify-center shadow-2xs font-mono tabular-nums">
+                              {conv.unreadCount}
+                            </span>
                           )}
                         </div>
-                      ))}
-
-                      <button
-                        type="button"
-                        onClick={handleAddButton}
-                        disabled={templateForm.buttons.length >= 3}
-                        className="w-full py-2 text-xs font-semibold border border-dashed border-gray-300 text-blue-600 rounded-lg hover:bg-blue-50/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Add Button
-                      </button>
-                    </div>
-
-                    <div className="flex gap-3 pt-4 border-t border-gray-100 justify-end">
-                      <Button variant="outline" type="button" onClick={() => { setTemplatesView("table"); setEditingTemplateId(null); }}>Cancel</Button>
-                      <Button variant="primary" type="submit">Save Template</Button>
-                    </div>
-                  </form>
-                  <div className="w-[280px] shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-3">
-                    <div className="border-b border-gray-100 pb-2"><span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Live Preview</span></div>
-                    <div className="rounded-2xl border-4 border-gray-800 overflow-hidden shadow-inner bg-[#E5DDD5] h-[340px] flex flex-col">
-                      <div className="bg-[#075E54] text-white p-2.5 flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-bold text-[10px]">WA</div>
-                        <p className="text-[10px] font-bold">Mantra Health</p>
                       </div>
-                      <div className="flex-1 p-3 overflow-y-auto flex flex-col justify-end">
-                        <div className="bg-white rounded-lg shadow-sm p-2 text-[11px] text-gray-800 max-w-[90%] rounded-tl-none space-y-1 select-none">
-                          {/* Header preview */}
-                          {templateForm.headerType === "text" && templateForm.headerText && (
-                            <p className="font-bold text-[11px] text-gray-900 leading-tight">{templateForm.headerText}</p>
-                          )}
-                          {templateForm.headerType === "image" && templateForm.headerMediaUrl && (
-                            templateForm.headerMediaUrl.startsWith("blob:") ? (
-                              <img src={templateForm.headerMediaUrl} alt="Header preview" className="w-full rounded object-cover max-h-20" />
-                            ) : (
-                              <div className="w-full h-14 bg-gray-100 rounded flex items-center justify-center">
-                                <ImageIcon className="w-5 h-5 text-gray-400" />
-                              </div>
-                            )
-                          )}
-                          {templateForm.headerType === "video" && (
-                            <div className="w-full h-14 bg-gray-900 rounded flex items-center justify-center gap-1.5">
-                              <Play className="w-5 h-5 text-white" />
-                              <span className="text-[9px] text-white font-medium">Video</span>
-                            </div>
-                          )}
-                          {templateForm.headerType === "document" && (
-                            <div className="flex items-center gap-1.5 bg-gray-100 rounded px-2 py-1">
-                              <FileText className="w-4 h-4 text-red-500" />
-                              <span className="text-[9px] text-gray-700 font-medium truncate">{templateForm.headerFileName || "document.pdf"}</span>
-                            </div>
-                          )}
-                          <p className="whitespace-pre-wrap leading-tight text-gray-700">{templateForm.bodyText || "Template body goes here..."}</p>
-                          {templateForm.footerText && <p className="text-[9px] text-gray-400">{templateForm.footerText}</p>}
-                        </div>
-                        {templateForm.buttons.length > 0 && (
-                          <div className="bg-white rounded-b-lg shadow-sm max-w-[90%] mt-0.5 overflow-hidden">
-                            {templateForm.buttons.map((btn, i) => (
-                              <div
-                                key={i}
-                                className={`px-3 py-2 text-[10px] font-semibold text-center text-blue-600 flex items-center justify-center gap-1 ${i > 0 ? "border-t border-gray-100" : ""}`}
-                              >
-                                {btn.type === "template" && <Link2 className="w-3 h-3 shrink-0" />}
-                                <span>{btn.label || "Button"}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* ── Right Side Panel: Chat Window (Separate Div / Card) ── */}
+            <div className="flex-1 min-w-0 bg-white rounded-2xl border border-gray-200/90 shadow-xs flex flex-col overflow-hidden">
+              {activeConversation ? (
+                <>
+                  {/* Shared Chat Subcomponents */}
+                  <ConversationHeader
+                    conversation={activeConversation}
+                    onToggleBotStatus={handleToggleBotStatus}
+                    onOpenAssignBotModal={() => setShowAssignBotModal(true)}
+                    onOpenAssignPersonModal={() => setAssignAgentMenuOpen(true)}
+                    availableEmployees={AVAILABLE_EMPLOYEES}
+                  />
+                  <MessageThreadList
+                    messages={activeConversation.messages}
+                    emptyMessage="No messages in this conversation yet."
+                  />
+                  <MessageComposerBar
+                    conversation={activeConversation}
+                    session={computeSessionWindow(activeConversation)}
+                    onSendMessage={handleSendMessage}
+                    onSendTemplate={handleSendTemplateDirectly}
+                    onEnrollCampaign={handleEnrollCampaign}
+                  />
+                </>
+              ) : (
+                <div
+                  className="flex-1 flex flex-col items-center justify-center text-center p-8 text-gray-400 text-sm"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                    <MessageCircle className="w-6 h-6 text-gray-400" />
                   </div>
+                  <p className="font-semibold text-gray-600 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Select a conversation
+                  </p>
+                  <p className="text-xs text-gray-400">Choose a chat from the contact list to view the conversation</p>
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab: WhatsApp Templates (Table View + Side Drawer) ── */}
+        {activeTab === "templates" && (
+          <>
+            {(() => {
+              const templateColumns: TableColumn<WhatsappTemplate>[] = [
+                {
+                  id: "name",
+                  header: "Name",
+                  align: "left",
+                  render: (tpl) => (
+                    <button
+                      onClick={() => handleEditTemplate(tpl)}
+                      className="text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors text-left cursor-pointer"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      {tpl.name}
+                    </button>
+                  ),
+                },
+                {
+                  id: "identifier",
+                  header: "Identifier",
+                  align: "left",
+                  render: (tpl) => <span className="text-xs font-mono text-gray-500">{tpl.identifier}</span>,
+                },
+                {
+                  id: "category",
+                  header: "Category",
+                  align: "center",
+                  render: (tpl) => (
+                    <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5 uppercase">
+                      {tpl.category}
+                    </span>
+                  ),
+                },
+                {
+                  id: "status",
+                  header: "Status",
+                  align: "center",
+                  render: (tpl) => (
+                    (!tpl.approvalStatus || tpl.approvalStatus === "pending") ? (
+                      <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-100 rounded-full px-2 py-0.5 uppercase">Pending</span>
+                    ) : tpl.approvalStatus === "approved" ? (
+                      <span className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 rounded-full px-2 py-0.5 uppercase">Approved</span>
+                    ) : (
+                      <span title={tpl.rejectionReason || "Denied by Meta"} className="text-[10px] font-bold bg-red-50 text-red-700 border border-red-100 rounded-full px-2 py-0.5 uppercase cursor-help">Denied</span>
+                    )
+                  ),
+                },
+                {
+                  id: "language",
+                  header: "Language",
+                  align: "center",
+                  render: (tpl) => <span className="text-xs text-gray-500">{tpl.language}</span>,
+                },
+              ];
+
+              const templateRowActions: TableRowAction<WhatsappTemplate>[] = [
+                {
+                  label: "Edit",
+                  icon: <Pencil className="w-3.5 h-3.5 text-blue-500" />,
+                  onClick: (tpl) => handleEditTemplate(tpl),
+                },
+                {
+                  label: "Get Approved",
+                  icon: <ShieldCheck className="w-3.5 h-3.5 text-green-600" />,
+                  hidden: (tpl) => tpl.approvalStatus === "approved",
+                  onClick: (tpl) => {
+                    setApprovingTemplate(tpl);
+                    setShowApprovalModal(true);
+                  },
+                },
+                {
+                  label: "Delete",
+                  icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+                  isDanger: true,
+                  onClick: (tpl) => handleDeleteTemplate(tpl.id),
+                },
+              ];
+
+              return (
+                <TableComponent
+                  className="rounded-2xl border-gray-200/90 shadow-xs"
+                  data={filteredTemplates}
+                  columns={templateColumns}
+                  getRowId={(tpl) => tpl.id}
+                  rowActions={templateRowActions}
+                  selectedIds={selectedTemplates}
+                  onSelectionChange={(ids) => setSelectedTemplates(new Set(Array.from(ids) as string[]))}
+                  onRowClick={(tpl) => handleEditTemplate(tpl)}
+                  defaultRowsPerPage={20}
+                  emptyMessage="No templates yet. Build a pre-approved WhatsApp message template to reuse in campaigns and chatbot flows."
+                />
               );
             })()}
 
-
-            {/* ══════════════════════════════════════════════════════
-            TAB: CAMPAIGNS
-        ══════════════════════════════════════════════════════ */}
-            {activeTab === "campaigns" && (
-              showCampaignBuilder ? (
-                <CampaignBuilderView
-                  campaignForm={campaignForm} setCampaignForm={setCampaignForm}
-                  campaignNodes={campaignNodes} setCampaignNodes={setCampaignNodes}
-                  editingNodeId={editingNodeId} setEditingNodeId={setEditingNodeId}
-                  editingCampaignId={editingCampaignId} globalTemplates={globalTemplates}
-                  handleAddNode={handleAddNode} handleSaveCampaign={handleSaveCampaign}
-                  onBack={() => setShowCampaignBuilder(false)} />
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+            {/* ── WhatsApp Template Side Drawer ── */}
+            <DrawerShell
+              isOpen={showTemplateDrawer}
+              onClose={() => {
+                setShowTemplateDrawer(false);
+                setEditingTemplateId(null);
+              }}
+              title={editingTemplateId ? "Edit WhatsApp Template" : "New WhatsApp Template"}
+              subtitle="Build a pre-approved WhatsApp message template to reuse in campaigns and chatbot flows."
+              icon={<FileText className="w-4 h-4 text-[#1456f0]" />}
+              width="max-w-3xl"
+              zIndex={600}
+              footer={
+                <div className="flex items-center justify-end gap-2 w-full">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTemplateDrawer(false);
+                      setEditingTemplateId(null);
+                    }}
+                    className="px-4 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveTemplate()}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-[#1456f0] hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Save Template</span>
+                  </button>
+                </div>
+              }
+            >
+              <div className="flex flex-col lg:flex-row gap-6 items-start">
+                {/* Form fields */}
+                <div className="flex-1 min-w-0 space-y-5">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>WhatsApp Campaigns</h2>
-                      <p className="text-sm text-gray-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>Create and track automated marketing flows</p>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Template Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={templateForm.name}
+                        onChange={(e) => handleNameChange(e.target.value)}
+                        placeholder="e.g. Appointment Reminder"
+                        className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
                     </div>
-                    <Button variant="primary" onClick={handleNewCampaignFromAnywhere}><Plus className="w-4 h-4" /> New Campaign</Button>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Template Identifier *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={templateForm.identifier}
+                        onChange={(e) => setTemplateForm({ ...templateForm, identifier: e.target.value })}
+                        placeholder="appointment_reminder"
+                        className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-4">
-                    {[
-                      { label: "Total Campaigns", value: campaigns.length, icon: <Zap className="w-5 h-5 text-blue-600" />, bg: "bg-blue-50" },
-                      { label: "Active", value: campaigns.filter(c => c.status === "active").length, icon: <Play className="w-5 h-5 text-green-600" />, bg: "bg-green-50" },
-                      { label: "Total Sent", value: campaigns.reduce((a, c) => a + c.sent, 0).toLocaleString(), icon: <Send className="w-5 h-5 text-purple-600" />, bg: "bg-purple-50" },
-                      { label: "Avg. Open Rate", value: (() => { const s = campaigns.filter(c => c.sent > 0); return s.length ? Math.round(s.reduce((a, c) => a + c.opened / c.sent, 0) / s.length * 100) + "%" : "—"; })(), icon: <TrendingUp className="w-5 h-5 text-orange-600" />, bg: "bg-orange-50" },
-                    ].map(card => (
-                      <div key={card.label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-4">
-                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${card.bg}`}>{card.icon}</div>
-                        <div>
-                          <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{card.value}</p>
-                          <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>{card.label}</p>
-                        </div>
-                      </div>
-                    ))}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Category *
+                      </label>
+                      <Select value={templateForm.category} onValueChange={(val: any) => setTemplateForm({ ...templateForm, category: val })}>
+                        <SelectTrigger className="w-full text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Marketing">Marketing</SelectItem>
+                          <SelectItem value="Utility">Utility</SelectItem>
+                          <SelectItem value="Authentication">Authentication</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Language *
+                      </label>
+                      <Select value={templateForm.language} onValueChange={(val: any) => setTemplateForm({ ...templateForm, language: val })}>
+                        <SelectTrigger className="w-full text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {LANGUAGES.map((lang) => (
+                            <SelectItem key={lang} value={lang}>{lang}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                    {campaigns.length === 0 ? (
-                      <div className="p-16 text-center">
-                        <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4"><Zap className="w-7 h-7 text-blue-600" /></div>
-                        <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>No campaigns yet</h3>
-                        <p className="text-sm text-gray-500 mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>Create your first campaign to start nurturing leads on WhatsApp.</p>
-                        <Button variant="primary" onClick={handleNewCampaignFromAnywhere}><Plus className="w-4 h-4" />New Campaign</Button>
+
+                  {/* Header */}
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                      <label className="text-xs font-bold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Header <span className="text-[11px] text-gray-400 font-normal">(Optional)</span>
+                      </label>
+                      <div className="flex gap-1 text-[11px]">
+                        {(["none", "text", "image", "video", "document"] as const).map((ht) => (
+                          <button
+                            key={ht}
+                            type="button"
+                            onClick={() =>
+                              setTemplateForm((prev) => ({
+                                ...prev,
+                                headerType: ht,
+                                headerText: ht === "text" ? prev.headerText || "" : "",
+                                headerMediaUrl: ht !== "text" && ht !== "none" ? "" : "",
+                                headerFileName: "",
+                              }))
+                            }
+                            className={`px-2 py-0.5 rounded-full border capitalize text-[10px] font-semibold transition-colors cursor-pointer ${
+                              templateForm.headerType === ht
+                                ? "bg-blue-600 text-white border-blue-600"
+                                : "bg-white border-gray-200 text-gray-600 hover:border-blue-300"
+                            }`}
+                          >
+                            {ht}
+                          </button>
+                        ))}
                       </div>
-                    ) : (
-                      (() => {
-                        const campaignCols: TableColumn<Campaign>[] = [
-                          {
-                            id: "name",
-                            header: "Campaign Name",
-                            align: "left",
-                            render: (campaign) => (
-                              <button
-                                onClick={() => handleOpenView(campaign)}
-                                className="text-sm font-semibold text-gray-900 hover:text-blue-600 transition-colors text-left cursor-pointer"
-                                style={{ fontFamily: "DM Sans, sans-serif" }}
+                    </div>
+                    {templateForm.headerType && templateForm.headerType !== "none" && (
+                      <div className="p-3.5 space-y-3 bg-white">
+                        {templateForm.headerType === "text" ? (
+                          <div>
+                            <label className="text-xs font-semibold text-gray-600 mb-1 block">Header Text</label>
+                            <input
+                              type="text"
+                              value={templateForm.headerText || ""}
+                              onChange={(e) => setTemplateForm((prev) => ({ ...prev, headerText: e.target.value }))}
+                              placeholder="Bold headline text..."
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {templateForm.headerMediaUrl ? (
+                              <div className="flex items-center gap-2 p-2.5 bg-blue-50 border border-blue-200 rounded-xl">
+                                <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-blue-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                    {templateForm.headerFileName || "Uploaded file"}
+                                  </p>
+                                  <p className="text-[10px] text-blue-500" style={{ fontFamily: "Outfit, sans-serif" }}>Stored as local object URL</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setTemplateForm((prev) => ({ ...prev, headerMediaUrl: "", headerFileName: "" }))}
+                                  className="p-1 text-blue-400 hover:text-red-500 transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div
+                                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-blue-500", "bg-blue-50"); }}
+                                onDragLeave={(e) => { e.currentTarget.classList.remove("border-blue-500", "bg-blue-50"); }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  e.currentTarget.classList.remove("border-blue-500", "bg-blue-50");
+                                  const file = e.dataTransfer.files[0];
+                                  if (file) handleFileDrop(file);
+                                }}
+                                className="relative border-2 border-dashed border-gray-300 rounded-xl p-5 text-center transition-all hover:border-blue-400"
                               >
-                                {campaign.name}
-                              </button>
-                            ),
-                          },
-                          {
-                            id: "status",
-                            header: "Status",
-                            align: "center",
-                            render: (campaign) => (
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${STATUS_COLOR[campaign.status]}`}>
-                                {campaign.status}
-                              </span>
-                            ),
-                          },
-                          {
-                            id: "audience",
-                            header: "Audience",
-                            align: "left",
-                            render: (campaign) => {
-                              const clientCount = campaign.audienceClientIds?.length ?? 0;
-                              const manualCount = campaign.audienceManualRecipients?.length ?? 0;
-                              const totalCount = clientCount + manualCount;
-                              const displayName = campaign.audienceName || campaign.audience;
-
-                              if (displayName) {
-                                if (!LEGACY_CHATBOT_MODULE_ENABLED) {
-                                  return (
-                                    <span className="text-xs text-purple-700 font-semibold block">
-                                      {displayName}{totalCount > 0 ? ` (${totalCount})` : ""}
-                                    </span>
-                                  );
-                                }
-                                return (
-                                  <button
-                                    onClick={() => { setSharingCampaign(campaign); setShowShareModal(true); }}
-                                    className="text-xs text-purple-700 font-semibold hover:underline text-left block"
-                                    title="Click to manage audience"
-                                  >
-                                    {displayName}{totalCount > 0 ? ` (${totalCount})` : ""}
-                                  </button>
-                                );
-                              }
-                              return <span className="text-gray-400 italic text-xs">No audience selected</span>;
-                            },
-                          },
-                          {
-                            id: "sent",
-                            header: "Sent",
-                            align: "center",
-                            render: (campaign) => (
-                              <span className="text-sm font-bold text-gray-900">
-                                {campaign.sent.toLocaleString()}
-                              </span>
-                            ),
-                          },
-                          {
-                            id: "createdAt",
-                            header: "Created",
-                            align: "center",
-                            render: (campaign) => (
-                              <span className="text-xs text-gray-400">
-                                {campaign.createdAt}
-                              </span>
-                            ),
-                          },
-                        ];
-
-                        const campaignActions: TableRowAction<Campaign>[] = [
-                          {
-                            label: "View Overview",
-                            icon: <Eye className="w-3.5 h-3.5 text-blue-500" />,
-                            onClick: (campaign) => handleOpenView(campaign),
-                          },
-                          {
-                            label: "Edit Campaign",
-                            icon: <Pencil className="w-3.5 h-3.5 text-slate-600" />,
-                            onClick: (campaign) => {
-                              handleOpenEdit(campaign);
-                              handleTabChange("campaigns");
-                            },
-                          },
-                          {
-                            label: "Share",
-                            icon: <Share2 className="w-3.5 h-3.5 text-purple-600" />,
-                            hidden: () => !LEGACY_CHATBOT_MODULE_ENABLED,
-                            onClick: (campaign) => {
-                              setSharingCampaign(campaign);
-                              setShowShareModal(true);
-                            },
-                          },
-                          {
-                            label: "Pause / Resume",
-                            icon: <Play className="w-3.5 h-3.5 text-amber-500" />,
-                            hidden: (campaign) => campaign.status !== "active" && campaign.status !== "paused",
-                            onClick: (campaign) => handleToggleCampaign(campaign.id),
-                          },
-                          {
-                            label: "Delete",
-                            icon: <Trash2 className="w-3.5 h-3.5 text-rose-500" />,
-                            isDanger: true,
-                            onClick: (campaign) => handleDeleteCampaign(campaign.id),
-                          },
-                        ];
-
-                        return (
-                          <TableComponent
-                            data={campaigns}
-                            columns={campaignCols}
-                            getRowId={(campaign) => campaign.id}
-                            rowActions={campaignActions}
-                            selectedIds={selectedCampaigns}
-                            onSelectionChange={(ids) => setSelectedCampaigns(new Set(Array.from(ids) as string[]))}
-                            onRowClick={(campaign) => handleOpenView(campaign)}
-                            defaultRowsPerPage={20}
-                            emptyMessage="No campaigns found."
-                          />
-                        );
-                      })()
+                                <input
+                                  type="file"
+                                  accept={acceptForHeaderType}
+                                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileDrop(f); }}
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                />
+                                <div className="flex flex-col items-center gap-1.5 pointer-events-none">
+                                  <Upload className="w-6 h-6 text-gray-400" />
+                                  <p className="text-xs font-semibold text-gray-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                    <span className="text-blue-600">Click to upload</span> or drag and drop
+                                  </p>
+                                  <p className="text-[10px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                    {templateForm.headerType === "image" ? "PNG, JPG up to 5MB" : templateForm.headerType === "video" ? "MP4 up to 16MB" : "PDF up to 100MB"}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
+
+                  {/* Body Text */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="block text-xs font-bold text-gray-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Body Text *
+                      </label>
+                      <VariablePickerButton targetRef={textareaRef} value={templateForm.bodyText} onChange={(val) => setTemplateForm((prev) => ({ ...prev, bodyText: val }))} label="{ } Insert Variable" />
+                    </div>
+                    <textarea
+                      ref={textareaRef}
+                      required
+                      value={templateForm.bodyText}
+                      onChange={(e) => setTemplateForm({ ...templateForm, bodyText: e.target.value })}
+                      placeholder="Hello {{contact_name}}, your appointment is confirmed for {{appointment_date}}."
+                      rows={4}
+                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    />
+
+                    {/* Variable Field Mapping */}
+                    {(() => {
+                      const tokens = [...(templateForm.bodyText.matchAll(/\{\{([^}]+)\}\}/g))].map((m) => m[1].trim()).filter((v, i, a) => a.indexOf(v) === i);
+                      if (tokens.length === 0) return null;
+                      return (
+                        <div className="border border-blue-100 rounded-xl overflow-hidden mt-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowVarMapping((v) => !v)}
+                            className="w-full flex items-center justify-between px-3.5 py-2 bg-blue-50 hover:bg-blue-100/60 transition-colors text-xs font-semibold text-blue-700 cursor-pointer"
+                            style={{ fontFamily: "DM Sans, sans-serif" }}
+                          >
+                            <span>📌 Field Mapping — {tokens.length} variable{tokens.length !== 1 ? "s" : ""} detected</span>
+                            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showVarMapping ? "rotate-180" : ""}`} />
+                          </button>
+                          {showVarMapping && (
+                            <div className="p-3 space-y-2.5 bg-white">
+                              <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                Map each <code className="bg-gray-100 px-1 rounded">&#123;&#123;variable&#125;&#125;</code> to a static value, a MantraAssist field, or live availability.
+                              </p>
+                              {tokens.map((token) => {
+                                const mapping = (templateForm.variableMappings || {})[token] || { source: "static" as const, staticValue: "", fieldKey: "" };
+                                const setMapping = (patch: Partial<typeof mapping>) =>
+                                  setTemplateForm((prev) => ({
+                                    ...prev,
+                                    variableMappings: {
+                                      ...(prev.variableMappings || {}),
+                                      [token]: { ...mapping, ...patch },
+                                    },
+                                  }));
+                                return (
+                                  <div key={token} className="p-2.5 border border-gray-100 rounded-lg bg-gray-50 space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <code className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">&#123;&#123;{token}&#125;&#125;</code>
+                                      <div className="flex gap-1 ml-auto">
+                                        {(["static", "field", "availability"] as const).map((src) => (
+                                          <button
+                                            key={src}
+                                            type="button"
+                                            onClick={() => setMapping({ source: src })}
+                                            className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold transition-colors capitalize cursor-pointer ${
+                                              mapping.source === src
+                                                ? "bg-blue-600 text-white border-blue-600"
+                                                : "bg-white text-gray-500 border-gray-200 hover:border-blue-400"
+                                            }`}
+                                          >
+                                            {src}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    {mapping.source === "static" && (
+                                      <input
+                                        type="text"
+                                        value={mapping.staticValue || ""}
+                                        onChange={(e) => setMapping({ staticValue: e.target.value })}
+                                        placeholder="Static replacement value"
+                                        className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                                        style={{ fontFamily: "Outfit, sans-serif" }}
+                                      />
+                                    )}
+                                    {mapping.source === "field" && (
+                                      <select
+                                        value={mapping.fieldKey || ""}
+                                        onChange={(e) => setMapping({ fieldKey: e.target.value })}
+                                        className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                                      >
+                                        <option value="">Select a MantraAssist field…</option>
+                                        <optgroup label="Client">
+                                          <option value="client.name">Client Name</option>
+                                          <option value="client.email">Client Email</option>
+                                          <option value="client.phone">Client Phone</option>
+                                        </optgroup>
+                                        <optgroup label="Appointment">
+                                          <option value="appointment.date">Appointment Date</option>
+                                          <option value="appointment.time">Appointment Time</option>
+                                          <option value="appointment.service">Service Name</option>
+                                        </optgroup>
+                                        <optgroup label="Team Member">
+                                          <option value="teamMember.name">Provider Name</option>
+                                          <option value="teamMember.phone">Provider Phone</option>
+                                        </optgroup>
+                                      </select>
+                                    )}
+                                    {mapping.source === "availability" && (
+                                      <p className="text-[11px] text-gray-500 italic" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                        Will resolve to the contact's next available slot at send time.
+                                      </p>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Footer Text */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Footer Text <span className="text-[11px] text-gray-400 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={templateForm.footerText}
+                      onChange={(e) => setTemplateForm({ ...templateForm, footerText: e.target.value })}
+                      placeholder="e.g. Reply STOP to opt out"
+                      className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    />
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-gray-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Buttons <span className="text-[11px] text-gray-400 font-normal">(Optional)</span>
+                      </label>
+                      <span className="text-[11px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {templateForm.buttons.length}/3
+                      </span>
+                    </div>
+
+                    {templateForm.buttons.map((btn, index) => (
+                      <div key={index} className="p-3 border border-gray-200 rounded-xl bg-gray-50/50 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-gray-600">Button {index + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveButton(index)}
+                            className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Remove
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={btn.type}
+                            onChange={(e) => handleButtonChange(index, "type", e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white"
+                          >
+                            <option value="quick_reply">Quick Reply</option>
+                            <option value="call">Call Phone Number</option>
+                            <option value="url">Visit Website</option>
+                            <option value="email">Send Email</option>
+                          </select>
+                          <input
+                            type="text"
+                            value={btn.label}
+                            onChange={(e) => handleButtonChange(index, "label", e.target.value)}
+                            placeholder="Button text..."
+                            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg"
+                          />
+                        </div>
+
+                        {btn.type === "call" && (
+                          <input
+                            type="tel"
+                            value={btn.value || ""}
+                            onChange={(e) => handleButtonChange(index, "value", e.target.value)}
+                            placeholder="+1 555 123 4567"
+                            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg"
+                          />
+                        )}
+                        {btn.type === "url" && (
+                          <input
+                            type="url"
+                            value={btn.value || ""}
+                            onChange={(e) => handleButtonChange(index, "value", e.target.value)}
+                            placeholder="https://..."
+                            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg font-mono"
+                          />
+                        )}
+                        {btn.type === "email" && (
+                          <input
+                            type="email"
+                            value={btn.value || ""}
+                            onChange={(e) => handleButtonChange(index, "value", e.target.value)}
+                            placeholder="support@example.com"
+                            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg font-mono"
+                          />
+                        )}
+                      </div>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={handleAddButton}
+                      disabled={templateForm.buttons.length >= 3}
+                      className="w-full py-2 text-xs font-semibold border border-dashed border-gray-300 text-blue-600 rounded-lg hover:bg-blue-50/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Button
+                    </button>
+                  </div>
                 </div>
-              )
-            )}
 
+                {/* Right: Live Preview Phone */}
+                <div className="w-[260px] shrink-0 sticky top-0 space-y-2">
+                  <div className="flex items-center justify-between pb-1">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Live Preview</span>
+                  </div>
+                  <div className="rounded-2xl border-4 border-gray-800 overflow-hidden shadow-md bg-[#E5DDD5] h-[340px] flex flex-col">
+                    <div className="bg-[#075E54] text-white p-2.5 flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-bold text-[10px]">WA</div>
+                      <p className="text-[10px] font-bold">Mantra Health</p>
+                    </div>
+                    <div className="flex-1 p-2.5 overflow-y-auto flex flex-col justify-end">
+                      <div className="bg-white rounded-lg shadow-xs p-2 text-[11px] text-gray-800 max-w-[95%] rounded-tl-none space-y-1 select-none">
+                        {templateForm.headerType === "text" && templateForm.headerText && (
+                          <p className="font-bold text-[11px] text-gray-900 leading-tight">{templateForm.headerText}</p>
+                        )}
+                        {templateForm.headerType === "image" && templateForm.headerMediaUrl && (
+                          templateForm.headerMediaUrl.startsWith("blob:") ? (
+                            <img src={templateForm.headerMediaUrl} alt="Header preview" className="w-full rounded object-cover max-h-20" />
+                          ) : (
+                            <div className="w-full h-14 bg-gray-100 rounded flex items-center justify-center">
+                              <ImageIcon className="w-5 h-5 text-gray-400" />
+                            </div>
+                          )
+                        )}
+                        {templateForm.headerType === "video" && (
+                          <div className="w-full h-14 bg-gray-900 rounded flex items-center justify-center gap-1.5">
+                            <Play className="w-4 h-4 text-white" />
+                            <span className="text-[9px] text-white font-medium">Video</span>
+                          </div>
+                        )}
+                        {templateForm.headerType === "document" && (
+                          <div className="flex items-center gap-1.5 bg-gray-100 rounded px-2 py-1">
+                            <FileText className="w-3.5 h-3.5 text-red-500" />
+                            <span className="text-[9px] text-gray-700 font-medium truncate">{templateForm.headerFileName || "document.pdf"}</span>
+                          </div>
+                        )}
+                        <p className="whitespace-pre-wrap leading-tight text-gray-700 text-[11px]">{templateForm.bodyText || "Template body goes here..."}</p>
+                        {templateForm.footerText && <p className="text-[9px] text-gray-400">{templateForm.footerText}</p>}
+                      </div>
+                      {templateForm.buttons.length > 0 && (
+                        <div className="bg-white rounded-b-lg shadow-xs max-w-[95%] mt-0.5 overflow-hidden">
+                          {templateForm.buttons.map((btn, i) => (
+                            <div
+                              key={i}
+                              className={`px-2.5 py-1.5 text-[10px] font-semibold text-center text-blue-600 flex items-center justify-center gap-1 ${
+                                i > 0 ? "border-t border-gray-100" : ""
+                              }`}
+                            >
+                              {btn.type === "template" && <Link2 className="w-3 h-3 shrink-0" />}
+                              <span>{btn.label || "Button"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </DrawerShell>
+          </>
+        )}
 
-            {/* ══════════════════════════════════════════════════════
-            TAB: CHATBOT — Managed by ChatbotTab component
-        ══════════════════════════════════════════════════════ */}
-            {activeTab === "chatbot" && LEGACY_CHATBOT_MODULE_ENABLED && (
-              <ChatbotTab
-                campaigns={campaigns}
-                employees={AVAILABLE_EMPLOYEES}
-                templates={globalTemplates}
-                statusFilter={chatbotStatusFilter}
-              />
-            )}
-
-            {/* ══════════════════════════════════════════════════════
-                TAB: WEBSITE WIDGET SETTINGS
-            ══════════════════════════════════════════════════════ */}
-            {activeTab === "website-settings" && (
-              <WebsiteWidgetSettingsTab
-                onNavigateToInbox={() => {
-                  setActiveTab("chats");
-                  setChannelFilter("website");
-                }}
-              />
-            )}
+        {/* ── Tab: Website Widget Settings ── */}
+        {activeTab === "website-settings" && (
+          <div className="bg-white rounded-2xl border border-gray-200/90 shadow-xs p-6 overflow-y-auto">
+            <WebsiteWidgetSettingsTab
+              onNavigateToInbox={() => {
+                setActiveTab("chats");
+                setChannelFilter("website");
+              }}
+            />
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Template Row Actions Menu */}
-      {openMenuTemplateId && templateMenuPos && createPortal(
-        <>
-          <div className="fixed inset-0" style={{ zIndex: 9998 }} onClick={() => setOpenMenuTemplateId(null)} />
-          {(() => {
-            const tpl = globalTemplates.find(t => t.id === openMenuTemplateId);
-            if (!tpl) return null;
-            return (
-              <div className="absolute w-52 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
-                style={{ top: templateMenuPos.top, left: templateMenuPos.left, zIndex: 9999, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}>
-                <button
-                  onClick={() => { handleEditTemplate(tpl); setTemplatesView("builder"); setOpenMenuTemplateId(null); }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-gray-50 text-left text-sm text-gray-700 transition-colors"
-                >
-                  <Pencil className="w-4 h-4 text-blue-500" /> Edit
-                </button>
-                {tpl.approvalStatus !== "approved" ? (
-                  <button
-                    onClick={() => { setApprovingTemplate(tpl); setShowApprovalModal(true); setOpenMenuTemplateId(null); }}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-green-50 text-left text-sm text-green-700 font-semibold transition-colors"
-                  >
-                    <ShieldCheck className="w-4 h-4" /> Get Approved
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-400 cursor-not-allowed">
-                    <Check className="w-4 h-4 text-green-500" /> Already Approved
-                  </div>
-                )}
-                <div className="border-t border-gray-100" />
-                <button
-                  onClick={() => { handleDeleteTemplate(tpl.id); setOpenMenuTemplateId(null); }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-red-50 text-left text-sm text-red-600 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" /> Delete
-                </button>
-              </div>
-            );
-          })()}
-        </>,
-        document.body
-      )}
 
       {/* Campaign Row Actions Menu */}
       {openMenuCampaignId && menuPos && createPortal(
