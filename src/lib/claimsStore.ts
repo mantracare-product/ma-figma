@@ -5,7 +5,9 @@ export type ClaimStatus =
   | "Accepted"
   | "Under Review"
   | "Paid"
+  | "Denied"
   | "Rejected";
+
 
 export interface ClaimPayer {
   id: string;
@@ -445,3 +447,36 @@ export function submitClaimElectronically(claimId: string): Promise<Claim> {
     }, 1200);
   });
 }
+
+export function moveClaimToStage(claimId: string, stageId: string, stageName?: string): Claim | null {
+  const current = getStoredClaims();
+  const claim = current.find((c) => c.id === claimId);
+  if (!claim) return null;
+
+  // Map known stage names/categories to ClaimStatus
+  let newStatus = claim.status;
+  const lower = (stageName || "").toLowerCase();
+  if (lower.includes("paid") || lower.includes("settled")) {
+    newStatus = "Paid";
+  } else if (lower.includes("denied") || lower.includes("reject") || lower.includes("failed")) {
+    newStatus = "Denied";
+  } else if (lower.includes("submit")) {
+    newStatus = "Submitted";
+  } else if (lower.includes("draft") || lower.includes("intake")) {
+    newStatus = "Draft";
+  } else if (lower.includes("review") || lower.includes("verified")) {
+    newStatus = "Ready to Submit";
+  }
+
+  const updated: Claim = {
+    ...claim,
+    currentStageId: stageId,
+    statusLabel: stageName || claim.statusLabel,
+    status: newStatus,
+    updatedAt: new Date().toISOString(),
+  };
+
+  saveClaim(updated);
+  return updated;
+}
+

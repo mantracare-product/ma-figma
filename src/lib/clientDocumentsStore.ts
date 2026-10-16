@@ -4,7 +4,7 @@ export interface StoredClientDocument {
   invoiceId?: string;
   appointmentId?: string;
   entityId?: string;
-  entityType?: "client" | "process" | "appointment" | "invoice";
+  entityType?: "client" | "process" | "appointment" | "invoice" | "claim";
   name: string;
   category: string;
   valueBy?: string;

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import { getStoredProcesses } from "../../lib/useProcessStore";
 
-export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember" | "scribe" | "invoice";
+export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember" | "scribe" | "invoice" | "claim";
 
 export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
   "client",
@@ -11,7 +11,8 @@ export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
   "service",
   "organization",
   "teamMember",
-  "invoice"
+  "invoice",
+  "claim",
 ];
 
 export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plural: string }> = {
@@ -24,6 +25,7 @@ export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: strin
   teamMember: { singular: "team member", plural: "team members" },
   scribe: { singular: "AI Scribe field", plural: "AI Scribe fields" },
   invoice: { singular: "invoice", plural: "invoices" },
+  claim: { singular: "claim", plural: "claims" },
 };
 
 export const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -90,7 +92,7 @@ export type SubFieldInputType =
   | "crm_bind"
   | "file";
 
-export type CrmBindModule = "client" | "call" | "process" | "appointment" | "service" | "invoice" | "organization" | "teamMember" | "scribe";
+export type CrmBindModule = "client" | "call" | "process" | "appointment" | "service" | "invoice" | "claim" | "organization" | "teamMember" | "scribe";
 
 export const CRM_MODULE_COLUMNS: Record<CrmBindModule, { key: string; label: string }[]> = {
   client: [
@@ -145,6 +147,14 @@ export const CRM_MODULE_COLUMNS: Record<CrmBindModule, { key: string; label: str
     { key: "amount", label: "Total Amount" },
     { key: "status", label: "Payment Status" },
     { key: "dueDate", label: "Due Date" },
+  ],
+  claim: [
+    { key: "claimNumber", label: "Claim ID" },
+    { key: "patientName", label: "Patient Name" },
+    { key: "serviceDate", label: "Service Date" },
+    { key: "payer", label: "Insurance Payer" },
+    { key: "totalCharge", label: "Total Billed" },
+    { key: "status", label: "Status" },
   ],
   organization: [
     { key: "name", label: "Organization Name" },
@@ -1866,6 +1876,40 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
     { key: "discount_applied", label: "Discount Applied", module: "invoice", sectionId: "sec-inv-items", inputType: "money", placeholder: "0.00", currency: "USD", defaultValue: 0, showAlways: true },
     { key: "payment_url", label: "Payment Link URL", module: "invoice", sectionId: "sec-inv-payment-link", inputType: "link", placeholder: "https://pay.example.com/...", showAlways: true },
   ],
+  claim: [
+    { key: "claim_number", label: "Claim ID", module: "claim", sectionId: "sec-clm-details", inputType: "text", placeholder: "CLM-2026-0001", required: true, showAlways: true },
+    { key: "service_date", label: "Date of Service", module: "claim", sectionId: "sec-clm-details", inputType: "date", required: true, showAlways: true },
+    { key: "billed_amount", label: "Billed Charge Amount", module: "claim", sectionId: "sec-clm-details", inputType: "money", currency: "USD", placeholder: "0.00", showAlways: true },
+    {
+      key: "claim_type",
+      label: "Claim Format Type",
+      module: "claim",
+      sectionId: "sec-clm-details",
+      inputType: "new_list",
+      placeholder: "Select claim type...",
+      newListConfig: { sourceMode: "basic_list", allowSearch: false, allowCustomOptions: true },
+      options: [
+        { id: 1, label: "Professional (CMS-1500 / 837P)", value: "Professional (837P)" },
+        { id: 2, label: "Institutional (UB-04 / 837I)", value: "Institutional (837I)" },
+        { id: 3, label: "Dental (ADA / 837D)", value: "Dental (837D)" },
+      ],
+      showAlways: true,
+    },
+    { key: "place_of_service", label: "Place of Service", module: "claim", sectionId: "sec-clm-details", inputType: "text", placeholder: "11 - Office", showAlways: true },
+    { key: "client_name", label: "Patient / Insured Name", module: "claim", sectionId: "sec-clm-patient", inputType: "text", placeholder: "Patient Name", required: true, showAlways: true },
+    { key: "patient_dob", label: "Patient DOB", module: "claim", sectionId: "sec-clm-patient", inputType: "date", showAlways: true },
+    { key: "client_phone", label: "Contact Phone", module: "claim", sectionId: "sec-clm-patient", inputType: "tel", placeholder: "+1 (555) 000-0000", showAlways: true },
+    { key: "client_email", label: "Contact Email", module: "claim", sectionId: "sec-clm-patient", inputType: "email", placeholder: "patient@example.com", showAlways: true },
+    { key: "payer_name", label: "Insurance Payer", module: "claim", sectionId: "sec-clm-patient", inputType: "text", placeholder: "Blue Cross Blue Shield", required: true, showAlways: true },
+    { key: "policy_number", label: "Member / Policy ID", module: "claim", sectionId: "sec-clm-patient", inputType: "text", placeholder: "BCBS-9821420", required: true, showAlways: true },
+    { key: "group_number", label: "Group Number", module: "claim", sectionId: "sec-clm-patient", inputType: "text", placeholder: "GRP-00491", showAlways: true },
+    { key: "diagnosis_codes", label: "Primary Diagnosis (ICD-10)", module: "claim", sectionId: "sec-clm-billing", inputType: "text", placeholder: "J20.9, I10", showAlways: true },
+    { key: "procedure_codes", label: "CPT / HCPCS Codes", module: "claim", sectionId: "sec-clm-billing", inputType: "text", placeholder: "99214, 71046", showAlways: true },
+    { key: "provider_npi", label: "Billing Provider NPI", module: "claim", sectionId: "sec-clm-billing", inputType: "text", placeholder: "1932840192", showAlways: true },
+    { key: "prior_auth_number", label: "Prior Authorization #", module: "claim", sectionId: "sec-clm-billing", inputType: "text", placeholder: "AUTH-882194", showAlways: true },
+    { key: "allowed_amount", label: "Payer Allowed Amount", module: "claim", sectionId: "sec-clm-billing", inputType: "money", currency: "USD", placeholder: "0.00", showAlways: true },
+    { key: "paid_amount", label: "Payer Paid / Settled Amount", module: "claim", sectionId: "sec-clm-billing", inputType: "money", currency: "USD", placeholder: "0.00", showAlways: true },
+  ],
 };
 
 export function getLiveTeamMembers() {
@@ -2216,6 +2260,56 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       createdAt: 0,
     },
   ],
+  claim: [
+    {
+      id: "sec-clm-details",
+      title: "Claim Details",
+      description: "Claim ID, service date, billed amount, and submission type",
+      module: "claim",
+      source: "system",
+      fieldKeys: [
+        "claim_number",
+        "service_date",
+        "billed_amount",
+        "claim_type",
+        "place_of_service",
+      ],
+      createdAt: 0,
+    },
+    {
+      id: "sec-clm-patient",
+      title: "Patient & Policy Information",
+      description: "Patient coordinates, insurance payer, and coverage policy",
+      module: "claim",
+      source: "system",
+      fieldKeys: [
+        "client_name",
+        "client_email",
+        "client_phone",
+        "patient_dob",
+        "payer_name",
+        "policy_number",
+        "group_number",
+      ],
+      createdAt: 0,
+    },
+    {
+      id: "sec-clm-billing",
+      title: "Billing & Diagnosis (ICD-10 / CPT)",
+      description: "Diagnosis codes, procedure codes, prior auth, and billing provider",
+      module: "claim",
+      source: "system",
+      fieldKeys: [
+        "diagnosis_codes",
+        "procedure_codes",
+        "provider_npi",
+        "prior_auth_number",
+        "allowed_amount",
+        "paid_amount",
+      ],
+      createdAt: 0,
+    },
+  ],
 };
 
 interface FieldRegistryContextValue {
@@ -2450,6 +2544,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
     teamMember: [],
     scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
     invoice: [],
+    claim: [],
   };
 
   if (typeof window === "undefined") {
@@ -2471,6 +2566,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
         teamMember: [],
         scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
         invoice: [],
+        claim: [],
       };
 
       if (Array.isArray(parsed)) {
@@ -2526,6 +2622,7 @@ function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, Fie
     teamMember: [],
     scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
     invoice: [],
+    claim: [],
   };
 
   // Check legacy sessionStorage keys
@@ -2660,6 +2757,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
     teamMember: [],
     scribe: [],
     invoice: [],
+    claim: [],
   };
 
   if (typeof window === "undefined") {
@@ -2681,6 +2779,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
         teamMember: [],
         scribe: [],
         invoice: [],
+        claim: [],
       };
 
       if (Array.isArray(parsed)) {
@@ -2717,6 +2816,7 @@ function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, S
     teamMember: [],
     scribe: [],
     invoice: [],
+    claim: [],
   };
 
   const legacyRaw = sessionStorage.getItem("sectionRegistry_v1");

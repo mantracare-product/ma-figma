@@ -21,6 +21,7 @@ export const CRM_MODULE_LABELS: Record<CrmBindModule, string> = {
   appointment: "Appointments",
   service: "Services",
   invoice: "Invoices",
+  claim: "Insurance Claims",
   organization: "Organizations",
   teamMember: "Team Members",
   scribe: "AI Scribe",
@@ -33,6 +34,7 @@ export const CRM_MODULE_DEFAULT_DISPLAY_FIELDS: Record<CrmBindModule, string[]> 
   appointment: ["title", "date", "status", "service", "doctorName", "clientName"],
   service: ["name", "price", "duration", "category"],
   invoice: ["invoiceNumber", "clientName", "amount", "status", "dueDate"],
+  claim: ["claimNumber", "patientName", "serviceDate", "totalCharge", "status"],
   organization: ["name", "industry", "website", "location"],
   teamMember: ["name", "role", "email", "department"],
   scribe: ["sessionName", "patientName", "chiefComplaint", "diagnosis", "doctorName"],
@@ -62,6 +64,10 @@ export function fetchCrmRecords(module: CrmBindModule): any[] {
         return getStoredProcesses();
       case "organization": {
         const raw = localStorage.getItem("mantra_organizations_v1");
+        return raw ? JSON.parse(raw) : [];
+      }
+      case "claim": {
+        const raw = localStorage.getItem("mantra_claims_v1");
         return raw ? JSON.parse(raw) : [];
       }
       default:
@@ -199,6 +205,7 @@ export function useCrmBindOptions(
       call: "ma_call_logs_changed",
       appointment: "ma_appointments_changed",
       invoice: "ma_invoices_changed",
+      claim: "mantra_claims_changed",
       scribe: "ma_scribe_changed",
     };
 

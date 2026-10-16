@@ -25,6 +25,7 @@ export interface ActivityBase {
   clientId?: string;
   appointmentId?: string;
   invoiceId?: string;
+  claimId?: string;
   createdBy?: "system" | "ai" | "user";
   sourceStepName?: string;
   clientName?: string;
@@ -219,7 +220,7 @@ function writeAll(entries: ActivityEntry[]): void {
 export function getActivity(
   clientId: string | string[],
   processId?: string,
-  options?: { appointmentId?: string; invoiceId?: string }
+  options?: { appointmentId?: string; invoiceId?: string; claimId?: string }
 ): ActivityEntry[] {
   const all = readAll();
   const rawList = Array.isArray(clientId) ? clientId : [clientId];
@@ -232,6 +233,9 @@ export function getActivity(
     : undefined;
   const targetInvId = options?.invoiceId
     ? String(options.invoiceId).toLowerCase().trim()
+    : undefined;
+  const targetClaimId = options?.claimId
+    ? String(options.claimId).toLowerCase().trim()
     : undefined;
 
   const filtered = all.filter((e) => {
@@ -251,6 +255,16 @@ export function getActivity(
       const normTarget = targetInvId.replace(/[^0-9]/g, "");
       const normEntry = entryInvId.replace(/[^0-9]/g, "");
       if (entryInvId === targetInvId || (normTarget && normEntry && normTarget === normEntry)) {
+        return true;
+      }
+    }
+
+    // 1c. Direct claimId match
+    if (targetClaimId && ((e as any).claimId || (e as any).refId)) {
+      const entryClaimId = String((e as any).claimId || (e as any).refId).toLowerCase().trim();
+      const normTarget = targetClaimId.replace(/[^0-9]/g, "");
+      const normEntry = entryClaimId.replace(/[^0-9]/g, "");
+      if (entryClaimId === targetClaimId || (normTarget && normEntry && normTarget === normEntry)) {
         return true;
       }
     }
@@ -331,7 +345,7 @@ export function appendActivity(
 export function subscribeToActivity(
   clientId: string | string[],
   callback: (entries: ActivityEntry[]) => void,
-  options?: { appointmentId?: string; invoiceId?: string }
+  options?: { appointmentId?: string; invoiceId?: string; claimId?: string }
 ): () => void {
   const handler = () => {
     callback(getActivity(clientId, undefined, options));

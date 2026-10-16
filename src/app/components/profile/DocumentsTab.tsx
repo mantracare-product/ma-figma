@@ -39,9 +39,10 @@ export interface DocumentsTabProps {
   };
   processName?: string;
   title?: string;
-  entityType?: "client" | "process" | "appointment" | "invoice";
+  entityType?: "client" | "process" | "appointment" | "invoice" | "claim";
   entityId?: string;
   invoiceData?: any;
+  claimData?: any;
   hideClientDefaultDocs?: boolean;
 }
 

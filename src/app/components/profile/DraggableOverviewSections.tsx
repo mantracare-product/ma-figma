@@ -78,7 +78,7 @@ export interface OverviewSection {
 }
 
 export interface DraggableOverviewSectionsProps {
-  mode: "client" | "process" | "scribe" | "service" | "appointment" | "invoice";
+  mode: "client" | "process" | "scribe" | "service" | "appointment" | "invoice" | "claim";
   client?: any;
   log?: any;
   sections: OverviewSection[];

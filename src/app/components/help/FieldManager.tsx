@@ -11,6 +11,7 @@ const MODULE_LABELS: Record<Exclude<FieldModule, "deal">, string> = {
   process: "Process Fields",
   appointment: "Appointment Fields",
   invoice: "Invoice Fields",
+  claim: "Claim Fields",
   call: "Call Fields",
   service: "Service Fields",
   organization: "Organization Fields",
@@ -18,7 +19,7 @@ const MODULE_LABELS: Record<Exclude<FieldModule, "deal">, string> = {
   scribe: "AI Scribe Fields",
 };
 
-const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "invoice", "call", "service", "organization", "teamMember"];
+const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "invoice", "claim", "call", "service", "organization", "teamMember"];
 
 // Module → singular noun for prose labels
 const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plural: string }> = {
@@ -26,6 +27,7 @@ const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plur
   process: { singular: "process", plural: "processes" },
   appointment: { singular: "appointment", plural: "appointments" },
   invoice: { singular: "invoice", plural: "invoices" },
+  claim: { singular: "claim", plural: "claims" },
   call: { singular: "call", plural: "calls" },
   service: { singular: "service", plural: "services" },
   organization: { singular: "organization", plural: "organizations" },

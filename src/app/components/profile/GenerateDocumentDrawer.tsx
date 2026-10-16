@@ -41,7 +41,7 @@ export interface GenerateDocumentDrawerProps {
   };
   initialTemplate?: DocumentTemplate | null;
   onDocumentGenerated?: (doc: StoredClientDocument) => void;
-  entityType?: "client" | "process" | "appointment" | "invoice";
+  entityType?: "client" | "process" | "appointment" | "invoice" | "claim";
   entityId?: string;
   invoiceData?: any;
   previewDoc?: StoredClientDocument | null;

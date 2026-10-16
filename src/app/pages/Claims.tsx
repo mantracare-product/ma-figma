@@ -29,6 +29,7 @@ import ClaimSubmissionModal from "../components/claims/ClaimSubmissionModal";
 import ClaimStatusModal from "../components/claims/ClaimStatusModal";
 import CMS1500Modal from "../components/claims/CMS1500Modal";
 import ClaimProgressBar from "../components/claims/ClaimProgressBar";
+import ClaimDetailDrawer from "../components/claims/ClaimDetailDrawer";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 
 export default function Claims() {
@@ -74,6 +75,8 @@ export default function Claims() {
   const [activeStatusClaim, setActiveStatusClaim] = useState<Claim | null>(null);
   const [activeCMS1500Claim, setActiveCMS1500Claim] = useState<Claim | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [selectedClaimForDetail, setSelectedClaimForDetail] = useState<Claim | null>(null);
+  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
 
   // Load claims
   const refreshClaims = () => {
@@ -451,9 +454,17 @@ export default function Claims() {
               header: "Claim ID",
               align: "left",
               render: (claim) => (
-                <span className="font-mono font-bold text-slate-800 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedClaimForDetail(claim);
+                    setIsDetailDrawerOpen(true);
+                  }}
+                  className="font-mono font-bold text-[#1456f0] hover:underline text-xs cursor-pointer text-left transition-colors"
+                  title="Click to view claim details, custom fields & activity"
+                >
                   {claim.claimNumber}
-                </span>
+                </button>
               ),
             },
             {
@@ -628,6 +639,21 @@ export default function Claims() {
           claim={activeCMS1500Claim}
           isOpen={!!activeCMS1500Claim}
           onClose={() => setActiveCMS1500Claim(null)}
+        />
+
+        {/* Claim Detail Drawer (Standard Architecture: Draggable Sections + Activity Feed + Documents) */}
+        <ClaimDetailDrawer
+          isOpen={isDetailDrawerOpen}
+          onClose={() => {
+            setIsDetailDrawerOpen(false);
+            setSelectedClaimForDetail(null);
+          }}
+          claim={selectedClaimForDetail}
+          onEditClaim={(c) => {
+            setIsDetailDrawerOpen(false);
+            handleEditClaim(c);
+          }}
+          onOpenCMS1500={(c) => setActiveCMS1500Claim(c)}
         />
       </div>
     </div>

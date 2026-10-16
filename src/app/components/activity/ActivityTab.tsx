@@ -72,6 +72,7 @@ export interface ActivityLogEntry {
   transcriptPreview?: string;
   appointmentId?: string;
   invoiceId?: string;
+  claimId?: string;
   extractedData?: {
     chiefComplaint?: string;
     symptoms?: string[];
@@ -1308,6 +1309,7 @@ export interface ActivityTabProps {
   processName?: string;
   appointmentId?: string;
   invoiceId?: string;
+  claimId?: string;
   onFillWithAi?: (scribeData: {
     transcriptPreview?: string;
     diagnosis?: string;
@@ -1363,6 +1365,7 @@ export default function ActivityTab({
   processName,
   appointmentId,
   invoiceId,
+  claimId,
   onFillWithAi,
 }: ActivityTabProps) {
   const navigate = useNavigate();
