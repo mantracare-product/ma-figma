@@ -490,22 +490,6 @@ export default function Invoices() {
                 ),
               },
               {
-                id: "processId",
-                header: "Process ID",
-                align: "left",
-                render: (inv) => {
-                  const procId = inv.processId || invoiceProcess.id || "PROC-INV-01";
-                  return (
-                    <span
-                      className="font-mono text-xs font-semibold text-slate-600 bg-slate-100/80 px-2 py-0.5 rounded border border-slate-200/60"
-                      style={{ fontFamily: "JetBrains Mono, monospace" }}
-                    >
-                      {procId}
-                    </span>
-                  );
-                },
-              },
-              {
                 id: "title",
                 header: "Title",
                 align: "left",
@@ -523,40 +507,6 @@ export default function Invoices() {
                     </span>
                   );
                 },
-              },
-              {
-                id: "client",
-                header: "Client",
-                align: "left",
-                render: (inv) => (
-                  <button
-                    onClick={() => handleOpenDetail(inv)}
-                    className="text-left font-bold hover:underline text-xs text-[#1A73E8]"
-                    style={{ fontFamily: 'DM Sans, sans-serif' }}
-                  >
-                    {inv.clientName}
-                  </button>
-                ),
-              },
-              {
-                id: "amount",
-                header: "Amount",
-                align: "center",
-                render: (inv) => (
-                  <span className="font-bold text-xs text-slate-900 font-mono">
-                    ${inv.total.toFixed(2)}
-                  </span>
-                ),
-              },
-              {
-                id: "balance",
-                header: "Balance",
-                align: "center",
-                render: (inv) => (
-                  <span className="font-bold text-xs text-slate-700 font-mono">
-                    ${(inv.status === "paid" || inv.status === "void" ? 0 : Math.max(0, inv.total - (inv.amountPaid || 0))).toFixed(2)}
-                  </span>
-                ),
               },
               {
                 id: "stage",
@@ -601,6 +551,40 @@ export default function Invoices() {
                     </div>
                   );
                 },
+              },
+              {
+                id: "client",
+                header: "Client",
+                align: "left",
+                render: (inv) => (
+                  <button
+                    onClick={() => handleOpenDetail(inv)}
+                    className="text-left font-bold hover:underline text-xs text-[#1A73E8]"
+                    style={{ fontFamily: 'DM Sans, sans-serif' }}
+                  >
+                    {inv.clientName}
+                  </button>
+                ),
+              },
+              {
+                id: "amount",
+                header: "Amount",
+                align: "center",
+                render: (inv) => (
+                  <span className="font-bold text-xs text-slate-900 font-mono">
+                    ${inv.total.toFixed(2)}
+                  </span>
+                ),
+              },
+              {
+                id: "balance",
+                header: "Balance",
+                align: "center",
+                render: (inv) => (
+                  <span className="font-bold text-xs text-slate-700 font-mono">
+                    ${(inv.status === "paid" || inv.status === "void" ? 0 : Math.max(0, inv.total - (inv.amountPaid || 0))).toFixed(2)}
+                  </span>
+                ),
               },
               {
                 id: "dueDate",

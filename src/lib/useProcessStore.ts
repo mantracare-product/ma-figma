@@ -371,7 +371,7 @@ export const REQUIRED_SYSTEM_CATEGORIES: Record<EntityType, string[]> = {
   client: [],
   appointment: ["booked", "rescheduled", "completed", "cancelled"],
   invoice: ["draft", "paid", "void"],
-  insurance: ["pending", "verified", "failed"],
+  insurance: ["draft", "submitted", "paid", "failed"],
   claim: ["draft", "submitted", "paid", "denied"],
 };
 
@@ -424,8 +424,8 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
   },
   insurance: {
     id: "process-insurance-default",
-    name: "Insurance Verification",
-    description: "Patient policy verification and coverage validation",
+    name: "Insurance and Claims",
+    description: "Patient policy verification, coverage validation, and claims management",
     assignedToUserId: 1,
     entityType: "insurance",
     aiSettings: {
@@ -436,9 +436,12 @@ export const DEFAULT_ENTITY_PROCESSES: Record<Exclude<EntityType, "client">, Pro
       style: "Balanced",
     },
     stages: [
-      { id: "ins-1", name: "Pending", description: "Eligibility verification in progress", status: "active", color: "#F59E0B", systemCategory: "pending", isSystemCategoryRequired: true, isInitial: true, stagePosition: "initial" },
-      { id: "ins-2", name: "Verified", description: "Coverage active and verified", status: "active", color: "#10B981", systemCategory: "verified", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
-      { id: "ins-3", name: "Failed", description: "Coverage inactive or verification rejected", status: "active", color: "#EF4444", systemCategory: "failed", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "ins-1", name: "Draft & Intake", description: "Patient policy info collected and claim intake prepared", status: "active", color: "#64748B", systemCategory: "draft", stageCategory: "in_progress", isSystemCategoryRequired: true, isInitial: true, stagePosition: "initial" },
+      { id: "ins-2", name: "Coverage Verified", description: "Eligibility, benefits, copay and deductible verified", status: "active", color: "#06B6D4", systemCategory: "verified_coverage", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "ins-3", name: "Submitted (837P)", description: "Electronic claim submitted to clearinghouse / payer", status: "active", color: "#3B82F6", systemCategory: "submitted", stageCategory: "in_progress", isSystemCategoryRequired: true, stagePosition: "intermediate" },
+      { id: "ins-4", name: "Under Review", description: "Payer adjudication and claims review in progress", status: "active", color: "#F59E0B", systemCategory: "in_review", stageCategory: "in_progress", stagePosition: "intermediate" },
+      { id: "ins-5", name: "Paid & Settled", description: "Claim paid in full and reconciled with billing", status: "active", color: "#10B981", systemCategory: "paid", stageCategory: "success", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
+      { id: "ins-6", name: "Denied", description: "Claim denied or coverage verification failed", status: "active", color: "#EF4444", systemCategory: "failed", stageCategory: "lost", isSystemCategoryRequired: true, isFinal: true, isFinalStage: true, stagePosition: "final" },
     ],
   },
   claim: {
@@ -821,7 +824,6 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
   DEFAULT_ENTITY_PROCESSES.appointment,
   DEFAULT_ENTITY_PROCESSES.invoice,
   DEFAULT_ENTITY_PROCESSES.insurance,
-  DEFAULT_ENTITY_PROCESSES.claim,
 ];
 
 export const DEFAULT_WORKFLOW_STEPS: Record<string, WorkflowStep[]> = {
@@ -854,7 +856,31 @@ export function getStoredProcesses(): Process[] {
 
   let changed = false;
 
+  // Filter out claim entity processes from workflows
+  const beforeLen = list.length;
+  list = list.filter((p) => p.entityType !== "claim");
+  if (list.length !== beforeLen) changed = true;
 
+  // Rename insurance entity process to "Insurance and Claims" and populate in-progress stages if missing
+  list = list.map((p) => {
+    if (p.entityType === "insurance") {
+      const hasInProgress = p.stages.some(
+        (s) => s.stageCategory === "in_progress" && !s.isFinalStage && !s.isFinal
+      );
+      if (!hasInProgress || p.stages.length <= 3) {
+        changed = true;
+        return {
+          ...p,
+          name: "Insurance and Claims",
+          stages: DEFAULT_ENTITY_PROCESSES.insurance.stages,
+        };
+      } else if (p.name === "Insurance Verification" || p.name === "Insurance") {
+        changed = true;
+        return { ...p, name: "Insurance and Claims" };
+      }
+    }
+    return p;
+  });
 
   // Ensure existing client processes have entityType assigned
   list = list.map((p) => {
@@ -963,7 +989,7 @@ export function getStoredProcesses(): Process[] {
   }
 
   // Ensure singleton processes for non-client entities exist
-  const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim"];
+  const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance"];
   for (const et of nonClientTypes) {
     const exists = list.some((p) => p.entityType === et);
     if (!exists) {
@@ -1033,7 +1059,7 @@ export function getActiveOrganizationSync(): {
 
 export function saveStoredProcesses(processes: Process[]) {
   try {
-    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance", "claim"];
+    const nonClientTypes: Array<Exclude<EntityType, "client">> = ["appointment", "invoice", "insurance"];
     const sanitized: Process[] = [];
 
     // 1. Client processes (free to add, edit, delete, reorder)

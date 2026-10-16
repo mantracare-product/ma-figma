@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router";
 import {
   Shield,
   Plus,
@@ -7,7 +8,9 @@ import {
   FileCheck,
   Pencil,
   Eye,
+  Settings as SettingsIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import Button from "../components/ui/Button";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
@@ -20,6 +23,7 @@ import {
   CLAIMS_CHANGED_EVENT,
   saveClaim,
 } from "../../lib/claimsStore";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 import CreateClaimDrawer from "../components/claims/CreateClaimDrawer";
 import ClaimSubmissionModal from "../components/claims/ClaimSubmissionModal";
 import ClaimStatusModal from "../components/claims/ClaimStatusModal";
@@ -28,11 +32,40 @@ import ClaimProgressBar from "../components/claims/ClaimProgressBar";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 
 export default function Claims() {
+  const navigate = useNavigate();
   const [claims, setClaims] = useState<Claim[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatusTab, setSelectedStatusTab] = useState<string>("all");
   const [selectedPayerFilter, setSelectedPayerFilter] = useState<string>("all");
   const [selectedClaimIds, setSelectedClaimIds] = useState<string[]>([]);
+  const [storeTick, setStoreTick] = useState(0);
+
+  // Workflow integration: retrieve configured insurance & claims process
+  useEffect(() => {
+    const handleStoreChange = () => setStoreTick((t) => t + 1);
+    window.addEventListener(PROCESS_STORE_EVENT, handleStoreChange);
+    window.addEventListener("storage", handleStoreChange);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, handleStoreChange);
+      window.removeEventListener("storage", handleStoreChange);
+    };
+  }, []);
+
+  const insuranceProcesses = useMemo(() => {
+    const procs = getStoredProcesses();
+    const list = procs.filter((p) => p.entityType === "insurance");
+    return list.length > 0 ? list : [DEFAULT_ENTITY_PROCESSES.insurance];
+  }, [storeTick]);
+
+  const [selectedProcessFilter, setSelectedProcessFilter] = useState<string>("");
+
+  const insuranceProcess = useMemo(() => {
+    if (selectedProcessFilter) {
+      const found = insuranceProcesses.find((p) => p.id === selectedProcessFilter);
+      if (found) return found;
+    }
+    return insuranceProcesses[0] || DEFAULT_ENTITY_PROCESSES.insurance;
+  }, [insuranceProcesses, selectedProcessFilter]);
 
   // Modals state
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
@@ -69,6 +102,34 @@ export default function Claims() {
     };
     saveClaim(updated);
     refreshClaims();
+  };
+
+  const handleStageChange = (claimId: string, stageId: string, stageName?: string) => {
+    const target = claims.find((c) => c.id === claimId);
+    if (!target) return;
+    const stageObj = insuranceProcess.stages.find((s) => s.id === stageId);
+    const name = stageName || stageObj?.name || stageId;
+
+    let newStatus: ClaimStatus = target.status;
+    const lower = name.toLowerCase();
+    if (lower.includes("paid")) newStatus = "Paid";
+    else if (lower.includes("accept") || lower.includes("verified")) newStatus = "Accepted";
+    else if (lower.includes("submit")) newStatus = "Submitted";
+    else if (lower.includes("review")) newStatus = "Under Review";
+    else if (lower.includes("ready") || lower.includes("pending")) newStatus = "Ready to Submit";
+    else if (lower.includes("reject") || lower.includes("fail") || lower.includes("denied")) newStatus = "Rejected";
+    else if (lower.includes("draft")) newStatus = "Draft";
+
+    const updated: Claim = {
+      ...target,
+      currentStageId: stageId,
+      statusLabel: name,
+      status: newStatus,
+      updatedAt: new Date().toISOString(),
+    };
+    saveClaim(updated);
+    refreshClaims();
+    toast.success(`Claim moved to ${name} ✓`);
   };
 
   // Filtered claims
@@ -307,6 +368,23 @@ export default function Claims() {
                   </option>
                 ))}
               </select>
+              {insuranceProcesses.length > 1 && (
+                <select
+                  value={selectedProcessFilter || insuranceProcesses[0].id}
+                  onChange={(e) => {
+                    setSelectedProcessFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="h-[36px] text-xs px-3 bg-white border border-border rounded-xl font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {insuranceProcesses.map((proc) => (
+                    <option key={proc.id} value={proc.id}>
+                      {proc.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           }
           onExport={() => setShowExportModal(true)}
@@ -318,6 +396,20 @@ export default function Claims() {
               setIsCreateDrawerOpen(true);
             },
           }}
+          afterPrimaryAction={
+            <button
+              type="button"
+              onClick={() => {
+                navigate(`/process?entity=insurance&processId=${insuranceProcess.id}`, {
+                  state: { processId: insuranceProcess.id, processName: insuranceProcess.name },
+                });
+              }}
+              className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+              title="Configure Insurance & Claims Workflow"
+            >
+              <SettingsIcon className="w-4 h-4" />
+            </button>
+          }
         />
 
         {/* Unified DataExportModal */}
@@ -355,21 +447,6 @@ export default function Claims() {
         {(() => {
           const claimColumns: TableColumn<Claim>[] = [
             {
-              id: "patientName",
-              header: "Client",
-              align: "left",
-              render: (claim) => (
-                <button
-                  type="button"
-                  onClick={() => handleEditClaim(claim)}
-                  className="font-semibold text-[#1456f0] hover:underline text-xs cursor-pointer text-left"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  {claim.patientName}
-                </button>
-              ),
-            },
-            {
               id: "claimNumber",
               header: "Claim ID",
               align: "left",
@@ -399,6 +476,51 @@ export default function Claims() {
               },
             },
             {
+              id: "stage",
+              header: "Stages",
+              align: "center",
+              render: (claim) => {
+                const stages = insuranceProcess.stages;
+                const stageKey = (claim.currentStageId || "").trim();
+                const matchedStage = stageKey
+                  ? stages.find(
+                      (s) =>
+                        s.id.toLowerCase() === stageKey.toLowerCase() ||
+                        s.name.toLowerCase() === stageKey.toLowerCase() ||
+                        (claim.statusLabel && s.name.toLowerCase() === claim.statusLabel.toLowerCase())
+                    )
+                  : (stages.find((s) => s.systemCategory === claim.status || s.name.toLowerCase() === (claim.status || "").toLowerCase()) || stages[0]);
+
+                return (
+                  <div className="flex items-center justify-center">
+                    <ClaimProgressBar
+                      status={claim.status}
+                      currentStageId={claim.currentStageId || matchedStage?.id}
+                      stages={insuranceProcess.stages}
+                      onStatusChange={(stageId, stageName) => handleStageChange(claim.id, stageId, stageName)}
+                      interactive={true}
+                      claimId={claim.id}
+                    />
+                  </div>
+                );
+              },
+            },
+            {
+              id: "patientName",
+              header: "Client",
+              align: "left",
+              render: (claim) => (
+                <button
+                  type="button"
+                  onClick={() => handleEditClaim(claim)}
+                  className="font-semibold text-[#1456f0] hover:underline text-xs cursor-pointer text-left"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {claim.patientName}
+                </button>
+              ),
+            },
+            {
               id: "payer",
               header: "Insurance Payer",
               align: "left",
@@ -407,27 +529,6 @@ export default function Claims() {
                   {claim.payer.name}
                 </span>
               ),
-            },
-            {
-              id: "stage",
-              header: "Stage",
-              align: "center",
-              render: (claim) => (
-                <div className="flex items-center justify-center">
-                  <ClaimProgressBar
-                    status={claim.status}
-                    onStatusChange={(newSt) => handleStatusChange(claim.id, newSt)}
-                    interactive={true}
-                    claimId={claim.id}
-                  />
-                </div>
-              ),
-            },
-            {
-              id: "status",
-              header: "Status",
-              align: "center",
-              render: (claim) => getStatusBadge(claim.status),
             },
             {
               id: "serviceDate",

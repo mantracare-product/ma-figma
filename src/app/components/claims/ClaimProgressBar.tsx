@@ -1,30 +1,64 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { ClaimStatus } from "../../../lib/claimsStore";
+import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
+import { CHEVRON_PALETTE } from "../common/ChevronStageRibbon";
+
+export interface ClaimStageItem {
+  id: string;
+  name: string;
+  color?: string;
+  systemCategory?: string;
+  isInitial?: boolean;
+  isFinal?: boolean;
+  isFinalStage?: boolean;
+  stagePosition?: "initial" | "intermediate" | "final" | null;
+  stageCategory?: "in_progress" | "success" | "lost";
+}
 
 interface ClaimProgressBarProps {
-  status: ClaimStatus;
-  onStatusChange?: (newStatus: ClaimStatus) => void;
+  status?: ClaimStatus | string;
+  currentStageId?: string;
+  stages?: ClaimStageItem[];
+  onStatusChange?: (newStageId: string, stageName?: string) => void;
   interactive?: boolean;
   claimId?: string;
 }
 
-export const CLAIM_STAGE_BLOCKS: { id: ClaimStatus; name: string; step: number; color?: string }[] = [
-  { id: "Draft", name: "Draft", step: 1 },
-  { id: "Ready to Submit", name: "Ready to Submit", step: 2 },
-  { id: "Submitted", name: "Submitted", step: 3 },
-  { id: "Under Review", name: "Under Review", step: 4 },
-  { id: "Accepted", name: "Accepted", step: 5 },
-  { id: "Paid", name: "Paid", step: 6, color: "#10B981" },
-];
-
 export default function ClaimProgressBar({
   status,
+  currentStageId,
+  stages: propStages,
   onStatusChange,
   interactive = true,
 }: ClaimProgressBarProps) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [showPopover, setShowPopover] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Fallback internal stages from store if propStages is not provided
+  const [internalStages, setInternalStages] = useState<ClaimStageItem[]>(() => {
+    const proc = getStoredProcesses().find((p) => p.entityType === "insurance") || DEFAULT_ENTITY_PROCESSES.insurance;
+    return proc.stages;
+  });
+
+  useEffect(() => {
+    if (propStages && propStages.length > 0) return;
+    const handleUpdate = () => {
+      const proc = getStoredProcesses().find((p) => p.entityType === "insurance") || DEFAULT_ENTITY_PROCESSES.insurance;
+      setInternalStages(proc.stages);
+    };
+    window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, [propStages]);
+
+  const effectiveStages = useMemo(() => {
+    if (propStages && propStages.length > 0) return propStages;
+    return internalStages;
+  }, [propStages, internalStages]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -36,62 +70,141 @@ export default function ClaimProgressBar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Determine active step position (1-6)
-  let activeIndex = 1;
-  if (status === "Draft") activeIndex = 1;
-  else if (status === "Ready to Submit") activeIndex = 2;
-  else if (status === "Submitted") activeIndex = 3;
-  else if (status === "Under Review") activeIndex = 4;
-  else if (status === "Accepted") activeIndex = 5;
-  else if (status === "Paid") activeIndex = 6;
-  else if (status === "Rejected") activeIndex = 3; // marked at submission/review point
+  // Determine active step position (1-based index) matching workflow configuration
+  const activeIndex = useMemo(() => {
+    if (currentStageId && currentStageId.trim() !== "") {
+      const idx = effectiveStages.findIndex(
+        (s) =>
+          s.id.toLowerCase() === currentStageId.trim().toLowerCase() ||
+          s.name.toLowerCase() === currentStageId.trim().toLowerCase()
+      );
+      if (idx !== -1) return idx + 1;
+    }
+    if (status && typeof status === "string") {
+      const clean = status.trim().toLowerCase();
+      const idx = effectiveStages.findIndex(
+        (s) =>
+          s.name.toLowerCase() === clean ||
+          s.id.toLowerCase() === clean ||
+          (s.systemCategory && s.systemCategory.toLowerCase() === clean)
+      );
+      if (idx !== -1) return idx + 1;
 
-  const isRejected = status === "Rejected";
-  const isPaid = status === "Paid";
+      // Semantic matching for standard CMS statuses
+      if (clean === "paid" || clean === "accepted" || clean === "verified") {
+        const wonIdx = effectiveStages.findIndex(
+          (s) =>
+            s.stageCategory === "success" ||
+            s.systemCategory === "verified" ||
+            s.systemCategory === "paid" ||
+            s.name.toLowerCase().includes("verified") ||
+            s.name.toLowerCase().includes("paid")
+        );
+        if (wonIdx !== -1) return wonIdx + 1;
+        return effectiveStages.length;
+      }
+      if (clean === "rejected" || clean === "failed" || clean === "denied") {
+        const lostIdx = effectiveStages.findIndex(
+          (s) =>
+            s.stageCategory === "lost" ||
+            s.systemCategory === "failed" ||
+            s.systemCategory === "denied" ||
+            s.name.toLowerCase().includes("fail") ||
+            s.name.toLowerCase().includes("denied") ||
+            s.name.toLowerCase().includes("reject")
+        );
+        if (lostIdx !== -1) return lostIdx + 1;
+        return effectiveStages.length;
+      }
+      if (clean === "draft") {
+        return 1;
+      }
+      if (clean === "ready to submit" || clean === "pending") {
+        const pendingIdx = effectiveStages.findIndex(
+          (s) =>
+            s.systemCategory === "pending" ||
+            s.name.toLowerCase().includes("pending") ||
+            s.name.toLowerCase().includes("ready")
+        );
+        if (pendingIdx !== -1) return pendingIdx + 1;
+        return 1;
+      }
+      if (clean === "submitted" || clean === "under review") {
+        return Math.max(1, Math.min(effectiveStages.length - 1, 2));
+      }
+    }
+    return 1;
+  }, [effectiveStages, currentStageId, status]);
+
+  const currentStageObj = activeIndex > 0 ? effectiveStages[activeIndex - 1] : null;
 
   return (
     <div className="relative inline-flex items-center gap-2" ref={containerRef}>
       <div
-        className="flex items-center gap-[3px] cursor-pointer py-1 px-1 rounded hover:bg-slate-100/60 transition-colors"
+        className="flex items-center justify-center -space-x-px cursor-pointer py-0.5 px-0.5 rounded hover:bg-slate-100/60 transition-colors"
         onClick={() => {
           if (interactive && onStatusChange) {
             setShowPopover(!showPopover);
           }
         }}
-        title={`Current stage: ${status}. Click to change stage.`}
+        title={`Current stage: ${currentStageObj?.name || status || "Pending"}. Click to change stage.`}
       >
-        {/* Render 6 Visual Block Segments */}
-        {CLAIM_STAGE_BLOCKS.map((stg, i) => {
+        {/* Render dynamic workflow stages with no gaps */}
+        {effectiveStages.map((stg, i) => {
           const segIdx = i + 1;
-          const isCompleted = segIdx < activeIndex;
-          const isActive = segIdx === activeIndex;
-          const isFilled = isCompleted || isActive;
+          const isStgLost =
+            stg.isFinalStage ||
+            stg.isFinal ||
+            stg.stageCategory === "lost" ||
+            stg.systemCategory === "failed" ||
+            stg.systemCategory === "denied" ||
+            stg.systemCategory === "rejected" ||
+            stg.name.toLowerCase().includes("fail") ||
+            stg.name.toLowerCase().includes("denied") ||
+            stg.name.toLowerCase().includes("reject") ||
+            stg.name.toLowerCase().includes("lost");
+
+          const isCurrentLost = Boolean(
+            currentStageObj &&
+              (currentStageObj.isFinalStage ||
+                currentStageObj.isFinal ||
+                currentStageObj.stageCategory === "lost" ||
+                currentStageObj.systemCategory === "failed" ||
+                currentStageObj.systemCategory === "denied" ||
+                currentStageObj.name.toLowerCase().includes("fail") ||
+                currentStageObj.name.toLowerCase().includes("denied") ||
+                currentStageObj.name.toLowerCase().includes("reject"))
+          );
+
+          const isActive = activeIndex > 0 && segIdx === activeIndex;
+          const isCompleted = activeIndex > 0 && segIdx < activeIndex && !isStgLost;
           const isHovered = hoveredIdx === segIdx;
+          const stgColor = stg.color || CHEVRON_PALETTE[i % CHEVRON_PALETTE.length] || "#1E88E5";
 
-          let bg = "transparent";
-          let border = "1px solid #E2E8F0";
+          let bg = "#E2E8F0";
+          let border = "1px solid #CBD5E1";
+          let opacity = 0.9;
 
-          if (isRejected) {
-            if (isActive || isCompleted) {
-              bg = "#EF4444";
-              border = "none";
-            }
-          } else if (isPaid) {
-            bg = "#10B981"; // Emerald green across completed pipeline for Paid
-            border = "none";
-          } else if (status === "Under Review" && isActive) {
-            bg = "#8B5CF6"; // Purple for review
-            border = "none";
-          } else if (status === "Accepted" && (isActive || isCompleted)) {
-            bg = "#3B82F6"; // Blue for accepted
-            border = "none";
-          } else if (isFilled) {
-            bg = "#1E88E5"; // Vibrant blue
-            border = "none";
+          if (isActive) {
+            bg = stgColor;
+            border = "1.5px solid #0F172A";
+            opacity = 1;
+          } else if (isCompleted) {
+            bg = stgColor;
+            border = `1px solid ${stgColor}`;
+            opacity = 0.9;
+          } else {
+            bg = "#E2E8F0";
+            border = "1px solid #CBD5E1";
+            opacity = 0.9;
           }
 
           return (
-            <div key={stg.id} className="relative">
+            <div
+              key={stg.id || `stage-${i}`}
+              className="relative"
+              style={{ zIndex: isActive ? 10 : isHovered ? 20 : 1 }}
+            >
               {/* Dark Tooltip on Hover */}
               {isHovered && !showPopover && (
                 <div
@@ -106,6 +219,7 @@ export default function ClaimProgressBar({
                   }}
                 >
                   {stg.name}
+                  {isActive ? " (Current)" : isCompleted ? " (Completed)" : ""}
                 </div>
               )}
 
@@ -114,7 +228,7 @@ export default function ClaimProgressBar({
                 onClick={(e) => {
                   e.stopPropagation();
                   if (interactive && onStatusChange) {
-                    onStatusChange(stg.id);
+                    onStatusChange(stg.id, stg.name);
                   }
                 }}
                 onMouseEnter={() => setHoveredIdx(segIdx)}
@@ -122,9 +236,10 @@ export default function ClaimProgressBar({
                 style={{
                   width: "18px",
                   height: "8px",
-                  borderRadius: "2px",
+                  borderRadius: "0px",
                   backgroundColor: bg,
                   border: border,
+                  opacity: opacity,
                   cursor: interactive && onStatusChange ? "pointer" : "default",
                   display: "block",
                   padding: 0,
@@ -139,47 +254,40 @@ export default function ClaimProgressBar({
         })}
       </div>
 
-      {/* Popover on click to change stage */}
+      {/* Popover on click to change stage from configured workflow */}
       {showPopover && (
-        <div className="absolute left-0 top-full mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 text-xs text-left">
-          <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1">
-            Change Claim Stage
+        <div className="absolute left-0 top-full mt-1 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 text-xs text-left">
+          <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1 flex items-center justify-between">
+            <span>Change Stage</span>
+            <span className="font-normal text-slate-400">({effectiveStages.length} Stages)</span>
           </div>
-          {CLAIM_STAGE_BLOCKS.map((stg) => (
-            <button
-              key={stg.id}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onStatusChange) onStatusChange(stg.id);
-                setShowPopover(false);
-              }}
-              className={`w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center justify-between font-medium cursor-pointer ${
-                status === stg.id ? "bg-blue-50 font-bold text-blue-600" : "text-slate-700"
-              }`}
-            >
-              <span>
-                {stg.step}. {stg.name}
-              </span>
-              {status === stg.id && <span className="text-blue-600 font-bold">✓</span>}
-            </button>
-          ))}
-          <div className="border-t border-slate-100 mt-1 pt-1">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onStatusChange) onStatusChange("Rejected");
-                setShowPopover(false);
-              }}
-              className={`w-full text-left px-3 py-1.5 hover:bg-red-50 flex items-center justify-between font-medium text-red-600 cursor-pointer ${
-                status === "Rejected" ? "bg-red-50 font-bold" : ""
-              }`}
-            >
-              <span>Mark as Rejected</span>
-              {status === "Rejected" && <span className="font-bold">✓</span>}
-            </button>
-          </div>
+          {effectiveStages.map((stg, i) => {
+            const isSelected = activeIndex === i + 1;
+            const stageColor = stg.color || CHEVRON_PALETTE[i % CHEVRON_PALETTE.length] || "#1E88E5";
+            return (
+              <button
+                key={stg.id || `pop-${i}`}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onStatusChange) onStatusChange(stg.id, stg.name);
+                  setShowPopover(false);
+                }}
+                className={`w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center justify-between font-medium cursor-pointer transition-colors ${
+                  isSelected ? "bg-blue-50 font-bold text-blue-600" : "text-slate-700"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: stageColor }}
+                  />
+                  <span>{stg.name}</span>
+                </div>
+                {isSelected && <span className="text-blue-600 font-bold">✓</span>}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

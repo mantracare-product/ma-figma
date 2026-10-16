@@ -1038,7 +1038,8 @@ export default function Process() {
 
   const targetProcessFromNav = useMemo(() => {
     const params = new URLSearchParams(location.search);
-    const targetEntity = params.get("entity") || (location.state as any)?.entity;
+    let targetEntity = params.get("entity") || (location.state as any)?.entity;
+    if (targetEntity === "claim") targetEntity = "insurance";
     const targetProcessId = params.get("processId") || params.get("process") || (location.state as any)?.processId;
     const targetProcessName = params.get("processName") || params.get("name") || (location.state as any)?.processName;
     if (!targetProcessId && !targetProcessName && !targetEntity) return null;
@@ -1061,7 +1062,7 @@ export default function Process() {
     return null;
   });
   const [selectedEntity, setSelectedEntity] = useState<EntityType>(() => {
-    if (targetProcessFromNav?.entityType) return targetProcessFromNav.entityType;
+    if (targetProcessFromNav?.entityType) return (targetProcessFromNav.entityType === "claim" ? "insurance" : targetProcessFromNav.entityType) as EntityType;
     return "client";
   });
   const [replacementStageId, setReplacementStageId] = useState<string>("");
@@ -1075,7 +1076,8 @@ export default function Process() {
 
   useEffect(() => {
     if (targetProcessFromNav) {
-      setSelectedEntity(targetProcessFromNav.entityType || "client");
+      const ent = targetProcessFromNav.entityType === "claim" ? "insurance" : (targetProcessFromNav.entityType || "client");
+      setSelectedEntity(ent as EntityType);
       setSelectedProcess(targetProcessFromNav.id);
       setViewMode("process");
       setExpandedStage(null);
@@ -1086,8 +1088,7 @@ export default function Process() {
     { id: "client", label: "Processes", icon: GitBranch },
     { id: "appointment", label: "Appointments", icon: Calendar },
     { id: "invoice", label: "Invoices", icon: FileText },
-    { id: "insurance", label: "Insurance", icon: Shield },
-    { id: "claim", label: "Claims", icon: ClipboardList },
+    { id: "insurance", label: "Insurance & Claims", icon: Shield },
   ];
 
   const entityModes = useMemo(() => {
@@ -1128,14 +1129,16 @@ export default function Process() {
       if (p.permissions?.canHide === false) return false;
       return isProcessMatchingOrg(p, organization);
     });
-    // For appointment entity, allow multiple processes matching the client organization's category, industry, and location
-    if (selectedEntity === "appointment") {
+    // For appointment and insurance entities, allow multiple processes matching the client organization's category, industry, and location
+    if (selectedEntity === "appointment" || selectedEntity === "insurance") {
       if (matching.length > 0) {
         return matching;
       }
-      return entityFilteredProcesses.length > 0 ? entityFilteredProcesses : [DEFAULT_ENTITY_PROCESSES.appointment];
+      return entityFilteredProcesses.length > 0
+        ? entityFilteredProcesses
+        : [selectedEntity === "appointment" ? DEFAULT_ENTITY_PROCESSES.appointment : DEFAULT_ENTITY_PROCESSES.insurance];
     }
-    // For other non-client entities (invoice, insurance, claim), display one process matching the organization's industry & category
+    // For other non-client entities (invoice, claim), display one process matching the organization's industry & category
     if (selectedEntity !== "client") {
       if (matching.length > 0) {
         return [matching[0]];
@@ -2773,14 +2776,19 @@ export default function Process() {
     }
 
     const isAppointment = selectedEntity === "appointment";
+    const isInsurance = selectedEntity === "insurance";
     const newProcessId = `proc-${selectedEntity}-${Date.now()}`;
+    const targetEntityType: EntityType = isAppointment ? "appointment" : isInsurance ? "insurance" : "client";
+
+    const defaultStages = DEFAULT_ENTITY_PROCESSES[targetEntityType as Exclude<EntityType, "client">]?.stages;
+    const initialStages = defaultStages ? defaultStages.map((st, i) => ({ ...st, id: `${st.id}-${Date.now()}-${i}` })) : [];
 
     const process: Process = {
       id: newProcessId,
       ...newProcess,
       assignedToUserId: 1,
-      stages: [], // Newly added process has no predefined stages
-      entityType: isAppointment ? "appointment" : "client",
+      stages: initialStages,
+      entityType: targetEntityType,
       industryCategory: organization?.industryCategory || "All",
       industry: organization?.industry || "All",
       locations: organization?.location ? [organization.location] : (organization?.locations || ["All"]),
@@ -2791,7 +2799,7 @@ export default function Process() {
               industryCategory: organization.industryCategory,
               industries: organization.industry ? [organization.industry] : [],
               locations: organization.location ? [organization.location] : [],
-              entities: isAppointment ? ["appointment"] : ["client", "process"],
+              entities: isAppointment ? ["appointment"] : isInsurance ? ["insurance"] : ["client", "process"],
             },
           ]
         : undefined,
@@ -2811,7 +2819,7 @@ export default function Process() {
     setViewMode("process");
     setNewProcess({ name: "", description: "" });
     setShowAddProcessModal(false);
-    toast.success(`${isAppointment ? "Appointment process" : "Process"} added successfully`);
+    toast.success(`${isAppointment ? "Appointment workflow" : isInsurance ? "Insurance & Claim workflow" : "Workflow"} added successfully`);
   };
 
   const handleUpdateProcess = (
@@ -2833,7 +2841,7 @@ export default function Process() {
 
   const handleDeleteProcess = (processId: string) => {
     const target = processes.find((p) => p.id === processId);
-    if (target?.entityType && target.entityType !== "client" && target.entityType !== "appointment") {
+    if (target?.entityType && target.entityType !== "client" && target.entityType !== "appointment" && target.entityType !== "insurance") {
       toast.error("Standard entity processes cannot be deleted.");
       return;
     }
@@ -2843,6 +2851,14 @@ export default function Process() {
       processes.filter((p) => p.entityType === "appointment").length <= 1
     ) {
       toast.error("Default appointment process cannot be deleted when it is the only process.");
+      return;
+    }
+    if (
+      target?.entityType === "insurance" &&
+      target.id === DEFAULT_ENTITY_PROCESSES.insurance.id &&
+      processes.filter((p) => p.entityType === "insurance").length <= 1
+    ) {
+      toast.error("Default insurance process cannot be deleted when it is the only process.");
       return;
     }
     setProcesses((prev) => prev.filter((p) => p.id !== processId));
@@ -3508,7 +3524,7 @@ export default function Process() {
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search processes..."
           filterPresets={
-            selectedEntity === "client" || selectedEntity === "appointment"
+            selectedEntity === "client" || selectedEntity === "appointment" || selectedEntity === "insurance"
               ? [
                 {
                   id: "all",
@@ -3546,9 +3562,14 @@ export default function Process() {
           ]}
           onExport={() => setShowExportModal(true)}
           primaryAction={
-            selectedEntity === "client" || selectedEntity === "appointment"
+            selectedEntity === "client" || selectedEntity === "appointment" || selectedEntity === "insurance"
               ? {
-                label: selectedEntity === "appointment" ? "Add Appointment Workflow" : "Add Workflow",
+                label:
+                  selectedEntity === "appointment"
+                    ? "Add Appointment Workflow"
+                    : selectedEntity === "insurance"
+                    ? "Add Insurance & Claim Workflow"
+                    : "Add Workflow",
                 icon: <Plus className="w-3.5 h-3.5" />,
                 onClick: () => {
                   setNewProcess({ name: "", description: "" });
@@ -5572,7 +5593,13 @@ export default function Process() {
             setShowAddProcessModal(false);
             setNewProcess({ name: "", description: "" });
           }}
-          title={selectedEntity === "appointment" ? "Add Appointment Workflow" : "Add Workflow"}
+          title={
+            selectedEntity === "appointment"
+              ? "Add Appointment Workflow"
+              : selectedEntity === "insurance"
+              ? "Add Insurance & Claim Workflow"
+              : "Add Workflow"
+          }
           footer={
             <>
               <Button variant="outline" onClick={() => {
@@ -5585,7 +5612,11 @@ export default function Process() {
                 variant="primary"
                 onClick={handleAddProcess}
               >
-                Add Workflow
+                {selectedEntity === "appointment"
+                  ? "Add Appointment Workflow"
+                  : selectedEntity === "insurance"
+                  ? "Add Insurance & Claim Workflow"
+                  : "Add Workflow"}
               </Button>
             </>
           }
@@ -5595,7 +5626,13 @@ export default function Process() {
               label="Process Name"
               value={newProcess.name}
               onChange={(e) => setNewProcess({ ...newProcess, name: e.target.value })}
-              placeholder={selectedEntity === "appointment" ? "e.g., Clinical Consultation Workflow" : "Enter process name"}
+              placeholder={
+                selectedEntity === "appointment"
+                  ? "e.g., Clinical Consultation Workflow"
+                  : selectedEntity === "insurance"
+                  ? "e.g., Pre-Authorization & Claims Workflow"
+                  : "Enter process name"
+              }
             />
             <div>
               <label className="block text-sm font-medium mb-2">Process Description</label>

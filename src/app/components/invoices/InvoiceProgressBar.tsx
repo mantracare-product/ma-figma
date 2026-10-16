@@ -87,7 +87,7 @@ export default function InvoiceProgressBar({
   return (
     <div className="relative inline-block" ref={containerRef}>
       <div
-        className="flex items-center gap-[3px] justify-center cursor-pointer p-1 rounded hover:bg-slate-100/50 transition-colors"
+        className="flex items-center justify-center -space-x-px cursor-pointer p-0.5 rounded hover:bg-slate-100/50 transition-colors"
         onClick={() => {
           if (interactive && onStatusChange && !isVoid && !isCurrentLostStage) {
             setShowPopover(!showPopover);
@@ -132,7 +132,7 @@ export default function InvoiceProgressBar({
             opacity = 0.9;
           } else if (isOverdue && (isActive || isCompleted)) {
             bg = stg.systemCategory === "overdue" || isActive ? "#EF4444" : (stg.color || "#1E88E5");
-            border = "none";
+            border = "1.5px solid #EF4444";
           } else {
             bg = "#E2E8F0";
             border = "1px solid #CBD5E1";
@@ -140,7 +140,11 @@ export default function InvoiceProgressBar({
           }
 
           return (
-            <div key={stg.id} className="relative">
+            <div
+              key={stg.id}
+              className="relative"
+              style={{ zIndex: isActive ? 10 : isHovered ? 20 : 1 }}
+            >
               {/* Dark Tooltip on Hover */}
               {isHovered && !showPopover && (
                 <div
@@ -171,7 +175,7 @@ export default function InvoiceProgressBar({
                 style={{
                   width: "18px",
                   height: "8px",
-                  borderRadius: "2px",
+                  borderRadius: "0px",
                   backgroundColor: bg,
                   border: border,
                   opacity: opacity,
