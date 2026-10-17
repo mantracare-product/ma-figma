@@ -1,6 +1,12 @@
 export const WEBSITE_WIDGET_CONFIG_EVENT = "websiteWidgetConfig_updated";
 const STORAGE_KEY = "websiteWidgetConfig";
 
+export interface RequirementItem {
+  id: string;
+  label: string;
+  processId: string;
+}
+
 export interface WebsiteWidgetConfig {
   themeColor: string;
   themeMode: "light" | "dark";
@@ -29,8 +35,10 @@ export interface WebsiteWidgetConfig {
     name: boolean;
     email: boolean;
     phone: boolean;
-    processSelect: boolean;
+    requirement: boolean;
+    processSelect?: boolean;
   };
+  requirements: RequirementItem[];
   defaultProcessId: string;
   processLabelMap: Record<string, string>;
 
@@ -45,6 +53,13 @@ export interface WebsiteWidgetConfig {
   agentDisplay: "user" | "custom" | "hide";
   customProfiles: Record<string, { name?: string; position?: string; image?: string }>;
 }
+
+export const DEFAULT_REQUIREMENTS: RequirementItem[] = [
+  { id: "req-1", label: "Book an Appointment", processId: "1" },
+  { id: "req-2", label: "Insurance & Coverage Inquiry", processId: "2" },
+  { id: "req-3", label: "Billing & Invoices", processId: "3" },
+  { id: "req-4", label: "General Health Consultation", processId: "1" },
+];
 
 const DEFAULT_WIDGET_CONFIG: WebsiteWidgetConfig = {
   themeColor: "#1456f0",
@@ -71,8 +86,10 @@ const DEFAULT_WIDGET_CONFIG: WebsiteWidgetConfig = {
     name: true,
     email: true,
     phone: true,
+    requirement: true,
     processSelect: true,
   },
+  requirements: DEFAULT_REQUIREMENTS,
   defaultProcessId: "1", // Client Intake
   processLabelMap: {
     "1": "Book an Intake Appointment",
@@ -107,7 +124,11 @@ export function getWebsiteWidgetConfig(): WebsiteWidgetConfig {
       formFields: {
         ...DEFAULT_WIDGET_CONFIG.formFields,
         ...(parsed.formFields || {}),
+        requirement: parsed.formFields?.requirement !== undefined ? parsed.formFields.requirement : true,
       },
+      requirements: Array.isArray(parsed.requirements) && parsed.requirements.length > 0
+        ? parsed.requirements
+        : DEFAULT_REQUIREMENTS,
       processLabelMap: {
         ...DEFAULT_WIDGET_CONFIG.processLabelMap,
         ...(parsed.processLabelMap || {}),

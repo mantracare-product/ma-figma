@@ -904,6 +904,7 @@ export default function Chats() {
   const [showAssignBotModal, setShowAssignBotModal] = useState(false);
   const [showEnrollCampaignModal, setShowEnrollCampaignModal] = useState(false);
   const [showTestProcessDrawer, setShowTestProcessDrawer] = useState(false);
+  const widgetSettingsSaveRef = useRef<(() => void) | null>(null);
 
   const handleChannelChange = (channel: "whatsapp" | "sms" | "website") => {
     setChannelFilter(channel);
@@ -1769,6 +1770,16 @@ export default function Chats() {
                     handleCreateNewTemplate();
                   },
                 }
+              : subMode === "settings"
+              ? {
+                  label: "Save Configuration",
+                  icon: <Check className="w-4 h-4" />,
+                  onClick: () => {
+                    if (widgetSettingsSaveRef.current) {
+                      widgetSettingsSaveRef.current();
+                    }
+                  },
+                }
               : undefined
           }
         />
@@ -2483,6 +2494,9 @@ export default function Chats() {
         {activeTab === "website-settings" && (
           <div className="bg-white rounded-2xl border border-gray-200/90 shadow-xs p-6 overflow-y-auto">
             <WebsiteWidgetSettingsTab
+              registerSaveHandler={(fn) => {
+                widgetSettingsSaveRef.current = fn;
+              }}
               onNavigateToInbox={() => {
                 setActiveTab("chats");
                 setChannelFilter("website");

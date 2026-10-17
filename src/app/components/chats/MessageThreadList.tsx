@@ -24,14 +24,19 @@ export default function MessageThreadList({
   messages = [],
   emptyMessage = "No messages in this conversation yet.",
 }: MessageThreadListProps) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
   }, [messages.length]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-[#fafafa] space-y-3.5">
+    <div
+      ref={containerRef}
+      className="flex-1 overflow-y-auto p-6 bg-[#fafafa] space-y-3.5"
+    >
       {messages.length === 0 ? (
         <div className="text-center py-12 text-slate-400 text-sm italic">
           {emptyMessage}
@@ -107,7 +112,6 @@ export default function MessageThreadList({
           );
         })
       )}
-      <div ref={bottomRef} />
     </div>
   );
 }

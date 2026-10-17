@@ -39,9 +39,11 @@ import { getStoredTeamMembers } from "../../../lib/teamStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import { processWebsiteVisitorSubmission } from "../../../lib/websiteChatSimulator";
 import { toast } from "sonner";
+import { InfoTooltip } from "../help/InfoTooltip";
 
 interface WebsiteWidgetSettingsTabProps {
   onNavigateToInbox?: () => void;
+  registerSaveHandler?: (fn: () => void) => void;
 }
 
 const PRESET_COLORS = [
@@ -73,7 +75,7 @@ interface MockAgent {
   image: string;
 }
 
-export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteWidgetSettingsTabProps) {
+export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSaveHandler }: WebsiteWidgetSettingsTabProps) {
   const [config, setConfig] = useState<WebsiteWidgetConfig>(getWebsiteWidgetConfig);
   const processes = getStoredProcesses();
   const teamMembers = getStoredTeamMembers();
@@ -132,10 +134,17 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
   const [simName, setSimName] = useState("");
   const [simEmail, setSimEmail] = useState("");
   const [simPhone, setSimPhone] = useState("");
+  const [simRequirementId, setSimRequirementId] = useState("");
   const [simMessage, setSimMessage] = useState("");
   const [simHistory, setSimHistory] = useState<Array<{ sender: "user" | "bot"; text: string; header?: any; buttons?: any[] }>>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedSnippet, setCopiedSnippet] = useState(false);
+
+  useEffect(() => {
+    if (!simRequirementId && config.requirements?.length > 0) {
+      setSimRequirementId(config.requirements[0].id);
+    }
+  }, [config.requirements, simRequirementId]);
 
   // Build combined agent list from team store + seeds
   const availableAgents: MockAgent[] = [
@@ -195,6 +204,42 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
   const handleSave = () => {
     saveWebsiteWidgetConfig(config);
     toast.success("Website widget settings saved successfully!");
+  };
+
+  useEffect(() => {
+    if (registerSaveHandler) {
+      registerSaveHandler(handleSave);
+    }
+  }, [registerSaveHandler, config]);
+
+  const handleAddRequirement = () => {
+    const newReqId = `req-${Date.now()}`;
+    const newReq = {
+      id: newReqId,
+      label: "New Requirement",
+      processId: processes[0]?.id || "1",
+    };
+    setConfig((prev) => ({
+      ...prev,
+      requirements: [...(prev.requirements || []), newReq],
+    }));
+  };
+
+  const handleUpdateRequirement = (index: number, field: "label" | "processId", value: string) => {
+    setConfig((prev) => {
+      const updated = [...(prev.requirements || [])];
+      if (updated[index]) {
+        updated[index] = { ...updated[index], [field]: value };
+      }
+      return { ...prev, requirements: updated };
+    });
+  };
+
+  const handleRemoveRequirement = (index: number) => {
+    setConfig((prev) => ({
+      ...prev,
+      requirements: (prev.requirements || []).filter((_, i) => i !== index),
+    }));
   };
 
 
@@ -261,13 +306,20 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
       return;
     }
 
+    const chosenReq = (config.requirements || []).find((r) => r.id === simRequirementId) || config.requirements?.[0];
+    const targetProcessId = (config.formFields.requirement ?? true) && chosenReq
+      ? chosenReq.processId
+      : config.autoCreateProcessId || processes[0]?.id || "1";
+    const targetReqLabel = (config.formFields.requirement ?? true) && chosenReq ? chosenReq.label : undefined;
+
     setIsSubmitting(true);
     const result = processWebsiteVisitorSubmission({
       name: simName,
       email: simEmail,
       phone: simPhone,
-      processId: processes[0]?.id || "1",
+      processId: targetProcessId,
       firstMessage: simMessage,
+      requirementLabel: targetReqLabel,
     });
 
     setIsSubmitting(false);
@@ -282,8 +334,9 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
           buttons: result.buttons,
         },
       ]);
+      const reqInfo = targetReqLabel ? ` (${targetReqLabel})` : "";
       toast.success(
-        `Website visitor created! Client: "${simName}" enrolled in "${result.processName}" at stage "${result.stageName}".`,
+        `Website visitor created! Client: "${simName}" enrolled in "${result.processName}"${reqInfo} at stage "${result.stageName}".`,
         {
           action: onNavigateToInbox ? {
             label: "Open Inbox",
@@ -300,31 +353,9 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
 
   return (
     <div className="space-y-6 pb-12">
-      {/* ── Top Header Bar (DESIGN.md §1 & §4) ── */}
-      <div className="flex items-center justify-between pb-4 border-b border-[#E2E8F0]">
-        <div>
-          <h2 className="text-xl font-bold text-[#1E293B] flex items-center gap-2" style={{ fontFamily: "Outfit, sans-serif" }}>
-            <Globe className="w-5 h-5 text-[#1456f0]" /> Website Widget Settings
-          </h2>
-          <p className="text-xs text-[#64748b] mt-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-            Configure theme, intake forms, working hours, chat routing, and embed the chatbot on your site.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={handleSave}
-          className="px-4 py-2 bg-[#1456f0] hover:bg-[#1044be] text-white rounded-xl font-semibold text-xs transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
-          style={{ fontFamily: "DM Sans, sans-serif" }}
-        >
-          <Check className="w-3.5 h-3.5" />
-          Save Configuration
-        </button>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* ── Left Column: Configuration Settings ── */}
         <div className="lg:col-span-7 space-y-5">
-
 
           {/* ── Collapsible Section 1: Website Widget Section ── */}
           <div className="border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#fafafa]/50 shadow-xs">
@@ -337,13 +368,13 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
                 <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#1456f0] flex items-center justify-center font-bold">
                   <Sliders className="w-4 h-4" />
                 </div>
-                <div className="text-left">
+                <div className="text-left flex items-center gap-2">
                   <h3 className="text-sm font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
                     Website Widget Section
                   </h3>
-                  <p className="text-[11px] text-[#64748b]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    Appearance, branding, location working hours, and pre-chat intake
-                  </p>
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <InfoTooltip text="Appearance, branding, location working hours, and pre-chat intake" />
+                  </span>
                 </div>
               </div>
               <ChevronDown
@@ -431,26 +462,12 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Welcome Greeting Message
-                    </label>
-                    <textarea
-                      value={config.welcomeMessage}
-                      onChange={(e) => setConfig((prev) => ({ ...prev, welcomeMessage: e.target.value }))}
-                      rows={2}
-                      placeholder="Initial greeting shown to website visitors..."
-                      className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 text-[#1E293B] font-medium bg-white focus:border-[#1456f0] focus:ring-2 focus:ring-[#1456f0]/10 outline-none resize-none"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    />
-                  </div>
-
                   <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                    <div>
+                    <div className="flex items-center gap-1.5">
                       <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "DM Sans, sans-serif" }}>
                         Remove &ldquo;Powered by MantraAssist&rdquo; signature
                       </span>
-                      <p className="text-[11px] text-[#64748b]">White-label the chatbot widget header and footer</p>
+                      <InfoTooltip text="White-label the chatbot widget header and footer" />
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -467,12 +484,12 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
                 {/* 3. Working Time Preferences (Location Schedule Based) */}
                 <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
                   <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                    <div>
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B] flex items-center gap-2" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        <Clock className="w-4 h-4 text-[#1456f0]" />
-                        <span>Working Time Preferences</span>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-[#1456f0]" />
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Working Time Preferences
                       </h3>
-                      <p className="text-[11px] text-[#64748b] mt-0.5">Show the widget only during specific business work hours</p>
+                      <InfoTooltip text="Show the widget only during specific business work hours based on location schedule" />
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -529,18 +546,18 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
                                 <Building2 className="w-3.5 h-3.5 text-[#1456f0]" />
                                 <span>{activeLoc.name}</span>
                               </span>
-                              <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
-                                Synced with Location
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                                  Synced with Location
+                                </span>
+                                <InfoTooltip text="Working hours and days are automatically inherited from this location's schedule configured in Organization Settings." />
+                              </div>
                             </div>
                             <div className="text-[11px] text-[#475569] space-y-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
                               <div><strong className="text-[#1E293B]">Address:</strong> {activeLoc.address}</div>
                               <div><strong className="text-[#1E293B]">Work Hours:</strong> {activeLoc.schedule}</div>
                               <div><strong className="text-[#1E293B]">Timezone:</strong> {activeLoc.timezone}</div>
                             </div>
-                            <p className="text-[10px] text-[#64748b] pt-1 border-t border-blue-100/60">
-                              Working hours and days are automatically inherited from this location&apos;s schedule configured in Organization Settings.
-                            </p>
                           </div>
                         );
                       })()}
@@ -552,10 +569,11 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
 
                 {/* 5. Pre-Chat Form */}
                 <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
-                  <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
                       <Layers className="w-4 h-4 text-[#1456f0]" />
                       <span>Pre-Chat Form</span>
+                      <InfoTooltip text="Intake fields collected from web visitors before initiating the conversation" />
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -569,12 +587,9 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
                   </div>
 
                   {config.enablePreChatForm && (
-                    <>
-                      <p className="text-xs text-[#64748b]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Select the intake fields collected from web visitors before initiating the conversation:
-                      </p>
-
-                      <div className="grid grid-cols-3 gap-3 pt-1">
+                    <div className="space-y-4 pt-1">
+                      {/* Form Fields: Full Name, Email, Phone, Requirement */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                         <label className="flex items-center gap-2 text-xs text-[#1E293B] p-2.5 border border-[#E2E8F0] rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
                           <input
                             type="checkbox"
@@ -619,16 +634,31 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
                           />
                           <Phone className="w-3.5 h-3.5 text-[#64748b]" /> Phone Number
                         </label>
+
+                        <label className="flex items-center gap-2 text-xs text-[#1E293B] p-2.5 border border-[#E2E8F0] rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={config.formFields.requirement ?? true}
+                            onChange={(e) =>
+                              setConfig((prev) => ({
+                                ...prev,
+                                formFields: { ...prev.formFields, requirement: e.target.checked, processSelect: e.target.checked },
+                              }))
+                            }
+                            className="rounded border-gray-300 text-[#1456f0] focus:ring-[#1456f0]"
+                          />
+                          <HelpCircle className="w-3.5 h-3.5 text-[#64748b]" /> Requirement
+                        </label>
                       </div>
 
-                      {/* Auto Create the Client */}
-                      <div className="p-3.5 border border-[#E2E8F0] rounded-xl bg-gray-50/50 space-y-3 mt-3">
+                      {/* Auto Create the Client & Requirement to Process Mapping */}
+                      <div className="p-3.5 border border-[#E2E8F0] rounded-xl bg-gray-50/50 space-y-3">
                         <div className="flex items-center justify-between">
-                          <div>
+                          <div className="flex items-center gap-1.5">
                             <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "DM Sans, sans-serif" }}>
                               Auto Create the Client
                             </span>
-                            <p className="text-[11px] text-[#64748b]">Automatically enroll new visitors as CRM clients in workflow</p>
+                            <InfoTooltip text="Automatically enroll new visitors as CRM clients in workflow" />
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
                             <input
@@ -642,40 +672,93 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
                         </div>
 
                         {config.autoCreateClientEnabled && (
-                          <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-200/60">
-                            <div>
-                              <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                Process
-                              </label>
-                              <select
-                                value={config.autoCreateProcessId}
-                                onChange={(e) => setConfig((prev) => ({ ...prev, autoCreateProcessId: e.target.value }))}
-                                className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                              >
-                                {processes.map((p) => (
-                                  <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
-                              </select>
-                            </div>
+                          (config.formFields.requirement ?? true) ? (
+                            <div className="space-y-2.5 pt-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                  Requirement to Process Mapping
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={handleAddRequirement}
+                                  className="text-[11px] font-semibold text-[#1456f0] hover:underline flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Plus className="w-3 h-3" /> Add Requirement
+                                </button>
+                              </div>
 
-                            <div>
-                              <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                Initial Stage
-                              </label>
-                              <select
-                                value={config.autoCreateStage}
-                                onChange={(e) => setConfig((prev) => ({ ...prev, autoCreateStage: e.target.value }))}
-                                className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                              >
-                                {processStages.map((stage) => (
-                                  <option key={stage} value={stage}>{stage}</option>
+                              <div className="space-y-2">
+                                {(config.requirements || []).map((req, idx) => (
+                                  <div key={req.id || idx} className="flex items-center gap-2">
+                                    <input
+                                      type="text"
+                                      value={req.label}
+                                      onChange={(e) => handleUpdateRequirement(idx, "label", e.target.value)}
+                                      placeholder="Requirement Option (e.g. Booking)"
+                                      className="flex-1 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                                    />
+                                    <span className="text-xs text-[#94a3b8] font-mono">→</span>
+                                    <select
+                                      value={req.processId}
+                                      onChange={(e) => handleUpdateRequirement(idx, "processId", e.target.value)}
+                                      className="flex-1 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                                    >
+                                      {processes.map((p) => (
+                                        <option key={p.id} value={p.id}>
+                                          {p.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {(config.requirements || []).length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveRequirement(idx)}
+                                        className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer transition-colors"
+                                        title="Remove requirement"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
                                 ))}
-                              </select>
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-3 pt-1">
+                              <div>
+                                <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                  Process
+                                </label>
+                                <select
+                                  value={config.autoCreateProcessId}
+                                  onChange={(e) => setConfig((prev) => ({ ...prev, autoCreateProcessId: e.target.value }))}
+                                  className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                                >
+                                  {processes.map((p) => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                  Initial Stage
+                                </label>
+                                <select
+                                  value={config.autoCreateStage}
+                                  onChange={(e) => setConfig((prev) => ({ ...prev, autoCreateStage: e.target.value }))}
+                                  className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                                >
+                                  {processStages.map((stage) => (
+                                    <option key={stage} value={stage}>{stage}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          )
                         )}
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
@@ -693,13 +776,13 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
                 <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#1456f0] flex items-center justify-center font-bold">
                   <GitFork className="w-4 h-4" />
                 </div>
-                <div className="text-left">
+                <div className="text-left flex items-center gap-2">
                   <h3 className="text-sm font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
                     Chat Routing Settings
                   </h3>
-                  <p className="text-[11px] text-[#64748b]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    First responder, employee queue assignment, automated client creation & agent profile display
-                  </p>
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <InfoTooltip text="First responder, employee queue assignment, automated client creation & agent profile display" />
+                  </span>
                 </div>
               </div>
               <ChevronDown
@@ -713,12 +796,13 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
               <div className="p-4 space-y-5">
                 {/* 1. First Responder */}
                 <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B] border-b border-gray-100 pb-3" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    <ShieldCheck className="w-4 h-4 text-[#1456f0]" />
-                    <span>First Responder</span>
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <ShieldCheck className="w-4 h-4 text-[#1456f0]" />
+                      <span>First Responder</span>
+                    </div>
+                    <InfoTooltip text="Select who responds first when a visitor initiates a chat" />
                   </div>
-
-                  <p className="text-xs text-[#64748b]">Select who responds first when a visitor initiates a chat:</p>
 
                   <div className="flex items-center gap-6">
                     <label className="flex items-center gap-2 text-xs font-bold text-[#1E293B] cursor-pointer" style={{ fontFamily: "DM Sans, sans-serif" }}>
@@ -758,9 +842,12 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
 
                   {/* Agent Queue Multi-select */}
                   <div className="space-y-1.5" ref={agentSelectRef}>
-                    <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Agent Queue ({config.agentQueue?.length || 0} assigned)
-                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Agent Queue ({config.agentQueue?.length || 0} assigned)
+                      </label>
+                      <InfoTooltip text="Search and assign team members to the visitor chat queue" />
+                    </div>
 
                     <div
                       onClick={() => setAgentDropdownOpen(true)}
@@ -844,9 +931,12 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
 
                   {/* Distribute submissions among employees */}
                   <div>
-                    <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Distribute Submissions Among Employees
-                    </label>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Distribute Submissions Among Employees
+                      </label>
+                      <InfoTooltip text="Routing strategy: To everybody (simultaneous), evenly (round-robin), or as enqueued (sequential)" />
+                    </div>
                     <select
                       value={config.distribution}
                       onChange={(e) => setConfig((prev) => ({ ...prev, distribution: e.target.value as any }))}
@@ -868,9 +958,12 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Agent Information Display Mode
-                    </label>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Agent Information Display Mode
+                      </label>
+                      <InfoTooltip text="Choose how agent identities appear to website visitors: actual account, custom alias/avatar, or anonymous" />
+                    </div>
                     <select
                       value={config.agentDisplay}
                       onChange={(e) => setConfig((prev) => ({ ...prev, agentDisplay: e.target.value as any }))}
@@ -885,7 +978,12 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
 
                   {config.agentDisplay === "custom" && (
                     <div className="space-y-3 pt-2">
-                      <p className="text-xs text-[#64748b]">Configure custom aliases and avatars for queue agents:</p>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          Custom Profiles
+                        </span>
+                        <InfoTooltip text="Configure custom aliases and avatars for queue agents" />
+                      </div>
 
                       {(config.agentQueue || []).length === 0 ? (
                         <div className="p-4 border border-dashed border-gray-200 rounded-xl text-center text-xs text-slate-400">
@@ -993,6 +1091,7 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
                 <Code className="w-4 h-4 text-[#1456f0]" />
                 <span>&lt;&gt; Widget Code</span>
+                <InfoTooltip text="Paste this HTML snippet right before the closing </body> tag of your website to activate the chatbot widget" />
               </div>
               <button
                 type="button"
@@ -1004,10 +1103,6 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
                 {copiedSnippet ? "Copied to Clipboard" : "Copy to Clipboard"}
               </button>
             </div>
-
-            <p className="text-xs text-[#64748b]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-              Paste this HTML snippet right before the closing <code className="text-[#1456f0] bg-blue-50 px-1 py-0.5 rounded font-mono text-[11px]">&lt;/body&gt;</code> tag of your website to activate the chatbot widget.
-            </p>
 
             <div className="relative bg-[#0F172A] rounded-xl p-3.5 overflow-x-auto text-xs font-mono text-slate-200 border border-slate-800">
               <pre>{embedScriptSnippet}</pre>
@@ -1021,9 +1116,20 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
             <h3 className="text-sm font-bold text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
               <Sparkles className="w-4 h-4 text-[#1456f0]" /> Live Widget Simulator
             </h3>
-            <span className="text-[11px] bg-blue-50 text-[#1456f0] font-semibold px-2.5 py-0.5 rounded-full border border-blue-200">
-              Interactive Preview
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] bg-blue-50 text-[#1456f0] font-semibold px-2.5 py-0.5 rounded-full border border-blue-200">
+                Interactive Preview
+              </span>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="px-3.5 py-1.5 bg-[#1456f0] hover:bg-[#1044be] text-white rounded-xl font-semibold text-xs transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+              >
+                <Check className="w-3.5 h-3.5" />
+                Save Configuration
+              </button>
+            </div>
           </div>
 
           {/* Widget Card Container */}
@@ -1119,6 +1225,23 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox }: WebsiteW
                         className="w-full text-xs border border-[#E2E8F0] dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-[#1E293B] dark:text-white"
                         style={{ fontFamily: "DM Sans, sans-serif" }}
                       />
+                    </div>
+                  )}
+
+                  {config.enablePreChatForm && (config.formFields.requirement ?? true) && (
+                    <div>
+                      <select
+                        value={simRequirementId || config.requirements?.[0]?.id || ""}
+                        onChange={(e) => setSimRequirementId(e.target.value)}
+                        className="w-full text-xs border border-[#E2E8F0] dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-[#1E293B] dark:text-white outline-none focus:border-[#1456f0] cursor-pointer"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        {(config.requirements || []).map((req) => (
+                          <option key={req.id} value={req.id}>
+                            {req.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
 
