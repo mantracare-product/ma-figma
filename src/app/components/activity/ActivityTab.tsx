@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import {
@@ -8,7 +8,7 @@ import {
   Receipt, FileCheck, CreditCard, Mic, Sparkles, Stethoscope
 } from "lucide-react";
 import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
-import { EntityType } from "../../../lib/useProcessStore";
+import { EntityType, getStoredProcesses } from "../../../lib/useProcessStore";
 import TranscriptDetailDrawer from "../scribe/TranscriptDetailDrawer";
 import { getScribeSessionById, ScribeSession } from "../../../lib/scribeSessionStore";
 import {

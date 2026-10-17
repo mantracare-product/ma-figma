@@ -47,8 +47,10 @@ import {
   AlertCircle,
   AlertTriangle,
   Activity,
+  Mic,
 } from "lucide-react";
 import { toast } from "sonner";
+import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import ActivityTab, { ActivityLogEntry, ActivityType } from "../activity/ActivityTab";
 import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
@@ -394,6 +396,23 @@ export default function ProcessDetailDrawer({
   };
 
   const currentProcessId = (log as any)?.processId || (log as any)?.process || (log as any)?.processName;
+
+  // AI Scribe Consultation Drawer state (only available for appointment processes)
+  const [showScribeModal, setShowScribeModal] = useState(false);
+
+  const isAppointmentProcess = useMemo(() => {
+    if (!currentProcessId) return false;
+    const allProcs = getStoredProcesses();
+    const matched = allProcs.find(
+      (p) =>
+        p.id === currentProcessId ||
+        p.name?.toLowerCase() === String(currentProcessId).toLowerCase()
+    );
+    if (matched?.entityType === "appointment") return true;
+    if (matched?.name?.toLowerCase().includes("appointment")) return true;
+    if (String(currentProcessId).toLowerCase().includes("appointment")) return true;
+    return false;
+  }, [currentProcessId]);
 
   const [processSections, setProcessSections] = useState<OverviewSection[]>(() => {
     const customSecs = getSectionsForOrg("process", activeOrganization, currentProcessId).filter((s) => s.source !== "system");
@@ -1000,7 +1019,7 @@ export default function ProcessDetailDrawer({
         }}
       >
         <div
-          className="flex flex-col bg-[#F8FAFC] text-slate-800 shadow-2xl h-screen transition-all duration-300"
+          className="flex flex-col bg-[#F8FAFC] text-slate-800 shadow-2xl h-screen transition-all duration-300 relative"
           style={{
             width: "68vw",
             minWidth: "780px",
@@ -1428,7 +1447,32 @@ export default function ProcessDetailDrawer({
                 )}
               </div>
             )}
+
           </div>
+
+          {/* Floating AI Scribe Capsule Button in Bottom Corner of Process Drawer */}
+          {!showScribeModal && (
+            <div className="absolute bottom-5 right-6 pointer-events-auto z-30">
+              <button
+                type="button"
+                onClick={() => setShowScribeModal(true)}
+                className="group flex items-center gap-1.5 h-8 px-3 rounded-full bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#11161c] hover:to-[#22303e] text-white shadow-[0_4px_16px_rgba(0,0,0,0.35)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.45)] transition-all duration-200 hover:scale-[1.03] active:scale-[0.97] cursor-pointer border border-white/20 select-none backdrop-blur-md"
+                title="Open Ambient AI Scribe"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {/* Live Indicator Dot */}
+                <span className="relative flex h-2 w-2 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+
+                <Mic className="h-3.5 w-3.5 text-white group-hover:scale-110 transition-transform flex-shrink-0" />
+                <span className="text-xs font-semibold tracking-wide text-white leading-none">
+                  AI Scribe
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1460,6 +1504,30 @@ export default function ProcessDetailDrawer({
           toast.success(`Stage moved to ${requiredFieldsModalState.targetStageName} with required fields saved ✓`);
         }}
         zIndex={1000}
+      />
+
+      {/* AI Scribe Consultation Drawer for Process */}
+      <NewConsultationDrawer
+        isOpen={showScribeModal}
+        onClose={() => setShowScribeModal(false)}
+        initialClientId={clientId}
+        initialClientName={clientName}
+        initialEntityType={isAppointmentProcess ? "appointment" : "client"}
+        initialRecordId={log?.id || (currentProcessId ? `REC-${currentProcessId}` : undefined)}
+        initialProcessId={currentProcessId}
+        initialProcessName={log?.process}
+        zIndex={600}
+        onSessionCreated={(session) => {
+          setShowScribeModal(false);
+          toast.success(`AI Scribe consultation recorded for ${session.clientName || clientName}!`);
+          handleFillFromScribe({
+            transcriptPreview: session.transcript?.fullText?.slice(0, 300),
+            diagnosis: session.extractedData?.diagnosis,
+            chiefComplaint: session.extractedData?.chiefComplaint,
+            extractedData: session.extractedData,
+            scribeSessionId: session.id,
+          });
+        }}
       />
     </>
   );

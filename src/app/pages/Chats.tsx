@@ -2492,17 +2492,15 @@ export default function Chats() {
 
         {/* ── Tab: Website Widget Settings ── */}
         {activeTab === "website-settings" && (
-          <div className="bg-white rounded-2xl border border-gray-200/90 shadow-xs p-6 overflow-y-auto">
-            <WebsiteWidgetSettingsTab
-              registerSaveHandler={(fn) => {
-                widgetSettingsSaveRef.current = fn;
-              }}
-              onNavigateToInbox={() => {
-                setActiveTab("chats");
-                setChannelFilter("website");
-              }}
-            />
-          </div>
+          <WebsiteWidgetSettingsTab
+            registerSaveHandler={(fn) => {
+              widgetSettingsSaveRef.current = fn;
+            }}
+            onNavigateToInbox={() => {
+              setActiveTab("chats");
+              setChannelFilter("website");
+            }}
+          />
         )}
       </div>
 

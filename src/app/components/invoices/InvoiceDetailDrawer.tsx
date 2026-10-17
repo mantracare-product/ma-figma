@@ -31,8 +31,10 @@ import {
   Settings,
   Search,
   Trash2,
+  Mic,
 } from "lucide-react";
 import { toast } from "sonner";
+import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
 import { ClientInvoice, InvoiceStatus, InvoicePaymentRecord, InvoiceLineItem } from "../../types/invoiceTypes";
 import { useInvoices } from "../../context/InvoiceContext";
 import { ChevronStageRibbon } from "../common/ChevronStageRibbon";
@@ -127,6 +129,7 @@ export default function InvoiceDetailDrawer({
   const [activeTab, setActiveTab] = useState<"overview" | "documents" | "payments">("overview");
   const [copiedLink, setCopiedLink] = useState(false);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
+  const [showScribeModal, setShowScribeModal] = useState(false);
 
   // Field Management Modals
   const [fieldManagerOpen, setFieldManagerOpen] = useState(false);
@@ -736,7 +739,7 @@ export default function InvoiceDetailDrawer({
   return (
     <div className="fixed inset-0 z-50 overflow-hidden flex justify-end bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
       <div
-        className="w-full bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 overflow-hidden animate-in slide-in-from-right duration-300"
+        className="w-full bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 overflow-hidden animate-in slide-in-from-right duration-300 relative"
         style={{
           width: "68vw",
           minWidth: "780px",
@@ -1152,6 +1155,30 @@ export default function InvoiceDetailDrawer({
           )}
 
         </div>
+
+        {/* Floating AI Scribe Capsule Button in Bottom Corner of Invoice Drawer */}
+        {!showScribeModal && (
+          <div className="absolute bottom-5 right-6 pointer-events-auto z-30">
+            <button
+              type="button"
+              onClick={() => setShowScribeModal(true)}
+              className="group flex items-center gap-1.5 h-8 px-3 rounded-full bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#11161c] hover:to-[#22303e] text-white shadow-[0_4px_16px_rgba(0,0,0,0.35)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.45)] transition-all duration-200 hover:scale-[1.03] active:scale-[0.97] cursor-pointer border border-white/20 select-none backdrop-blur-md"
+              title="Open Ambient AI Scribe"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {/* Live Indicator Dot */}
+              <span className="relative flex h-2 w-2 flex-shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+
+              <Mic className="h-3.5 w-3.5 text-white group-hover:scale-110 transition-transform flex-shrink-0" />
+              <span className="text-xs font-semibold tracking-wide text-white leading-none">
+                AI Scribe
+              </span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Sub-Modals ── */}
@@ -1249,6 +1276,28 @@ export default function InvoiceDetailDrawer({
           }}
         />
       )}
+
+      {/* AI Scribe Consultation Drawer for Invoice */}
+      <NewConsultationDrawer
+        isOpen={showScribeModal}
+        onClose={() => setShowScribeModal(false)}
+        initialClientId={liveInvoice?.clientId}
+        initialClientName={liveInvoice?.clientName}
+        initialEntityType="invoice"
+        initialRecordId={liveInvoice?.id}
+        zIndex={600}
+        onSessionCreated={(session) => {
+          setShowScribeModal(false);
+          toast.success(`AI Scribe consultation recorded for ${session.clientName || liveInvoice?.clientName}!`);
+          handleFillFromScribe({
+            transcriptPreview: session.transcript?.fullText?.slice(0, 300),
+            diagnosis: session.extractedData?.diagnosis,
+            chiefComplaint: session.extractedData?.chiefComplaint,
+            extractedData: session.extractedData,
+            scribeSessionId: session.id,
+          });
+        }}
+      />
     </div>
   );
 }

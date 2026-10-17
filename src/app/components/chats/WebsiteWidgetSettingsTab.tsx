@@ -353,12 +353,289 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* ── Left Column: Configuration Settings ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* ── Left Column: Live Widget Simulator & Position Mockup (Sticky Non-scrolling) ── */}
+        <div className="lg:col-span-5 space-y-5 sticky top-4 self-start max-h-[calc(100vh-32px)] overflow-y-auto pr-0.5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+              <Sparkles className="w-4 h-4 text-[#1456f0]" /> Live Widget Simulator
+            </h3>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] bg-blue-50 text-[#1456f0] font-semibold px-2.5 py-0.5 rounded-full border border-blue-200">
+                Interactive Preview
+              </span>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="px-3.5 py-1.5 bg-[#1456f0] hover:bg-[#1044be] text-white rounded-xl font-semibold text-xs transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+              >
+                <Check className="w-3.5 h-3.5" />
+                Save Configuration
+              </button>
+            </div>
+          </div>
+
+          {/* Widget Card Container */}
+          <div
+            className={`rounded-2xl border border-[#E2E8F0] shadow-lg overflow-hidden transition-all ${
+              config.themeMode === "dark" ? "bg-slate-900 text-white" : "bg-white text-gray-900"
+            }`}
+          >
+            {/* Widget Top Bar */}
+            <div
+              className="p-4 flex items-center justify-between text-white shadow-xs"
+              style={{ backgroundColor: config.themeColor }}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs">
+                  <Bot className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold leading-tight" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {config.botName || "MantraAssist Care Bot"}
+                  </h4>
+                  {!config.removeSignature ? (
+                    <span className="text-[10px] text-white/80">Online · Powered by MantraAssist</span>
+                  ) : (
+                    <span className="text-[10px] text-white/80">Online · Ready to help</span>
+                  )}
+                </div>
+              </div>
+              <Globe className="w-4 h-4 text-white/70" />
+            </div>
+
+            {/* Widget Body / Simulator Form */}
+            <div className="p-4 space-y-4 max-h-[460px] overflow-y-auto">
+              {/* Welcome Message Bubble */}
+              <div className="flex items-start gap-2">
+                <div
+                  className="w-6 h-6 rounded-full text-white flex items-center justify-center text-[10px] flex-shrink-0 mt-0.5"
+                  style={{ backgroundColor: config.themeColor }}
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                </div>
+                <div
+                  className={`p-3 rounded-2xl rounded-tl-xs text-xs max-w-[85%] ${
+                    config.themeMode === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-100 text-[#1E293B]"
+                  }`}
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  {config.welcomeMessage}
+                </div>
+              </div>
+
+              {/* Form Input Area */}
+              <form onSubmit={handleRunSimulator} className="space-y-3 pt-2">
+                <div className="p-3.5 rounded-xl border border-gray-200/80 bg-gray-50/50 dark:bg-slate-800/50 space-y-2.5">
+                  <p className="text-[11px] font-bold text-[#475569] dark:text-slate-300" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {config.enablePreChatForm ? "Complete form to start chat:" : "Test conversation:"}
+                  </p>
+
+                  {config.enablePreChatForm && config.formFields.name && (
+                    <div>
+                      <input
+                        type="text"
+                        value={simName}
+                        onChange={(e) => setSimName(e.target.value)}
+                        placeholder="Visitor Name *"
+                        className="w-full text-xs border border-[#E2E8F0] dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-[#1E293B] dark:text-white"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                        required
+                      />
+                    </div>
+                  )}
+
+                  {config.enablePreChatForm && config.formFields.email && (
+                    <div>
+                      <input
+                        type="email"
+                        value={simEmail}
+                        onChange={(e) => setSimEmail(e.target.value)}
+                        placeholder="Email Address"
+                        className="w-full text-xs border border-[#E2E8F0] dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-[#1E293B] dark:text-white"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                      />
+                    </div>
+                  )}
+
+                  {config.enablePreChatForm && config.formFields.phone && (
+                    <div>
+                      <input
+                        type="tel"
+                        value={simPhone}
+                        onChange={(e) => setSimPhone(e.target.value)}
+                        placeholder="Phone Number"
+                        className="w-full text-xs border border-[#E2E8F0] dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-[#1E293B] dark:text-white"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                      />
+                    </div>
+                  )}
+
+                  {config.enablePreChatForm && (config.formFields.requirement ?? true) && (
+                    <div>
+                      <select
+                        value={simRequirementId || config.requirements?.[0]?.id || ""}
+                        onChange={(e) => setSimRequirementId(e.target.value)}
+                        className="w-full text-xs border border-[#E2E8F0] dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-[#1E293B] dark:text-white outline-none focus:border-[#1456f0] cursor-pointer"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        {(config.requirements || []).map((req) => (
+                          <option key={req.id} value={req.id}>
+                            {req.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div>
+                    <input
+                      type="text"
+                      value={simMessage}
+                      onChange={(e) => setSimMessage(e.target.value)}
+                      placeholder="Type your message..."
+                      className="w-full text-xs border border-[#E2E8F0] dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-[#1E293B] dark:text-white"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full py-2.5 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer"
+                  style={{ backgroundColor: config.themeColor, fontFamily: "DM Sans, sans-serif" }}
+                >
+                  <Send className="w-3.5 h-3.5" /> Submit &amp; Start Chat
+                </button>
+              </form>
+
+              {/* Chat Simulation Output */}
+              {simHistory.length > 0 && (
+                <div className="pt-3 border-t border-gray-200 dark:border-slate-700 space-y-2.5">
+                  <p className="text-[11px] font-bold text-gray-500" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Automated Bot Response:
+                  </p>
+                  {simHistory.map((m, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex flex-col ${m.sender === "user" ? "items-end" : "items-start"}`}
+                    >
+                      <div
+                        className={`p-3 rounded-2xl text-xs max-w-[90%] space-y-1 ${
+                          m.sender === "user"
+                            ? "text-white rounded-br-xs"
+                            : "bg-slate-100 dark:bg-slate-800 text-[#1E293B] dark:text-slate-100 rounded-bl-xs"
+                        }`}
+                        style={{
+                          backgroundColor: m.sender === "user" ? config.themeColor : undefined,
+                          fontFamily: "DM Sans, sans-serif",
+                        }}
+                      >
+                        {m.header?.text && (
+                          <div className="font-bold text-[11px] pb-1 border-b border-gray-200/40">
+                            {m.header.text}
+                          </div>
+                        )}
+                        <p>{m.text}</p>
+
+                        {m.buttons && m.buttons.length > 0 && (
+                          <div className="pt-2 flex flex-wrap gap-1.5">
+                            {m.buttons.map((b, bi) => (
+                              <span
+                                key={bi}
+                                className="px-2 py-0.5 bg-white/20 text-white rounded-full text-[10px] font-medium"
+                              >
+                                {b.label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Choose Position Grid Mockup (ai-chat-module parity) ── */}
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                <Sliders className="w-4 h-4 text-[#1456f0]" />
+                <span>Choose Widget Position</span>
+              </h3>
+              <span className="text-[11px] font-mono text-[#64748b] bg-slate-100 px-2 py-0.5 rounded-md">
+                {config.position || "bottom-right"}
+              </span>
+            </div>
+
+            <p className="text-xs text-[#64748b]">Select where the floating launcher button anchors on website visitor screens:</p>
+
+            {/* Position Mockup Window */}
+            <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden shadow-xs">
+              {/* Browser window header */}
+              <div className="bg-[#f1f5f9] border-b border-[#E2E8F0] h-6 flex items-center gap-1.5 px-3">
+                <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
+                <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
+                <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
+              </div>
+
+              {/* 3x2 Grid */}
+              <div className="grid grid-cols-3 grid-rows-2 gap-[1px] bg-[#E2E8F0]">
+                {[
+                  { id: "top-left", label: "Top Left", arrow: "↖" },
+                  { id: "top-center", label: "Top Center", arrow: "↑" },
+                  { id: "top-right", label: "Top Right", arrow: "↗" },
+                  { id: "bottom-left", label: "Bottom Left", arrow: "↙" },
+                  { id: "bottom-center", label: "Bottom Center", arrow: "↓" },
+                  { id: "bottom-right", label: "Bottom Right", arrow: "↘" },
+                ].map((pos) => {
+                  const isActive = (config.position || "bottom-right") === pos.id;
+                  return (
+                    <div
+                      key={pos.id}
+                      onClick={() => setConfig((prev) => ({ ...prev, position: pos.id as any }))}
+                      className={`h-20 bg-white flex flex-col items-center justify-center cursor-pointer transition-all relative ${
+                        isActive
+                          ? "bg-blue-50/80 text-[#1456f0] ring-2 ring-inset ring-[#1456f0]"
+                          : "hover:bg-slate-50 text-slate-300 hover:text-slate-500"
+                      }`}
+                    >
+                      <span className="text-xl font-bold select-none">{pos.arrow}</span>
+                      <span className="text-[10px] font-semibold mt-0.5 select-none">{pos.label}</span>
+
+                      {/* Active floating widget button badge */}
+                      {isActive && (
+                        <div
+                          className="absolute w-7 h-7 rounded-full text-white flex items-center justify-center text-xs shadow-md transition-transform scale-105"
+                          style={{
+                            backgroundColor: config.themeColor,
+                            top: pos.id.includes("top") ? "6px" : undefined,
+                            bottom: pos.id.includes("bottom") ? "6px" : undefined,
+                            left: pos.id.includes("left") ? "6px" : pos.id.includes("center") ? "calc(50% - 14px)" : undefined,
+                            right: pos.id.includes("right") ? "6px" : undefined,
+                          }}
+                        >
+                          <PhoneCall className="w-3.5 h-3.5" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Right Column: Configuration Settings (Separated Cards) ── */}
         <div className="lg:col-span-7 space-y-5">
 
           {/* ── Collapsible Section 1: Website Widget Section ── */}
-          <div className="border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#fafafa]/50 shadow-xs">
+          <div className="border border-[#E2E8F0] rounded-2xl overflow-hidden bg-white shadow-xs">
             <button
               type="button"
               onClick={() => setShowWidgetSection(!showWidgetSection)}
@@ -766,7 +1043,7 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
           </div>
 
           {/* ── Collapsible Section 2: Chat Routing Settings (ai-chat-module parity) ── */}
-          <div className="border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#fafafa]/50 shadow-xs">
+          <div className="border border-[#E2E8F0] rounded-2xl overflow-hidden bg-white shadow-xs">
             <button
               type="button"
               onClick={() => setShowRoutingSection(!showRoutingSection)}
@@ -1110,282 +1387,6 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
           </div>
         </div>
 
-        {/* ── Right Column: Live Widget Simulator & Position Mockup ── */}
-        <div className="lg:col-span-5 space-y-5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-              <Sparkles className="w-4 h-4 text-[#1456f0]" /> Live Widget Simulator
-            </h3>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] bg-blue-50 text-[#1456f0] font-semibold px-2.5 py-0.5 rounded-full border border-blue-200">
-                Interactive Preview
-              </span>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="px-3.5 py-1.5 bg-[#1456f0] hover:bg-[#1044be] text-white rounded-xl font-semibold text-xs transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-              >
-                <Check className="w-3.5 h-3.5" />
-                Save Configuration
-              </button>
-            </div>
-          </div>
-
-          {/* Widget Card Container */}
-          <div
-            className={`rounded-2xl border border-[#E2E8F0] shadow-lg overflow-hidden transition-all ${
-              config.themeMode === "dark" ? "bg-slate-900 text-white" : "bg-white text-gray-900"
-            }`}
-          >
-            {/* Widget Top Bar */}
-            <div
-              className="p-4 flex items-center justify-between text-white shadow-xs"
-              style={{ backgroundColor: config.themeColor }}
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs">
-                  <Bot className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold leading-tight" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    {config.botName || "MantraAssist Care Bot"}
-                  </h4>
-                  {!config.removeSignature ? (
-                    <span className="text-[10px] text-white/80">Online · Powered by MantraAssist</span>
-                  ) : (
-                    <span className="text-[10px] text-white/80">Online · Ready to help</span>
-                  )}
-                </div>
-              </div>
-              <Globe className="w-4 h-4 text-white/70" />
-            </div>
-
-            {/* Widget Body / Simulator Form */}
-            <div className="p-4 space-y-4 max-h-[460px] overflow-y-auto">
-              {/* Welcome Message Bubble */}
-              <div className="flex items-start gap-2">
-                <div
-                  className="w-6 h-6 rounded-full text-white flex items-center justify-center text-[10px] flex-shrink-0 mt-0.5"
-                  style={{ backgroundColor: config.themeColor }}
-                >
-                  <Bot className="w-3.5 h-3.5" />
-                </div>
-                <div
-                  className={`p-3 rounded-2xl rounded-tl-xs text-xs max-w-[85%] ${
-                    config.themeMode === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-100 text-[#1E293B]"
-                  }`}
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  {config.welcomeMessage}
-                </div>
-              </div>
-
-              {/* Form Input Area */}
-              <form onSubmit={handleRunSimulator} className="space-y-3 pt-2">
-                <div className="p-3.5 rounded-xl border border-gray-200/80 bg-gray-50/50 dark:bg-slate-800/50 space-y-2.5">
-                  <p className="text-[11px] font-bold text-[#475569] dark:text-slate-300" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    {config.enablePreChatForm ? "Complete form to start chat:" : "Test conversation:"}
-                  </p>
-
-                  {config.enablePreChatForm && config.formFields.name && (
-                    <div>
-                      <input
-                        type="text"
-                        value={simName}
-                        onChange={(e) => setSimName(e.target.value)}
-                        placeholder="Visitor Name *"
-                        className="w-full text-xs border border-[#E2E8F0] dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-[#1E293B] dark:text-white"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                        required
-                      />
-                    </div>
-                  )}
-
-                  {config.enablePreChatForm && config.formFields.email && (
-                    <div>
-                      <input
-                        type="email"
-                        value={simEmail}
-                        onChange={(e) => setSimEmail(e.target.value)}
-                        placeholder="Email Address"
-                        className="w-full text-xs border border-[#E2E8F0] dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-[#1E293B] dark:text-white"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      />
-                    </div>
-                  )}
-
-                  {config.enablePreChatForm && config.formFields.phone && (
-                    <div>
-                      <input
-                        type="tel"
-                        value={simPhone}
-                        onChange={(e) => setSimPhone(e.target.value)}
-                        placeholder="Phone Number"
-                        className="w-full text-xs border border-[#E2E8F0] dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-[#1E293B] dark:text-white"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      />
-                    </div>
-                  )}
-
-                  {config.enablePreChatForm && (config.formFields.requirement ?? true) && (
-                    <div>
-                      <select
-                        value={simRequirementId || config.requirements?.[0]?.id || ""}
-                        onChange={(e) => setSimRequirementId(e.target.value)}
-                        className="w-full text-xs border border-[#E2E8F0] dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-[#1E293B] dark:text-white outline-none focus:border-[#1456f0] cursor-pointer"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      >
-                        {(config.requirements || []).map((req) => (
-                          <option key={req.id} value={req.id}>
-                            {req.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  <div>
-                    <input
-                      type="text"
-                      value={simMessage}
-                      onChange={(e) => setSimMessage(e.target.value)}
-                      placeholder="Type your message..."
-                      className="w-full text-xs border border-[#E2E8F0] dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-[#1E293B] dark:text-white"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-2.5 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer"
-                  style={{ backgroundColor: config.themeColor, fontFamily: "DM Sans, sans-serif" }}
-                >
-                  <Send className="w-3.5 h-3.5" /> Submit &amp; Start Chat
-                </button>
-              </form>
-
-              {/* Chat Simulation Output */}
-              {simHistory.length > 0 && (
-                <div className="pt-3 border-t border-gray-200 dark:border-slate-700 space-y-2.5">
-                  <p className="text-[11px] font-bold text-gray-500" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    Automated Bot Response:
-                  </p>
-                  {simHistory.map((m, idx) => (
-                    <div
-                      key={idx}
-                      className={`flex flex-col ${m.sender === "user" ? "items-end" : "items-start"}`}
-                    >
-                      <div
-                        className={`p-3 rounded-2xl text-xs max-w-[90%] space-y-1 ${
-                          m.sender === "user"
-                            ? "text-white rounded-br-xs"
-                            : "bg-slate-100 dark:bg-slate-800 text-[#1E293B] dark:text-slate-100 rounded-bl-xs"
-                        }`}
-                        style={{
-                          backgroundColor: m.sender === "user" ? config.themeColor : undefined,
-                          fontFamily: "DM Sans, sans-serif",
-                        }}
-                      >
-                        {m.header?.text && (
-                          <div className="font-bold text-[11px] pb-1 border-b border-gray-200/40">
-                            {m.header.text}
-                          </div>
-                        )}
-                        <p>{m.text}</p>
-
-                        {m.buttons && m.buttons.length > 0 && (
-                          <div className="pt-2 flex flex-wrap gap-1.5">
-                            {m.buttons.map((b, bi) => (
-                              <span
-                                key={bi}
-                                className="px-2 py-0.5 bg-white/20 text-white rounded-full text-[10px] font-medium"
-                              >
-                                {b.label}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Choose Position Grid Mockup (ai-chat-module parity) ── */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-3 shadow-xs">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                <Sliders className="w-4 h-4 text-[#1456f0]" />
-                <span>Choose Widget Position</span>
-              </h3>
-              <span className="text-[11px] font-mono text-[#64748b] bg-slate-100 px-2 py-0.5 rounded-md">
-                {config.position || "bottom-right"}
-              </span>
-            </div>
-
-            <p className="text-xs text-[#64748b]">Select where the floating launcher button anchors on website visitor screens:</p>
-
-            {/* Position Mockup Window */}
-            <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden shadow-xs">
-              {/* Browser window header */}
-              <div className="bg-[#f1f5f9] border-b border-[#E2E8F0] h-6 flex items-center gap-1.5 px-3">
-                <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
-                <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
-                <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
-              </div>
-
-              {/* 3x2 Grid */}
-              <div className="grid grid-cols-3 grid-rows-2 gap-[1px] bg-[#E2E8F0]">
-                {[
-                  { id: "top-left", label: "Top Left", arrow: "↖" },
-                  { id: "top-center", label: "Top Center", arrow: "↑" },
-                  { id: "top-right", label: "Top Right", arrow: "↗" },
-                  { id: "bottom-left", label: "Bottom Left", arrow: "↙" },
-                  { id: "bottom-center", label: "Bottom Center", arrow: "↓" },
-                  { id: "bottom-right", label: "Bottom Right", arrow: "↘" },
-                ].map((pos) => {
-                  const isActive = (config.position || "bottom-right") === pos.id;
-                  return (
-                    <div
-                      key={pos.id}
-                      onClick={() => setConfig((prev) => ({ ...prev, position: pos.id as any }))}
-                      className={`h-20 bg-white flex flex-col items-center justify-center cursor-pointer transition-all relative ${
-                        isActive
-                          ? "bg-blue-50/80 text-[#1456f0] ring-2 ring-inset ring-[#1456f0]"
-                          : "hover:bg-slate-50 text-slate-300 hover:text-slate-500"
-                      }`}
-                    >
-                      <span className="text-xl font-bold select-none">{pos.arrow}</span>
-                      <span className="text-[10px] font-semibold mt-0.5 select-none">{pos.label}</span>
-
-                      {/* Active floating widget button badge */}
-                      {isActive && (
-                        <div
-                          className="absolute w-7 h-7 rounded-full text-white flex items-center justify-center text-xs shadow-md transition-transform scale-105"
-                          style={{
-                            backgroundColor: config.themeColor,
-                            top: pos.id.includes("top") ? "6px" : undefined,
-                            bottom: pos.id.includes("bottom") ? "6px" : undefined,
-                            left: pos.id.includes("left") ? "6px" : pos.id.includes("center") ? "calc(50% - 14px)" : undefined,
-                            right: pos.id.includes("right") ? "6px" : undefined,
-                          }}
-                        >
-                          <PhoneCall className="w-3.5 h-3.5" />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

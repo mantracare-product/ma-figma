@@ -3,7 +3,6 @@ import { Outlet, Link } from "react-router";
 import Sidebar from "./Sidebar";
 import logo from "../../../imports/ma_logo.png";
 import symbolLogo from "../../../imports/Ma-symbol-mark.png";
-import AIScribeFloatingWidget from "../scribe/AIScribeFloatingWidget";
 import { useSidebar } from "../../context/SidebarContext";
 import { useSidebarMenu } from "../../context/SidebarMenuContext";
 
@@ -64,9 +63,6 @@ export default function MainLayout() {
           <Outlet />
         </main>
       </div>
-
-      {/* Persistent AI Scribe Floating Widget */}
-      <AIScribeFloatingWidget />
     </div>
   );
 }
