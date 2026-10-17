@@ -50,6 +50,9 @@ export interface Claim {
   
   // Linkages to existing Mantra modules
   appointmentId?: string;
+  appointmentTitle?: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
   scribeSessionId?: string;
   serviceId?: string;
 

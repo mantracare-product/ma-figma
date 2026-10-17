@@ -3,6 +3,8 @@ import DrawerShell from "../ui/DrawerShell";
 import {
   Bot,
   MessageSquare,
+  MessageCircle,
+  Smartphone,
   Globe,
   Settings,
   Check,
@@ -11,11 +13,16 @@ import {
   ChevronDown,
   Layers,
   Sparkles,
+  Cpu,
+  UserPlus,
+  Phone,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
 import { ChatbotSettings, DEFAULT_CHATBOT_SETTINGS } from "../../../lib/useProcessStore";
-import { getStoredWhatsAppNumbers } from "../../../lib/useWhatsAppNumbers";
+import { useAIModels } from "../../../lib/aiModelsStore";
+import { getStoredWhatsAppNumbers, saveStoredWhatsAppNumbers } from "../../../lib/useWhatsAppNumbers";
+import MultiSelectNumberDropdown from "./MultiSelectNumberDropdown";
 
 export interface ChatbotSaveOptions {
   setAsDefault?: boolean;
@@ -32,17 +39,10 @@ export interface ChatbotChannelDrawerProps {
   onSave?: (settings: ChatbotSettings, options?: ChatbotSaveOptions) => void;
 }
 
-const AVAILABLE_NUMBERS = [
+const DEFAULT_NUMBERS = [
   "+1 (555) 123-4567",
   "+1 (555) 987-6543",
   "+1 (555) 555-1234",
-];
-
-const BOT_MODELS = [
-  "Gemini 2.5 Flash (Google)",
-  "OpenAI - GPT-4o",
-  "Claude 3.5 Sonnet (Anthropic)",
-  "Llama 3.3 70B",
 ];
 
 export default function ChatbotChannelDrawer({
@@ -59,37 +59,50 @@ export default function ChatbotChannelDrawer({
   const [modelDropdownOpen, setModelDropdownOpen] = useState(true);
   const [scopeDropdownOpen, setScopeDropdownOpen] = useState(false);
 
+  // Dynamic LLM models from store
+  const { activeModels } = useAIModels();
+
   // Channel toggles & values
   const [enableWhatsapp, setEnableWhatsapp] = useState<boolean>(true);
   const [whatsappNumber, setWhatsappNumber] = useState<string>("+1 (555) 123-4567");
+  const [whatsappNumbers, setWhatsappNumbers] = useState<string[]>(["+1 (555) 123-4567"]);
 
   const [enableSms, setEnableSms] = useState<boolean>(true);
   const [smsNumber, setSmsNumber] = useState<string>("+1 (555) 123-4567");
+  const [smsNumbers, setSmsNumbers] = useState<string[]>(["+1 (555) 123-4567"]);
 
   const [enableWebsite, setEnableWebsite] = useState<boolean>(true);
   const [websiteSource, setWebsiteSource] = useState<string>("https://example.com/widget");
 
   const [welcomeMessage, setWelcomeMessage] = useState<string>("Hi there! How can I help you today?");
-  const [botModel, setBotModel] = useState<string>("Gemini 2.5 Flash (Google)");
+  const [botModel, setBotModel] = useState<string>("Gemini 2.5 Flash");
+  const [autoCreateClient, setAutoCreateClient] = useState<boolean>(true);
 
   // Scope & Default checkboxes
   const [setAsDefault, setSetAsDefault] = useState(false);
   const [applyToCurrentProcess, setApplyToCurrentProcess] = useState(false);
 
-  const baseNumbers = inboundNumbers && inboundNumbers.length > 0 ? inboundNumbers : AVAILABLE_NUMBERS;
-  // Dynamic WhatsApp numbers from store
-  const [integratedPhoneOptions, setIntegratedPhoneOptions] = useState<string[]>(baseNumbers);
+  // Channel phone numbers list
+  const baseNumbers = inboundNumbers && inboundNumbers.length > 0 ? inboundNumbers : DEFAULT_NUMBERS;
+  const [whatsappNumberList, setWhatsappNumberList] = useState<string[]>(baseNumbers);
+  const [smsNumberList, setSmsNumberList] = useState<string[]>(baseNumbers);
 
   useEffect(() => {
     try {
       const waList = getStoredWhatsAppNumbers();
       if (waList && waList.length > 0) {
-        const merged = Array.from(new Set([...baseNumbers, ...waList.map((w) => w.displayPhoneNumber)]));
-        setIntegratedPhoneOptions(merged);
+        const waPhones = waList.map((w) => w.displayPhoneNumber);
+        const mergedWa = Array.from(new Set([...baseNumbers, ...waPhones]));
+        setWhatsappNumberList(mergedWa);
+        setSmsNumberList(mergedWa);
       } else {
-        setIntegratedPhoneOptions(baseNumbers);
+        setWhatsappNumberList(baseNumbers);
+        setSmsNumberList(baseNumbers);
       }
-    } catch {}
+    } catch {
+      setWhatsappNumberList(baseNumbers);
+      setSmsNumberList(baseNumbers);
+    }
   }, [inboundNumbers]);
 
   // Sync when settings prop or isOpen changes
@@ -97,28 +110,81 @@ export default function ChatbotChannelDrawer({
     if (isOpen) {
       const current = settings || DEFAULT_CHATBOT_SETTINGS;
       setEnableWhatsapp(current.enableWhatsapp !== undefined ? current.enableWhatsapp : true);
-      setWhatsappNumber(current.whatsappNumber || integratedPhoneOptions[0] || "+1 (555) 123-4567");
+
+      // WhatsApp multi-select sync
+      const initWaNums =
+        current.whatsappNumbers && current.whatsappNumbers.length > 0
+          ? current.whatsappNumbers
+          : current.whatsappNumber
+          ? [current.whatsappNumber]
+          : [whatsappNumberList[0] || "+1 (555) 123-4567"];
+      setWhatsappNumbers(initWaNums);
+      setWhatsappNumber(initWaNums[0] || "+1 (555) 123-4567");
+
+      // SMS multi-select sync
       setEnableSms(current.enableSms !== undefined ? current.enableSms : true);
-      setSmsNumber(current.smsNumber || integratedPhoneOptions[0] || "+1 (555) 123-4567");
+      const initSmsNums =
+        current.smsNumbers && current.smsNumbers.length > 0
+          ? current.smsNumbers
+          : current.smsNumber
+          ? [current.smsNumber]
+          : [smsNumberList[0] || "+1 (555) 123-4567"];
+      setSmsNumbers(initSmsNums);
+      setSmsNumber(initSmsNums[0] || "+1 (555) 123-4567");
+
       setEnableWebsite(current.enableWebsite !== undefined ? current.enableWebsite : true);
       setWebsiteSource(current.websiteSource || "https://example.com/widget");
       setWelcomeMessage(current.welcomeMessage || "Hi there! How can I help you today?");
-      setBotModel(current.botModel || "Gemini 2.5 Flash (Google)");
+      
+      // Match active model if possible
+      const matched = activeModels.find(
+        (m) => m.name === current.botModel || `${m.name} (${m.provider})` === current.botModel
+      );
+      setBotModel(matched ? matched.name : current.botModel || activeModels[0]?.name || "Gemini 2.5 Flash");
+      
+      setAutoCreateClient(current.autoCreateClient !== undefined ? current.autoCreateClient : true);
       setSetAsDefault(false);
       setApplyToCurrentProcess(false);
     }
-  }, [isOpen, settings, integratedPhoneOptions]);
+  }, [isOpen, settings, activeModels, whatsappNumberList, smsNumberList]);
+
+  const handleAddWaNumber = (newNum: string) => {
+    if (!whatsappNumberList.includes(newNum)) {
+      const updated = [...whatsappNumberList, newNum];
+      setWhatsappNumberList(updated);
+      try {
+        const existing = getStoredWhatsAppNumbers();
+        saveStoredWhatsAppNumbers([
+          ...existing,
+          {
+            id: `wa-${Date.now()}`,
+            displayPhoneNumber: newNum,
+            name: `WhatsApp (${newNum})`,
+          },
+        ]);
+      } catch {}
+    }
+  };
+
+  const handleAddSmsNumber = (newNum: string) => {
+    if (!smsNumberList.includes(newNum)) {
+      setSmsNumberList([...smsNumberList, newNum]);
+    }
+  };
 
   const handleSave = () => {
     const updated: ChatbotSettings = {
       enableWhatsapp,
-      whatsappNumber,
+      whatsappNumber: whatsappNumbers[0] || "",
+      whatsappNumbers,
       enableSms,
-      smsNumber,
+      smsNumber: smsNumbers[0] || "",
+      smsNumbers,
       enableWebsite,
       websiteSource,
       welcomeMessage,
       botModel,
+      autoCreateClient,
     };
 
     if (onSave) {
@@ -129,13 +195,24 @@ export default function ChatbotChannelDrawer({
 
   const handleResetDefaults = () => {
     setEnableWhatsapp(DEFAULT_CHATBOT_SETTINGS.enableWhatsapp ?? true);
-    setWhatsappNumber(DEFAULT_CHATBOT_SETTINGS.whatsappNumber ?? "+1 (555) 123-4567");
+    const defaultWa = DEFAULT_CHATBOT_SETTINGS.whatsappNumbers || [
+      DEFAULT_CHATBOT_SETTINGS.whatsappNumber || "+1 (555) 123-4567",
+    ];
+    setWhatsappNumbers(defaultWa);
+    setWhatsappNumber(defaultWa[0] || "+1 (555) 123-4567");
+
     setEnableSms(DEFAULT_CHATBOT_SETTINGS.enableSms ?? true);
-    setSmsNumber(DEFAULT_CHATBOT_SETTINGS.smsNumber ?? "+1 (555) 123-4567");
+    const defaultSms = DEFAULT_CHATBOT_SETTINGS.smsNumbers || [
+      DEFAULT_CHATBOT_SETTINGS.smsNumber || "+1 (555) 123-4567",
+    ];
+    setSmsNumbers(defaultSms);
+    setSmsNumber(defaultSms[0] || "+1 (555) 123-4567");
+
     setEnableWebsite(DEFAULT_CHATBOT_SETTINGS.enableWebsite ?? true);
     setWebsiteSource(DEFAULT_CHATBOT_SETTINGS.websiteSource ?? "https://example.com/widget");
     setWelcomeMessage(DEFAULT_CHATBOT_SETTINGS.welcomeMessage ?? "Hi there! How can I help you today?");
-    setBotModel(DEFAULT_CHATBOT_SETTINGS.botModel ?? "Gemini 2.5 Flash (Google)");
+    setBotModel(DEFAULT_CHATBOT_SETTINGS.botModel ?? (activeModels[0]?.name || "Gemini 2.5 Flash"));
+    setAutoCreateClient(DEFAULT_CHATBOT_SETTINGS.autoCreateClient ?? true);
     setSetAsDefault(false);
     setApplyToCurrentProcess(false);
     toast.info("Reset to default chatbot settings");
@@ -146,7 +223,7 @@ export default function ChatbotChannelDrawer({
       isOpen={isOpen}
       onClose={onClose}
       title="Chatbot Channel Settings"
-      subtitle={stageName ? `Configure channels, WhatsApp numbers, SMS, and website bot for "${stageName}"` : "Configure channels and AI chatbot settings"}
+      subtitle={stageName ? `Configure channels and AI chatbot settings for "${stageName}"` : "Configure channels and AI chatbot settings"}
       icon={<Bot className="w-5 h-5 text-primary" />}
       width="max-w-[540px]"
       footer={
@@ -195,16 +272,16 @@ export default function ChatbotChannelDrawer({
               <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
                 <MessageSquare className="w-4 h-4" />
               </div>
-              <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
                 <span
                   className="text-sm font-bold text-[#222222]"
                   style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
                   Chatbot Channels & Sources
                 </span>
-                <span className="text-xs text-slate-500 font-medium">
-                  WhatsApp, SMS, and Website live chat
-                </span>
+                <Tooltip text="Enable or disable communication channels for the conversational AI bot.">
+                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help hover:text-slate-600 transition-colors" />
+                </Tooltip>
               </div>
             </div>
             <ChevronDown
@@ -215,17 +292,21 @@ export default function ChatbotChannelDrawer({
           </button>
 
           {channelsDropdownOpen && (
-            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
-              {/* Channel 1: WhatsApp */}
-              <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
+            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3.5">
+              {/* Source 1: WhatsApp Channel */}
+              <div className="p-3.5 bg-white border border-slate-200/90 rounded-xl shadow-2xs hover:border-slate-300 transition-all space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-lg">💬</span>
-                    <div>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                      <MessageCircle className="w-4 h-4" />
+                    </div>
+                    <div className="flex items-center gap-1.5">
                       <span className="text-xs font-bold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
                         WhatsApp Channel
                       </span>
-                      <p className="text-[11px] text-slate-500">Enable AI conversational bot over WhatsApp</p>
+                      <Tooltip text="Enable AI conversational bot over WhatsApp.">
+                        <Info className="w-3.5 h-3.5 text-slate-400 cursor-help hover:text-slate-600 transition-colors" />
+                      </Tooltip>
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -240,41 +321,47 @@ export default function ChatbotChannelDrawer({
                 </div>
 
                 {enableWhatsapp && (
-                  <div className="pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <label className="text-xs font-semibold text-slate-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Integrated Number (Source)
-                      </label>
-                      <Tooltip text="Select which integrated WhatsApp phone number the chatbot should respond on.">
-                        <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                  <div className="pt-2.5 border-t border-slate-100 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Channel Phone Numbers
+                      </span>
+                      <Tooltip text="Select multiple WhatsApp numbers for this workflow, or add new numbers inside the dropdown.">
+                        <Info className="w-3.5 h-3.5 text-slate-400 cursor-help hover:text-slate-600 transition-colors" />
                       </Tooltip>
                     </div>
-                    <select
-                      value={whatsappNumber}
-                      onChange={(e) => setWhatsappNumber(e.target.value)}
-                      className="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900 cursor-pointer"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      {integratedPhoneOptions.map((num) => (
-                        <option key={num} value={num}>
-                          {num} (WhatsApp Business)
-                        </option>
-                      ))}
-                    </select>
+
+                    <MultiSelectNumberDropdown
+                      selected={whatsappNumbers}
+                      onChange={(nums) => {
+                        setWhatsappNumbers(nums);
+                        setWhatsappNumber(nums[0] || "");
+                      }}
+                      options={whatsappNumberList}
+                      onAddOption={handleAddWaNumber}
+                      palette="emerald"
+                      placeholder="Select WhatsApp phone numbers..."
+                      badgeSuffix="WhatsApp Business"
+                    />
                   </div>
                 )}
               </div>
 
-              {/* Channel 2: SMS */}
-              <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
+              {/* Source 2: SMS Channel */}
+              <div className="p-3.5 bg-white border border-slate-200/90 rounded-xl shadow-2xs hover:border-slate-300 transition-all space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-lg">📱</span>
-                    <div>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                      <Smartphone className="w-4 h-4" />
+                    </div>
+                    <div className="flex items-center gap-1.5">
                       <span className="text-xs font-bold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
                         SMS Channel
                       </span>
-                      <p className="text-[11px] text-slate-500">Enable text message conversational bot</p>
+                      <Tooltip text="Enable text message conversational AI bot over SMS.">
+                        <Info className="w-3.5 h-3.5 text-slate-400 cursor-help hover:text-slate-600 transition-colors" />
+                      </Tooltip>
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -289,41 +376,47 @@ export default function ChatbotChannelDrawer({
                 </div>
 
                 {enableSms && (
-                  <div className="pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <label className="text-xs font-semibold text-slate-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Integrated Number (Source)
-                      </label>
-                      <Tooltip text="Select which integrated phone number should send and receive SMS text messages.">
-                        <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                  <div className="pt-2.5 border-t border-slate-100 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-blue-600" />
+                      <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Channel Phone Numbers
+                      </span>
+                      <Tooltip text="Select multiple SMS carrier numbers for this workflow, or add new numbers inside the dropdown.">
+                        <Info className="w-3.5 h-3.5 text-slate-400 cursor-help hover:text-slate-600 transition-colors" />
                       </Tooltip>
                     </div>
-                    <select
-                      value={smsNumber}
-                      onChange={(e) => setSmsNumber(e.target.value)}
-                      className="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900 cursor-pointer"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      {integratedPhoneOptions.map((num) => (
-                        <option key={num} value={num}>
-                          {num} (SMS Carrier)
-                        </option>
-                      ))}
-                    </select>
+
+                    <MultiSelectNumberDropdown
+                      selected={smsNumbers}
+                      onChange={(nums) => {
+                        setSmsNumbers(nums);
+                        setSmsNumber(nums[0] || "");
+                      }}
+                      options={smsNumberList}
+                      onAddOption={handleAddSmsNumber}
+                      palette="blue"
+                      placeholder="Select SMS phone numbers..."
+                      badgeSuffix="SMS Carrier"
+                    />
                   </div>
                 )}
               </div>
 
-              {/* Channel 3: Website Chatbot */}
-              <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
+              {/* Source 3: Website Chatbot */}
+              <div className="p-3.5 bg-white border border-slate-200/90 rounded-xl shadow-2xs hover:border-slate-300 transition-all space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-lg">🌐</span>
-                    <div>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shrink-0">
+                      <Globe className="w-4 h-4" />
+                    </div>
+                    <div className="flex items-center gap-1.5">
                       <span className="text-xs font-bold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
                         Website Chatbot
                       </span>
-                      <p className="text-[11px] text-slate-500">Live chat widget embedded on your portal or website</p>
+                      <Tooltip text="Live chat widget embedded on your portal or website.">
+                        <Info className="w-3.5 h-3.5 text-slate-400 cursor-help hover:text-slate-600 transition-colors" />
+                      </Tooltip>
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -338,21 +431,24 @@ export default function ChatbotChannelDrawer({
                 </div>
 
                 {enableWebsite && (
-                  <div className="pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <label className="text-xs font-semibold text-slate-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Website Widget Link / Source URL
-                      </label>
-                      <Tooltip text="URL where your chatbot widget is deployed or website domain.">
-                        <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                      </Tooltip>
+                  <div className="pt-2.5 border-t border-slate-100 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Globe className="w-3.5 h-3.5 text-purple-600" />
+                        <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          Widget Link / Source URL
+                        </span>
+                        <Tooltip text="Website URL or integration identifier where your live chatbot is embedded.">
+                          <Info className="w-3.5 h-3.5 text-slate-400 cursor-help hover:text-slate-600 transition-colors" />
+                        </Tooltip>
+                      </div>
                     </div>
                     <input
                       type="text"
                       value={websiteSource}
                       onChange={(e) => setWebsiteSource(e.target.value)}
-                      placeholder="https://example.com/widget"
-                      className="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900 placeholder:text-slate-400 transition-colors"
+                      placeholder="Mantra AI Web Widget or https://example.com/widget"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 font-medium text-slate-800 shadow-2xs"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     />
                   </div>
@@ -362,7 +458,7 @@ export default function ChatbotChannelDrawer({
           )}
         </div>
 
-        {/* SECTION 2: Chatbot Prompt & Welcome Message */}
+        {/* SECTION 2: Chatbot Intelligence & Settings */}
         <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
           <button
             type="button"
@@ -373,16 +469,16 @@ export default function ChatbotChannelDrawer({
               <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
                 <Sparkles className="w-4 h-4" />
               </div>
-              <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
                 <span
                   className="text-sm font-bold text-[#222222]"
                   style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
-                  Chatbot Intelligence & Greeting
+                  Chatbot Intelligence & Settings
                 </span>
-                <span className="text-xs text-slate-500 font-medium">
-                  Underlying model and initial welcome message
-                </span>
+                <Tooltip text="Underlying LLM model and automated client creation settings.">
+                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help hover:text-slate-600 transition-colors" />
+                </Tooltip>
               </div>
             </div>
             <ChevronDown
@@ -393,41 +489,65 @@ export default function ChatbotChannelDrawer({
           </button>
 
           {modelDropdownOpen && (
-            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  AI Model
-                </label>
-                <select
-                  value={botModel}
-                  onChange={(e) => setBotModel(e.target.value)}
-                  className="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900 cursor-pointer"
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  {BOT_MODELS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
+            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3.5">
+              {/* AI Model Selection */}
+              <div className="space-y-1.5 p-3.5 bg-white border border-slate-200/90 rounded-xl shadow-2xs">
+                <div className="flex items-center gap-1.5">
+                  <Cpu className="w-3.5 h-3.5 text-emerald-600" />
+                  <label className="text-xs font-bold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    AI Model
+                  </label>
+                  <Tooltip text="Select the LLM model that powers conversational logic and chat responses.">
+                    <Info className="w-3.5 h-3.5 text-slate-400 cursor-help hover:text-slate-600 transition-colors" />
+                  </Tooltip>
+                </div>
+                <div className="relative">
+                  <select
+                    value={botModel}
+                    onChange={(e) => setBotModel(e.target.value)}
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900 cursor-pointer shadow-2xs pr-8 appearance-none"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    {activeModels.map((m) => (
+                      <option key={m.id} value={m.name}>
+                        {m.name} ({m.provider})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  Welcome Greeting
+              {/* Auto-create Client Toggle */}
+              <div className="flex items-center justify-between p-3.5 bg-white border border-slate-200/90 rounded-xl shadow-2xs hover:border-slate-300 transition-all">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+                    <UserPlus className="w-4 h-4" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Auto-create Client
+                    </span>
+                    <Tooltip text="Automatically create a new client contact record in your CRM when a visitor starts a conversation.">
+                      <Info className="w-3.5 h-3.5 text-slate-400 cursor-help hover:text-slate-600 transition-colors" />
+                    </Tooltip>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={autoCreateClient}
+                    onChange={(e) => setAutoCreateClient(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600 cursor-pointer" />
                 </label>
-                <textarea
-                  value={welcomeMessage}
-                  onChange={(e) => setWelcomeMessage(e.target.value)}
-                  rows={3}
-                  placeholder="Hi there! How can I help you today?"
-                  className="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900 placeholder:text-slate-400 transition-colors resize-none"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                />
               </div>
             </div>
           )}
         </div>
+
+
 
         {/* SECTION 3: Settings Scope & Defaults */}
         <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">

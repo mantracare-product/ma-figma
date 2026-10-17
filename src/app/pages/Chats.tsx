@@ -1197,7 +1197,7 @@ export default function Chats() {
         viewFilter === "unread" ? c.unreadCount > 0 :
           viewFilter === "assigned_to_me" ? c.assignedPersonId === CURRENT_USER_ID :
             c.status === viewFilter;
-    const matchesNumber = numberFilter ? (c.inboxNumber ? c.inboxNumber === numberFilter : true) : true;
+    const matchesNumber = true; // Show all contacts in the contact list
     return matchesSearch && matchesChannel && matchesView && matchesNumber;
   });
 
@@ -1610,6 +1610,20 @@ export default function Chats() {
             </span>
           }
         >
+          <button
+            type="button"
+            onClick={() => {
+              if (channelFilter === "website") {
+                setShowTestWebsiteDrawer(true);
+              } else {
+                setShowTestProcessDrawer(true);
+              }
+            }}
+            className="text-[11px] font-mono font-medium text-slate-400 hover:text-slate-800 transition-colors px-1.5 py-0.5 rounded hover:bg-slate-100/80 cursor-pointer"
+            title="Open Test Simulator"
+          >
+            (dev)
+          </button>
           <HowItWorksButton onClick={() => setShowHelp(true)} label="How Chats Works" />
         </PageHeader>
 
@@ -1746,99 +1760,6 @@ export default function Chats() {
               ? "Search visitor chats..."
               : "Search conversations..."
           }
-          secondaryActions={
-            subMode === "inbox" ? (
-              <div className="flex items-center gap-2">
-                {/* View Filter Dropdown */}
-                <div className="relative shrink-0" ref={viewFilterDropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowViewFilterDropdown((prev) => !prev);
-                      setShowNumberFilterDropdown(false);
-                    }}
-                    className={`h-[36px] px-3.5 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-all relative shadow-2xs cursor-pointer ${
-                      viewFilter !== "all"
-                        ? "bg-blue-50 text-[#1456f0] border-blue-200/80"
-                        : "bg-white text-slate-700 border-border hover:bg-slate-50"
-                    }`}
-                    title="Filter view"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <Filter className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline capitalize">
-                      {viewFilter === "all"
-                        ? "All"
-                        : viewFilter === "open"
-                        ? "Open"
-                        : viewFilter === "unread"
-                        ? "Unread"
-                        : viewFilter === "resolved"
-                        ? "Resolved"
-                        : "Assigned"}
-                    </span>
-                    <ChevronDown className="w-3 h-3 text-[#94a3b8]" />
-                    {viewFilter !== "all" && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#1456f0] absolute top-1 right-1" />
-                    )}
-                  </button>
-
-                  {showViewFilterDropdown && (
-                    <div
-                      className="absolute right-0 mt-1 w-44 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      {(["all", "open", "unread", "resolved", "assigned_to_me"] as const).map((v) => (
-                        <button
-                          key={v}
-                          type="button"
-                          onClick={() => {
-                            setViewFilter(v);
-                            setShowViewFilterDropdown(false);
-                          }}
-                          className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
-                            viewFilter === v
-                              ? "text-[#1456f0] font-bold bg-blue-50/60"
-                              : "text-[#1E293B]"
-                          }`}
-                        >
-                          <span>
-                            {v === "all"
-                              ? "All Chats"
-                              : v === "open"
-                              ? "Open"
-                              : v === "unread"
-                              ? "Unread"
-                              : v === "resolved"
-                              ? "Resolved"
-                              : "Assigned to me"}
-                          </span>
-                          {viewFilter === v && <Check className="w-3.5 h-3.5 text-[#1456f0]" />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Test Simulator Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (channelFilter === "website") {
-                      setShowTestWebsiteDrawer(true);
-                    } else {
-                      setShowTestProcessDrawer(true);
-                    }
-                  }}
-                  className="h-[36px] px-3.5 bg-white hover:bg-slate-50 text-[#1E293B] border border-border rounded-full text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0 shadow-2xs cursor-pointer"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-[#1456f0]" />
-                  <span>Test</span>
-                </button>
-              </div>
-            ) : null
-          }
           primaryAction={
             subMode === "templates"
               ? {
@@ -1856,7 +1777,7 @@ export default function Chats() {
         {activeTab === "chats" && (
           <div className="flex gap-5 sm:gap-6 h-[calc(100vh-230px)] min-h-[620px]">
             {/* ── Left Side Panel: Contacts List (Separate Div / Card) ── */}
-            <div className="w-[330px] sm:w-[360px] shrink-0 bg-white rounded-2xl border border-gray-200/90 shadow-xs flex flex-col overflow-hidden">
+            <div className="w-[330px] sm:w-[360px] shrink-0 bg-white rounded-none border border-gray-200/90 shadow-xs flex flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
                 {channelFilter === null ? (
                   <div className="p-10 flex flex-col items-center text-center gap-3">
@@ -1943,7 +1864,7 @@ export default function Chats() {
             </div>
 
             {/* ── Right Side Panel: Chat Window (Separate Div / Card) ── */}
-            <div className="flex-1 min-w-0 bg-white rounded-2xl border border-gray-200/90 shadow-xs flex flex-col overflow-hidden">
+            <div className="flex-1 min-w-0 bg-white rounded-none border border-gray-200/90 shadow-xs flex flex-col overflow-hidden">
               {activeConversation ? (
                 <>
                   {/* Shared Chat Subcomponents */}

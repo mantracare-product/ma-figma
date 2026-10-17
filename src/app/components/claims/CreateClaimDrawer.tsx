@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   X,
   Plus,
@@ -12,6 +12,10 @@ import {
   DollarSign,
   Activity,
   AlertCircle,
+  Receipt,
+  FileText,
+  Link2,
+  Check,
 } from "lucide-react";
 import Button from "../ui/Button";
 import CPTCodeInput from "../ui/CPTCodeInput";
@@ -28,6 +32,8 @@ import { loadServices, Service } from "../../../lib/servicesStore";
 import { getScribeSessions, ScribeSession } from "../../../lib/scribeSessionStore";
 import { getICDCodeItem } from "../../../lib/icdCodes";
 import { getCPTCodeOption } from "../../../lib/cptCodes";
+import { useClients } from "../../../lib/clientsStore";
+import { useInvoices } from "../../context/InvoiceContext";
 
 interface CreateClaimDrawerProps {
   isOpen: boolean;
@@ -35,6 +41,7 @@ interface CreateClaimDrawerProps {
   onClaimCreated: (createdClaim: Claim, autoOpenSubmitModal?: boolean) => void;
   initialAppointmentId?: string;
   initialClientId?: string;
+  initialInvoiceId?: string;
   claimToEdit?: Claim | null;
 }
 
@@ -44,11 +51,19 @@ export default function CreateClaimDrawer({
   onClaimCreated,
   initialAppointmentId,
   initialClientId,
+  initialInvoiceId,
   claimToEdit,
 }: CreateClaimDrawerProps) {
+  const { clients } = useClients();
+  const { invoices } = useInvoices();
+
+  // Cascade Selection States
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>("");
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>("");
+
   // Appointment list
   const [appointmentsList, setAppointmentsList] = useState<any[]>([]);
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>("");
   const [scribeSessionMatch, setScribeSessionMatch] = useState<ScribeSession | null>(null);
 
   // Form Fields
@@ -96,10 +111,10 @@ export default function CreateClaimDrawer({
   // Load available appointments
   useEffect(() => {
     try {
-      const saved = sessionStorage.getItem("appointments_v1");
+      const saved = localStorage.getItem("appointments_v1") || sessionStorage.getItem("appointments_v1");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           setAppointmentsList(parsed);
           return;
         }
@@ -108,50 +123,125 @@ export default function CreateClaimDrawer({
 
     // Fallback default appointments
     setAppointmentsList([
-      { id: "apt-101", clientName: "Sarah Johnson", clientPhone: "+1 (555) 123-4567", serviceId: 1, date: "2026-08-24", time: "10:45", notes: "Cataract review", clientId: "CL-001" },
-      { id: "apt-102", clientName: "Michael Chen", clientPhone: "+1 (555) 234-5678", serviceId: 2, date: "2026-08-24", time: "09:30", notes: "Bronchitis & fever", clientId: "CL-002" },
-      { id: "apt-103", clientName: "Emily Davis", clientPhone: "+1 (555) 345-6789", serviceId: 3, date: "2026-08-23", time: "16:15", notes: "Knee osteoarthritis", clientId: "CL-003" },
-      { id: "apt-104", clientName: "Robert Wilson", clientPhone: "+1 (555) 456-7890", serviceId: 4, date: "2026-08-23", time: "14:00", notes: "Post-Lasik follow up", clientId: "CL-004" },
+      { id: "apt-101", title: "Comprehensive Eye Exam", clientName: "Sarah Johnson", clientPhone: "+1 (555) 123-4567", serviceId: 1, date: "2026-08-24", time: "10:45", notes: "Cataract review", clientId: "CL-001" },
+      { id: "apt-102", title: "Pulmonology Consult", clientName: "Michael Chen", clientPhone: "+1 (555) 234-5678", serviceId: 2, date: "2026-08-24", time: "09:30", notes: "Bronchitis & fever", clientId: "CL-002" },
+      { id: "apt-103", title: "Orthopedic Evaluation", clientName: "Emily Davis", clientPhone: "+1 (555) 345-6789", serviceId: 3, date: "2026-08-23", time: "16:15", notes: "Knee osteoarthritis", clientId: "CL-003" },
+      { id: "apt-104", title: "Post-Lasik Follow Up", clientName: "Robert Wilson", clientPhone: "+1 (555) 456-7890", serviceId: 4, date: "2026-08-23", time: "14:00", notes: "Post-Lasik follow up", clientId: "CL-004" },
     ]);
   }, [isOpen]);
 
-  // Handle appointment selection
-  const handleSelectAppointment = (aptId: string) => {
-    setSelectedAppointmentId(aptId);
-    if (!aptId) {
-      setScribeSessionMatch(null);
+  // Derived filterings for Client -> Appointment -> Invoice
+  const selectedClient = useMemo(() => {
+    return clients.find(
+      (c) => c.id === selectedClientId || (patientName && c.name?.toLowerCase() === patientName.toLowerCase())
+    );
+  }, [clients, selectedClientId, patientName]);
+
+  const availableAppointments = useMemo(() => {
+    if (!selectedClientId && !patientName) return appointmentsList;
+    const filtered = appointmentsList.filter(
+      (a) =>
+        (selectedClientId && (a.clientId === selectedClientId || String(a.patientId) === selectedClientId)) ||
+        (patientName && a.clientName?.toLowerCase() === patientName.toLowerCase())
+    );
+    return filtered.length > 0 ? filtered : appointmentsList;
+  }, [appointmentsList, selectedClientId, patientName]);
+
+  const selectedAppointment = useMemo(() => {
+    return appointmentsList.find((a) => String(a.id) === String(selectedAppointmentId));
+  }, [appointmentsList, selectedAppointmentId]);
+
+  const availableInvoices = useMemo(() => {
+    const list: { invoice: any; isDirectAppointmentMatch: boolean }[] = [];
+    const seenIds = new Set<string>();
+
+    if (selectedAppointmentId) {
+      invoices.forEach((inv) => {
+        const isMatch =
+          String(inv.appointmentId) === String(selectedAppointmentId) ||
+          (selectedAppointment?.invoiceId && String(inv.id) === String(selectedAppointment.invoiceId));
+        if (isMatch) {
+          seenIds.add(inv.id);
+          list.push({ invoice: inv, isDirectAppointmentMatch: true });
+        }
+      });
+    }
+
+    invoices.forEach((inv) => {
+      if (!seenIds.has(inv.id)) {
+        const matchClient =
+          (selectedClientId && inv.clientId === selectedClientId) ||
+          (patientName && inv.clientName?.toLowerCase() === patientName.toLowerCase());
+        if (matchClient) {
+          seenIds.add(inv.id);
+          list.push({ invoice: inv, isDirectAppointmentMatch: false });
+        }
+      }
+    });
+
+    return list;
+  }, [invoices, selectedAppointmentId, selectedAppointment, selectedClientId, patientName]);
+
+  const selectedInvoice = useMemo(() => {
+    return invoices.find((inv) => String(inv.id) === String(selectedInvoiceId));
+  }, [invoices, selectedInvoiceId]);
+
+  // Handler: Selecting a Client
+  const handleSelectClient = (clientId: string) => {
+    setSelectedClientId(clientId);
+    if (!clientId) {
       return;
     }
 
-    const appt = appointmentsList.find((a) => String(a.id) === String(aptId));
+    const cl = clients.find((c) => c.id === clientId);
+    if (!cl) return;
+
+    setPatientName(cl.name);
+    setPatientId(cl.id);
+    if (cl.phone) setPatientPhone(cl.phone);
+    if ((cl as any).dob) setPatientDob((cl as any).dob);
+    if ((cl as any).gender) setPatientGender((cl as any).gender);
+    if ((cl as any).address || (cl as any).location) {
+      setPatientAddress((cl as any).address || (cl as any).location);
+    }
+
+    // Auto-select first appointment for this client if available
+    const clientAppts = appointmentsList.filter(
+      (a) => a.clientId === cl.id || a.clientName?.toLowerCase() === cl.name.toLowerCase()
+    );
+    if (clientAppts.length > 0) {
+      if (!clientAppts.some((a) => String(a.id) === String(selectedAppointmentId))) {
+        handleSelectAppointment(String(clientAppts[0].id), clientAppts[0]);
+      }
+    } else {
+      setSelectedAppointmentId("");
+      setSelectedInvoiceId("");
+    }
+  };
+
+  // Handler: Selecting an Appointment Encounter
+  const handleSelectAppointment = (aptId: string, directApptObj?: any) => {
+    setSelectedAppointmentId(aptId);
+    if (!aptId) {
+      setScribeSessionMatch(null);
+      setSelectedInvoiceId("");
+      return;
+    }
+
+    const appt = directApptObj || appointmentsList.find((a) => String(a.id) === String(aptId));
     if (!appt) return;
 
     if (appt.clientName) setPatientName(appt.clientName);
     if (appt.clientPhone) setPatientPhone(appt.clientPhone);
+    if (appt.clientId) {
+      setPatientId(appt.clientId);
+      if (!selectedClientId || selectedClientId !== appt.clientId) {
+        setSelectedClientId(appt.clientId);
+      }
+    }
     if (appt.date) {
       setServiceDate(appt.date);
       setLines((prev) => prev.map((l) => ({ ...l, serviceDate: appt.date })));
-    }
-    if (appt.clientId) setPatientId(appt.clientId);
-
-    // Link Service & CPT code
-    const allServices = loadServices();
-    const matchedService = allServices.find((s) => s.id === Number(appt.serviceId) || s.name.toLowerCase() === (appt.serviceName || "").toLowerCase());
-    if (matchedService) {
-      const cpt = matchedService.cptCode || "99213";
-      const cptOpt = getCPTCodeOption(cpt);
-      setLines([
-        {
-          id: "line-" + Date.now(),
-          serviceDate: appt.date || new Date().toISOString().slice(0, 10),
-          cptCode: cpt,
-          description: cptOpt ? cptOpt.description : matchedService.name,
-          modifier: "",
-          diagnosisPointer: "A",
-          units: 1,
-          chargeAmount: Number(matchedService.price) || 120.0,
-        },
-      ]);
     }
 
     // Link AI Scribe ICD-10 Code
@@ -199,6 +289,77 @@ export default function CreateClaimDrawer({
       setDiagnoses(newDiags);
     } else {
       setScribeSessionMatch(null);
+    }
+
+    // Auto-match invoice against this appointment
+    const matchedInvoice = invoices.find(
+      (inv) =>
+        String(inv.appointmentId) === String(aptId) ||
+        (appt.invoiceId && String(inv.id) === String(appt.invoiceId))
+    );
+    if (matchedInvoice) {
+      handleSelectInvoice(matchedInvoice.id, matchedInvoice, appt.date);
+    } else {
+      // Default CPT service line from appointment service
+      const allServices = loadServices();
+      const matchedService = allServices.find((s) => s.id === Number(appt.serviceId) || s.name.toLowerCase() === (appt.serviceName || "").toLowerCase());
+      if (matchedService) {
+        const cpt = matchedService.cptCode || "99213";
+        const cptOpt = getCPTCodeOption(cpt);
+        setLines([
+          {
+            id: "line-" + Date.now(),
+            serviceDate: appt.date || new Date().toISOString().slice(0, 10),
+            cptCode: cpt,
+            description: cptOpt ? cptOpt.description : matchedService.name,
+            modifier: "",
+            diagnosisPointer: "A",
+            units: 1,
+            chargeAmount: Number(matchedService.price) || 120.0,
+          },
+        ]);
+      }
+    }
+  };
+
+  // Handler: Selecting an Invoice Against Appointment
+  const handleSelectInvoice = (invoiceId: string, directInvObj?: any, overrideDate?: string) => {
+    setSelectedInvoiceId(invoiceId);
+    if (!invoiceId) return;
+
+    const inv = directInvObj || invoices.find((i) => String(i.id) === String(invoiceId));
+    if (!inv) return;
+
+    if (inv.clientId && (!selectedClientId || selectedClientId !== inv.clientId)) {
+      setSelectedClientId(inv.clientId);
+      setPatientId(inv.clientId);
+    }
+    if (inv.clientName && !patientName) {
+      setPatientName(inv.clientName);
+    }
+
+    // Sync line items into CPT service lines
+    if (inv.lineItems && inv.lineItems.length > 0) {
+      const allServices = loadServices();
+      const sDate = overrideDate || serviceDate || inv.issueDate || inv.createdAt?.slice(0, 10) || new Date().toISOString().slice(0, 10);
+      const convertedLines: ClaimServiceLine[] = inv.lineItems.map((li: any, idx: number) => {
+        const matchedService = allServices.find(
+          (s) => s.name.toLowerCase() === (li.name || "").toLowerCase()
+        );
+        const cpt = matchedService?.cptCode || (li.name?.toLowerCase().includes("therapy") ? "90834" : li.name?.toLowerCase().includes("consult") ? "99213" : "99214");
+        const cptOpt = getCPTCodeOption(cpt);
+        return {
+          id: "line-" + Date.now() + "-" + idx,
+          serviceDate: sDate,
+          cptCode: cpt,
+          description: cptOpt ? cptOpt.description : (li.name || "Service Item"),
+          modifier: "",
+          diagnosisPointer: "A",
+          units: Number(li.quantity) || 1,
+          chargeAmount: Number(li.rate) || Number(li.amount) || 120.0,
+        };
+      });
+      setLines(convertedLines);
     }
   };
 
@@ -267,13 +428,14 @@ export default function CreateClaimDrawer({
     setLines(lines.filter((l) => l.id !== id));
   };
 
-  // Effect to populate form when editing an existing claim
+  // Effect to populate form when editing an existing claim or creating with initial props
   useEffect(() => {
     if (!isOpen) return;
 
     if (claimToEdit) {
       setPatientName(claimToEdit.patientName || "");
       setPatientId(claimToEdit.patientId || "CL-001");
+      setSelectedClientId(claimToEdit.patientId || "");
       setPatientDob(claimToEdit.patientDob || "1992-04-15");
       setPatientGender(claimToEdit.patientGender || "Female");
       setPatientAddress(claimToEdit.patientAddress || "742 Evergreen Terr, Springfield, IL 62704");
@@ -296,8 +458,19 @@ export default function CreateClaimDrawer({
         setLines(claimToEdit.lines);
       }
       setSelectedAppointmentId(claimToEdit.appointmentId || "");
+      setSelectedInvoiceId(claimToEdit.invoiceId || "");
+    } else {
+      if (initialClientId) {
+        handleSelectClient(initialClientId);
+      }
+      if (initialAppointmentId) {
+        handleSelectAppointment(initialAppointmentId);
+      }
+      if (initialInvoiceId) {
+        handleSelectInvoice(initialInvoiceId);
+      }
     }
-  }, [isOpen, claimToEdit]);
+  }, [isOpen, claimToEdit, initialClientId, initialAppointmentId, initialInvoiceId]);
 
   // Financial totals
   const totalCharge = lines.reduce((sum, line) => sum + (Number(line.chargeAmount) || 0) * (Number(line.units) || 1), 0);
@@ -319,6 +492,9 @@ export default function CreateClaimDrawer({
         groupNumber,
         payer: selectedPayer,
         appointmentId: selectedAppointmentId || claimToEdit.appointmentId,
+        appointmentTitle: selectedAppointment?.title || selectedAppointment?.serviceName || claimToEdit.appointmentTitle,
+        invoiceId: selectedInvoiceId || claimToEdit.invoiceId,
+        invoiceNumber: selectedInvoice?.invoiceNumber || selectedInvoice?.id || claimToEdit.invoiceNumber,
         scribeSessionId: scribeSessionMatch ? scribeSessionMatch.id : claimToEdit.scribeSessionId,
         renderingProviderName,
         renderingProviderNpi,
@@ -358,6 +534,9 @@ export default function CreateClaimDrawer({
       groupNumber,
       payer: selectedPayer,
       appointmentId: selectedAppointmentId || undefined,
+      appointmentTitle: selectedAppointment?.title || selectedAppointment?.serviceName || undefined,
+      invoiceId: selectedInvoiceId || undefined,
+      invoiceNumber: selectedInvoice?.invoiceNumber || selectedInvoice?.id || undefined,
       scribeSessionId: scribeSessionMatch ? scribeSessionMatch.id : undefined,
       renderingProviderName,
       renderingProviderNpi,
@@ -403,7 +582,7 @@ export default function CreateClaimDrawer({
               <p className="text-xs text-slate-500">
                 {claimToEdit
                   ? `Update CPT codes, ICD-10 diagnosis, or provider information for claim ${claimToEdit.claimNumber}`
-                  : "Seamlessly links Appointment • Service CPT • AI Scribe ICD Diagnosis"}
+                  : "Seamlessly links Client • Encounter (Appointment) • Billing Invoice"}
               </p>
             </div>
           </div>
@@ -418,52 +597,133 @@ export default function CreateClaimDrawer({
 
         {/* Scrollable Form Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Appointment / Scribe Link Section */}
-          <div className="bg-gradient-to-r from-blue-50/70 to-indigo-50/50 border border-blue-200/80 rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-3">
+          {/* Step 1: Linkage: Client -> Encounter (Appointment Title) -> Invoice */}
+          <div className="bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50/80 border border-blue-200/80 rounded-2xl p-4.5 shadow-xs">
+            <div className="flex items-center justify-between mb-3.5">
               <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                <Calendar className="w-4 h-4 text-blue-600" />
-                Step 1: Link Booked Appointment &amp; AI Scribe Session
+                <Link2 className="w-4 h-4 text-blue-600" />
+                Step 1: Link Client Encounter &amp; Billing Records
               </span>
-              <span className="text-[11px] text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-full font-medium">
-                Auto-fill enabled
+              <span className="text-[11px] text-blue-700 bg-blue-100/70 px-2.5 py-0.5 rounded-full font-medium flex items-center gap-1">
+                <Check className="w-3 h-3 text-blue-600" />
+                Auto-fill Demographics &amp; CPT Codes
               </span>
             </div>
 
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* 1. Choose Client */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Select Patient Appointment
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-blue-600" />
+                  1. Client / Patient
                 </label>
                 <select
-                  value={selectedAppointmentId}
-                  onChange={(e) => handleSelectAppointment(e.target.value)}
-                  className="w-full text-xs font-medium px-3 py-2 bg-white border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={selectedClientId}
+                  onChange={(e) => handleSelectClient(e.target.value)}
+                  className="w-full text-xs font-medium px-3 py-2 bg-white border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-800"
                 >
-                  <option value="">-- Choose an appointment to auto-fill --</option>
-                  {appointmentsList.map((apt) => (
-                    <option key={apt.id} value={apt.id}>
-                      {apt.clientName} &bull; {apt.date} at {apt.time || "10:00"} ({apt.notes || "General Consult"})
+                  <option value="">-- Choose Client --</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.id || c.phone || "Client"})
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Scribe Session Match Banner */}
-              {scribeSessionMatch && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 animate-in fade-in duration-200">
-                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div className="text-xs">
-                    <span className="font-bold text-emerald-950 block" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      AI Scribe Clinical Note Connected!
-                    </span>
-                    <p className="text-[11px] text-emerald-800 mt-0.5">
-                      Extracted diagnosis: &ldquo;<span className="font-semibold">{scribeSessionMatch.extractedData.diagnosis}</span>&rdquo; (ICD-10: <span className="font-mono font-bold">{scribeSessionMatch.extractedData.icd10Code || "H25.11"}</span>) &bull; Provider: {scribeSessionMatch.doctorName}
-                    </p>
-                  </div>
-                </div>
-              )}
+              {/* 2. Available Encounter (Appointment Title) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                  2. Encounter (Appt Title)
+                </label>
+                <select
+                  value={selectedAppointmentId}
+                  onChange={(e) => handleSelectAppointment(e.target.value)}
+                  className="w-full text-xs font-medium px-3 py-2 bg-white border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 text-slate-800"
+                >
+                  <option value="">-- Choose Encounter --</option>
+                  {availableAppointments.length === 0 ? (
+                    <option value="" disabled>No appointments found for client</option>
+                  ) : (
+                    availableAppointments.map((apt) => {
+                      const encounterTitle = apt.title || apt.serviceName || apt.notes || "Clinical Encounter";
+                      return (
+                        <option key={apt.id} value={apt.id}>
+                          {encounterTitle} &bull; {apt.date} ({apt.time || "10:00"})
+                        </option>
+                      );
+                    })
+                  )}
+                </select>
+              </div>
+
+              {/* 3. Invoice against that appointment */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                  <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+                  3. Invoice Against Encounter
+                </label>
+                <select
+                  value={selectedInvoiceId}
+                  onChange={(e) => handleSelectInvoice(e.target.value)}
+                  className="w-full text-xs font-medium px-3 py-2 bg-white border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 text-slate-800"
+                >
+                  <option value="">-- No Invoice / Standalone --</option>
+                  {availableInvoices.map(({ invoice: inv, isDirectAppointmentMatch }) => (
+                    <option key={inv.id} value={inv.id}>
+                      {isDirectAppointmentMatch ? "⭐ [Encounter Invoice] " : ""}{inv.invoiceNumber || inv.id} &bull; ${Number(inv.total).toFixed(2)} ({inv.statusLabel || inv.status || "Active"})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+
+            {/* Visual Confirmation Chips / Feedback Cards */}
+            {(selectedAppointment || selectedInvoice || scribeSessionMatch) && (
+              <div className="mt-3.5 pt-3 border-t border-blue-100 flex flex-col sm:flex-row flex-wrap items-center gap-2">
+                {selectedAppointment && (
+                  <div className="inline-flex items-center gap-1.5 text-[11px] bg-white border border-blue-200/90 px-2.5 py-1 rounded-lg text-slate-700 shadow-2xs">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span>Encounter:</span>
+                    <strong className="text-slate-900 font-semibold truncate max-w-[180px]">
+                      {selectedAppointment.title || selectedAppointment.serviceName || "Clinical Encounter"}
+                    </strong>
+                    <span className="text-slate-400">&bull;</span>
+                    <span className="text-slate-600">{selectedAppointment.date}</span>
+                  </div>
+                )}
+
+                {selectedInvoice && (
+                  <div className="inline-flex items-center gap-1.5 text-[11px] bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg text-emerald-900 shadow-2xs">
+                    <Receipt className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Invoice:</span>
+                    <strong className="font-semibold">{selectedInvoice.invoiceNumber || selectedInvoice.id}</strong>
+                    <span className="text-emerald-400">&bull;</span>
+                    <span className="font-bold text-emerald-700">${Number(selectedInvoice.total).toFixed(2)}</span>
+                    {selectedInvoice.lineItems?.length > 0 && (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-medium ml-1">
+                        {selectedInvoice.lineItems.length} lines synced
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {scribeSessionMatch && (
+                  <div className="inline-flex items-center gap-1.5 text-[11px] bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-lg text-purple-900 shadow-2xs">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                    <span>AI Scribe Note:</span>
+                    <strong className="font-mono text-purple-950">
+                      {scribeSessionMatch.extractedData.icd10Code || "H25.11"}
+                    </strong>
+                    <span className="text-purple-400">&bull;</span>
+                    <span className="text-purple-700 truncate max-w-[120px]">
+                      {scribeSessionMatch.extractedData.diagnosis}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Patient Details */}

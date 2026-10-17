@@ -144,6 +144,7 @@ export default function Clients() {
     "Name",
     "Email",
     "Phone",
+    "Source",
     "Status",
     "Processes",
     "Stage",
@@ -158,6 +159,7 @@ export default function Clients() {
     "Name",
     "Email",
     "Phone",
+    "Source",
     "Status",
     "Processes",
     "Stage",
@@ -411,6 +413,7 @@ export default function Clients() {
     name: true,
     email: true,
     phone: true,
+    source: true,
     responsible: true,
     lastContact: true,
     status: true,
@@ -420,6 +423,7 @@ export default function Clients() {
     'name',
     'email',
     'phone',
+    'source',
     'responsible',
     'lastContact',
     'status',
@@ -725,6 +729,30 @@ export default function Clients() {
             )}
           </td>
         );
+      case 'source':
+        return (
+          <td key="source" className="px-3 py-1 text-xs whitespace-nowrap" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+            {isBulkEditMode && selectedRows.has(client.id) ? (
+              <select
+                value={client.source || "Self Gen"}
+                onChange={(e) => {
+                  setClients(prev => prev.map(c =>
+                    c.id === client.id ? { ...c, source: e.target.value } : c
+                  ));
+                }}
+                className="text-xs px-2 py-0.5 border border-input rounded-lg bg-input-background"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              >
+                <option value="Bitirix">Bitirix</option>
+                <option value="WhatsApp">WhatsApp</option>
+                <option value="Facebook">Facebook</option>
+                <option value="Self Gen">Self Gen</option>
+              </select>
+            ) : (
+              client.source || '—'
+            )}
+          </td>
+        );
       case 'responsible':
         return (
           <td key="responsible" className="px-3 py-1 text-xs whitespace-nowrap" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
@@ -844,6 +872,7 @@ export default function Clients() {
       responsible: newClient.responsible,
       lastContact: new Date().toISOString().split("T")[0],
       status: "Active",
+      source: newClient.source || "Self Gen",
       companyName: newClient.companyName,
       jobPosition: newClient.jobPosition,
       numberOfEmployees: newClient.numberOfEmployees,
@@ -2783,6 +2812,11 @@ export default function Clients() {
                 render: (client) => <span className="text-xs text-muted-foreground">{client.countryCode} {client.phone}</span>,
               },
               {
+                id: "source",
+                header: "Source",
+                render: (client) => <span className="text-xs text-muted-foreground">{client.source || "—"}</span>,
+              },
+              {
                 id: "responsible",
                 header: "Responsible",
                 render: (client) => <span className="text-xs text-foreground">{client.responsible || "—"}</span>,
@@ -3174,14 +3208,18 @@ export default function Clients() {
                     </div>
                     <div>
                       <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Source</label>
-                      <input
-                        type="text"
+                      <select
                         value={newClient.source}
                         onChange={(e) => setNewClient({ ...newClient, source: e.target.value })}
-                        placeholder="e.g., Website, Referral, Social"
-                        className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                        className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm cursor-pointer"
                         style={{ fontFamily: 'Outfit, sans-serif' }}
-                      />
+                      >
+                        <option value="">Select source...</option>
+                        <option value="Bitirix">Bitirix</option>
+                        <option value="WhatsApp">WhatsApp</option>
+                        <option value="Facebook">Facebook</option>
+                        <option value="Self Gen">Self Gen</option>
+                      </select>
                     </div>
                   </div>
 

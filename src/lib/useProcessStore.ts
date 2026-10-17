@@ -66,12 +66,15 @@ export interface CallTriggerSettings {
 export interface ChatbotSettings {
   enableWhatsapp?: boolean;
   whatsappNumber?: string;
+  whatsappNumbers?: string[];
   enableSms?: boolean;
   smsNumber?: string;
+  smsNumbers?: string[];
   enableWebsite?: boolean;
   websiteSource?: string;
   welcomeMessage?: string;
   botModel?: string;
+  autoCreateClient?: boolean;
 }
 
 export interface ProcessTransitionTarget {
@@ -342,12 +345,15 @@ export const DEFAULT_CALL_TRIGGER_SETTINGS: CallTriggerSettings = {
 export const DEFAULT_CHATBOT_SETTINGS: ChatbotSettings = {
   enableWhatsapp: true,
   whatsappNumber: "+1 (555) 123-4567",
+  whatsappNumbers: ["+1 (555) 123-4567"],
   enableSms: true,
   smsNumber: "+1 (555) 123-4567",
+  smsNumbers: ["+1 (555) 123-4567"],
   enableWebsite: true,
   websiteSource: "Mantra AI Web Widget",
   welcomeMessage: "Hello! How can I assist you today?",
   botModel: "Gemini 2.5 Flash",
+  autoCreateClient: true,
 };
 
 export function getDefaultCallTriggerSettings(): CallTriggerSettings {

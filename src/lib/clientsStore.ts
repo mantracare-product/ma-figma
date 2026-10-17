@@ -56,6 +56,18 @@ export function getStoredClients(): Client[] {
             }
           }
 
+          if (!c.source) {
+            if (canonical?.source) {
+              updated.source = canonical.source;
+              clientChanged = true;
+            } else {
+              const fallbackSources = ["Bitirix", "WhatsApp", "Facebook", "Self Gen"];
+              const charSum = (c.id || "").split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+              updated.source = fallbackSources[charSum % fallbackSources.length];
+              clientChanged = true;
+            }
+          }
+
           if (clientChanged) {
             changed = true;
             return updated;
