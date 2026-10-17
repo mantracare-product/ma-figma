@@ -28,6 +28,7 @@ import {
   GitFork,
   MapPin,
   Building2,
+  ArrowRight,
 } from "lucide-react";
 import {
   getWebsiteWidgetConfig,
@@ -44,6 +45,8 @@ import { InfoTooltip } from "../help/InfoTooltip";
 interface WebsiteWidgetSettingsTabProps {
   onNavigateToInbox?: () => void;
   registerSaveHandler?: (fn: () => void) => void;
+  searchQuery?: string;
+  onClearSearch?: () => void;
 }
 
 const PRESET_COLORS = [
@@ -75,7 +78,12 @@ interface MockAgent {
   image: string;
 }
 
-export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSaveHandler }: WebsiteWidgetSettingsTabProps) {
+export default function WebsiteWidgetSettingsTab({
+  onNavigateToInbox,
+  registerSaveHandler,
+  searchQuery = "",
+  onClearSearch,
+}: WebsiteWidgetSettingsTabProps) {
   const [config, setConfig] = useState<WebsiteWidgetConfig>(getWebsiteWidgetConfig);
   const processes = getStoredProcesses();
   const teamMembers = getStoredTeamMembers();
@@ -97,7 +105,7 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
           }));
         }
       }
-    } catch {}
+    } catch { }
 
     const locNames =
       activeOrganization?.locations && activeOrganization.locations.length > 0
@@ -110,8 +118,8 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
       address: name.includes("New York")
         ? "450 Lexington Ave, Suite 210, New York, NY"
         : name.includes("California")
-        ? "123 Health Ave, Suite 400, Los Angeles, CA"
-        : "Online Telehealth Service",
+          ? "123 Health Ave, Suite 400, Los Angeles, CA"
+          : "Online Telehealth Service",
       schedule: "Monday – Friday: 9:00 AM – 5:00 PM",
       timezone: name.includes("New York") ? "Eastern Time (EST)" : "Pacific Time (PST)",
     }));
@@ -120,6 +128,38 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
   // Accordion Section States
   const [showWidgetSection, setShowWidgetSection] = useState(true);
   const [showRoutingSection, setShowRoutingSection] = useState(true);
+
+  // Search filtering logic
+  const q = (searchQuery || "").toLowerCase().trim();
+
+  useEffect(() => {
+    if (q) {
+      setShowWidgetSection(true);
+      setShowRoutingSection(true);
+    }
+  }, [q]);
+
+  const matchesPosition = !q || ["position", "mockup", "launcher", "corner", "bottom-right", "bottom-left", "top-right", "top-left", "top-center", "bottom-center", "floating", "anchor"].some(k => k.includes(q) || q.includes(k));
+  const matchesTheme = !q || ["theme", "color", "colors", "palette", "mode", "dark", "light", "blue", "primary"].some(k => k.includes(q) || q.includes(k));
+  const matchesLauncherIcon = !q || ["launcher", "icon", "header", "title", "subtitle", "greeting", "chat", "phone", "message", "headset", "branding"].some(k => k.includes(q) || q.includes(k));
+  const matchesHours = !q || ["hours", "working hours", "business hours", "schedule", "location", "branch", "timezone", "operating"].some(k => k.includes(q) || q.includes(k));
+  const matchesIntake = !q || ["intake", "form", "fields", "name", "email", "phone", "mandatory", "visitor", "pre-chat", "requirements", "requirement", "mapping", "process", "stage"].some(k => k.includes(q) || q.includes(k));
+  const matchesFirstResponder = !q || ["responder", "first responder", "ai", "bot", "human", "agent", "routing"].some(k => k.includes(q) || q.includes(k));
+  const matchesQueue = !q || ["agent", "queue", "team", "care team", "assignment", "round robin", "coordinator", "avatar", "fallback", "display"].some(k => k.includes(q) || q.includes(k));
+  const matchesEmbed = !q || ["embed", "script", "code", "html", "snippet", "install", "cdn", "website", "head"].some(k => k.includes(q) || q.includes(k));
+
+  const hasWidgetSectionMatches = matchesTheme || matchesLauncherIcon || matchesHours || matchesIntake;
+  const hasRoutingSectionMatches = matchesFirstResponder || matchesQueue;
+  const totalMatches = [
+    matchesPosition,
+    matchesTheme,
+    matchesLauncherIcon,
+    matchesHours,
+    matchesIntake,
+    matchesFirstResponder,
+    matchesQueue,
+    matchesEmbed,
+  ].filter(Boolean).length;
 
 
   // Agent Queue State
@@ -295,6 +335,13 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
     setTimeout(() => setCopiedSnippet(false), 3000);
   };
 
+  const scrollToStep = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   const handleRunSimulator = (e: React.FormEvent) => {
     e.preventDefault();
     if (!simName.trim()) {
@@ -356,31 +403,10 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* ── Left Column: Live Widget Simulator & Position Mockup (Sticky Non-scrolling) ── */}
         <div className="lg:col-span-5 space-y-5 sticky top-4 self-start max-h-[calc(100vh-32px)] overflow-y-auto pr-0.5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-              <Sparkles className="w-4 h-4 text-[#1456f0]" /> Live Widget Simulator
-            </h3>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] bg-blue-50 text-[#1456f0] font-semibold px-2.5 py-0.5 rounded-full border border-blue-200">
-                Interactive Preview
-              </span>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="px-3.5 py-1.5 bg-[#1456f0] hover:bg-[#1044be] text-white rounded-xl font-semibold text-xs transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-              >
-                <Check className="w-3.5 h-3.5" />
-                Save Configuration
-              </button>
-            </div>
-          </div>
-
           {/* Widget Card Container */}
           <div
-            className={`rounded-2xl border border-[#E2E8F0] shadow-lg overflow-hidden transition-all ${
-              config.themeMode === "dark" ? "bg-slate-900 text-white" : "bg-white text-gray-900"
-            }`}
+            className={`rounded-2xl border border-[#E2E8F0] shadow-lg overflow-hidden transition-all ${config.themeMode === "dark" ? "bg-slate-900 text-white" : "bg-white text-gray-900"
+              }`}
           >
             {/* Widget Top Bar */}
             <div
@@ -416,9 +442,8 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
                   <Bot className="w-3.5 h-3.5" />
                 </div>
                 <div
-                  className={`p-3 rounded-2xl rounded-tl-xs text-xs max-w-[85%] ${
-                    config.themeMode === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-100 text-[#1E293B]"
-                  }`}
+                  className={`p-3 rounded-2xl rounded-tl-xs text-xs max-w-[85%] ${config.themeMode === "dark" ? "bg-slate-800 text-slate-100" : "bg-slate-100 text-[#1E293B]"
+                    }`}
                   style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
                   {config.welcomeMessage}
@@ -524,11 +549,10 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
                       className={`flex flex-col ${m.sender === "user" ? "items-end" : "items-start"}`}
                     >
                       <div
-                        className={`p-3 rounded-2xl text-xs max-w-[90%] space-y-1 ${
-                          m.sender === "user"
+                        className={`p-3 rounded-2xl text-xs max-w-[90%] space-y-1 ${m.sender === "user"
                             ? "text-white rounded-br-xs"
                             : "bg-slate-100 dark:bg-slate-800 text-[#1E293B] dark:text-slate-100 rounded-bl-xs"
-                        }`}
+                          }`}
                         style={{
                           backgroundColor: m.sender === "user" ? config.themeColor : undefined,
                           fontFamily: "DM Sans, sans-serif",
@@ -562,296 +586,319 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
           </div>
 
           {/* ── Choose Position Grid Mockup (ai-chat-module parity) ── */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-3 shadow-xs">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                <Sliders className="w-4 h-4 text-[#1456f0]" />
-                <span>Choose Widget Position</span>
-              </h3>
-              <span className="text-[11px] font-mono text-[#64748b] bg-slate-100 px-2 py-0.5 rounded-md">
-                {config.position || "bottom-right"}
-              </span>
-            </div>
-
-            <p className="text-xs text-[#64748b]">Select where the floating launcher button anchors on website visitor screens:</p>
-
-            {/* Position Mockup Window */}
-            <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden shadow-xs">
-              {/* Browser window header */}
-              <div className="bg-[#f1f5f9] border-b border-[#E2E8F0] h-6 flex items-center gap-1.5 px-3">
-                <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
-                <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
-                <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
+          {matchesPosition && (
+            <div id="setting-position" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <Sliders className="w-4 h-4 text-[#1456f0]" />
+                  <span>Choose Widget Position</span>
+                </h3>
+                <span className="text-[11px] font-mono text-[#64748b] bg-slate-100 px-2 py-0.5 rounded-md">
+                  {config.position || "bottom-right"}
+                </span>
               </div>
 
-              {/* 3x2 Grid */}
-              <div className="grid grid-cols-3 grid-rows-2 gap-[1px] bg-[#E2E8F0]">
-                {[
-                  { id: "top-left", label: "Top Left", arrow: "↖" },
-                  { id: "top-center", label: "Top Center", arrow: "↑" },
-                  { id: "top-right", label: "Top Right", arrow: "↗" },
-                  { id: "bottom-left", label: "Bottom Left", arrow: "↙" },
-                  { id: "bottom-center", label: "Bottom Center", arrow: "↓" },
-                  { id: "bottom-right", label: "Bottom Right", arrow: "↘" },
-                ].map((pos) => {
-                  const isActive = (config.position || "bottom-right") === pos.id;
-                  return (
-                    <div
-                      key={pos.id}
-                      onClick={() => setConfig((prev) => ({ ...prev, position: pos.id as any }))}
-                      className={`h-20 bg-white flex flex-col items-center justify-center cursor-pointer transition-all relative ${
-                        isActive
-                          ? "bg-blue-50/80 text-[#1456f0] ring-2 ring-inset ring-[#1456f0]"
-                          : "hover:bg-slate-50 text-slate-300 hover:text-slate-500"
-                      }`}
-                    >
-                      <span className="text-xl font-bold select-none">{pos.arrow}</span>
-                      <span className="text-[10px] font-semibold mt-0.5 select-none">{pos.label}</span>
+              <p className="text-xs text-[#64748b]">Select where the floating launcher button anchors on website visitor screens:</p>
 
-                      {/* Active floating widget button badge */}
-                      {isActive && (
-                        <div
-                          className="absolute w-7 h-7 rounded-full text-white flex items-center justify-center text-xs shadow-md transition-transform scale-105"
-                          style={{
-                            backgroundColor: config.themeColor,
-                            top: pos.id.includes("top") ? "6px" : undefined,
-                            bottom: pos.id.includes("bottom") ? "6px" : undefined,
-                            left: pos.id.includes("left") ? "6px" : pos.id.includes("center") ? "calc(50% - 14px)" : undefined,
-                            right: pos.id.includes("right") ? "6px" : undefined,
-                          }}
-                        >
-                          <PhoneCall className="w-3.5 h-3.5" />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              {/* Position Mockup Window */}
+              <div className="bg-white border border-[#E2E8F0] rounded-xl overflow-hidden shadow-xs">
+                {/* Browser window header */}
+                <div className="bg-[#f1f5f9] border-b border-[#E2E8F0] h-6 flex items-center gap-1.5 px-3">
+                  <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
+                  <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
+                  <span className="w-2 h-2 rounded-full bg-[#cbd5e1]"></span>
+                </div>
+
+                {/* 3x2 Grid */}
+                <div className="grid grid-cols-3 grid-rows-2 gap-[1px] bg-[#E2E8F0]">
+                  {[
+                    { id: "top-left", label: "Top Left", arrow: "↖" },
+                    { id: "top-center", label: "Top Center", arrow: "↑" },
+                    { id: "top-right", label: "Top Right", arrow: "↗" },
+                    { id: "bottom-left", label: "Bottom Left", arrow: "↙" },
+                    { id: "bottom-center", label: "Bottom Center", arrow: "↓" },
+                    { id: "bottom-right", label: "Bottom Right", arrow: "↘" },
+                  ].map((pos) => {
+                    const isActive = (config.position || "bottom-right") === pos.id;
+                    return (
+                      <div
+                        key={pos.id}
+                        onClick={() => setConfig((prev) => ({ ...prev, position: pos.id as any }))}
+                        className={`h-20 bg-white flex flex-col items-center justify-center cursor-pointer transition-all relative ${isActive
+                            ? "bg-blue-50/80 text-[#1456f0] ring-2 ring-inset ring-[#1456f0]"
+                            : "hover:bg-slate-50 text-slate-300 hover:text-slate-500"
+                          }`}
+                      >
+                        <span className="text-xl font-bold select-none">{pos.arrow}</span>
+                        <span className="text-[10px] font-semibold mt-0.5 select-none">{pos.label}</span>
+
+                        {/* Active floating widget button badge */}
+                        {isActive && (
+                          <div
+                            className="absolute w-7 h-7 rounded-full text-white flex items-center justify-center text-xs shadow-md transition-transform scale-105"
+                            style={{
+                              backgroundColor: config.themeColor,
+                              top: pos.id.includes("top") ? "6px" : undefined,
+                              bottom: pos.id.includes("bottom") ? "6px" : undefined,
+                              left: pos.id.includes("left") ? "6px" : pos.id.includes("center") ? "calc(50% - 14px)" : undefined,
+                              right: pos.id.includes("right") ? "6px" : undefined,
+                            }}
+                          >
+                            <PhoneCall className="w-3.5 h-3.5" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* ── Right Column: Configuration Settings (Separated Cards) ── */}
         <div className="lg:col-span-7 space-y-5">
+          {/* Search Results Feedback Banner */}
+          {q && (
+            <div className="bg-blue-50/80 border border-blue-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-[#1456f0]" />
+                <span className="font-semibold text-slate-800">
+                  Showing settings matching <span className="text-[#1456f0] font-bold">&quot;{searchQuery}&quot;</span> ({totalMatches} found)
+                </span>
+              </div>
+              {onClearSearch && (
+                <button
+                  type="button"
+                  onClick={onClearSearch}
+                  className="text-xs text-[#1456f0] hover:underline font-semibold cursor-pointer"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+          )}
 
-          {/* ── Collapsible Section 1: Website Widget Section ── */}
-          <div className="border border-[#E2E8F0] rounded-2xl overflow-hidden bg-white shadow-xs">
-            <button
-              type="button"
-              onClick={() => setShowWidgetSection(!showWidgetSection)}
-              className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors border-b border-[#E2E8F0] cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#1456f0] flex items-center justify-center font-bold">
-                  <Sliders className="w-4 h-4" />
+          {/* Empty Search State */}
+          {q && totalMatches === 0 && (
+            <div className="p-8 bg-white border border-[#E2E8F0] rounded-2xl text-center space-y-2.5">
+              <Sliders className="w-7 h-7 text-slate-300 mx-auto" />
+              <h4 className="text-sm font-bold text-slate-800">No settings found matching &quot;{searchQuery}&quot;</h4>
+              <p className="text-xs text-slate-500">
+                Try searching for <span className="font-semibold">theme</span>, <span className="font-semibold">intake</span>, <span className="font-semibold">position</span>, <span className="font-semibold">hours</span>, or <span className="font-semibold">code</span>.
+              </p>
+              {onClearSearch && (
+                <button
+                  type="button"
+                  onClick={onClearSearch}
+                  className="mt-2 px-3 py-1.5 bg-[#1456f0] hover:bg-blue-700 text-white text-xs font-semibold rounded-lg cursor-pointer transition-all"
+                >
+                  Clear Search
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* 1. Theme & Colors */}
+          {matchesTheme && (
+            <div id="setting-theme" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <Palette className="w-4 h-4 text-[#1456f0]" />
+                  <span>Theme & Colors</span>
                 </div>
-                <div className="text-left flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Website Widget Section
-                  </h3>
-                  <span onClick={(e) => e.stopPropagation()}>
-                    <InfoTooltip text="Appearance, branding, location working hours, and pre-chat intake" />
-                  </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: config.themeColor }}></span>
+                  <span className="text-[11px] font-mono text-slate-500 font-semibold">{config.themeColor}</span>
                 </div>
               </div>
-              <ChevronDown
-                className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                  showWidgetSection ? "rotate-180" : "rotate-0"
-                }`}
-              />
-            </button>
 
-            {showWidgetSection && (
-              <div className="p-4 space-y-5">
-                {/* 1. Theme & Colors */}
-                <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B] border-b border-gray-100 pb-3" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    <Palette className="w-4 h-4 text-[#1456f0]" />
-                    <span>Theme & Colors</span>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Widget Primary Color
-                    </label>
-                    <div className="flex items-center gap-3">
-                      {PRESET_COLORS.map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => setConfig((prev) => ({ ...prev, themeColor: c }))}
-                          className="w-8 h-8 rounded-full flex items-center justify-center border-2 transition-transform hover:scale-105 cursor-pointer shadow-2xs"
-                          style={{
-                            backgroundColor: c,
-                            borderColor: config.themeColor === c ? "#0F172A" : "transparent",
-                          }}
-                        >
-                          {config.themeColor === c && <Check className="w-4 h-4 text-white" />}
-                        </button>
-                      ))}
-                      <div className="flex items-center gap-1.5 border border-[#E2E8F0] rounded-xl px-2 py-1 bg-white">
-                        <input
-                          type="color"
-                          value={config.themeColor}
-                          onChange={(e) => setConfig((prev) => ({ ...prev, themeColor: e.target.value }))}
-                          className="w-6 h-6 rounded cursor-pointer border-none bg-transparent"
-                          title="Custom Color"
-                        />
-                        <span className="text-xs font-mono text-[#64748b] uppercase">{config.themeColor}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-1">
-                    <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Theme Mode
-                    </label>
-                    <select
-                      value={config.themeMode}
-                      onChange={(e) => setConfig((prev) => ({ ...prev, themeMode: e.target.value as any }))}
-                      className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 bg-white text-[#1E293B] font-medium focus:border-[#1456f0] focus:ring-2 focus:ring-[#1456f0]/10 outline-none"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
+              <div>
+                <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  Widget Primary Color
+                </label>
+                <div className="flex items-center gap-3">
+                  {PRESET_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setConfig((prev) => ({ ...prev, themeColor: c }))}
+                      className="w-8 h-8 rounded-full flex items-center justify-center border-2 transition-transform hover:scale-105 cursor-pointer shadow-2xs"
+                      style={{
+                        backgroundColor: c,
+                        borderColor: config.themeColor === c ? "#0F172A" : "transparent",
+                      }}
                     >
-                      <option value="light">Light Mode</option>
-                      <option value="dark">Dark Mode</option>
-                    </select>
+                      {config.themeColor === c && <Check className="w-4 h-4 text-white" />}
+                    </button>
+                  ))}
+                  <div className="flex items-center gap-1.5 border border-[#E2E8F0] rounded-xl px-2 py-1 bg-white">
+                    <input
+                      type="color"
+                      value={config.themeColor}
+                      onChange={(e) => setConfig((prev) => ({ ...prev, themeColor: e.target.value }))}
+                      className="w-6 h-6 rounded cursor-pointer border-none bg-transparent"
+                      title="Custom Color"
+                    />
+                    <span className="text-xs font-mono text-[#64748b] uppercase">{config.themeColor}</span>
                   </div>
                 </div>
+              </div>
 
-                {/* 2. Branding & Header */}
-                <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B] border-b border-gray-100 pb-3" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    <Bot className="w-4 h-4 text-[#1456f0]" />
-                    <span>Branding & Header</span>
-                  </div>
+              <div className="pt-1">
+                <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  Theme Mode
+                </label>
+                <select
+                  value={config.themeMode}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, themeMode: e.target.value as any }))}
+                  className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 bg-white text-[#1E293B] font-medium focus:border-[#1456f0] focus:ring-2 focus:ring-[#1456f0]/10 outline-none"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  <option value="light">Light Mode</option>
+                  <option value="dark">Dark Mode</option>
+                </select>
+              </div>
+            </div>
+          )}
 
+          {/* 2. Branding & Header */}
+          {matchesLauncherIcon && (
+            <div id="setting-launcher-icon" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B] border-b border-gray-100 pb-3" style={{ fontFamily: "Outfit, sans-serif" }}>
+                <Bot className="w-4 h-4 text-[#1456f0]" />
+                <span>Branding & Header</span>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  Bot / Brand Name
+                </label>
+                <input
+                  type="text"
+                  value={config.botName}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, botName: e.target.value }))}
+                  placeholder="e.g. MantraAssist Care Bot"
+                  className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 text-[#1E293B] font-medium bg-white focus:border-[#1456f0] focus:ring-2 focus:ring-[#1456f0]/10 outline-none"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                />
+              </div>
+
+              <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Remove &ldquo;Powered by MantraAssist&rdquo; signature
+                  </span>
+                  <InfoTooltip text="White-label the chatbot widget header and footer" />
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.removeSignature}
+                    onChange={(e) => setConfig((prev) => ({ ...prev, removeSignature: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1456f0]"></div>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* 3. Working Time Preferences */}
+          {matchesHours && (
+            <div id="setting-working-hours" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-[#1456f0]" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Working Time Preferences
+                  </h3>
+                  <InfoTooltip text="Show the widget only during specific business work hours based on location schedule" />
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.workHoursEnabled}
+                    onChange={(e) => setConfig((prev) => ({ ...prev, workHoursEnabled: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1456f0]"></div>
+                </label>
+              </div>
+
+              {config.workHoursEnabled && (
+                <div className="space-y-4 pt-1">
                   <div>
                     <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Bot / Brand Name
+                      Choose Organization Location
                     </label>
-                    <input
-                      type="text"
-                      value={config.botName}
-                      onChange={(e) => setConfig((prev) => ({ ...prev, botName: e.target.value }))}
-                      placeholder="e.g. MantraAssist Care Bot"
-                      className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 text-[#1E293B] font-medium bg-white focus:border-[#1456f0] focus:ring-2 focus:ring-[#1456f0]/10 outline-none"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    />
-                  </div>
-
-                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Remove &ldquo;Powered by MantraAssist&rdquo; signature
-                      </span>
-                      <InfoTooltip text="White-label the chatbot widget header and footer" />
+                    <div className="relative">
+                      <select
+                        value={config.selectedLocation || availableOrgLocations[0]?.name}
+                        onChange={(e) => {
+                          const found = availableOrgLocations.find((l) => l.name === e.target.value);
+                          setConfig((prev) => ({
+                            ...prev,
+                            selectedLocation: e.target.value,
+                            selectedLocationId: found?.id,
+                          }));
+                        }}
+                        className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 pl-8 bg-white text-[#1E293B] font-medium focus:border-[#1456f0] focus:ring-2 focus:ring-[#1456f0]/10 outline-none cursor-pointer"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        {availableOrgLocations.map((loc) => (
+                          <option key={loc.id} value={loc.name}>
+                            {loc.name}
+                          </option>
+                        ))}
+                      </select>
+                      <MapPin className="w-4 h-4 text-[#1456f0] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={config.removeSignature}
-                        onChange={(e) => setConfig((prev) => ({ ...prev, removeSignature: e.target.checked }))}
-                        className="sr-only peer"
-                      />
-                      <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1456f0]"></div>
-                    </label>
-                  </div>
-                </div>
-
-                {/* 3. Working Time Preferences (Location Schedule Based) */}
-                <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
-                  <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-[#1456f0]" />
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Working Time Preferences
-                      </h3>
-                      <InfoTooltip text="Show the widget only during specific business work hours based on location schedule" />
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={config.workHoursEnabled}
-                        onChange={(e) => setConfig((prev) => ({ ...prev, workHoursEnabled: e.target.checked }))}
-                        className="sr-only peer"
-                      />
-                      <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#1456f0]"></div>
-                    </label>
                   </div>
 
-                  {config.workHoursEnabled && (
-                    <div className="space-y-4 pt-1">
-                      <div>
-                        <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          Choose Organization Location
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={config.selectedLocation || availableOrgLocations[0]?.name}
-                            onChange={(e) => {
-                              const found = availableOrgLocations.find((l) => l.name === e.target.value);
-                              setConfig((prev) => ({
-                                ...prev,
-                                selectedLocation: e.target.value,
-                                selectedLocationId: found?.id,
-                              }));
-                            }}
-                            className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 pl-8 bg-white text-[#1E293B] font-medium focus:border-[#1456f0] focus:ring-2 focus:ring-[#1456f0]/10 outline-none cursor-pointer"
-                            style={{ fontFamily: "DM Sans, sans-serif" }}
-                          >
-                            {availableOrgLocations.map((loc) => (
-                              <option key={loc.id} value={loc.name}>
-                                {loc.name}
-                              </option>
-                            ))}
-                          </select>
-                          <MapPin className="w-4 h-4 text-[#1456f0] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  {/* Location Operating Hours Summary Card */}
+                  {(() => {
+                    const activeLoc =
+                      availableOrgLocations.find(
+                        (l) => l.name === (config.selectedLocation || availableOrgLocations[0]?.name)
+                      ) || availableOrgLocations[0];
+                    if (!activeLoc) return null;
+                    return (
+                      <div className="p-3.5 bg-blue-50/50 border border-blue-100 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            <Building2 className="w-3.5 h-3.5 text-[#1456f0]" />
+                            <span>{activeLoc.name}</span>
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                              Synced with Location
+                            </span>
+                            <InfoTooltip text="Working hours and days are automatically inherited from this location's schedule configured in Organization Settings." />
+                          </div>
+                        </div>
+                        <div className="text-[11px] text-[#475569] space-y-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          <div><strong className="text-[#1E293B]">Address:</strong> {activeLoc.address}</div>
+                          <div><strong className="text-[#1E293B]">Work Hours:</strong> {activeLoc.schedule}</div>
+                          <div><strong className="text-[#1E293B]">Timezone:</strong> {activeLoc.timezone}</div>
                         </div>
                       </div>
-
-                      {/* Location Operating Hours Summary Card */}
-                      {(() => {
-                        const activeLoc =
-                          availableOrgLocations.find(
-                            (l) => l.name === (config.selectedLocation || availableOrgLocations[0]?.name)
-                          ) || availableOrgLocations[0];
-                        if (!activeLoc) return null;
-                        return (
-                          <div className="p-3.5 bg-blue-50/50 border border-blue-100 rounded-xl space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                <Building2 className="w-3.5 h-3.5 text-[#1456f0]" />
-                                <span>{activeLoc.name}</span>
-                              </span>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
-                                  Synced with Location
-                                </span>
-                                <InfoTooltip text="Working hours and days are automatically inherited from this location's schedule configured in Organization Settings." />
-                              </div>
-                            </div>
-                            <div className="text-[11px] text-[#475569] space-y-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                              <div><strong className="text-[#1E293B]">Address:</strong> {activeLoc.address}</div>
-                              <div><strong className="text-[#1E293B]">Work Hours:</strong> {activeLoc.schedule}</div>
-                              <div><strong className="text-[#1E293B]">Timezone:</strong> {activeLoc.timezone}</div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
+              )}
+            </div>
+          )}
 
-
-
-                {/* 5. Pre-Chat Form */}
-                <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      <Layers className="w-4 h-4 text-[#1456f0]" />
-                      <span>Pre-Chat Form</span>
-                      <InfoTooltip text="Intake fields collected from web visitors before initiating the conversation" />
-                    </div>
+          {/* 4. Pre-Chat Form */}
+          {matchesIntake && (
+            <div id="setting-intake-form" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <Layers className="w-4 h-4 text-[#1456f0]" />
+                  <span>Pre-Chat Form</span>
+                  <InfoTooltip text="Intake fields collected from web visitors before initiating the conversation" />
+                </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
                         type="checkbox"
@@ -928,11 +975,68 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
                         </label>
                       </div>
 
-                      {/* Auto Create the Client & Requirement to Process Mapping */}
+                      {/* 1. Requirement to Process Mapping (maps visitor options to processes for prompt & routing) */}
+                      {(config.formFields.requirement ?? true) && (
+                        <div className="p-3.5 border border-[#E2E8F0] rounded-xl bg-gray-50/50 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                Requirement to Process Mapping
+                              </span>
+                              <InfoTooltip text="Map each visitor requirement choice to its target process for chatbot prompt instructions and workflow routing" />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleAddRequirement}
+                              className="text-[11px] font-semibold text-[#1456f0] hover:underline flex items-center gap-1 cursor-pointer"
+                            >
+                              <Plus className="w-3 h-3" /> Add Requirement
+                            </button>
+                          </div>
+
+                          <div className="space-y-2">
+                            {(config.requirements || []).map((req, idx) => (
+                              <div key={req.id || idx} className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={req.label}
+                                  onChange={(e) => handleUpdateRequirement(idx, "label", e.target.value)}
+                                  placeholder="Requirement Option (e.g. Booking)"
+                                  className="flex-1 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                                />
+                                <span className="text-xs text-[#94a3b8] font-mono">→</span>
+                                <select
+                                  value={req.processId}
+                                  onChange={(e) => handleUpdateRequirement(idx, "processId", e.target.value)}
+                                  className="flex-1 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                                >
+                                  {processes.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                {(config.requirements || []).length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveRequirement(idx)}
+                                    className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer transition-colors"
+                                    title="Remove requirement"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 2. Auto Create the Client */}
                       <div className="p-3.5 border border-[#E2E8F0] rounded-xl bg-gray-50/50 space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                            <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
                               Auto Create the Client
                             </span>
                             <InfoTooltip text="Automatically enroll new visitors as CRM clients in workflow" />
@@ -949,59 +1053,8 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
                         </div>
 
                         {config.autoCreateClientEnabled && (
-                          (config.formFields.requirement ?? true) ? (
-                            <div className="space-y-2.5 pt-1">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                  Requirement to Process Mapping
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={handleAddRequirement}
-                                  className="text-[11px] font-semibold text-[#1456f0] hover:underline flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Plus className="w-3 h-3" /> Add Requirement
-                                </button>
-                              </div>
-
-                              <div className="space-y-2">
-                                {(config.requirements || []).map((req, idx) => (
-                                  <div key={req.id || idx} className="flex items-center gap-2">
-                                    <input
-                                      type="text"
-                                      value={req.label}
-                                      onChange={(e) => handleUpdateRequirement(idx, "label", e.target.value)}
-                                      placeholder="Requirement Option (e.g. Booking)"
-                                      className="flex-1 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                                    />
-                                    <span className="text-xs text-[#94a3b8] font-mono">→</span>
-                                    <select
-                                      value={req.processId}
-                                      onChange={(e) => handleUpdateRequirement(idx, "processId", e.target.value)}
-                                      className="flex-1 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                                    >
-                                      {processes.map((p) => (
-                                        <option key={p.id} value={p.id}>
-                                          {p.name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    {(config.requirements || []).length > 1 && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveRequirement(idx)}
-                                        className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer transition-colors"
-                                        title="Remove requirement"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-2 gap-3 pt-1">
+                          <div className="grid grid-cols-2 gap-3 pt-1">
+                            {!(config.formFields.requirement ?? true) && (
                               <div>
                                 <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
                                   Process
@@ -1016,375 +1069,363 @@ export default function WebsiteWidgetSettingsTab({ onNavigateToInbox, registerSa
                                   ))}
                                 </select>
                               </div>
+                            )}
 
-                              <div>
-                                <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                  Initial Stage
-                                </label>
-                                <select
-                                  value={config.autoCreateStage}
-                                  onChange={(e) => setConfig((prev) => ({ ...prev, autoCreateStage: e.target.value }))}
-                                  className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                                >
-                                  {processStages.map((stage) => (
-                                    <option key={stage} value={stage}>{stage}</option>
-                                  ))}
-                                </select>
-                              </div>
+                            <div className={!(config.formFields.requirement ?? true) ? "" : "col-span-2"}>
+                              <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                Initial Stage for Created Clients
+                              </label>
+                              <select
+                                value={config.autoCreateStage}
+                                onChange={(e) => setConfig((prev) => ({ ...prev, autoCreateStage: e.target.value }))}
+                                className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                              >
+                                {processStages.map((stage) => (
+                                  <option key={stage} value={stage}>{stage}</option>
+                                ))}
+                              </select>
                             </div>
-                          )
+                          </div>
                         )}
                       </div>
                     </div>
                   )}
+            </div>
+          )}
+
+          {/* 5. First Responder */}
+          {matchesFirstResponder && (
+            <div id="setting-first-responder" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <ShieldCheck className="w-4 h-4 text-[#1456f0]" />
+                  <span>First Responder</span>
+                  <InfoTooltip text="Select who responds first when a visitor initiates a chat" />
                 </div>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-blue-50 text-[#1456f0] border-blue-200">
+                  {config.firstResponder === "ai" ? "AI Assistant" : "Human Agent"}
+                </span>
               </div>
-            )}
-          </div>
 
-          {/* ── Collapsible Section 2: Chat Routing Settings (ai-chat-module parity) ── */}
-          <div className="border border-[#E2E8F0] rounded-2xl overflow-hidden bg-white shadow-xs">
-            <button
-              type="button"
-              onClick={() => setShowRoutingSection(!showRoutingSection)}
-              className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 transition-colors border-b border-[#E2E8F0] cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#1456f0] flex items-center justify-center font-bold">
-                  <GitFork className="w-4 h-4" />
-                </div>
-                <div className="text-left flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Chat Routing Settings
-                  </h3>
-                  <span onClick={(e) => e.stopPropagation()}>
-                    <InfoTooltip text="First responder, employee queue assignment, automated client creation & agent profile display" />
-                  </span>
-                </div>
+              <div className="flex items-center gap-6">
+                <label className="flex items-center gap-2 text-xs font-bold text-[#1E293B] cursor-pointer" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  <input
+                    type="radio"
+                    name="firstResponder"
+                    value="ai"
+                    checked={config.firstResponder === "ai"}
+                    onChange={() => setConfig((prev) => ({ ...prev, firstResponder: "ai" }))}
+                    className="accent-[#1456f0]"
+                  />
+                  <span>AI Assistant</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs font-bold text-[#1E293B] cursor-pointer" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  <input
+                    type="radio"
+                    name="firstResponder"
+                    value="human"
+                    checked={config.firstResponder === "human"}
+                    onChange={() => setConfig((prev) => ({ ...prev, firstResponder: "human" }))}
+                    className="accent-[#1456f0]"
+                  />
+                  <span>Human Agent</span>
+                </label>
               </div>
-              <ChevronDown
-                className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                  showRoutingSection ? "rotate-180" : "rotate-0"
-                }`}
-              />
-            </button>
+            </div>
+          )}
 
-            {showRoutingSection && (
-              <div className="p-4 space-y-5">
-                {/* 1. First Responder */}
-                <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
-                  <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      <ShieldCheck className="w-4 h-4 text-[#1456f0]" />
-                      <span>First Responder</span>
-                    </div>
-                    <InfoTooltip text="Select who responds first when a visitor initiates a chat" />
-                  </div>
+          {/* 6. Queue & Routing */}
+          {matchesQueue && (
+            <div id="setting-agent-queue" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <Users className="w-4 h-4 text-[#1456f0]" />
+                  <span>Queue & Routing</span>
+                  <InfoTooltip text="Search and assign team members to the visitor chat queue and configure distribution" />
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-slate-50 text-[#475569] border-slate-200">
+                  {config.agentQueue?.length || 0} Assigned
+                </span>
+              </div>
 
-                  <div className="flex items-center gap-6">
-                    <label className="flex items-center gap-2 text-xs font-bold text-[#1E293B] cursor-pointer" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      <input
-                        type="radio"
-                        name="firstResponder"
-                        value="ai"
-                        checked={config.firstResponder === "ai"}
-                        onChange={() => setConfig((prev) => ({ ...prev, firstResponder: "ai" }))}
-                        className="accent-[#1456f0]"
-                      />
-                      <span>AI Assistant</span>
-                    </label>
-
-                    <label className="flex items-center gap-2 text-xs font-bold text-[#1E293B] cursor-pointer" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      <input
-                        type="radio"
-                        name="firstResponder"
-                        value="human"
-                        checked={config.firstResponder === "human"}
-                        onChange={() => setConfig((prev) => ({ ...prev, firstResponder: "human" }))}
-                        className="accent-[#1456f0]"
-                      />
-                      <span>Human Agent</span>
-                    </label>
-                  </div>
-
-
+              {/* Agent Queue Multi-select */}
+              <div className="space-y-1.5" ref={agentSelectRef}>
+                <div className="flex items-center gap-1.5">
+                  <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Agent Queue ({config.agentQueue?.length || 0} assigned)
+                  </label>
+                  <InfoTooltip text="Search and assign team members to the visitor chat queue" />
                 </div>
 
-                {/* 2. Queue & Routing */}
-                <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B] border-b border-gray-100 pb-3" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    <Users className="w-4 h-4 text-[#1456f0]" />
-                    <span>Queue & Routing</span>
-                  </div>
+                <div
+                  onClick={() => setAgentDropdownOpen(true)}
+                  className="min-h-[44px] p-2 border border-[#E2E8F0] rounded-xl bg-white flex flex-wrap items-center gap-1.5 cursor-text focus-within:border-[#1456f0] focus-within:ring-2 focus-within:ring-[#1456f0]/10 transition-all"
+                >
+                  {(config.agentQueue || []).map((id) => {
+                    const agent = availableAgents.find((a) => a.id === id);
+                    if (!agent) return null;
+                    const custom = config.customProfiles?.[id];
+                    const name = custom?.name || agent.name;
+                    const avatar = custom?.image || agent.image;
 
-                  {/* Agent Queue Multi-select */}
-                  <div className="space-y-1.5" ref={agentSelectRef}>
-                    <div className="flex items-center gap-1.5">
-                      <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Agent Queue ({config.agentQueue?.length || 0} assigned)
-                      </label>
-                      <InfoTooltip text="Search and assign team members to the visitor chat queue" />
-                    </div>
+                    return (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-semibold text-[#1E293B]"
+                      >
+                        <img src={avatar} alt={name} className="w-4 h-4 rounded-full object-cover" />
+                        <span>{name}</span>
+                        <X
+                          className="w-3 h-3 text-slate-400 hover:text-red-500 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleQueueAgent(id);
+                          }}
+                        />
+                      </span>
+                    );
+                  })}
 
-                    <div
-                      onClick={() => setAgentDropdownOpen(true)}
-                      className="min-h-[44px] p-2 border border-[#E2E8F0] rounded-xl bg-white flex flex-wrap items-center gap-1.5 cursor-text focus-within:border-[#1456f0] focus-within:ring-2 focus-within:ring-[#1456f0]/10 transition-all"
-                    >
-                      {(config.agentQueue || []).map((id) => {
-                        const agent = availableAgents.find((a) => a.id === id);
-                        if (!agent) return null;
-                        const custom = config.customProfiles?.[id];
-                        const name = custom?.name || agent.name;
-                        const avatar = custom?.image || agent.image;
+                  <input
+                    type="text"
+                    value={agentSearch}
+                    onChange={(e) => {
+                      setAgentSearch(e.target.value);
+                      setAgentDropdownOpen(true);
+                    }}
+                    onFocus={() => setAgentDropdownOpen(true)}
+                    placeholder={(config.agentQueue || []).length === 0 ? "Search team members to assign..." : "Add more..."}
+                    className="flex-1 text-xs outline-none bg-transparent min-w-[120px] text-[#1E293B]"
+                  />
+                </div>
 
-                        return (
-                          <span
-                            key={id}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-semibold text-[#1E293B]"
-                          >
-                            <img src={avatar} alt={name} className="w-4 h-4 rounded-full object-cover" />
-                            <span>{name}</span>
-                            <X
-                              className="w-3 h-3 text-slate-400 hover:text-red-500 cursor-pointer"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleQueueAgent(id);
-                              }}
-                            />
-                          </span>
-                        );
-                      })}
-
-                      <input
-                        type="text"
-                        value={agentSearch}
-                        onChange={(e) => {
-                          setAgentSearch(e.target.value);
-                          setAgentDropdownOpen(true);
-                        }}
-                        onFocus={() => setAgentDropdownOpen(true)}
-                        placeholder={(config.agentQueue || []).length === 0 ? "Search team members to assign..." : "Add more..."}
-                        className="flex-1 text-xs outline-none bg-transparent min-w-[120px] text-[#1E293B]"
-                      />
-                    </div>
-
-                    {/* Agent Dropdown list */}
-                    {agentDropdownOpen && (
-                      <div className="border border-[#E2E8F0] rounded-xl bg-white shadow-lg max-h-48 overflow-y-auto mt-1 p-1 z-30">
-                        {availableAgents
-                          .filter(
-                            (a) =>
-                              !(config.agentQueue || []).includes(a.id) &&
-                              a.name.toLowerCase().includes(agentSearch.toLowerCase())
-                          )
-                          .map((a) => (
-                            <div
-                              key={a.id}
-                              onClick={() => toggleQueueAgent(a.id)}
-                              className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
-                            >
-                              <div className="flex items-center gap-2">
-                                <img src={a.image} alt={a.name} className="w-6 h-6 rounded-full object-cover" />
-                                <div>
-                                  <div className="text-xs font-bold text-[#1E293B]">{a.name}</div>
-                                  <div className="text-[10px] text-[#64748b]">{a.role}</div>
-                                </div>
-                              </div>
-                              <span className="text-[11px] font-semibold text-[#1456f0]">+ Add</span>
+                {/* Agent Dropdown list */}
+                {agentDropdownOpen && (
+                  <div className="border border-[#E2E8F0] rounded-xl bg-white shadow-lg max-h-48 overflow-y-auto mt-1 p-1 z-30">
+                    {availableAgents
+                      .filter(
+                        (a) =>
+                          !(config.agentQueue || []).includes(a.id) &&
+                          a.name.toLowerCase().includes(agentSearch.toLowerCase())
+                      )
+                      .map((a) => (
+                        <div
+                          key={a.id}
+                          onClick={() => toggleQueueAgent(a.id)}
+                          className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <img src={a.image} alt={a.name} className="w-6 h-6 rounded-full object-cover" />
+                            <div>
+                              <div className="text-xs font-bold text-[#1E293B]">{a.name}</div>
+                              <div className="text-[10px] text-[#64748b]">{a.role}</div>
                             </div>
-                          ))}
-                        {availableAgents.filter(
-                          (a) =>
-                            !(config.agentQueue || []).includes(a.id) &&
-                            a.name.toLowerCase().includes(agentSearch.toLowerCase())
-                        ).length === 0 && (
-                          <div className="p-3 text-center text-xs text-[#94a3b8]">No more agents found</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-
-
-                  {/* Distribute submissions among employees */}
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Distribute Submissions Among Employees
-                      </label>
-                      <InfoTooltip text="Routing strategy: To everybody (simultaneous), evenly (round-robin), or as enqueued (sequential)" />
-                    </div>
-                    <select
-                      value={config.distribution}
-                      onChange={(e) => setConfig((prev) => ({ ...prev, distribution: e.target.value as any }))}
-                      className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      <option value="To everybody">To everybody (Simultaneous broadcast)</option>
-                      <option value="Evenly">Evenly (Round-robin balancing)</option>
-                      <option value="Exactly as enqueued">Exactly as enqueued (Sequential priority)</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* 3. Agent Display & Custom Profiles */}
-                <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B] border-b border-gray-100 pb-3" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    <User className="w-4 h-4 text-[#1456f0]" />
-                    <span>Agent Display Settings</span>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Agent Information Display Mode
-                      </label>
-                      <InfoTooltip text="Choose how agent identities appear to website visitors: actual account, custom alias/avatar, or anonymous" />
-                    </div>
-                    <select
-                      value={config.agentDisplay}
-                      onChange={(e) => setConfig((prev) => ({ ...prev, agentDisplay: e.target.value as any }))}
-                      className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      <option value="user">User Profile (Show actual account info)</option>
-                      <option value="custom">Use Custom Profile (Mask real identity)</option>
-                      <option value="hide">Hide User Information (Anonymous agent)</option>
-                    </select>
-                  </div>
-
-                  {config.agentDisplay === "custom" && (
-                    <div className="space-y-3 pt-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          Custom Profiles
-                        </span>
-                        <InfoTooltip text="Configure custom aliases and avatars for queue agents" />
-                      </div>
-
-                      {(config.agentQueue || []).length === 0 ? (
-                        <div className="p-4 border border-dashed border-gray-200 rounded-xl text-center text-xs text-slate-400">
-                          No agents in queue. Add agents in the Queue section above.
+                          </div>
+                          <span className="text-[11px] font-semibold text-[#1456f0]">+ Add</span>
                         </div>
-                      ) : (
-                        (config.agentQueue || []).map((id) => {
-                          const base = availableAgents.find((a) => a.id === id);
-                          if (!base) return null;
-                          const custom = config.customProfiles?.[id] || {};
-                          const displayName = custom.name !== undefined ? custom.name : base.name;
-                          const displayPosition = custom.position !== undefined ? custom.position : base.role;
-                          const displayImage = custom.image || base.image;
-
-                          return (
-                            <div key={id} className="p-3.5 border border-[#E2E8F0] rounded-xl bg-blue-50/20 space-y-3 relative">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-[#64748b] text-[11px] flex items-center gap-1.5">
-                                  <img src={base.image} alt={base.name} className="w-4 h-4 rounded-full opacity-60" />
-                                  Syncing from: <strong className="text-[#1E293B]">{base.name}</strong>
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleQueueAgent(id)}
-                                  className="text-[#94a3b8] hover:text-red-500 cursor-pointer text-xs"
-                                  title="Remove from queue"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-
-                              <div className="flex items-center gap-3">
-                                {/* Avatar with popover */}
-                                <div className="relative">
-                                  <img
-                                    src={displayImage}
-                                    alt={displayName}
-                                    onClick={() => setPopoverAgentId(popoverAgentId === id ? null : id)}
-                                    className="w-12 h-12 rounded-full object-cover border-2 border-[#1456f0]/30 cursor-pointer hover:border-[#1456f0] transition-colors"
-                                    title="Click to choose avatar"
-                                  />
-
-                                  {popoverAgentId === id && (
-                                    <div className="absolute top-14 left-0 bg-white border border-[#E2E8F0] rounded-xl p-3 shadow-xl z-50 w-56 space-y-2.5">
-                                      <div className="text-[11px] font-bold text-[#475569] uppercase">Select System Avatar</div>
-                                      <div className="grid grid-cols-4 gap-2">
-                                        {SYSTEM_AVATARS.map((url, i) => (
-                                          <img
-                                            key={i}
-                                            src={url}
-                                            onClick={() => {
-                                              updateCustomProfile(id, "image", url);
-                                              setPopoverAgentId(null);
-                                            }}
-                                            className="w-8 h-8 rounded-full border border-gray-200 cursor-pointer hover:scale-110 transition-transform"
-                                          />
-                                        ))}
-                                      </div>
-                                      <div className="border-t border-gray-100 pt-2">
-                                        <label className="text-[11px] font-semibold text-[#1456f0] hover:underline flex items-center gap-1 cursor-pointer justify-center">
-                                          <Upload className="w-3 h-3" /> Upload Custom Photo
-                                          <input
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            onChange={(e) => handleCustomAvatarUpload(id, e)}
-                                          />
-                                        </label>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="flex-1 grid grid-cols-2 gap-2">
-                                  <input
-                                    type="text"
-                                    value={displayName}
-                                    onChange={(e) => updateCustomProfile(id, "name", e.target.value)}
-                                    placeholder="Public Display Name"
-                                    className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                                  />
-                                  <input
-                                    type="text"
-                                    value={displayPosition}
-                                    onChange={(e) => updateCustomProfile(id, "position", e.target.value)}
-                                    placeholder="Position / Title"
-                                    className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })
+                      ))}
+                    {availableAgents.filter(
+                      (a) =>
+                        !(config.agentQueue || []).includes(a.id) &&
+                        a.name.toLowerCase().includes(agentSearch.toLowerCase())
+                    ).length === 0 && (
+                        <div className="p-3 text-center text-xs text-[#94a3b8]">No more agents found</div>
                       )}
-                    </div>
-                  )}
+                  </div>
+                )}
+              </div>
+
+              {/* Distribute submissions among employees */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Distribute Submissions Among Employees
+                  </label>
+                  <InfoTooltip text="Routing strategy: To everybody (simultaneous), evenly (round-robin), or as enqueued (sequential)" />
+                </div>
+                <select
+                  value={config.distribution}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, distribution: e.target.value as any }))}
+                  className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  <option value="To everybody">To everybody (Simultaneous broadcast)</option>
+                  <option value="Evenly">Evenly (Round-robin balancing)</option>
+                  <option value="Exactly as enqueued">Exactly as enqueued (Sequential priority)</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* 7. Agent Display Settings */}
+          {matchesQueue && (
+            <div id="setting-agent-display" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <User className="w-4 h-4 text-[#1456f0]" />
+                  <span>Agent Display Settings</span>
+                  <InfoTooltip text="Choose how agent identities appear to website visitors: actual account, custom alias/avatar, or anonymous" />
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* ── Card: Embed Widget Code (Positioned at Bottom) ── */}
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-3 shadow-xs">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                <Code className="w-4 h-4 text-[#1456f0]" />
-                <span>&lt;&gt; Widget Code</span>
-                <InfoTooltip text="Paste this HTML snippet right before the closing </body> tag of your website to activate the chatbot widget" />
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Agent Information Display Mode
+                  </label>
+                  <InfoTooltip text="Choose how agent identities appear to website visitors: actual account, custom alias/avatar, or anonymous" />
+                </div>
+                <select
+                  value={config.agentDisplay}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, agentDisplay: e.target.value as any }))}
+                  className="w-full text-xs border border-[#E2E8F0] rounded-xl p-2.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  <option value="user">User Profile (Show actual account info)</option>
+                  <option value="custom">Use Custom Profile (Mask real identity)</option>
+                  <option value="hide">Hide User Information (Anonymous agent)</option>
+                </select>
               </div>
-              <button
-                type="button"
-                onClick={handleCopyCode}
-                className="px-3 py-1.5 bg-[#eff6ff] hover:bg-[#dbeafe] text-[#1456f0] border border-[#bfdbfe] rounded-xl font-semibold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-              >
-                {copiedSnippet ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiedSnippet ? "Copied to Clipboard" : "Copy to Clipboard"}
-              </button>
-            </div>
 
-            <div className="relative bg-[#0F172A] rounded-xl p-3.5 overflow-x-auto text-xs font-mono text-slate-200 border border-slate-800">
-              <pre>{embedScriptSnippet}</pre>
+              {config.agentDisplay === "custom" && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-[#475569] uppercase tracking-wider" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Custom Profiles
+                    </span>
+                    <InfoTooltip text="Configure custom aliases and avatars for queue agents" />
+                  </div>
+
+                  {(config.agentQueue || []).length === 0 ? (
+                    <div className="p-4 border border-dashed border-gray-200 rounded-xl text-center text-xs text-slate-400">
+                      No agents in queue. Add agents in the Queue section above.
+                    </div>
+                  ) : (
+                    (config.agentQueue || []).map((id) => {
+                      const base = availableAgents.find((a) => a.id === id);
+                      if (!base) return null;
+                      const custom = config.customProfiles?.[id] || {};
+                      const displayName = custom.name !== undefined ? custom.name : base.name;
+                      const displayPosition = custom.position !== undefined ? custom.position : base.role;
+                      const displayImage = custom.image || base.image;
+
+                      return (
+                        <div key={id} className="p-3.5 border border-[#E2E8F0] rounded-xl bg-blue-50/20 space-y-3 relative">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-[#64748b] text-[11px] flex items-center gap-1.5">
+                              <img src={base.image} alt={base.name} className="w-4 h-4 rounded-full opacity-60" />
+                              Syncing from: <strong className="text-[#1E293B]">{base.name}</strong>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleQueueAgent(id)}
+                              className="text-[#94a3b8] hover:text-red-500 cursor-pointer text-xs"
+                              title="Remove from queue"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            {/* Avatar with popover */}
+                            <div className="relative">
+                              <img
+                                src={displayImage}
+                                alt={displayName}
+                                onClick={() => setPopoverAgentId(popoverAgentId === id ? null : id)}
+                                className="w-12 h-12 rounded-full object-cover border-2 border-[#1456f0]/30 cursor-pointer hover:border-[#1456f0] transition-colors"
+                                title="Click to choose avatar"
+                              />
+
+                              {popoverAgentId === id && (
+                                <div className="absolute top-14 left-0 bg-white border border-[#E2E8F0] rounded-xl p-3 shadow-xl z-50 w-56 space-y-2.5">
+                                  <div className="text-[11px] font-bold text-[#475569] uppercase">Select System Avatar</div>
+                                  <div className="grid grid-cols-4 gap-2">
+                                    {SYSTEM_AVATARS.map((url, i) => (
+                                      <img
+                                        key={i}
+                                        src={url}
+                                        onClick={() => {
+                                          updateCustomProfile(id, "image", url);
+                                          setPopoverAgentId(null);
+                                        }}
+                                        className="w-8 h-8 rounded-full border border-gray-200 cursor-pointer hover:scale-110 transition-transform"
+                                      />
+                                    ))}
+                                  </div>
+                                  <div className="border-t border-gray-100 pt-2">
+                                    <label className="text-[11px] font-semibold text-[#1456f0] hover:underline flex items-center gap-1 cursor-pointer justify-center">
+                                      <Upload className="w-3 h-3" /> Upload Custom Photo
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) => handleCustomAvatarUpload(id, e)}
+                                      />
+                                    </label>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex-1 grid grid-cols-2 gap-2">
+                              <input
+                                type="text"
+                                value={displayName}
+                                onChange={(e) => updateCustomProfile(id, "name", e.target.value)}
+                                placeholder="Public Display Name"
+                                className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                              />
+                              <input
+                                type="text"
+                                value={displayPosition}
+                                onChange={(e) => updateCustomProfile(id, "position", e.target.value)}
+                                placeholder="Position / Title"
+                                className="text-xs border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
-          </div>
+          )}
+
+          {/* 8. Widget Installation & Embed Code */}
+          {matchesEmbed && (
+            <div id="setting-embed-code" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <Code className="w-4 h-4 text-[#1456f0]" />
+                  <span>Widget Installation & Embed Code</span>
+                  <InfoTooltip text="Paste this HTML snippet right before the closing </body> tag of your website to activate the chatbot widget" />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyCode}
+                  className="px-3 py-1.5 bg-[#eff6ff] hover:bg-[#dbeafe] text-[#1456f0] border border-[#bfdbfe] rounded-xl font-semibold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  {copiedSnippet ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedSnippet ? "Copied to Clipboard" : "Copy to Clipboard"}
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-[#64748b]">
+                  <span className="font-mono text-[11px]">&lt;&gt; Website Embed Snippet</span>
+                  <span>Place before &lt;/body&gt;</span>
+                </div>
+                <div className="relative bg-[#0F172A] rounded-xl p-3.5 overflow-x-auto text-xs font-mono text-slate-200 border border-slate-800">
+                  <pre>{embedScriptSnippet}</pre>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
       </div>

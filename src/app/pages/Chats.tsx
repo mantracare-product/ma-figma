@@ -56,6 +56,11 @@ import {
   Sparkles,
   Inbox,
   Phone,
+  Sliders,
+  Palette,
+  PhoneCall,
+  Code,
+  Layers,
 } from "lucide-react";
 import TemplateLibraryDrawer from "../components/chats/TemplateLibraryDrawer";
 import DrawerShell from "../components/ui/DrawerShell";
@@ -1225,6 +1230,99 @@ export default function Chats() {
         t.bodyText.toLowerCase().includes(q)
     );
   }, [globalTemplates, templateSearch]);
+
+  // ── Website Widget Settings Search & Quick Jump State ──
+  const [widgetSettingsSearch, setWidgetSettingsSearch] = useState("");
+
+  const WIDGET_SETTINGS_ITEMS = useMemo(() => [
+    {
+      id: "setting-position",
+      title: "Widget Position",
+      category: "Appearance & Layout",
+      description: "Screen anchor alignment (bottom-right, bottom-left, top corners, centers)",
+      keywords: ["position", "anchor", "bottom", "left", "right", "top", "align", "corner"],
+      icon: <Sliders className="w-4 h-4 text-[#1456f0]" />,
+    },
+    {
+      id: "setting-theme",
+      title: "Theme & Colors",
+      category: "Appearance & Layout",
+      description: "Primary brand accent color palette and Light/Dark mode switcher",
+      keywords: ["theme", "color", "accent", "primary", "palette", "dark", "light", "mode", "hex"],
+      icon: <Palette className="w-4 h-4 text-[#1456f0]" />,
+    },
+    {
+      id: "setting-launcher-icon",
+      title: "Branding & Header",
+      category: "Appearance & Layout",
+      description: "Bot name, greeting header and white-label signature toggle",
+      keywords: ["branding", "name", "bot", "brand", "header", "signature", "white-label", "powered by"],
+      icon: <Bot className="w-4 h-4 text-[#1456f0]" />,
+    },
+    {
+      id: "setting-working-hours",
+      title: "Working Time Preferences",
+      category: "Appearance & Layout",
+      description: "Show widget during business work hours synced with location schedules",
+      keywords: ["hours", "working", "schedule", "time", "location", "operating", "days", "timezone"],
+      icon: <Clock className="w-4 h-4 text-[#1456f0]" />,
+    },
+    {
+      id: "setting-intake-form",
+      title: "Pre-Chat Intake Form",
+      category: "Appearance & Layout",
+      description: "Name, email, phone, requirement dropdown and CRM client auto-creation mapping",
+      keywords: ["intake", "form", "pre-chat", "fields", "requirement", "process", "client", "mapping", "phone", "email"],
+      icon: <Layers className="w-4 h-4 text-[#1456f0]" />,
+    },
+    {
+      id: "setting-first-responder",
+      title: "First Responder",
+      category: "Chat Routing & Queue",
+      description: "Choose whether AI Assistant or Human Agent responds first to visitor inquiries",
+      keywords: ["first", "responder", "ai", "human", "agent", "assistant", "bot", "routing", "priority"],
+      icon: <ShieldCheck className="w-4 h-4 text-[#1456f0]" />,
+    },
+    {
+      id: "setting-agent-queue",
+      title: "Queue & Routing & Public Profiles",
+      category: "Chat Routing & Queue",
+      description: "Assign team members to queue and configure public display names, avatars & titles",
+      keywords: ["queue", "agent", "employee", "team", "assign", "routing", "profile", "avatar", "title", "position"],
+      icon: <Users className="w-4 h-4 text-[#1456f0]" />,
+    },
+    {
+      id: "setting-embed-code",
+      title: "Widget Embed Code",
+      category: "Installation & Embed",
+      description: "HTML script tag snippet for instant website installation",
+      keywords: ["embed", "code", "script", "install", "html", "snippet", "javascript", "integration"],
+      icon: <Code className="w-4 h-4 text-[#1456f0]" />,
+    },
+  ], []);
+
+  const filteredWidgetSettings = useMemo(() => {
+    if (!widgetSettingsSearch.trim()) return WIDGET_SETTINGS_ITEMS;
+    const q = widgetSettingsSearch.toLowerCase().trim();
+    return WIDGET_SETTINGS_ITEMS.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.category.toLowerCase().includes(q) ||
+        item.keywords.some((k) => k.includes(q))
+    );
+  }, [WIDGET_SETTINGS_ITEMS, widgetSettingsSearch]);
+
+  const handleJumpToSetting = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-[#1456f0]", "transition-all");
+      setTimeout(() => {
+        el.classList.remove("ring-2", "ring-[#1456f0]");
+      }, 2500);
+    }
+  };
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [templatesView, setTemplatesView] = useState<"table" | "builder">("table");
   const [showTemplateDrawer, setShowTemplateDrawer] = useState(false);
@@ -1752,14 +1850,80 @@ export default function Chats() {
               )}
             </div>
           }
-          searchQuery={subMode === "templates" ? templateSearch : chatSearch}
-          onSearchChange={subMode === "templates" ? setTemplateSearch : setChatSearch}
+          searchQuery={
+            subMode === "templates"
+              ? templateSearch
+              : subMode === "settings"
+              ? widgetSettingsSearch
+              : chatSearch
+          }
+          onSearchChange={
+            subMode === "templates"
+              ? setTemplateSearch
+              : subMode === "settings"
+              ? setWidgetSettingsSearch
+              : setChatSearch
+          }
           searchPlaceholder={
             subMode === "templates"
               ? "Search templates..."
+              : subMode === "settings"
+              ? "Search widget settings (theme, intake, position, hours, code)..."
               : channelFilter === "website"
               ? "Search visitor chats..."
               : "Search conversations..."
+          }
+          customFilterModalContent={
+            subMode === "settings" ? (
+              <div className="p-3 space-y-3 max-h-[380px] overflow-y-auto">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sliders className="w-3.5 h-3.5 text-[#1456f0]" />
+                    <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Widget Settings Directory
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {filteredWidgetSettings.length} of {WIDGET_SETTINGS_ITEMS.length} settings
+                  </span>
+                </div>
+
+                {filteredWidgetSettings.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-slate-400 space-y-1">
+                    <p className="font-semibold text-slate-600">No settings found matching &quot;{widgetSettingsSearch}&quot;</p>
+                    <p className="text-[11px]">Try searching for theme, intake, position, hours, queue, or code.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {filteredWidgetSettings.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleJumpToSetting(item.id)}
+                        className="p-2.5 rounded-xl border border-[#E2E8F0] hover:border-[#1456f0] hover:bg-blue-50/50 transition-all text-left flex items-start gap-2.5 cursor-pointer group"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 group-hover:bg-[#1456f0] group-hover:text-white text-[#1456f0] flex items-center justify-center shrink-0 transition-colors">
+                          {item.icon}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <span className="text-xs font-bold text-[#1E293B] group-hover:text-[#1456f0] transition-colors truncate">
+                              {item.title}
+                            </span>
+                            <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 shrink-0">
+                              {item.category.split(" ")[0]}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 line-clamp-2 leading-tight">
+                            {item.description}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : undefined
           }
           primaryAction={
             subMode === "templates"
@@ -2493,6 +2657,8 @@ export default function Chats() {
         {/* ── Tab: Website Widget Settings ── */}
         {activeTab === "website-settings" && (
           <WebsiteWidgetSettingsTab
+            searchQuery={widgetSettingsSearch}
+            onClearSearch={() => setWidgetSettingsSearch("")}
             registerSaveHandler={(fn) => {
               widgetSettingsSaveRef.current = fn;
             }}
