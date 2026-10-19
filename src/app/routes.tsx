@@ -78,6 +78,8 @@ const PatientFormsScreen = withLazy(() => import("./pages/patient/PatientFormsSc
 const PatientFormFillScreen = withLazy(() => import("./pages/patient/PatientFormFillScreen"));
 const PatientProfileScreen = withLazy(() => import("./pages/patient/PatientProfileScreen"));
 const AdminAIVoicesModels = withLazy(() => import("./pages/admin/AdminAIVoicesModels"));
+const AdminPlans = withLazy(() => import("./pages/admin/AdminPlans"));
+const AdminBilling = withLazy(() => import("./pages/admin/AdminBilling"));
 
 export const router = createBrowserRouter([
   {
@@ -192,6 +194,8 @@ export const router = createBrowserRouter([
               { path: "settings/:tab", Component: Settings },
               { path: "settings/billing/:subtab", Component: Settings },
               { path: "settings/team/:id", Component: ManageTeamMember },
+              { path: "billing", Component: Settings },
+              { path: "billing/:subtab", Component: Settings },
             ],
           },
           { path: "services", Component: Services },
@@ -226,6 +230,11 @@ export const router = createBrowserRouter([
           { path: "users", Component: UserManagement },
           { path: "organizations", Component: Organizations },
           { path: "forms", Component: WebForms },
+          { path: "plans", Component: AdminPlans },
+          { path: "plans-credits", Component: AdminPlans },
+          { path: "billing", Component: AdminBilling },
+          { path: "subscriptions", Component: AdminBilling },
+          { path: "credits", Component: AdminPlans },
           { path: "settings", Component: Settings },
           { path: "reports", Component: Reports },
         ],

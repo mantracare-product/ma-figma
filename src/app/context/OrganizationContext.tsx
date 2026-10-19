@@ -7,6 +7,8 @@ export interface Organization {
   industry: string;
   locations?: string[];
   location?: string;
+  country?: string;
+  currency?: string;
   email: string;
   phone: string;
   status: "Active" | "Inactive";
@@ -34,6 +36,8 @@ const defaultOrganizations: Organization[] = [
     industryCategory: "Healthcare",
     industry: "General Physician",
     locations: ["California", "New York"],
+    country: "United States",
+    currency: "USD",
     email: "contact@mantraassist.com",
     phone: "+1 (555) 123-4567",
     status: "Active",
@@ -44,26 +48,44 @@ const defaultOrganizations: Organization[] = [
     industryCategory: "Healthcare",
     industry: "Cardiologist",
     locations: ["California"],
+    country: "United States",
+    currency: "USD",
     email: "contact@heartcare.com",
     phone: "+1 (555) 123-4567",
     status: "Active",
   },
   {
     id: "2",
-    name: "Smile Dental Center",
-    industryCategory: "Healthcare",
-    industry: "Dentist",
-    locations: ["Texas"],
-    email: "contact@smiledental.com",
-    phone: "+1 (555) 987-6543",
+    name: "Zenith Wellness & Yoga",
+    industryCategory: "Wellness & Lifestyle",
+    industry: "Yoga & Mindfulness Studio",
+    locations: ["Bangalore", "Delhi"],
+    country: "India",
+    currency: "INR",
+    email: "contact@zenithwellness.in",
+    phone: "+91 98765 43210",
     status: "Active",
   },
   {
     id: "3",
+    name: "Skyline Realty Group",
+    industryCategory: "Real Estate",
+    industry: "Residential Real Estate Brokerage",
+    locations: ["London"],
+    country: "United Kingdom",
+    currency: "GBP",
+    email: "sales@skylinerealty.co.uk",
+    phone: "+44 20 7946 0958",
+    status: "Active",
+  },
+  {
+    id: "4",
     name: "Apex Auto Care",
     industryCategory: "Automobile",
     industry: "Auto Dealership & Service",
     locations: ["California", "Nevada"],
+    country: "United States",
+    currency: "USD",
     email: "service@apexauto.com",
     phone: "+1 (555) 345-6789",
     status: "Active",

@@ -92,9 +92,9 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
       title: "OVERVIEW",
       items: [
         { id: "orders", label: "Orders", icon: ShoppingCart, path: "/admin/orders" },
-        { id: "subscriptions", label: "Subscriptions", icon: CreditCard, path: "/admin/subscriptions" },
+        { id: "subscriptions", label: "Billing & Subscriptions", icon: CreditCard, path: "/admin/billing" },
         { id: "call-logs", label: "Calls logs", icon: PhoneCall, path: "/admin/call-logs" },
-        { id: "credits", label: "Credits/ transactions", icon: Coins, path: "/admin/credits" },
+        { id: "credits", label: "Credits & Packages", icon: Coins, path: "/admin/plans" },
         { id: "usages", label: "Usages (LiveKit / Dogra, Cartesia)", icon: Activity, path: "/admin/usages" },
       ],
     },
@@ -124,7 +124,7 @@ export default function AdminSidebar({ onClose }: AdminSidebarProps = {}) {
       id: "settings",
       title: "SETTINGS",
       items: [
-        { id: "plans", label: "Plans", icon: CreditCard, path: "/admin/settings" },
+        { id: "plans", label: "Plans & Credits", icon: CreditCard, path: "/admin/plans" },
         { id: "integration", label: "Integration", icon: Blocks, path: "/admin/settings" },
         { id: "user-management", label: "User Management", icon: Users, path: "/admin/users" },
         { id: "logs", label: "Logs", icon: FileText, path: "/admin/logs" },
