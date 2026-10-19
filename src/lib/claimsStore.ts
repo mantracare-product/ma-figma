@@ -61,8 +61,8 @@ export interface Claim {
   renderingProviderNpi: string;
   billingProviderName: string;
   billingProviderNpi: string;
-  billingProviderTaxId: string; // EIN/SSN
-  billingProviderAddress: string;
+  billingProviderTaxId?: string; // EIN/SSN
+  billingProviderAddress?: string;
   placeOfService: string; // e.g. "11 - Office", "02 - Telehealth"
 
   // Medical coding

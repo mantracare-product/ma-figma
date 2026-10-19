@@ -635,7 +635,11 @@ const SYSTEM_FIELD_KEYS = new Set([
   "responsible", "lastContact", "companyName", "jobPosition",
   "invoice_number", "issue_date", "due_date", "payment_mode",
   "product_name", "quantity", "unit_price", "tax_rate",
-  "line_items_summary", "subtotal", "tax_amount", "discount_applied", "payment_url"
+  "line_items_summary", "subtotal", "tax_amount", "discount_applied", "payment_url",
+  "claim_number", "service_date", "billed_amount", "claim_type", "place_of_service",
+  "client_name", "patient_dob", "client_phone", "client_email", "payer_name",
+  "policy_number", "group_number", "diagnosis_codes", "procedure_codes",
+  "provider_npi", "prior_auth_number", "allowed_amount", "paid_amount",
 ]);
 
 const SYSTEM_SECTION_IDS = new Set([
@@ -651,6 +655,9 @@ const SYSTEM_SECTION_IDS = new Set([
   "sec-inv-items",
   "sec-inv-payment-link",
   "sec-inv-custom",
+  "sec-clm-details",
+  "sec-clm-patient",
+  "sec-clm-billing",
 ]);
 
 /**
@@ -2351,6 +2358,7 @@ function normalizeModuleKey(raw: any): Exclude<FieldModule, "deal"> {
   if (lower === "teammember" || lower === "team_member" || lower === "team member" || lower === "team members") return "teamMember";
   if (lower === "scribe" || lower === "ai scribe" || lower === "ai_scribe") return "scribe";
   if (lower === "invoice" || lower === "invoices") return "invoice";
+  if (lower === "claim" || lower === "claims" || lower === "insurance" || lower === "insurance & claims" || lower === "insurance_claims") return "claim";
   return "client";
 }
 

@@ -23,8 +23,18 @@ import {
   Edit,
   Trash2,
 } from "lucide-react";
-import { toast } from "sonner";
-import { Claim, getStoredClaims, saveClaim, moveClaimToStage, submitClaimElectronically, CLAIMS_CHANGED_EVENT } from "../../../lib/claimsStore";
+import {
+  Claim,
+  ClaimStatus,
+  ClaimDiagnosisCode,
+  ClaimServiceLine,
+  getStoredClaims,
+  saveClaim,
+  generateClaimNumber,
+  moveClaimToStage,
+  submitClaimElectronically,
+  CLAIMS_CHANGED_EVENT,
+} from "../../../lib/claimsStore";
 import { ChevronStageRibbon } from "../common/ChevronStageRibbon";
 import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
 import ActivityTab, { ActivityLogEntry } from "../activity/ActivityTab";
@@ -48,13 +58,17 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "../ui/dropdown-menu";
+import { toast } from "sonner";
+
 
 export interface ClaimDetailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   claim: Claim | null;
+  isCreateMode?: boolean;
   onEditClaim?: (claim: Claim) => void;
   onOpenCMS1500?: (claim: Claim) => void;
+  onClaimCreated?: (createdClaim: Claim) => void;
 }
 
 const DEFAULT_CLAIM_SECTIONS: OverviewSection[] = [
@@ -108,12 +122,52 @@ const DEFAULT_CLAIM_SECTIONS: OverviewSection[] = [
   },
 ];
 
+const createEmptyClaim = (): Claim => {
+  return {
+    id: `clm-${Date.now()}`,
+    claimNumber: generateClaimNumber(),
+    patientId: "",
+    patientName: "",
+    patientDob: "",
+    patientGender: "Female",
+    patientAddress: "",
+    patientPhone: "",
+    insuredId: "",
+    groupNumber: "",
+    payer: {
+      id: "payer-1",
+      name: "",
+      payerId: "",
+      type: "Commercial",
+    },
+    serviceDate: new Date().toISOString().slice(0, 10),
+    placeOfService: "11 - Office",
+    submissionMethod: "clearinghouse",
+    status: "Draft",
+    statusLabel: "Draft & Intake",
+    totalCharge: 0,
+    amountPaid: 0,
+    lines: [],
+    diagnosisCodes: [],
+    renderingProviderName: "",
+    renderingProviderNpi: "",
+    billingProviderName: "",
+    billingProviderNpi: "",
+    billingProviderTaxId: "XX-XXX4912",
+    billingProviderAddress: "100 Medical Center Way, Suite 400, Chicago, IL 60601",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+};
+
 export default function ClaimDetailDrawer({
   isOpen,
   onClose,
   claim,
+  isCreateMode = false,
   onEditClaim,
   onOpenCMS1500,
+  onClaimCreated,
 }: ClaimDetailDrawerProps) {
   const { activeOrganization } = useOrganization();
   const { getSectionsForOrg, getFieldsForOrg, addCustomSection, updateCustomSection } = useFieldRegistry();
@@ -130,11 +184,21 @@ export default function ClaimDetailDrawer({
   const [editingSection, setEditingSection] = useState<SectionDefinition | null>(null);
 
   // Live Claim state
-  const [liveClaim, setLiveClaim] = useState<Claim | null>(claim);
+  const [liveClaim, setLiveClaim] = useState<Claim | null>(() => {
+    if (claim) return claim;
+    if (isCreateMode) return createEmptyClaim();
+    return null;
+  });
 
   useEffect(() => {
-    setLiveClaim(claim);
-  }, [claim]);
+    if (claim) {
+      setLiveClaim(claim);
+    } else if (isOpen && isCreateMode) {
+      setLiveClaim(createEmptyClaim());
+    } else {
+      setLiveClaim(null);
+    }
+  }, [claim, isOpen, isCreateMode]);
 
   // Sync when claim is modified elsewhere
   useEffect(() => {
@@ -188,11 +252,13 @@ export default function ClaimDetailDrawer({
 
   // Formatted Claim Title
   const claimTitle = useMemo(() => {
-    if (!liveClaim) return "Insurance Claim";
+    if (isCreateMode || !liveClaim?.patientName) {
+      return "New Insurance Claim";
+    }
     const patientName = liveClaim.patientName || "Client";
     const dateStr = liveClaim.serviceDate || (liveClaim.createdAt ? liveClaim.createdAt.slice(0, 10) : "2026-10-15");
     return `${patientName}_Claim_${dateStr}`;
-  }, [liveClaim]);
+  }, [liveClaim, isCreateMode]);
 
   // Local storage key for custom section configuration
   const claimSectionsStorageKey = useMemo(() => {
@@ -252,25 +318,49 @@ export default function ClaimDetailDrawer({
 
   useEffect(() => {
     if (!liveClaim) return;
+    if (isCreateMode) {
+      setFieldValues({
+        claim_number: liveClaim.claimNumber,
+        service_date: liveClaim.serviceDate || new Date().toISOString().slice(0, 10),
+        billed_amount: "",
+        claim_type: "Professional (CMS-1500 / 837P)",
+        place_of_service: liveClaim.placeOfService || "11 - Office",
+        client_name: "",
+        patient_dob: "",
+        client_phone: "",
+        client_email: "",
+        payer_name: "",
+        policy_number: "",
+        group_number: "",
+        diagnosis_codes: "",
+        procedure_codes: "",
+        provider_npi: "",
+        prior_auth_number: "",
+        allowed_amount: "",
+        paid_amount: "",
+      });
+      return;
+    }
+
     const initialValues: Record<string, any> = {
-      claim_number: liveClaim.claimNumber,
-      service_date: liveClaim.serviceDate,
-      billed_amount: liveClaim.totalCharge,
+      claim_number: liveClaim.claimNumber || "",
+      service_date: liveClaim.serviceDate || "",
+      billed_amount: liveClaim.totalCharge ? liveClaim.totalCharge : "",
       claim_type: liveClaim.submissionMethod === "clearinghouse" ? "Professional (837P)" : "CMS-1500 Paper",
       place_of_service: liveClaim.placeOfService || "11 - Office",
-      client_name: liveClaim.patientName,
-      patient_dob: liveClaim.patientDob,
-      client_phone: liveClaim.patientPhone,
-      client_email: "patient@example.com",
-      payer_name: liveClaim.payer?.name || "Insurance Payer",
+      client_name: liveClaim.patientName || "",
+      patient_dob: liveClaim.patientDob || "",
+      client_phone: liveClaim.patientPhone || "",
+      client_email: liveClaim.patientId ? `${liveClaim.patientId.toLowerCase()}@example.com` : "",
+      payer_name: liveClaim.payer?.name || "",
       policy_number: liveClaim.insuredId || "",
-      group_number: liveClaim.groupNumber || "GRP-001",
+      group_number: liveClaim.groupNumber || "",
       diagnosis_codes: (liveClaim.diagnosisCodes || []).map((d) => d.code).join(", "),
       procedure_codes: (liveClaim.lines || []).map((l) => l.cptCode).join(", "),
-      provider_npi: liveClaim.billingProviderNpi || "1932840192",
-      prior_auth_number: "AUTH-982110",
-      allowed_amount: liveClaim.totalCharge > 0 ? (liveClaim.totalCharge * 0.85).toFixed(2) : 0,
-      paid_amount: liveClaim.amountPaid || 0,
+      provider_npi: liveClaim.billingProviderNpi || "",
+      prior_auth_number: "",
+      allowed_amount: liveClaim.totalCharge > 0 ? (liveClaim.totalCharge * 0.85).toFixed(2) : "",
+      paid_amount: liveClaim.amountPaid || "",
     };
 
     try {
@@ -281,18 +371,25 @@ export default function ClaimDetailDrawer({
     } catch {}
 
     setFieldValues(initialValues);
-  }, [liveClaim]);
+  }, [liveClaim, isCreateMode]);
 
   const handleFieldValueChange = (key: string, value: any) => {
     setFieldValues((prev) => {
       const next = { ...prev, [key]: value };
-      if (liveClaim?.id) {
+      if (!isCreateMode && liveClaim?.id) {
         try {
           localStorage.setItem(`mantra_claim_fieldvalues_${liveClaim.id}`, JSON.stringify(next));
         } catch {}
       }
       return next;
     });
+
+    if (key === "client_name") {
+      setLiveClaim((prev) => (prev ? { ...prev, patientName: value } : prev));
+    } else if (key === "billed_amount") {
+      const num = parseFloat(value) || 0;
+      setLiveClaim((prev) => (prev ? { ...prev, totalCharge: num } : prev));
+    }
   };
 
   // Stage Progression Handler
@@ -343,6 +440,11 @@ export default function ClaimDetailDrawer({
     ].filter(Boolean) as string[];
 
     const load = () => {
+      if (isCreateMode) {
+        setActivities([]);
+        return;
+      }
+
       let list = getActivity(candidateIds, undefined, {
         claimId: liveClaim.id,
         appointmentId: liveClaim.appointmentId ? String(liveClaim.appointmentId) : undefined,
@@ -421,7 +523,7 @@ export default function ClaimDetailDrawer({
       appointmentId: liveClaim.appointmentId ? String(liveClaim.appointmentId) : undefined,
     });
     return unsub;
-  }, [liveClaim?.id, liveClaim?.status, liveClaim?.currentStageId, effectiveClientId, insuranceProcess.name, currentClaimStage?.name]);
+  }, [liveClaim?.id, liveClaim?.status, liveClaim?.currentStageId, effectiveClientId, insuranceProcess.name, currentClaimStage?.name, isCreateMode]);
 
   if (!isOpen || !liveClaim) return null;
 
@@ -430,6 +532,122 @@ export default function ClaimDetailDrawer({
     setCopiedId(true);
     toast.success("Claim ID copied to clipboard");
     setTimeout(() => setCopiedId(false), 2000);
+  };
+
+  const handleSaveClaim = (initialStatus: ClaimStatus = "Draft") => {
+    if (!liveClaim) return;
+    const clientName = (fieldValues.client_name || "").trim();
+
+    // Parse diagnosis codes
+    const diagString = fieldValues.diagnosis_codes || "";
+    const diagCodes: ClaimDiagnosisCode[] = diagString
+      ? diagString.split(",").map((c: string, idx: number) => ({
+          pointer: (["A", "B", "C", "D"][idx] || "A") as any,
+          code: c.trim(),
+          description: `ICD-10 Code ${c.trim()}`,
+        }))
+      : [];
+
+    // Parse procedure codes
+    const procString = fieldValues.procedure_codes || "";
+    const billedAmt = parseFloat(fieldValues.billed_amount) || 0;
+    const procList = procString ? procString.split(",") : [];
+    const serviceLines: ClaimServiceLine[] = procList.length > 0
+      ? procList.map((p: string, idx: number) => ({
+          id: `line-${Date.now()}-${idx}`,
+          serviceDate: fieldValues.service_date || liveClaim.serviceDate,
+          cptCode: p.trim(),
+          description: `CPT Procedure ${p.trim()}`,
+          diagnosisPointer: "A",
+          chargeAmount: billedAmt / procList.length,
+          units: 1,
+        }))
+      : [];
+
+    const newClaim: Claim = {
+      ...liveClaim,
+      id: liveClaim.id || `clm-${Date.now()}`,
+      claimNumber: liveClaim.claimNumber || generateClaimNumber(),
+      patientName: clientName || "Unnamed Client",
+      patientPhone: fieldValues.client_phone || "",
+      patientDob: fieldValues.patient_dob || "",
+      patientAddress: "",
+      insuredId: fieldValues.policy_number || "",
+      groupNumber: fieldValues.group_number || "",
+      payer: {
+        id: "payer-1",
+        name: fieldValues.payer_name || "Self-Pay / Commercial",
+        payerId: "PAY-001",
+        type: "Commercial",
+      },
+      serviceDate: fieldValues.service_date || new Date().toISOString().slice(0, 10),
+      placeOfService: fieldValues.place_of_service || "11 - Office",
+      totalCharge: billedAmt,
+      amountPaid: parseFloat(fieldValues.paid_amount) || 0,
+      lines: serviceLines,
+      diagnosisCodes: diagCodes,
+      billingProviderNpi: fieldValues.provider_npi || "",
+      status: initialStatus,
+      statusLabel: initialStatus === "Draft" ? "Draft & Intake" : initialStatus,
+      currentStageId: initialStatus === "Draft" ? claimStages[0]?.id : claimStages[1]?.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    saveClaim(newClaim);
+
+    appendActivity({
+      clientId: newClaim.patientId || newClaim.id,
+      claimId: newClaim.id,
+      processId: insuranceProcess.id,
+      processName: insuranceProcess.name,
+      type: "status_change" as any,
+      refId: newClaim.id,
+      status: "completed",
+      createdBy: "user",
+      timestamp: new Date().toISOString(),
+      details: {
+        primary: `Claim ${newClaim.claimNumber} created for ${newClaim.patientName}`,
+        secondary: `Status: ${newClaim.status} · Billed: $${newClaim.totalCharge.toFixed(2)}`,
+      },
+    });
+
+    toast.success(`Claim ${newClaim.claimNumber} created successfully! ✓`);
+    if (onClaimCreated) {
+      onClaimCreated(newClaim);
+    }
+    onClose();
+  };
+
+  const handleSaveExistingChanges = () => {
+    if (!liveClaim) return;
+    const clientName = (fieldValues.client_name || "").trim();
+    const billedAmt =
+      fieldValues.billed_amount !== undefined && fieldValues.billed_amount !== ""
+        ? parseFloat(fieldValues.billed_amount) || 0
+        : liveClaim.totalCharge;
+
+    const updated: Claim = {
+      ...liveClaim,
+      patientName: clientName || liveClaim.patientName,
+      patientPhone: fieldValues.client_phone ?? liveClaim.patientPhone,
+      patientDob: fieldValues.patient_dob ?? liveClaim.patientDob,
+      insuredId: fieldValues.policy_number ?? liveClaim.insuredId,
+      groupNumber: fieldValues.group_number ?? liveClaim.groupNumber,
+      payer: {
+        ...liveClaim.payer,
+        name: fieldValues.payer_name || liveClaim.payer?.name,
+      },
+      serviceDate: fieldValues.service_date || liveClaim.serviceDate,
+      placeOfService: fieldValues.place_of_service || liveClaim.placeOfService,
+      totalCharge: billedAmt,
+      billingProviderNpi: fieldValues.provider_npi || liveClaim.billingProviderNpi,
+      updatedAt: new Date().toISOString(),
+    };
+
+    saveClaim(updated);
+    setLiveClaim(updated);
+    toast.success("Claim changes saved ✓");
   };
 
   const handleSubmitClearinghouse = async () => {
@@ -494,44 +712,67 @@ export default function ClaimDetailDrawer({
           </div>
 
           <div className="flex items-center gap-2">
-            {liveClaim.status !== "Submitted" && liveClaim.status !== "Paid" && (
-              <button
-                type="button"
-                onClick={handleSubmitClearinghouse}
-                disabled={isSubmitting}
-                className="h-8 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Clock className="w-3.5 h-3.5 animate-spin" />
-                    <span>Transmitting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Submit 837P</span>
-                  </>
-                )}
-              </button>
-            )}
+            {isCreateMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleSaveClaim("Draft")}
+                  className="h-8 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <span>Save as Draft</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveClaim("Ready to Submit")}
+                  className="h-8 px-3.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create Claim</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleSaveExistingChanges}
+                  className="h-8 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                  title="Save any edits made to fields"
+                >
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Save Changes</span>
+                </button>
 
-            {onEditClaim && (
-              <button
-                type="button"
-                onClick={() => onEditClaim(liveClaim)}
-                className="h-8 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <Edit className="w-3.5 h-3.5 text-slate-500" />
-                <span>Edit Claim</span>
-              </button>
+                {liveClaim.status !== "Submitted" && liveClaim.status !== "Paid" && (
+                  <button
+                    type="button"
+                    onClick={handleSubmitClearinghouse}
+                    disabled={isSubmitting}
+                    className="h-8 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Clock className="w-3.5 h-3.5 animate-spin" />
+                        <span>Transmitting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Submit 837P</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </>
             )}
 
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors ml-1"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors ml-1 cursor-pointer"
               title="Close Drawer"
             >
               <X className="w-5 h-5" />
@@ -672,9 +913,9 @@ export default function ClaimDetailDrawer({
                     onFieldValueChange={handleFieldValueChange}
                     client={{
                       id: effectiveClientId,
-                      name: liveClaim.patientName,
-                      phone: liveClaim.patientPhone,
-                      email: "patient@example.com",
+                      name: liveClaim.patientName || "",
+                      phone: liveClaim.patientPhone || "",
+                      email: fieldValues.client_email || "",
                     }}
                   />
                 </div>
@@ -685,13 +926,13 @@ export default function ClaimDetailDrawer({
                     <ActivityTab
                       activity={activities}
                       clientId={effectiveClientId}
-                      clientName={liveClaim.patientName}
+                      clientName={liveClaim.patientName || "Client"}
                       clientPhone={liveClaim.patientPhone}
                       claimId={liveClaim.id}
                       processId={insuranceProcess.id}
                       processName="Insurance and Claims"
                       onCloseParentDrawer={onClose}
-                      emptyMessage="No activity logs yet for this claim"
+                      emptyMessage={isCreateMode ? "No activity logs yet for this new claim. Save the claim to start tracking workflow history." : "No activity logs yet for this claim"}
                     />
                   </div>
                 </div>
@@ -785,16 +1026,24 @@ export default function ClaimDetailDrawer({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {(liveClaim.lines || []).map((line, idx) => (
-                        <tr key={line.id || idx} className="hover:bg-slate-50/50">
-                          <td className="py-3 px-4 font-medium text-slate-600">{line.serviceDate}</td>
-                          <td className="py-3 px-4 font-mono font-bold text-blue-600">{line.cptCode}</td>
-                          <td className="py-3 px-4 text-slate-700 max-w-xs truncate">{line.description}</td>
-                          <td className="py-3 px-4 text-center font-mono font-semibold text-slate-500">{line.diagnosisPointer}</td>
-                          <td className="py-3 px-4 text-center font-medium text-slate-600">{line.units}</td>
-                          <td className="py-3 px-4 text-right font-mono font-semibold text-slate-900">${(line.chargeAmount || 0).toFixed(2)}</td>
+                      {(liveClaim.lines || []).length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
+                            No service lines added yet. Enter procedure codes in Overview or CMS-1500 form.
+                          </td>
                         </tr>
-                      ))}
+                      ) : (
+                        (liveClaim.lines || []).map((line, idx) => (
+                          <tr key={line.id || idx} className="hover:bg-slate-50/50">
+                            <td className="py-3 px-4 font-medium text-slate-600">{line.serviceDate}</td>
+                            <td className="py-3 px-4 font-mono font-bold text-blue-600">{line.cptCode}</td>
+                            <td className="py-3 px-4 text-slate-700 max-w-xs truncate">{line.description}</td>
+                            <td className="py-3 px-4 text-center font-mono font-semibold text-slate-500">{line.diagnosisPointer}</td>
+                            <td className="py-3 px-4 text-center font-medium text-slate-600">{line.units}</td>
+                            <td className="py-3 px-4 text-right font-mono font-semibold text-slate-900">${(line.chargeAmount || 0).toFixed(2)}</td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -806,17 +1055,23 @@ export default function ClaimDetailDrawer({
                   Primary & Secondary Diagnoses (ICD-10)
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {(liveClaim.diagnosisCodes || []).map((diag, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50/50">
-                      <span className="w-6 h-6 rounded-md bg-blue-100 text-blue-700 font-bold font-mono text-xs flex items-center justify-center shrink-0">
-                        {diag.pointer}
-                      </span>
-                      <div className="min-w-0">
-                        <span className="font-mono text-xs font-bold text-slate-900 block">{diag.code}</span>
-                        <span className="text-[11px] text-slate-500 truncate block">{diag.description}</span>
-                      </div>
+                  {(liveClaim.diagnosisCodes || []).length === 0 ? (
+                    <div className="col-span-2 py-6 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
+                      No diagnosis codes added yet. Enter ICD-10 codes in the Overview tab.
                     </div>
-                  ))}
+                  ) : (
+                    (liveClaim.diagnosisCodes || []).map((diag, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50/50">
+                        <span className="w-6 h-6 rounded-md bg-blue-100 text-blue-700 font-bold font-mono text-xs flex items-center justify-center shrink-0">
+                          {diag.pointer}
+                        </span>
+                        <div className="min-w-0">
+                          <span className="font-mono text-xs font-bold text-slate-900 block">{diag.code}</span>
+                          <span className="text-[11px] text-slate-500 truncate block">{diag.description}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 

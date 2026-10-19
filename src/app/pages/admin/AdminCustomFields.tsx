@@ -198,6 +198,7 @@ const MODULE_TABS: { label: string; value: Exclude<FieldModule, "deal"> }[] = [
   { label: "Appointments",  value: "appointment" },
   { label: "Services",      value: "service" },
   { label: "Invoices",      value: "invoice" },
+  { label: "Insurance & Claims", value: "claim" },
   { label: "Organizations", value: "organization" },
   { label: "Team Members",  value: "teamMember" },
 ];

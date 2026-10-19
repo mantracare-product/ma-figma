@@ -1414,7 +1414,7 @@ export default function Settings() {
     deleteCustomSection,
   } = useFieldRegistry();
 
-  const tabToModule: Record<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "services" | "invoices", FieldModule> = {
+  const tabToModule: Record<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "services" | "invoices" | "claims", FieldModule> = {
     "organization": "organization",
     "clients": "client",
     "call-logs": "call",
@@ -1424,6 +1424,7 @@ export default function Settings() {
     "team": "teamMember",
     "services": "service",
     "invoices": "invoice",
+    "claims": "claim",
   };
 
   const FIELD_TYPE_MAP: Record<string, any> = {
@@ -1544,7 +1545,7 @@ export default function Settings() {
   const [tablePreviewRows, setTablePreviewRows] = useState<Record<string, string>[]>([{}]);
 
   // Module filter tab
-  const [customFieldsTab, setCustomFieldsTab] = useState<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "services" | "invoices">("clients");
+  const [customFieldsTab, setCustomFieldsTab] = useState<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "services" | "invoices" | "claims">("clients");
 
   const currentModule = tabToModule[customFieldsTab || "clients"];
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
@@ -6836,6 +6837,7 @@ export default function Settings() {
                       <option value="appointments">Appointments</option>
                       <option value="services">Services</option>
                       <option value="invoices">Invoices</option>
+                      <option value="claims">Insurance & Claims</option>
                       <option value="forms">Forms</option>
                       <option value="team">Team</option>
                     </select>
@@ -6908,6 +6910,7 @@ export default function Settings() {
                               { label: "Appointments", value: "appointments" },
                               { label: "Services", value: "services" },
                               { label: "Invoices", value: "invoices" },
+                              { label: "Insurance & Claims", value: "claims" },
                               { label: "Forms", value: "forms" },
                               { label: "Team", value: "team" },
                             ],

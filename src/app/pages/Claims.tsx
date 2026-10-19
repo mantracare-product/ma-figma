@@ -9,11 +9,13 @@ import {
   Pencil,
   Eye,
   Settings as SettingsIcon,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import Button from "../components/ui/Button";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
+import { Tooltip } from "../components/ui/Tooltip";
 import { DataExportModal } from "../components/common/DataExportModal";
 import { TableComponent, TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import {
@@ -24,7 +26,6 @@ import {
   saveClaim,
 } from "../../lib/claimsStore";
 import { DEFAULT_ENTITY_PROCESSES, getStoredProcesses, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
-import CreateClaimDrawer from "../components/claims/CreateClaimDrawer";
 import ClaimSubmissionModal from "../components/claims/ClaimSubmissionModal";
 import ClaimStatusModal from "../components/claims/ClaimStatusModal";
 import CMS1500Modal from "../components/claims/CMS1500Modal";
@@ -69,8 +70,7 @@ export default function Claims() {
   }, [insuranceProcesses, selectedProcessFilter]);
 
   // Modals state
-  const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
-  const [editingClaim, setEditingClaim] = useState<Claim | null>(null);
+  const [isCreateMode, setIsCreateMode] = useState(false);
   const [activeSubmissionClaim, setActiveSubmissionClaim] = useState<Claim | null>(null);
   const [activeStatusClaim, setActiveStatusClaim] = useState<Claim | null>(null);
   const [activeCMS1500Claim, setActiveCMS1500Claim] = useState<Claim | null>(null);
@@ -91,8 +91,9 @@ export default function Claims() {
   }, []);
 
   const handleEditClaim = (claim: Claim) => {
-    setEditingClaim(claim);
-    setIsCreateDrawerOpen(true);
+    setSelectedClaimForDetail(claim);
+    setIsCreateMode(false);
+    setIsDetailDrawerOpen(true);
   };
 
   const handleStatusChange = (claimId: string, newStatus: ClaimStatus) => {
@@ -390,28 +391,44 @@ export default function Claims() {
               )}
             </div>
           }
-          onExport={() => setShowExportModal(true)}
           primaryAction={{
             label: "Create Claim",
             icon: <Plus className="w-4 h-4" />,
             onClick: () => {
-              setEditingClaim(null);
-              setIsCreateDrawerOpen(true);
+              setSelectedClaimForDetail(null);
+              setIsCreateMode(true);
+              setIsDetailDrawerOpen(true);
             },
           }}
           afterPrimaryAction={
-            <button
-              type="button"
-              onClick={() => {
-                navigate(`/process?entity=insurance&processId=${insuranceProcess.id}`, {
-                  state: { processId: insuranceProcess.id, processName: insuranceProcess.name },
-                });
-              }}
-              className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
-              title="Configure Insurance & Claims Workflow"
-            >
-              <SettingsIcon className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <Tooltip text="Export Claims">
+                <button
+                  type="button"
+                  onClick={() => setShowExportModal(true)}
+                  className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+                  aria-label="Export Claims"
+                  title="Export Claims"
+                >
+                  <Download className="w-4 h-4 text-slate-600" />
+                </button>
+              </Tooltip>
+              <Tooltip text="Configure Insurance & Claims Workflow">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate(`/process?entity=insurance&processId=${insuranceProcess.id}`, {
+                      state: { processId: insuranceProcess.id, processName: insuranceProcess.name },
+                    });
+                  }}
+                  className="p-2 h-[36px] w-[36px] flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-border bg-white transition-colors shrink-0 cursor-pointer shadow-2xs"
+                  aria-label="Configure Insurance & Claims Workflow"
+                  title="Configure Insurance & Claims Workflow"
+                >
+                  <SettingsIcon className="w-4 h-4 text-slate-600" />
+                </button>
+              </Tooltip>
+            </div>
           }
         />
 
@@ -601,38 +618,22 @@ export default function Claims() {
           );
         })()}
 
-      {/* Create / Edit Claim Drawer */}
-      <CreateClaimDrawer
-        isOpen={isCreateDrawerOpen}
-        claimToEdit={editingClaim}
-        onClose={() => {
-          setIsCreateDrawerOpen(false);
-          setEditingClaim(null);
-        }}
-        onClaimCreated={(createdClaim, autoOpenSubmit) => {
-          refreshClaims();
-          if (autoOpenSubmit) {
-            setActiveSubmissionClaim(createdClaim);
-          }
-        }}
-      />
+        {/* Claim Submission Modal (Electronic 837P or Manual CMS-1500) */}
+        <ClaimSubmissionModal
+          claim={activeSubmissionClaim}
+          isOpen={!!activeSubmissionClaim}
+          onClose={() => setActiveSubmissionClaim(null)}
+          onOpenCMS1500={(c) => setActiveCMS1500Claim(c)}
+          onSubmissionSuccess={() => refreshClaims()}
+        />
 
-      {/* Claim Submission Modal (Electronic 837P or Manual CMS-1500) */}
-      <ClaimSubmissionModal
-        claim={activeSubmissionClaim}
-        isOpen={!!activeSubmissionClaim}
-        onClose={() => setActiveSubmissionClaim(null)}
-        onOpenCMS1500={(c) => setActiveCMS1500Claim(c)}
-        onSubmissionSuccess={() => refreshClaims()}
-      />
-
-      {/* Clearinghouse Transmission Status Modal */}
-      <ClaimStatusModal
-        claim={activeStatusClaim}
-        isOpen={!!activeStatusClaim}
-        onClose={() => setActiveStatusClaim(null)}
-        onOpenCMS1500={(c) => setActiveCMS1500Claim(c)}
-      />
+        {/* Clearinghouse Transmission Status Modal */}
+        <ClaimStatusModal
+          claim={activeStatusClaim}
+          isOpen={!!activeStatusClaim}
+          onClose={() => setActiveStatusClaim(null)}
+          onOpenCMS1500={(c) => setActiveCMS1500Claim(c)}
+        />
 
         {/* CMS-1500 Form Modal */}
         <CMS1500Modal
@@ -644,14 +645,20 @@ export default function Claims() {
         {/* Claim Detail Drawer (Standard Architecture: Draggable Sections + Activity Feed + Documents) */}
         <ClaimDetailDrawer
           isOpen={isDetailDrawerOpen}
+          isCreateMode={isCreateMode}
           onClose={() => {
             setIsDetailDrawerOpen(false);
+            setIsCreateMode(false);
             setSelectedClaimForDetail(null);
           }}
           claim={selectedClaimForDetail}
+          onClaimCreated={() => {
+            refreshClaims();
+          }}
           onEditClaim={(c) => {
-            setIsDetailDrawerOpen(false);
-            handleEditClaim(c);
+            setSelectedClaimForDetail(c);
+            setIsCreateMode(false);
+            setIsDetailDrawerOpen(true);
           }}
           onOpenCMS1500={(c) => setActiveCMS1500Claim(c)}
         />

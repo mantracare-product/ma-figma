@@ -108,6 +108,7 @@ export const MODULE_OPTIONS: { label: string; value: Exclude<FieldModule, "deal"
   { label: "Call Log",     value: "call" },
   { label: "Service",      value: "service" },
   { label: "Invoice",      value: "invoice" },
+  { label: "Insurance & Claims", value: "claim" },
   { label: "Organization", value: "organization" },
   { label: "Team Member",  value: "teamMember" },
 ];
@@ -3739,6 +3740,7 @@ export function AdminFieldDrawer({
                     { value: "appointment", label: "Appointments (Bookings & Sessions)" },
                     { value: "service", label: "Services (Treatments & Catalog)" },
                     { value: "invoice", label: "Invoices (Billing & Receipts)" },
+                    { value: "claim", label: "Insurance & Claims (Claims & Billing)" },
                     { value: "organization", label: "Organizations (Accounts & Companies)" },
                     { value: "teamMember", label: "Team Members (Staff & Providers)" },
                   ]}
