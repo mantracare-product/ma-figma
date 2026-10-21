@@ -77,6 +77,8 @@ import MessageThreadList from "../components/chats/MessageThreadList";
 import MessageComposerBar from "../components/chats/MessageComposerBar";
 import WebmailView, { EmailFolder } from "../components/chats/WebmailView";
 import EmailTemplateDrawer, { EmailTemplate } from "../components/chats/EmailTemplateDrawer";
+import EmailBlacklistDrawer from "../components/chats/EmailBlacklistDrawer";
+import MailboxIntegrationDrawer from "../components/chats/MailboxIntegrationDrawer";
 export type Message = ConvMessage;
 export type Conversation = ConvConversation;
 import PageHeader from "../components/layout/PageHeader";
@@ -925,6 +927,20 @@ export default function Chats() {
   const [editingEmailTemplate, setEditingEmailTemplate] = useState<EmailTemplate | null>(null);
   const [selectedEmailTemplateIds, setSelectedEmailTemplateIds] = useState<Set<string>>(new Set());
 
+  const [showBlacklistDrawer, setShowBlacklistDrawer] = useState(false);
+  const [showMailboxIntegrationDrawer, setShowMailboxIntegrationDrawer] = useState(false);
+
+  useEffect(() => {
+    const handleOpenMailbox = () => setShowMailboxIntegrationDrawer(true);
+    const handleOpenBlacklist = () => setShowBlacklistDrawer(true);
+    window.addEventListener("open-mailbox-integration-settings", handleOpenMailbox);
+    window.addEventListener("open-webmail-blacklist", handleOpenBlacklist);
+    return () => {
+      window.removeEventListener("open-mailbox-integration-settings", handleOpenMailbox);
+      window.removeEventListener("open-webmail-blacklist", handleOpenBlacklist);
+    };
+  }, []);
+
   const DEFAULT_EMAIL_TEMPLATES: EmailTemplate[] = [
     {
       id: "em-tpl-1",
@@ -1043,28 +1059,20 @@ export default function Chats() {
   const emailTemplateColumns: TableColumn<EmailTemplate>[] = [
     {
       id: "name",
-      header: "TEMPLATE NAME & PREHEADER",
+      header: "NAME",
       align: "left",
       render: (tpl) => (
-        <div className="flex flex-col gap-0.5 text-left py-0.5">
-          <button
-            type="button"
-            onClick={() => {
-              setEditingEmailTemplate(tpl);
-              setShowEmailTemplateDrawer(true);
-            }}
-            className="text-xs font-bold text-[#1E293B] hover:text-[#1456f0] transition-colors text-left cursor-pointer flex items-center gap-1.5"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            <Mail className="w-3.5 h-3.5 text-[#0284C7] shrink-0" />
-            <span>{tpl.name}</span>
-          </button>
-          {tpl.preheader && (
-            <span className="text-[11px] text-slate-400 line-clamp-1 max-w-[340px]">
-              {tpl.preheader}
-            </span>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setEditingEmailTemplate(tpl);
+            setShowEmailTemplateDrawer(true);
+          }}
+          className="text-xs font-bold text-[#1E293B] hover:text-[#1456f0] transition-colors text-left cursor-pointer"
+          style={{ fontFamily: "Outfit, sans-serif" }}
+        >
+          {tpl.name}
+        </button>
       ),
     },
     {
@@ -1080,22 +1088,12 @@ export default function Chats() {
     {
       id: "category",
       header: "CATEGORY",
-      align: "center",
-      render: (tpl) => {
-        const categoryColorMap: Record<string, string> = {
-          "Appointment Reminder": "bg-blue-50 text-blue-700 border-blue-200/80",
-          "Follow-up": "bg-emerald-50 text-emerald-700 border-emerald-200/80",
-          "Welcome / Onboarding": "bg-purple-50 text-purple-700 border-purple-200/80",
-          "Billing": "bg-amber-50 text-amber-700 border-amber-200/80",
-          "Clinical Care": "bg-rose-50 text-rose-700 border-rose-200/80",
-        };
-        const colorCls = categoryColorMap[tpl.category] || "bg-slate-100 text-slate-700 border-slate-200";
-        return (
-          <span className={`text-[10px] font-bold border rounded-full px-2.5 py-0.5 uppercase tracking-wide inline-flex items-center gap-1 ${colorCls}`}>
-            {tpl.category}
-          </span>
-        );
-      },
+      align: "left",
+      render: (tpl) => (
+        <span className="text-xs text-slate-700 font-medium">
+          {tpl.category}
+        </span>
+      ),
     },
     {
       id: "lastModified",
@@ -2043,7 +2041,7 @@ export default function Chats() {
 
                 {showChannelDropdown && (
                   <div
-                    className="absolute left-0 mt-1 w-52 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
+                    className="absolute left-0 mt-1 w-44 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     <button
@@ -2053,15 +2051,7 @@ export default function Chats() {
                         channelFilter === "whatsapp" ? "text-[#128C7E] font-bold bg-emerald-50/60" : "text-[#1E293B]"
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-6 h-6 rounded-lg bg-[#25D366]/15 flex items-center justify-center text-[#128C7E]">
-                          <Phone className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <div className="font-bold">WhatsApp</div>
-                          <div className="text-[10px] text-muted-foreground font-normal">Direct messaging</div>
-                        </div>
-                      </div>
+                      <span>WhatsApp</span>
                       {channelFilter === "whatsapp" && <Check className="w-3.5 h-3.5 text-[#128C7E]" />}
                     </button>
 
@@ -2072,15 +2062,7 @@ export default function Chats() {
                         channelFilter === "sms" ? "text-[#10B981] font-bold bg-emerald-50/60" : "text-[#1E293B]"
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-6 h-6 rounded-lg bg-[#10B981]/15 flex items-center justify-center text-[#10B981]">
-                          <MessageSquare className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <div className="font-bold">SMS</div>
-                          <div className="text-[10px] text-muted-foreground font-normal">Twilio carrier</div>
-                        </div>
-                      </div>
+                      <span>SMS</span>
                       {channelFilter === "sms" && <Check className="w-3.5 h-3.5 text-[#10B981]" />}
                     </button>
 
@@ -2091,15 +2073,7 @@ export default function Chats() {
                         channelFilter === "website" ? "text-[#6366F1] font-bold bg-indigo-50/60" : "text-[#1E293B]"
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-6 h-6 rounded-lg bg-[#6366F1]/15 flex items-center justify-center text-[#6366F1]">
-                          <Globe className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <div className="font-bold">Website</div>
-                          <div className="text-[10px] text-muted-foreground font-normal">Live chat widget</div>
-                        </div>
-                      </div>
+                      <span>Website</span>
                       {channelFilter === "website" && <Check className="w-3.5 h-3.5 text-[#6366F1]" />}
                     </button>
 
@@ -2110,15 +2084,7 @@ export default function Chats() {
                         channelFilter === "email" ? "text-[#0284C7] font-bold bg-sky-50/60" : "text-[#1E293B]"
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-6 h-6 rounded-lg bg-[#0284C7]/15 flex items-center justify-center text-[#0284C7]">
-                          <Mail className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <div className="font-bold">Email</div>
-                          <div className="text-[10px] text-muted-foreground font-normal">Gmail / Outlook</div>
-                        </div>
-                      </div>
+                      <span>Email</span>
                       {channelFilter === "email" && <Check className="w-3.5 h-3.5 text-[#0284C7]" />}
                     </button>
                   </div>
@@ -2314,10 +2280,7 @@ export default function Chats() {
                                     : "text-[#1E293B]"
                                 }`}
                               >
-                                <div className="flex items-center gap-1.5 truncate">
-                                  <Mail className="w-3.5 h-3.5 text-[#0284C7] shrink-0" />
-                                  <span className="truncate">{num}</span>
-                                </div>
+                                <span className="truncate">{num}</span>
                                 {(numberFilter || availableNumbersForChannel[0]) === num && (
                                   <Check className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
                                 )}
@@ -2382,11 +2345,11 @@ export default function Chats() {
                           >
                             {(
                               [
-                                { id: "inbox" as const, label: "Inbox", icon: <Inbox className="w-3.5 h-3.5" /> },
-                                { id: "drafts" as const, label: "Drafts", icon: <FileEdit className="w-3.5 h-3.5" /> },
-                                { id: "sent" as const, label: "Sent", icon: <Send className="w-3.5 h-3.5" /> },
-                                { id: "spam" as const, label: "Spam", icon: <AlertOctagon className="w-3.5 h-3.5" /> },
-                                { id: "trash" as const, label: "Trash", icon: <Trash2 className="w-3.5 h-3.5" /> },
+                                { id: "inbox" as const, label: "Inbox" },
+                                { id: "drafts" as const, label: "Drafts" },
+                                { id: "sent" as const, label: "Sent" },
+                                { id: "spam" as const, label: "Spam" },
+                                { id: "trash" as const, label: "Trash" },
                               ] as const
                             ).map((f) => {
                               const isSelected = activeEmailFolder === f.id;
@@ -2403,9 +2366,6 @@ export default function Chats() {
                                   }`}
                                 >
                                   <div className="flex items-center gap-2">
-                                    <span className={isSelected ? "text-[#1456f0]" : "text-slate-500"}>
-                                      {f.icon}
-                                    </span>
                                     <span>{f.label}</span>
                                     {f.id === "inbox" && emailUnreadCount > 0 && (
                                       <span
@@ -2587,24 +2547,13 @@ export default function Chats() {
                     <button
                       type="button"
                       onClick={() => {
-                        toast.info("Blacklist manager opened");
+                        setShowBlacklistDrawer(true);
                         setShowEmailGearMenu(false);
                       }}
-                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 cursor-pointer"
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-700 cursor-pointer"
                     >
                       <Shield className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Blacklist</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        toast.info("Email contacts directory opened");
-                        setShowEmailGearMenu(false);
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 cursor-pointer"
-                    >
-                      <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-                      <span>My email contacts</span>
+                      <span>Block list</span>
                     </button>
                     <button
                       type="button"
@@ -2632,34 +2581,24 @@ export default function Chats() {
                     <button
                       type="button"
                       onClick={() => {
-                        navigate("/settings");
-                        setShowEmailGearMenu(false);
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-700 cursor-pointer"
-                    >
-                      <Layers className="w-3.5 h-3.5 text-slate-400" />
-                      <span>CRM Integration</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigate("/settings");
+                        setShowMailboxIntegrationDrawer(true);
                         setShowEmailGearMenu(false);
                       }}
                       className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-700 cursor-pointer"
                     >
                       <Settings className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Mailbox settings</span>
+                      <span>Email settings</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => {
-                        toast.info("Opening external email portal");
+                        handleSubModeChange("inbox");
+                        window.dispatchEvent(new CustomEvent("open-webmail-compose"));
                         setShowEmailGearMenu(false);
                       }}
                       className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-700 cursor-pointer"
                     >
-                      <Share2 className="w-3.5 h-3.5 text-slate-400" />
+                      <Mail className="w-3.5 h-3.5 text-slate-400" />
                       <span>Open email</span>
                     </button>
                   </div>
@@ -2677,8 +2616,8 @@ export default function Chats() {
               activeFolder={activeEmailFolder}
               onFolderChange={setActiveEmailFolder}
               onUnreadCountChange={setEmailUnreadCount}
-              onOpenMailboxSettings={() => navigate("/settings")}
-              onOpenCrmSettings={() => navigate("/settings")}
+              onOpenMailboxSettings={() => setShowMailboxIntegrationDrawer(true)}
+              onOpenCrmSettings={() => setShowMailboxIntegrationDrawer(true)}
             />
           ) : (
           <div className="flex gap-5 sm:gap-6 h-[calc(100vh-230px)] min-h-[620px]">
@@ -3594,6 +3533,16 @@ export default function Chats() {
         }}
         template={editingEmailTemplate}
         onSave={handleSaveEmailTemplate}
+      />
+
+      <EmailBlacklistDrawer
+        isOpen={showBlacklistDrawer}
+        onClose={() => setShowBlacklistDrawer(false)}
+      />
+
+      <MailboxIntegrationDrawer
+        isOpen={showMailboxIntegrationDrawer}
+        onClose={() => setShowMailboxIntegrationDrawer(false)}
       />
 
       <HowItWorksModal

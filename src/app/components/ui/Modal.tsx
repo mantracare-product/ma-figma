@@ -10,9 +10,10 @@ interface ModalProps {
   children: ReactNode;
   footer?: ReactNode;
   maxWidth?: "sm" | "md" | "md-plus" | "lg" | "xl" | "2xl" | "voice-lib" | "custom-field";
+  zIndex?: number;
 }
 
-export function Modal({ isOpen, onClose, title, headerAction, children, footer, maxWidth = "md" }: ModalProps) {
+export function Modal({ isOpen, onClose, title, headerAction, children, footer, maxWidth = "md", zIndex = 10002 }: ModalProps) {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -46,7 +47,8 @@ export function Modal({ isOpen, onClose, title, headerAction, children, footer, 
   if (maxWidth === "voice-lib") {
     return (
       <div
-        className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+        style={{ zIndex }}
         onClick={onClose}
       >
         <div
@@ -86,7 +88,8 @@ export function Modal({ isOpen, onClose, title, headerAction, children, footer, 
   // Standard modal behavior for other sizes
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"
+      className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"
+      style={{ zIndex }}
       onClick={onClose}
     >
       <div

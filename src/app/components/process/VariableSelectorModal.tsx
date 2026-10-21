@@ -35,8 +35,23 @@ export default function VariableSelectorModal({ isOpen, onClose, onInsert, mode 
         setSearch("");
     };
 
+    // Common Merge Variables (standard email and document placeholders)
+    const commonCategory = {
+        id: "common",
+        label: "Common Merge Variables",
+        variables: [
+            { name: "Client Name", token: "{{client_name}}" },
+            { name: "Doctor / Provider", token: "{{doctor_name}}" },
+            { name: "Appointment Date", token: "{{appointment_date}}" },
+            { name: "Appointment Time", token: "{{appointment_time}}" },
+            { name: "Clinic / Facility Name", token: "{{clinic_name}}" },
+            { name: "Service Name", token: "{{service_name}}" },
+            { name: "Patient Portal URL", token: "{{portal_url}}" },
+        ],
+    };
+
     // Construct categories dynamically from the field registry
-    const categories = ALL_MODULES.map((module) => {
+    const registryCategories = ALL_MODULES.map((module) => {
         const fields = getAllFields(module).map((f) => {
             const tokenVal = module === "teamMember" 
                 ? `teamMember.${f.key}` 
@@ -52,6 +67,8 @@ export default function VariableSelectorModal({ isOpen, onClose, onInsert, mode 
             variables: fields
         };
     }).filter(cat => cat.variables.length > 0);
+
+    const categories = [commonCategory, ...registryCategories];
 
     const q = search.toLowerCase();
     const visible = categories.map((cat) => ({
