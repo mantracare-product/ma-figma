@@ -147,7 +147,7 @@ export interface ModuleRow {
 }
 
 export const MODULES: ModuleRow[] = [
-  { key: "clients", label: "Clients", route: "/clients" },
+  { key: "clients", label: "Contact", route: "/clients" },
   { key: "processes", label: "Processes", route: "/deals" },
   { key: "calls", label: "Calls", route: "/call-logs" },
   { key: "chats", label: "Chats", route: "/chats" },

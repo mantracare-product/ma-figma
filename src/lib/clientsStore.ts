@@ -68,14 +68,50 @@ export function getStoredClients(): Client[] {
             }
           }
 
+          if (!c.contactType && !c.contact_type) {
+            const resolvedType = canonical?.contactType || canonical?.contact_type || "Lead";
+            updated.contactType = resolvedType;
+            updated.contact_type = resolvedType;
+            clientChanged = true;
+          } else if (!c.contactType || !c.contact_type) {
+            const resolvedType = c.contactType || c.contact_type || "Lead";
+            updated.contactType = resolvedType;
+            updated.contact_type = resolvedType;
+            clientChanged = true;
+          }
+
           if (clientChanged) {
             changed = true;
             return updated;
           }
           return c;
         });
+
+        // Ensure all canonical clients (including all 20 per category) are present
+        const existingIds = new Set(parsed.map((c: Client) => c.id));
+        canonicalClients.forEach((cc) => {
+          if (!existingIds.has(cc.id)) {
+            parsed.push(cc);
+            changed = true;
+          }
+        });
+
+        // Also ensure canonical contactType is respected for known canonical client records
+        parsed = parsed.map((c: Client) => {
+          const canonical = canonicalClients.find((cc) => cc.id === c.id);
+          if (canonical && canonical.contactType && (c.contactType !== canonical.contactType || c.contact_type !== canonical.contactType)) {
+            changed = true;
+            return {
+              ...c,
+              contactType: canonical.contactType,
+              contact_type: canonical.contactType,
+            };
+          }
+          return c;
+        });
+
         // Sanitize any client with invalid, empty, or 'new' ID
-        let maxExisting = 30;
+        let maxExisting = 80;
         parsed.forEach((c: Client) => {
           const m = c.id?.match(/^CL-(\d+)$/i);
           if (m) {

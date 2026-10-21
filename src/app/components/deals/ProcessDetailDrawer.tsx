@@ -283,8 +283,8 @@ export default function ProcessDetailDrawer({
   const DEFAULT_PROCESS_SECTIONS: OverviewSection[] = [
     {
       id: "sec-client-details",
-      title: "Client Details",
-      fieldKeys: ["client_name", "phone", "email", "source"],
+      title: "Contact Details",
+      fieldKeys: ["client_name", "contact_type", "phone", "email", "source"],
     },
     {
       id: "sec-process-info",
@@ -391,6 +391,14 @@ export default function ProcessDetailDrawer({
         existingSecIds.add(regSec.id);
       }
     });
+
+    const contactSec = updatedSections.find((s) => s.id === "sec-client-details");
+    if (contactSec) {
+      contactSec.title = "Contact Details";
+      if (!contactSec.fieldKeys.includes("contact_type")) {
+        contactSec.fieldKeys.splice(1, 0, "contact_type");
+      }
+    }
 
     return updatedSections;
   };
@@ -582,6 +590,7 @@ export default function ProcessDetailDrawer({
     const vals: Record<string, any> = {
       ...(log as any),
       client_name: clientName,
+      contact_type: (client as any)?.contact_type || (client as any)?.contactType || (log as any)?.contact_type || (log as any)?.contactType || "Lead",
       phone: client?.phone || (log as any)?.phone || "9667283405",
       email: client?.email || "anshul@mantracare.com",
       source: (client as any)?.source || "Inbound Web / WhatsApp",
@@ -1197,7 +1206,7 @@ export default function ProcessDetailDrawer({
             {activeTab === "general" && (
               <div className="p-6">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                  {/* LEFT COLUMN: Draggable Client Details & Process Information Sections */}
+                  {/* LEFT COLUMN: Draggable Contact Details & Process Information Sections */}
                   <div className="lg:col-span-5 space-y-5">
                     <DraggableOverviewSections
                       mode="process"

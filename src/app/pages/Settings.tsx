@@ -9,7 +9,8 @@ import { Tooltip } from "../components/ui/Tooltip";
 import { toast } from "sonner";
 import { useNavigate, useLocation, useParams, useSearchParams } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
-import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg } from "../context/FieldRegistryContext";
+import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, isFieldMatchingContactCategory, isSectionMatchingContactCategory } from "../context/FieldRegistryContext";
+import { getContactCategories, addContactCategory, useContactCategories } from "../../lib/contactCategoriesStore";
 import { TelephonyIntegrationPanel } from "../components/telephony/TelephonyIntegrationPanel";
 import { getStoredWhatsAppNumbers, saveStoredWhatsAppNumbers, WHATSAPP_NUMBERS_EVENT, WhatsAppNumberEntry } from "../../lib/useWhatsAppNumbers";
 import { SelectFieldsModal } from "../components/help/FieldManager";
@@ -1547,6 +1548,10 @@ export default function Settings() {
 
   // Module filter tab
   const [customFieldsTab, setCustomFieldsTab] = useState<"organization" | "clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "services" | "invoices" | "claims">("clients");
+  const [contactCategoryFilter, setContactCategoryFilter] = useState<string>("Lead");
+  const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const contactCategories = useContactCategories();
 
   const currentModule = tabToModule[customFieldsTab || "clients"];
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
@@ -6491,26 +6496,51 @@ export default function Settings() {
                     setLayoutCurrentPage(1);
                   }}
                   leftElement={
-                    <select
-                      value={customFieldsTab}
-                      onChange={(e) => {
-                        setCustomFieldsTab(e.target.value as any);
-                        setLayoutCurrentPage(1);
-                      }}
-                      className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <option value="organization">Organizations</option>
-                      <option value="clients">Clients</option>
-                      <option value="call-logs">Call Logs</option>
-                      <option value="processes">Processes</option>
-                      <option value="appointments">Appointments</option>
-                      <option value="services">Services</option>
-                      <option value="invoices">Invoices</option>
-                      <option value="claims">Insurance & Claims</option>
-                      <option value="forms">Forms</option>
-                      <option value="team">Team</option>
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={customFieldsTab}
+                        onChange={(e) => {
+                          setCustomFieldsTab(e.target.value as any);
+                          setLayoutCurrentPage(1);
+                        }}
+                        className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        <option value="organization">Organizations</option>
+                        <option value="clients">Contact</option>
+                        <option value="call-logs">Call Logs</option>
+                        <option value="processes">Processes</option>
+                        <option value="appointments">Appointments</option>
+                        <option value="services">Services</option>
+                        <option value="invoices">Invoices</option>
+                        <option value="claims">Insurance & Claims</option>
+                        <option value="forms">Forms</option>
+                        <option value="team">Team</option>
+                      </select>
+
+                      {customFieldsTab === "clients" && (
+                        <select
+                          value={contactCategoryFilter}
+                          onChange={(e) => {
+                            if (e.target.value === "__add_category__") {
+                              setIsAddCategoryModalOpen(true);
+                            } else {
+                              setContactCategoryFilter(e.target.value);
+                              setLayoutCurrentPage(1);
+                            }
+                          }}
+                          className="h-[36px] px-3 bg-white border border-border rounded-xl text-xs font-semibold text-gray-700 outline-none cursor-pointer shadow-2xs"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {contactCategories.map((cat) => (
+                            <option key={cat} value={cat}>
+                              {cat}
+                            </option>
+                          ))}
+                          <option value="__add_category__">+ Add Category</option>
+                        </select>
+                      )}
+                    </div>
                   }
                   searchQuery={layoutSearchQuery}
                   onSearchChange={(query) => {
@@ -6574,7 +6604,7 @@ export default function Settings() {
                             onChange: (val) => setCustomFieldsTab(val as any),
                             options: [
                               { label: "Organizations", value: "organization" },
-                              { label: "Clients", value: "clients" },
+                              { label: "Contact", value: "clients" },
                               { label: "Call Logs", value: "call-logs" },
                               { label: "Processes", value: "processes" },
                               { label: "Appointments", value: "appointments" },
@@ -6635,12 +6665,12 @@ export default function Settings() {
                 <div className="bg-white rounded-none border-0 overflow-hidden shadow-2xs">
                   {/* TAB 1: FIELDS TABLE VIEW */}
                   {layoutViewTab === "fields" && (() => {
-                    const currentFields = getAllFields(currentModule).filter((field) =>
-                      isFieldMatchingOrg(field, activeOrganization)
-                    );
-                    const sections = getAllSections(currentModule).filter((sec) =>
-                      isSectionMatchingOrg(sec, activeOrganization)
-                    );
+                    const currentFields = getAllFields(currentModule)
+                      .filter((field) => isFieldMatchingOrg(field, activeOrganization))
+                      .filter((field) => currentModule !== "client" || isFieldMatchingContactCategory(field, contactCategoryFilter));
+                    const sections = getAllSections(currentModule)
+                      .filter((sec) => isSectionMatchingOrg(sec, activeOrganization))
+                      .filter((sec) => currentModule !== "client" || isSectionMatchingContactCategory(sec, contactCategoryFilter));
 
                     const filteredFields = currentFields.filter((field) => {
                       if (!layoutSearchQuery.trim()) return true;
@@ -6862,9 +6892,9 @@ export default function Settings() {
 
                   {/* TAB 2: SECTIONS TABLE VIEW */}
                   {layoutViewTab === "sections" && (() => {
-                    const allSecs = getAllSections(currentModule).filter((sec) =>
-                      isSectionMatchingOrg(sec, activeOrganization)
-                    );
+                    const allSecs = getAllSections(currentModule)
+                      .filter((sec) => isSectionMatchingOrg(sec, activeOrganization))
+                      .filter((sec) => currentModule !== "client" || isSectionMatchingContactCategory(sec, contactCategoryFilter));
 
                     const filteredSections = allSecs.filter((sec) => {
                       if (!layoutSearchQuery.trim()) return true;
@@ -12171,6 +12201,7 @@ export default function Settings() {
           <AdminFieldDrawer
             field={editingFieldId !== null ? (getAllFields(currentModule).find((f) => f.id === editingFieldId) || null) : null}
             initialModule={currentModule as Exclude<FieldModule, "deal">}
+            initialContactCategory={currentModule === "client" ? contactCategoryFilter : undefined}
             sections={getAllSections(currentModule)}
             isAdmin={false}
             onClose={() => {
@@ -12189,6 +12220,7 @@ export default function Settings() {
           <AdminSectionDrawer
             section={editingSectionId !== null ? (getAllSections(currentModule).find((s) => s.id === editingSectionId) || null) : null}
             initialModule={currentModule as Exclude<FieldModule, "deal">}
+            initialContactCategory={currentModule === "client" ? contactCategoryFilter : undefined}
             isAdmin={false}
             onClose={() => {
               setShowAddSectionDrawer(false);
@@ -12199,6 +12231,78 @@ export default function Settings() {
               setEditingSectionId(null);
             }}
           />
+        )}
+
+        {/* ── Add Contact Category Modal ── */}
+        {isAddCategoryModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[2px]">
+            <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Add Contact Category
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddCategoryModalOpen(false);
+                    setNewCategoryName("");
+                  }}
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                Create a custom contact category (e.g. Partner, Distributor, Contractor) to segment your fields and sections.
+              </p>
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="e.g. Partner, Contractor..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newCategoryName.trim()) {
+                    const cat = newCategoryName.trim();
+                    addContactCategory(cat);
+                    setContactCategoryFilter(cat);
+                    setIsAddCategoryModalOpen(false);
+                    setNewCategoryName("");
+                    toast.success(`Category "${cat}" added successfully`);
+                  }
+                }}
+              />
+              <div className="flex items-center justify-end gap-2.5 mt-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddCategoryModalOpen(false);
+                    setNewCategoryName("");
+                  }}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!newCategoryName.trim()) return;
+                    const cat = newCategoryName.trim();
+                    addContactCategory(cat);
+                    setContactCategoryFilter(cat);
+                    setIsAddCategoryModalOpen(false);
+                    setNewCategoryName("");
+                    toast.success(`Category "${cat}" added successfully`);
+                  }}
+                  disabled={!newCategoryName.trim()}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg transition-colors shadow-sm cursor-pointer"
+                >
+                  Add Category
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Global Select Fields Modal for Custom Section Assignment */}

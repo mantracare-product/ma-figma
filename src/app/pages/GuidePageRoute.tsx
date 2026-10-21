@@ -1040,10 +1040,10 @@ const GUIDE_DATA: GuidePageData[] = [
                 howToUse: "Drag a card from one stage column and drop it in another to update that client's stage. Use a card's three-dot menu for Edit, Call, or Delete.",
             },
             {
-                title: "Client Detail Drawer",
-                whatItDoes: "Opens from the row/card menu's View option (or by clicking a client's name). It shows a clickable stage-pipeline strip at the top, then two tabs: General Information (editable fields — client name, responsible person, dates, contact details, custom fields you add yourself) and History (a full event log of stage changes and activities, with its own filter panel).",
-                whyHelps: "One place to review or correct everything about a client's progress through a process, and to see exactly when and by whom each change was made.",
-                howToUse: "Click a client to open the drawer, click the pipeline strip to change their stage, click any field in General Information to edit it inline, or switch to History and use Add Field / Restore Default Fields to adjust which event details are shown.",
+                title: "Contact Detail Drawer",
+                whatItDoes: "Opens from the row/card menu's View option (or by clicking a contact's name). It shows a clickable stage-pipeline strip at the top, then two tabs: General Information (editable fields — contact name, category / contact type, responsible person, dates, contact details, custom fields you add yourself) and History (a full event log of stage changes and activities, with its own filter panel).",
+                whyHelps: "One place to review or correct everything about a contact's progress through a process, and to see exactly when and by whom each change was made.",
+                howToUse: "Click a contact to open the drawer, click the pipeline strip to change their stage, click any field in General Information to edit it inline, or switch to History and use Add Field / Restore Default Fields to adjust which event details are shown.",
             },
             {
                 title: "Responsible Person Quick-View",
@@ -1083,7 +1083,7 @@ const GUIDE_DATA: GuidePageData[] = [
             {
                 title: "Reviewing a client's full history and reassigning ownership",
                 steps: [
-                    "Click into a client's row to open the Client Detail Drawer.",
+                    "Click into a contact's row to open the Contact Detail Drawer.",
                     "Switch to the History tab to see every stage change and activity, filtering by Event Type, Created By, or Date if needed.",
                     "Switch back to General Information, click the Responsible field, and pick a new team member from the dropdown.",
                     "The change saves immediately and is added to the client's History log.",

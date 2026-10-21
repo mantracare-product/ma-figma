@@ -52,7 +52,10 @@ import type {
 import {
   useFieldRegistry,
   INITIAL_SCRIBE_CUSTOM_FIELDS,
+  isFieldMatchingContactCategory,
+  isSectionMatchingContactCategory,
 } from "../../context/FieldRegistryContext";
+import { useContactCategories, addContactCategory } from "../../../lib/contactCategoriesStore";
 import PageHeader from "../../components/layout/PageHeader";
 import PageTopBar from "../../components/layout/PageTopBar";
 import TableComponent, { TableColumn, TableRowAction } from "../../components/ui/TableComponent";
@@ -192,7 +195,7 @@ function renderProcessesCell(
 }
 
 const MODULE_TABS: { label: string; value: Exclude<FieldModule, "deal"> }[] = [
-  { label: "Clients",       value: "client" },
+  { label: "Contact",       value: "client" },
   { label: "Call Logs",     value: "call" },
   { label: "Processes",     value: "process" },
   { label: "Appointments",  value: "appointment" },
@@ -282,6 +285,12 @@ export function AdminCustomFields() {
   // Processes store
   const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
 
+  // Contact Category state
+  const [contactCategoryFilter, setContactCategoryFilter] = useState<string>("Lead");
+  const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const contactCategories = useContactCategories();
+
   useEffect(() => {
     const handleUpdate = () => {
       setAllProcesses(getStoredProcesses());
@@ -312,26 +321,34 @@ export function AdminCustomFields() {
 
   // Filtered Fields
   const filteredFields = useMemo(() => {
+    let list = allFields;
+    if (activeModule === "client") {
+      list = list.filter((f) => isFieldMatchingContactCategory(f, contactCategoryFilter));
+    }
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return allFields;
-    return allFields.filter(
+    if (!q) return list;
+    return list.filter(
       (f) =>
         f.label.toLowerCase().includes(q) ||
         f.key.toLowerCase().includes(q) ||
         f.inputType.toLowerCase().includes(q)
     );
-  }, [allFields, searchQuery]);
+  }, [allFields, searchQuery, activeModule, contactCategoryFilter]);
 
   // Filtered Sections
   const filteredSections = useMemo(() => {
+    let list = allSections;
+    if (activeModule === "client") {
+      list = list.filter((s) => isSectionMatchingContactCategory(s, contactCategoryFilter));
+    }
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return allSections;
-    return allSections.filter(
+    if (!q) return list;
+    return list.filter(
       (s) =>
         s.title.toLowerCase().includes(q) ||
         (s.description && s.description.toLowerCase().includes(q))
     );
-  }, [allSections, searchQuery]);
+  }, [allSections, searchQuery, activeModule, contactCategoryFilter]);
 
   // Open Handlers
   const handleOpenCreateField = () => {
@@ -381,20 +398,47 @@ export function AdminCustomFields() {
             : `Search ${currentModLabel.toLowerCase()} sections...`
         }
         leftElement={
-          <div className="relative border border-gray-200 rounded-lg bg-gray-50 px-2.5 py-1 flex items-center mr-1">
-            <select
-              value={activeModule}
-              onChange={(e) => setActiveModule(e.target.value as any)}
-              className="bg-transparent text-xs font-bold text-gray-800 pr-4 outline-none cursor-pointer appearance-none"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              {MODULE_TABS.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <div className="flex items-center gap-1.5 mr-1">
+            <div className="relative border border-gray-200 rounded-lg bg-gray-50 px-2.5 py-1 flex items-center">
+              <select
+                value={activeModule}
+                onChange={(e) => setActiveModule(e.target.value as any)}
+                className="bg-transparent text-xs font-bold text-gray-800 pr-4 outline-none cursor-pointer appearance-none"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {MODULE_TABS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            {activeModule === "client" && (
+              <div className="relative border border-blue-200 rounded-lg bg-blue-50/50 px-2.5 py-1 flex items-center">
+                <select
+                  value={contactCategoryFilter}
+                  onChange={(e) => {
+                    if (e.target.value === "__add_category__") {
+                      setIsAddCategoryModalOpen(true);
+                    } else {
+                      setContactCategoryFilter(e.target.value);
+                    }
+                  }}
+                  className="bg-transparent text-xs font-semibold text-blue-700 pr-4 outline-none cursor-pointer appearance-none"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {contactCategories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                  <option value="__add_category__">+ Add Category</option>
+                </select>
+                <ChevronDown className="w-3 h-3 text-blue-500 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            )}
           </div>
         }
         filterPresets={
@@ -739,6 +783,7 @@ export function AdminCustomFields() {
         <AdminFieldDrawer
           field={editingField}
           initialModule={activeModule}
+          initialContactCategory={activeModule === "client" ? contactCategoryFilter : undefined}
           sections={allSections}
           isScribeSeed={editingField ? isScribeSeed(editingField) : false}
           onClose={() => {
@@ -753,11 +798,82 @@ export function AdminCustomFields() {
         <AdminSectionDrawer
           section={editingSection}
           initialModule={activeModule}
+          initialContactCategory={activeModule === "client" ? contactCategoryFilter : undefined}
           onClose={() => {
             setSectionDrawerOpen(false);
             setEditingSection(null);
           }}
         />
+      )}
+
+      {/* ── Add Category Modal ── */}
+      {isAddCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[2px]">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Add Contact Category
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddCategoryModalOpen(false);
+                  setNewCategoryName("");
+                }}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+              Create a custom contact category (e.g. Partner, Distributor, Contractor) to segment your fields and sections.
+            </p>
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder="e.g. Partner, Contractor..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newCategoryName.trim()) {
+                  const cat = newCategoryName.trim();
+                  addContactCategory(cat);
+                  setContactCategoryFilter(cat);
+                  setIsAddCategoryModalOpen(false);
+                  setNewCategoryName("");
+                }
+              }}
+            />
+            <div className="flex items-center justify-end gap-2.5 mt-5">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddCategoryModalOpen(false);
+                  setNewCategoryName("");
+                }}
+                className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!newCategoryName.trim()) return;
+                  const cat = newCategoryName.trim();
+                  addContactCategory(cat);
+                  setContactCategoryFilter(cat);
+                  setIsAddCategoryModalOpen(false);
+                  setNewCategoryName("");
+                }}
+                disabled={!newCategoryName.trim()}
+                className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg transition-colors shadow-sm cursor-pointer"
+              >
+                Add Category
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
 

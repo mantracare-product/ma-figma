@@ -16,7 +16,7 @@ export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
 ];
 
 export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plural: string }> = {
-  client: { singular: "client", plural: "clients" },
+  client: { singular: "contact", plural: "contacts" },
   process: { singular: "process", plural: "processes" },
   appointment: { singular: "appointment", plural: "appointments" },
   call: { singular: "call", plural: "calls" },
@@ -578,6 +578,7 @@ export interface FieldDefinition {
     numberFormat?: string;
   };
   scopingRules?: ScopingRule[]; // Multi-rule scoping: industry categories, industries, and locations
+  contactCategories?: string[]; // Contact categories (e.g. ["Lead", "Client", "Supplier", "Vendor"] or custom user categories)
   processIds?: string[];      // Assigned process template IDs (for module="process")
   requiredStages?: string[];  // Specific stage names/IDs this field is required for (for module="process" when required=true)
   isReusable?: boolean;        // Reusable across other modules (global field)
@@ -604,6 +605,7 @@ export interface SectionDefinition {
   industry?: string;          // Scoped to industry e.g. "Cardiologist", empty/All = global
   locations?: string[];       // Scoped to locations e.g. ["California"], empty/All = global
   scopingRules?: ScopingRule[]; // Multi-rule scoping: industry categories, industries, and locations
+  contactCategories?: string[]; // Contact categories (e.g. ["Lead", "Client", "Supplier", "Vendor"] or custom user categories)
   processIds?: string[];      // Assigned process template IDs (for module="process")
   isReusable?: boolean;        // Reusable across other modules (global section)
   reusableModules?: FieldModule[]; // Modules this section is shared with (empty/undefined = all modules)
@@ -958,6 +960,38 @@ export function isSectionMatchingOrg(
   }
 
   return true;
+}
+
+/**
+ * Check whether a field matches a selected contact category.
+ * If "all" or empty, matches all fields.
+ * If the field has no contactCategories defined, it is a global field that matches all categories.
+ */
+export function isFieldMatchingContactCategory(
+  field: FieldDefinition,
+  selectedCategory?: string
+): boolean {
+  if (!selectedCategory || selectedCategory === "all" || selectedCategory === "*") return true;
+  if (!field.contactCategories || field.contactCategories.length === 0) return true;
+  return field.contactCategories.some(
+    (c) => c.toLowerCase() === selectedCategory.toLowerCase()
+  );
+}
+
+/**
+ * Check whether a section matches a selected contact category.
+ * If "all" or empty, matches all sections.
+ * If the section has no contactCategories defined, it is a global section that matches all categories.
+ */
+export function isSectionMatchingContactCategory(
+  section: SectionDefinition,
+  selectedCategory?: string
+): boolean {
+  if (!selectedCategory || selectedCategory === "all" || selectedCategory === "*") return true;
+  if (!section.contactCategories || section.contactCategories.length === 0) return true;
+  return section.contactCategories.some(
+    (c) => c.toLowerCase() === selectedCategory.toLowerCase()
+  );
 }
 
 /**
@@ -1410,9 +1444,30 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
 
 export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefinition, "id" | "source" | "createdAt">[]> = {
   client: [
-    { key: "name", label: "Name", module: "client", inputType: "text", placeholder: "Full name", showAlways: true },
+    { key: "name", label: "Name", module: "client", inputType: "text", placeholder: "Full name", showAlways: true, contactCategories: ["Lead", "Client", "Supplier", "Vendor"] },
+    {
+      key: "contact_type",
+      label: "Contact Type",
+      module: "client",
+      inputType: "new_list",
+      placeholder: "Select contact type...",
+      newListConfig: {
+        sourceMode: "basic_list",
+        allowSearch: true,
+        allowCustomOptions: true,
+      },
+      options: [
+        { id: 1, label: "Lead", value: "Lead" },
+        { id: 2, label: "Client", value: "Client" },
+        { id: 3, label: "Supplier", value: "Supplier" },
+        { id: 4, label: "Vendor", value: "Vendor" },
+      ],
+      showAlways: true,
+      contactCategories: ["Lead", "Client", "Supplier", "Vendor"],
+    },
     {
       key: "status", label: "Status", module: "client", inputType: "select", placeholder: "Select status", showAlways: true,
+      contactCategories: ["Lead", "Client", "Supplier", "Vendor"],
       options: [
         { id: 1, label: "Active", value: "active" },
         { id: 2, label: "Inactive", value: "inactive" },
@@ -1421,6 +1476,7 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
     },
     {
       key: "processes", label: "Processes", module: "client", inputType: "select", placeholder: "Assign process", showAlways: true,
+      contactCategories: ["Lead", "Client", "Supplier", "Vendor"],
       options: [
         { id: 1, label: "Patient Intake", value: "Patient Intake" },
         { id: 2, label: "Follow-up Calls", value: "Follow-up Calls" },
@@ -1429,18 +1485,127 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
         { id: 5, label: "Insurance Verification", value: "Insurance Verification" },
       ]
     },
-    { key: "email", label: "Email", module: "client", inputType: "email", placeholder: "email@example.com", validation: "email", showAlways: true },
-    { key: "phone", label: "Phone", module: "client", inputType: "tel", placeholder: "+1 (555) 000-0000", validation: "phone", showAlways: true },
-    { key: "location", label: "Location", module: "client", inputType: "text", placeholder: "City, State or Address", showAlways: true },
-    { key: "company", label: "Company", module: "client", inputType: "text", placeholder: "Company name", showAlways: true },
-    { key: "role", label: "Role", module: "client", inputType: "text", placeholder: "Job title or role", showAlways: true },
-    { key: "language", label: "Language", module: "client", inputType: "text", placeholder: "e.g. English", showAlways: true },
-    { key: "country", label: "Country", module: "client", inputType: "text", placeholder: "e.g. United States", showAlways: true },
-    { key: "responsible", label: "Responsible Person", module: "client", inputType: "select", placeholder: "Unassigned", showAlways: true },
+    { key: "email", label: "Email", module: "client", inputType: "email", placeholder: "email@example.com", validation: "email", showAlways: true, contactCategories: ["Lead", "Client", "Supplier", "Vendor"] },
+    { key: "phone", label: "Phone", module: "client", inputType: "tel", placeholder: "+1 (555) 000-0000", validation: "phone", showAlways: true, contactCategories: ["Lead", "Client", "Supplier", "Vendor"] },
+    { key: "location", label: "Location", module: "client", inputType: "text", placeholder: "City, State or Address", showAlways: true, contactCategories: ["Lead", "Client", "Supplier", "Vendor"] },
+    { key: "company", label: "Company", module: "client", inputType: "text", placeholder: "Company name", showAlways: true, contactCategories: ["Lead", "Client", "Supplier", "Vendor"] },
+    { key: "role", label: "Role", module: "client", inputType: "text", placeholder: "Job title or role", showAlways: true, contactCategories: ["Lead", "Client", "Supplier", "Vendor"] },
+    { key: "language", label: "Language", module: "client", inputType: "text", placeholder: "e.g. English", showAlways: true, contactCategories: ["Lead", "Client", "Supplier", "Vendor"] },
+    { key: "country", label: "Country", module: "client", inputType: "text", placeholder: "e.g. United States", showAlways: true, contactCategories: ["Lead", "Client", "Supplier", "Vendor"] },
+    { key: "responsible", label: "Responsible Person", module: "client", inputType: "select", placeholder: "Unassigned", showAlways: true, contactCategories: ["Lead", "Client", "Supplier", "Vendor"] },
+    // ── Lead Specific Fields ──
+    {
+      key: "lead_source",
+      label: "Lead Source",
+      module: "client",
+      inputType: "new_list",
+      placeholder: "Select lead source...",
+      newListConfig: { sourceMode: "basic_list", allowSearch: true, allowCustomOptions: true },
+      options: [
+        { id: 1, label: "Website", value: "Website" },
+        { id: 2, label: "Referral", value: "Referral" },
+        { id: 3, label: "Inbound Call", value: "Inbound Call" },
+        { id: 4, label: "Campaign", value: "Campaign" },
+      ],
+      showAlways: true,
+      contactCategories: ["Lead"],
+    },
+    { key: "lead_score", label: "Lead Score", module: "client", inputType: "number", placeholder: "e.g. 85", showAlways: true, contactCategories: ["Lead"] },
+    { key: "estimated_budget", label: "Estimated Budget", module: "client", inputType: "money", currency: "USD", placeholder: "5000", showAlways: true, contactCategories: ["Lead"] },
+    // ── Client Specific Fields ──
+    {
+      key: "account_tier",
+      label: "Account Tier",
+      module: "client",
+      inputType: "new_list",
+      placeholder: "Select tier...",
+      newListConfig: { sourceMode: "basic_list", allowSearch: true, allowCustomOptions: true },
+      options: [
+        { id: 1, label: "Standard", value: "Standard" },
+        { id: 2, label: "Premium", value: "Premium" },
+        { id: 3, label: "Enterprise", value: "Enterprise" },
+        { id: 4, label: "VIP", value: "VIP" },
+      ],
+      showAlways: true,
+      contactCategories: ["Client"],
+    },
+    { key: "renewal_date", label: "Renewal Date", module: "client", inputType: "date", showAlways: true, contactCategories: ["Client"] },
+    { key: "client_manager", label: "Account Manager", module: "client", inputType: "text", placeholder: "Assigned manager", showAlways: true, contactCategories: ["Client"] },
+    // ── Supplier Specific Fields ──
+    {
+      key: "supply_category",
+      label: "Supply Category",
+      module: "client",
+      inputType: "new_list",
+      placeholder: "Select supply category...",
+      newListConfig: { sourceMode: "basic_list", allowSearch: true, allowCustomOptions: true },
+      options: [
+        { id: 1, label: "Medical Supplies", value: "Medical Supplies" },
+        { id: 2, label: "Office Equipment", value: "Office Equipment" },
+        { id: 3, label: "IT Hardware", value: "IT Hardware" },
+        { id: 4, label: "Logistics", value: "Logistics" },
+      ],
+      showAlways: true,
+      contactCategories: ["Supplier"],
+    },
+    { key: "delivery_lead_time", label: "Delivery Lead Time (Days)", module: "client", inputType: "number", placeholder: "7", showAlways: true, contactCategories: ["Supplier"] },
+    {
+      key: "payment_terms",
+      label: "Payment Terms",
+      module: "client",
+      inputType: "new_list",
+      placeholder: "Select terms...",
+      newListConfig: { sourceMode: "basic_list", allowSearch: true, allowCustomOptions: true },
+      options: [
+        { id: 1, label: "Net 15", value: "Net 15" },
+        { id: 2, label: "Net 30", value: "Net 30" },
+        { id: 3, label: "Net 60", value: "Net 60" },
+        { id: 4, label: "Due on Receipt", value: "Due on Receipt" },
+      ],
+      showAlways: true,
+      contactCategories: ["Supplier"],
+    },
+    // ── Vendor Specific Fields ──
+    { key: "vendor_contract_id", label: "Vendor Contract ID", module: "client", inputType: "text", placeholder: "VND-2026-001", showAlways: true, contactCategories: ["Vendor"] },
+    {
+      key: "vendor_compliance_status",
+      label: "Compliance Status",
+      module: "client",
+      inputType: "new_list",
+      placeholder: "Select compliance status...",
+      newListConfig: { sourceMode: "basic_list", allowSearch: true, allowCustomOptions: true },
+      options: [
+        { id: 1, label: "Fully Compliant", value: "Fully Compliant" },
+        { id: 2, label: "Under Review", value: "Under Review" },
+        { id: 3, label: "Pending Audit", value: "Pending Audit" },
+      ],
+      showAlways: true,
+      contactCategories: ["Vendor"],
+    },
+    { key: "vendor_sla_rating", label: "SLA Rating", module: "client", inputType: "rating", showAlways: true, contactCategories: ["Vendor"] },
   ],
   process: [
     { key: "process_name", label: "Process Name", module: "process", inputType: "text", placeholder: "Process name", showAlways: true },
     { key: "client_name", label: "Client Name", module: "process", inputType: "text", placeholder: "Client name", showAlways: true },
+    {
+      key: "contact_type",
+      label: "Contact Type",
+      module: "process",
+      inputType: "new_list",
+      placeholder: "Select contact type...",
+      newListConfig: {
+        sourceMode: "basic_list",
+        allowSearch: true,
+        allowCustomOptions: true,
+      },
+      options: [
+        { id: 1, label: "Lead", value: "Lead" },
+        { id: 2, label: "Client", value: "Client" },
+        { id: 3, label: "Supplier", value: "Supplier" },
+        { id: 4, label: "Vendor", value: "Vendor" },
+      ],
+      showAlways: true,
+    },
     { key: "entity", label: "Entity", module: "process", inputType: "text", placeholder: "Process", defaultValue: "Process", showAlways: true },
     { key: "created_on_date", label: "Created On Date", module: "process", inputType: "date", placeholder: "YYYY-MM-DD", showAlways: true },
     {
@@ -1973,10 +2138,11 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
     {
       id: "sec-general-info",
       title: "General Information",
-      description: "Basic client identity and contact information",
+      description: "Basic contact identity and contact information",
       module: "client",
       source: "system",
-      fieldKeys: ["name", "email", "phone", "location", "country"],
+      fieldKeys: ["name", "contact_type", "email", "phone", "location", "country"],
+      contactCategories: ["Lead", "Client", "Supplier", "Vendor"],
       createdAt: 0,
     },
     {
@@ -1986,6 +2152,7 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       module: "client",
       source: "system",
       fieldKeys: ["company", "role"],
+      contactCategories: ["Lead", "Client", "Supplier", "Vendor"],
       createdAt: 0,
     },
     {
@@ -1995,15 +2162,57 @@ export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefini
       module: "client",
       source: "system",
       fieldKeys: ["status", "processes"],
+      contactCategories: ["Lead", "Client", "Supplier", "Vendor"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-lead-qualification",
+      title: "Lead Qualification",
+      description: "Lead score, budget, and source tracking",
+      module: "client",
+      source: "system",
+      fieldKeys: ["lead_source", "lead_score", "estimated_budget"],
+      contactCategories: ["Lead"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-client-account",
+      title: "Client Account Details",
+      description: "Account tier, renewal date, and dedicated manager",
+      module: "client",
+      source: "system",
+      fieldKeys: ["account_tier", "renewal_date", "client_manager"],
+      contactCategories: ["Client"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-supplier-logistics",
+      title: "Supplier Logistics",
+      description: "Supply category, delivery lead times, and payment terms",
+      module: "client",
+      source: "system",
+      fieldKeys: ["supply_category", "delivery_lead_time", "payment_terms"],
+      contactCategories: ["Supplier"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-vendor-compliance",
+      title: "Vendor Compliance & SLA",
+      description: "Contract ID, compliance audit status, and SLA ratings",
+      module: "client",
+      source: "system",
+      fieldKeys: ["vendor_contract_id", "vendor_compliance_status", "vendor_sla_rating"],
+      contactCategories: ["Vendor"],
       createdAt: 0,
     },
     {
       id: "sec-custom-fields",
       title: "Custom Fields",
-      description: "User-defined custom client properties",
+      description: "User-defined custom contact properties",
       module: "client",
       source: "system",
       fieldKeys: [],
+      contactCategories: ["Lead", "Client", "Supplier", "Vendor"],
       createdAt: 0,
     },
   ],
@@ -2485,6 +2694,7 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     maxRating: f.maxRating ?? undefined,
     currency: f.currency ?? undefined,
     newListConfig: f.newListConfig ?? undefined,
+    contactCategories: Array.isArray(f.contactCategories) && f.contactCategories.length > 0 ? f.contactCategories : undefined,
   };
 }
 
@@ -2750,6 +2960,7 @@ function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, 
       canAddFields: true,
       canDelete: true,
     },
+    contactCategories: Array.isArray(s.contactCategories) && s.contactCategories.length > 0 ? s.contactCategories : undefined,
     createdAt: typeof s.createdAt === "number" ? s.createdAt : Date.now(),
   };
 }

@@ -58,6 +58,7 @@ import { CHEVRON_PALETTE } from "../components/common/ChevronStageRibbon";
 import { DEFAULT_ENTITY_PROCESSES } from "../../lib/useProcessStore";
 import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
 import PageTopBar from "../components/layout/PageTopBar";
+import { getContactCategories } from "../../lib/contactCategoriesStore";
 import { Modal } from "../components/ui/Modal";
 import NewConsultationDrawer from "../components/scribe/NewConsultationDrawer";
 import TranscriptDetailDrawer from "../components/scribe/TranscriptDetailDrawer";
@@ -82,7 +83,7 @@ import {
 import { eventBus } from "../../lib/eventBus";
 import { MOCK_SERVICES } from "../../lib/mockServicesData";
 
-const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
+const HARDCODED_KEYS = new Set(["name", "contact_type", "contactType", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
 
 const CHRONO_RANK: Record<string, number> = {
   process_entry: 0,
@@ -422,8 +423,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const DEFAULT_CLIENT_SECTIONS: OverviewSection[] = [
     {
       id: "sec-client-details",
-      title: "Client Details",
-      fieldKeys: ["name", "email", "phone", "location", "country"],
+      title: "Contact Details",
+      fieldKeys: ["name", "contact_type", "email", "phone", "location", "country"],
     },
     {
       id: "sec-company-details",
@@ -433,7 +434,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   ];
 
   const SYSTEM_FIELD_KEYS = new Set([
-    "name", "email", "phone", "location", "country",
+    "name", "contact_type", "contactType", "email", "phone", "location", "country",
     "company", "role", "status", "processes", "stage",
     "responsible", "lastContact", "companyName", "jobPosition"
   ]);
@@ -544,10 +545,33 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       }
     });
 
+    // Ensure sec-client-details has title Contact Details and includes contact_type
+    const contactDetailsSec = updatedSections.find((s) => s.id === "sec-client-details" || s.id === "sec-general-info");
+    if (contactDetailsSec) {
+      contactDetailsSec.title = "Contact Details";
+      if (!contactDetailsSec.fieldKeys.includes("contact_type")) {
+        contactDetailsSec.fieldKeys.splice(1, 0, "contact_type");
+      }
+    }
+
     return updatedSections;
   };
 
+  const queryParamType = new URLSearchParams(location.search).get("type");
+  const defaultCategoryFromUrl = useMemo(() => {
+    if (!queryParamType) return "Lead";
+    const available = getContactCategories();
+    const found = available.find(
+      (c) => c.toLowerCase() === queryParamType.trim().toLowerCase()
+    );
+    if (found) return found;
+    return queryParamType.trim().charAt(0).toUpperCase() + queryParamType.trim().slice(1);
+  }, [queryParamType]);
+
   const [clientName, setClientName] = useState(initialTarget?.name || "");
+  const [clientContactType, setClientContactType] = useState<string>(
+    initialTarget?.contact_type || initialTarget?.contactType || defaultCategoryFromUrl
+  );
   const [clientEmail, setClientEmail] = useState(initialTarget?.email || "");
   const [clientPhone, setClientPhone] = useState(initialTarget?.phone || "");
   const [clientCompany, setClientCompany] = useState(initialTarget?.companyName || "");
@@ -560,6 +584,18 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   // Keep form fields synced whenever id route changes or client is selected
   useEffect(() => {
+    if (id === "new") {
+      const qType = new URLSearchParams(location.search).get("type");
+      if (qType) {
+        const available = getContactCategories();
+        const found = available.find(
+          (c) => c.toLowerCase() === qType.trim().toLowerCase()
+        );
+        const cat = found || (qType.trim().charAt(0).toUpperCase() + qType.trim().slice(1));
+        setClientContactType(cat);
+      }
+      return;
+    }
     if (id && id !== "new") {
       const cleanId = String(id).trim().toLowerCase().replace(/^#/, "");
       const all = [...clients, ...getStoredClients()];
@@ -569,6 +605,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       });
       if (target) {
         setClientName(target.name || "");
+        setClientContactType(target.contact_type || target.contactType || "Lead");
         setClientEmail(target.email || "");
         setClientPhone(target.phone || "");
         setClientCompany(target.companyName || "");
@@ -596,7 +633,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     if (isNewClient) {
       return {
         id: "new",
-        name: clientName || "New Client",
+        name: clientName || "New Contact",
+        contact_type: clientContactType || "Lead",
+        contactType: clientContactType || "Lead",
         email: clientEmail || "",
         phone: clientPhone || "",
         country: clientCountry || "US",
@@ -622,7 +661,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     });
 
     return matched || initialTarget || null;
-  }, [id, isNewClient, clients, initialTarget, clientName, clientEmail, clientPhone, clientCountry, selectedProcesses, clientStatus, clientLocation, clientCompany, clientRole]);
+  }, [id, isNewClient, clients, initialTarget, clientName, clientContactType, clientEmail, clientPhone, clientCountry, selectedProcesses, clientStatus, clientLocation, clientCompany, clientRole]);
 
   const [clientSections, setClientSections] = useState<OverviewSection[]>(() => {
     let savedSections = (initialTarget as any)?.customSections;
@@ -706,6 +745,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const fieldValues = useMemo(() => {
     return {
       name: clientName,
+      contact_type: clientContactType,
+      contactType: clientContactType,
       email: clientEmail,
       phone: clientPhone,
       company: clientCompany,
@@ -718,6 +759,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     };
   }, [
     clientName,
+    clientContactType,
     clientEmail,
     clientPhone,
     clientCompany,
@@ -731,6 +773,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   const handleFieldValueChange = (key: string, val: any) => {
     if (key === "name") setClientName(val);
+    else if (key === "contact_type" || key === "contactType") setClientContactType(val);
     else if (key === "email") setClientEmail(val);
     else if (key === "phone") setClientPhone(val);
     else if (key === "company") setClientCompany(val);
@@ -749,6 +792,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           if (c.id !== client.id) return c;
           const updated: any = { ...c };
           if (key === "name") updated.name = val;
+          else if (key === "contact_type" || key === "contactType") {
+            updated.contact_type = val;
+            updated.contactType = val;
+          }
           else if (key === "email") updated.email = val;
           else if (key === "phone") updated.phone = val;
           else if (key === "company") updated.companyName = val;
@@ -935,6 +982,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     const createdClient: Client = {
       id: newId,
       name: clientName.trim(),
+      contact_type: clientContactType || "Lead",
+      contactType: clientContactType || "Lead",
       email: clientEmail.trim(),
       phone: clientPhone.trim(),
       country: clientCountry || "US",
@@ -2215,22 +2264,44 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             </div>
             <div className="flex-1">
               <h2 className="text-xl font-bold mb-1" style={{ color: "#1F2937", fontFamily: "DM Sans, sans-serif" }}>
-                {isNewClient ? (clientName || "Add New Client") : client.name}
+                {isNewClient ? (clientName || "Add New Contact") : client.name}
               </h2>
-              <span
-                className="inline-block px-2.5 py-1.5 text-[11px] font-bold"
-                style={{
-                  fontFamily: "Outfit, sans-serif",
-                  backgroundColor:
-                    isNewClient ? "#EFF6FF" : client.status === "Active" ? "#DCFCE7" : client.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
-                  color:
-                    isNewClient ? "#2563EB" : client.status === "Active" ? "#10B981" : client.status === "Pending" ? "#F59E0B" : "#6B7280",
-                  borderRadius: "6px",
-                  padding: "6px 10px",
-                }}
-              >
-                {isNewClient ? "New Client" : client.status}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className="inline-block px-2.5 py-1 text-[11px] font-bold"
+                  style={{
+                    fontFamily: "Outfit, sans-serif",
+                    backgroundColor:
+                      isNewClient ? "#EFF6FF" : client.status === "Active" ? "#DCFCE7" : client.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
+                    color:
+                      isNewClient ? "#2563EB" : client.status === "Active" ? "#10B981" : client.status === "Pending" ? "#F59E0B" : "#6B7280",
+                    borderRadius: "6px",
+                  }}
+                >
+                  {isNewClient ? "New Contact" : client.status}
+                </span>
+
+                <span
+                  className="inline-flex items-center px-2.5 py-1 text-[11px] font-bold rounded-md border"
+                  style={{
+                    fontFamily: "Outfit, sans-serif",
+                    backgroundColor:
+                      (clientContactType || (client as any)?.contact_type || (client as any)?.contactType) === "Lead" ? "#FAF5FF" :
+                      (clientContactType || (client as any)?.contact_type || (client as any)?.contactType) === "Supplier" ? "#EFF6FF" :
+                      (clientContactType || (client as any)?.contact_type || (client as any)?.contactType) === "Vendor" ? "#FFFBEB" : "#ECFDF5",
+                    color:
+                      (clientContactType || (client as any)?.contact_type || (client as any)?.contactType) === "Lead" ? "#7E22CE" :
+                      (clientContactType || (client as any)?.contact_type || (client as any)?.contactType) === "Supplier" ? "#1D4ED8" :
+                      (clientContactType || (client as any)?.contact_type || (client as any)?.contactType) === "Vendor" ? "#B45309" : "#047857",
+                    borderColor:
+                      (clientContactType || (client as any)?.contact_type || (client as any)?.contactType) === "Lead" ? "#E9D5FF" :
+                      (clientContactType || (client as any)?.contact_type || (client as any)?.contactType) === "Supplier" ? "#BFDBFE" :
+                      (clientContactType || (client as any)?.contact_type || (client as any)?.contactType) === "Vendor" ? "#FDE68A" : "#A7F3D0",
+                  }}
+                >
+                  Category: {clientContactType || (client as any)?.contact_type || (client as any)?.contactType || "Lead"}
+                </span>
+              </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {isNewClient && (
@@ -2241,7 +2312,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
                   <Check className="w-4 h-4" />
-                  Save Client
+                  Save Contact
                 </button>
               )}
               {!isNewClient && (
@@ -2315,6 +2386,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     mode="client"
                     client={client}
                     sections={clientSections}
+                    contactCategory={clientContactType}
                     onSectionsChange={handleSectionsChange}
                     fieldValues={fieldValues}
                     onFieldValueChange={handleFieldValueChange}
@@ -4536,3 +4608,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     </>
   );
 }
+
+export { ClientProfile as ContactDetailDrawer };
+

@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router";
-import { Search, Filter, Plus, Upload, Download, MoreVertical, Eye, Phone, Trash2, Settings as SettingsIcon, FileText, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail, MapPin, Clock, MessageSquare, Edit, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, User, CalendarClock, ArrowRight, List, Play, ChevronDown, ChevronUp, GripVertical, X, Building, Briefcase, Users, GitBranch, Globe, Copy, Shield, Info, AlertCircle, AlertTriangle, CheckCircle2, RefreshCw, FileSpreadsheet, Webhook, Send } from "lucide-react";
+import { Search, Filter, Plus, Upload, Download, MoreVertical, Eye, Phone, Trash2, Settings as SettingsIcon, FileText, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail, MapPin, Clock, MessageSquare, Edit, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, User, CalendarClock, ArrowRight, List, Play, ChevronDown, ChevronUp, GripVertical, X, Building, Briefcase, Users, GitBranch, Globe, Copy, Shield, Info, AlertCircle, AlertTriangle, CheckCircle2, RefreshCw, FileSpreadsheet, Webhook, Send, UserCheck, Truck, Building2, ShieldCheck } from "lucide-react";
 import { useDrag, useDrop } from "react-dnd";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -32,6 +32,7 @@ export type { Client } from "../../lib/clientsStore";
 export { initialClients } from "../../data/canonicalClients";
 import { type Client, useClients, saveStoredClients, addOrUpdateClient, CLIENTS_STORE_EVENT } from "../../lib/clientsStore";
 import { useTeamMembers } from "../../lib/teamStore";
+import { useContactCategories, addContactCategory } from "../../lib/contactCategoriesStore";
 import { TableComponent, TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 
 interface DraggableColumnHeaderProps {
@@ -132,6 +133,33 @@ export default function Clients() {
   const [modalStage, setModalStage] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeCategoryMode, setActiveCategoryMode] = useState<string>("lead");
+  const contactCategories = useContactCategories();
+  const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+
+  const categoryOptions = useMemo(() => {
+    return contactCategories.map((cat) => ({
+      id: cat.toLowerCase(),
+      label: cat.toLowerCase().endsWith("s") ? cat : `${cat}s`,
+      singular: cat,
+      countKey: cat,
+    }));
+  }, [contactCategories]);
+
+  const contactCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    contactCategories.forEach((cat) => {
+      counts[cat] = 0;
+    });
+    clients.forEach((c) => {
+      const rawType = (c.contact_type || c.contactType || "Lead").trim();
+      const matched = contactCategories.find((cat) => cat.toLowerCase() === rawType.toLowerCase()) || "Lead";
+      counts[matched] = (counts[matched] || 0) + 1;
+    });
+    return counts;
+  }, [clients, contactCategories]);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const entityType = "clients";
@@ -299,6 +327,7 @@ export default function Clients() {
   const [showColumnToggle, setShowColumnToggle] = useState(false);
   const [newClient, setNewClient] = useState({
     name: "",
+    contact_type: "Lead",
     email: "",
     phone: "",
     countryCode: "+1",
@@ -835,6 +864,13 @@ export default function Clients() {
             )}
           </td>
         );
+      case 'contact_type':
+      case 'category':
+        return (
+          <td key="contact_type" className="px-3 py-1 text-xs whitespace-nowrap text-foreground font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            {client.contact_type || client.contactType || "Lead"}
+          </td>
+        );
       default:
         return null;
     }
@@ -876,6 +912,8 @@ export default function Clients() {
       lastContact: new Date().toISOString().split("T")[0],
       status: "Active",
       source: newClient.source || "Self Gen",
+      contactType: newClient.contact_type || "Lead",
+      contact_type: newClient.contact_type || "Lead",
       companyName: newClient.companyName,
       jobPosition: newClient.jobPosition,
       numberOfEmployees: newClient.numberOfEmployees,
@@ -920,6 +958,7 @@ export default function Clients() {
     // Reset form
     setNewClient({
       name: "",
+      contact_type: "Lead",
       email: "",
       phone: "",
       countryCode: "+1",
@@ -938,7 +977,7 @@ export default function Clients() {
     setShowAdditionalDetails(false);
     setShowAddModal(false);
 
-    toast.success("Client added successfully");
+    toast.success("Contact added successfully");
   };
 
   const handleDeleteClient = (id: string) => {
@@ -1417,11 +1456,18 @@ export default function Clients() {
 
   // Advanced Filtering Logic
   const filteredClients = clients.filter((client) => {
+    // Mode switcher category filter
+    const clientType = (client.contact_type || client.contactType || "Lead").toLowerCase();
+    const matchesCategoryMode = clientType === activeCategoryMode.toLowerCase();
+    if (!matchesCategoryMode) return false;
+
     // Text search filter
     const matchesSearch = searchQuery === "" ||
       client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       client.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      client.phone.includes(searchQuery);
+      client.phone.includes(searchQuery) ||
+      (client.contact_type && client.contact_type.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (client.companyName && client.companyName.toLowerCase().includes(searchQuery.toLowerCase()));
 
     // Name filter (from dropdown)
     const matchesName = selectedName.length === 0 || selectedName.includes(client.name);
@@ -1480,23 +1526,75 @@ export default function Clients() {
       <div className="min-h-screen bg-[#fafafa]">
         <div className="px-10 sm:px-12 py-7.5 sm:py-8 w-full space-y-7">
           <PageHeader
-            title="Clients"
-            subtitle="Manage your medical intelligence and client interactions with precision"
+            title="Contacts"
+            subtitle="Manage your contact directory, leads, suppliers, vendors, and interactions with precision"
             badge={
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
                 Directory
               </span>
             }
           >
-            <HowItWorksButton onClick={() => setShowHelp(true)} label="How Clients Works" />
+            <HowItWorksButton onClick={() => setShowHelp(true)} label="How Contacts Work" />
           </PageHeader>
 
           {/* Action Bar powered by PageTopBar */}
           <PageTopBar
             isBottomPanelAttached={showFilterPanel}
+            leftElement={
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-[36px] px-3.5 bg-white border border-input hover:border-gray-300 rounded-lg text-xs font-semibold text-foreground flex items-center justify-between gap-2.5 transition-all shadow-2xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary min-w-[125px]"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <span>{categoryOptions.find((c) => c.id === activeCategoryMode)?.label || "Leads"}</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-44 bg-white shadow-lg rounded-xl border border-border p-1 z-50">
+                  {categoryOptions.map((opt) => {
+                    const isSelected = activeCategoryMode === opt.id;
+                    return (
+                      <DropdownMenuItem
+                        key={opt.id}
+                        onClick={() => {
+                          setActiveCategoryMode(opt.id);
+                          setCurrentPage(1);
+                        }}
+                        className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg cursor-pointer transition-colors ${
+                          isSelected
+                            ? "bg-primary/10 text-primary font-bold"
+                            : "text-foreground hover:bg-muted font-medium"
+                        }`}
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        <span>{opt.label}</span>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                            isSelected ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {contactCounts[opt.countKey] || 0}
+                        </span>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                  <div className="h-px bg-border my-1" />
+                  <DropdownMenuItem
+                    onClick={() => setIsAddCategoryModalOpen(true)}
+                    className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50/70 rounded-lg cursor-pointer transition-colors"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Add Category</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            }
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
-            searchPlaceholder="Search clients..."
+            searchPlaceholder={`Search ${(categoryOptions.find((c) => c.id === activeCategoryMode)?.label || "contacts").toLowerCase()}...`}
             activeFilters={activeFilters}
             onRemoveFilter={(index) => {
               const filter = activeFilters[index];
@@ -1524,8 +1622,10 @@ export default function Clients() {
             onExport={() => setShowExportModal(true)}
             isExporting={isExporting}
             primaryAction={{
-              label: "Add Client",
-              onClick: () => navigate("/clients/new"),
+              label: `Add ${categoryOptions.find((c) => c.id === activeCategoryMode)?.singular || "Contact"}`,
+              onClick: () => {
+                navigate(`/clients/new?type=${activeCategoryMode}`);
+              },
             }}
             customFilterModalContent={
               <div className="flex" style={{ maxHeight: '580px' }}>
@@ -1551,7 +1651,7 @@ export default function Clients() {
                                   setSearchQuery("");
                                 }}
                               >
-                                All Clients
+                                All Contacts
                               </button>
                               <button
                                 className={`w-full text-left px-4 py-3 text-sm rounded-lg transition-colors font-medium ${activeFilters.length === 1 && activeFilters[0]?.field === 'status' && activeFilters[0]?.values.length === 1 && activeFilters[0]?.values[0] === 'Active'
@@ -1570,7 +1670,7 @@ export default function Clients() {
                                   setActiveFilters([{ field: 'status', label: 'Status', values: ['Active'] }]);
                                 }}
                               >
-                                Active Clients
+                                Active Contacts
                               </button>
                               <button
                                 className={`w-full text-left px-4 py-3 text-sm rounded-lg transition-colors font-medium ${activeFilters.length === 1 && activeFilters[0]?.field === 'status' && activeFilters[0]?.values.length === 1 && activeFilters[0]?.values[0] === 'Inactive'
@@ -1589,7 +1689,7 @@ export default function Clients() {
                                   setActiveFilters([{ field: 'status', label: 'Status', values: ['Inactive'] }]);
                                 }}
                               >
-                                Inactive Clients
+                                Inactive Contacts
                               </button>
                             </div>
                           </div>
@@ -2850,7 +2950,7 @@ export default function Clients() {
 
             const clientRowActions: TableRowAction<Client>[] = [
               {
-                label: "View Profile",
+                label: "View Contact",
                 icon: <Eye className="w-3.5 h-3.5" />,
                 onClick: (client) => { const targetId = client.id ? String(client.id).replace(/^#/, "") : `CL-${Date.now()}`; navigate(`/clients/${targetId}`); },
               },
@@ -2912,14 +3012,14 @@ export default function Clients() {
             );
           })()}
 
-          {/* Add Client Modal */}
+          {/* Add Contact Modal */}
           <Modal
             isOpen={showAddModal}
             onClose={() => {
               setShowAddModal(false);
               setShowAdditionalDetails(false);
             }}
-            title="Add New Client"
+            title="Add New Contact"
             footer={
               <>
                 <Button
@@ -2936,13 +3036,13 @@ export default function Clients() {
                   onClick={handleAddClient}
                   disabled={!newClient.name || !newClient.phone || newClient.stage.length === 0 || !newClient.responsible}
                 >
-                  Add Client
+                  Add Contact
                 </Button>
               </>
             }
           >
             <div className="space-y-6">
-              {/* Section 1: Client Information (Primary) */}
+              {/* Section 1: Contact Information (Primary) */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -2950,21 +3050,38 @@ export default function Clients() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   </div>
-                  <h3 className="text-base font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Client Information</h3>
+                  <h3 className="text-base font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Contact Information</h3>
                 </div>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                      Client Name <span className="text-destructive">*</span>
+                      Contact Name <span className="text-destructive">*</span>
                     </label>
                     <input
                       type="text"
                       value={newClient.name}
                       onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
-                      placeholder="Enter client name"
+                      placeholder="Enter contact name"
                       className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                       style={{ fontFamily: 'Outfit, sans-serif' }}
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                      Contact Type / Category <span className="text-destructive">*</span>
+                    </label>
+                    <select
+                      value={newClient.contact_type || "Lead"}
+                      onChange={(e) => setNewClient({ ...newClient, contact_type: e.target.value })}
+                      className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm cursor-pointer"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      <option value="Lead">Lead</option>
+                      <option value="Client">Client</option>
+                      <option value="Supplier">Supplier</option>
+                      <option value="Vendor">Vendor</option>
+                    </select>
                   </div>
 
                   <div>
@@ -4887,6 +5004,78 @@ export default function Clients() {
               AI Scribe
             </span>
           </button>
+        </div>
+      )}
+
+      {/* ── Add Category Modal ── */}
+      {isAddCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[2px]">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-border animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-base font-bold text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Add Contact Category
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddCategoryModalOpen(false);
+                  setNewCategoryName("");
+                }}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+              Create a custom contact category (e.g. Partner, Distributor, Contractor) to segment your contacts.
+            </p>
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder="e.g. Partner, Contractor..."
+              className="w-full px-3 py-2 border border-input rounded-lg text-xs outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-foreground bg-input-background"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newCategoryName.trim()) {
+                  const cat = newCategoryName.trim();
+                  addContactCategory(cat);
+                  setActiveCategoryMode(cat.toLowerCase());
+                  setIsAddCategoryModalOpen(false);
+                  setNewCategoryName("");
+                  toast.success(`Category "${cat}" added successfully`);
+                }
+              }}
+            />
+            <div className="flex items-center justify-end gap-2.5 mt-5">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddCategoryModalOpen(false);
+                  setNewCategoryName("");
+                }}
+                className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-muted rounded-lg transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!newCategoryName.trim()) return;
+                  const cat = newCategoryName.trim();
+                  addContactCategory(cat);
+                  setActiveCategoryMode(cat.toLowerCase());
+                  setIsAddCategoryModalOpen(false);
+                  setNewCategoryName("");
+                  toast.success(`Category "${cat}" added successfully`);
+                }}
+                disabled={!newCategoryName.trim()}
+                className="px-4 py-2 text-xs font-semibold text-primary-foreground bg-primary hover:bg-primary/90 disabled:opacity-50 rounded-lg transition-colors shadow-sm cursor-pointer"
+              >
+                Add Category
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

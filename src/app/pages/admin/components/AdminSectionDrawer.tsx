@@ -23,6 +23,7 @@ import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../../li
 import { getStoredTeamMembers, TeamMember, TEAM_STORE_EVENT } from "../../../../lib/teamStore";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import { AdminSelect } from "../../../components/ui/AdminSelect";
+import { getContactCategories, addContactCategory, useContactCategories } from "../../../../lib/contactCategoriesStore";
 
 /**
  * Checks whether a field definition matches the section's scoping rules.
@@ -115,6 +116,7 @@ interface SectionFormState {
   userVisibility: boolean;
   visibleToUserIds: string[];
   scopingRules: ScopingRule[];
+  contactCategories: string[];
   processIds: string[];
   permissions: SectionPermissions;
 }
@@ -131,6 +133,7 @@ function defaultSectionForm(module: Exclude<FieldModule, "deal">): SectionFormSt
     userVisibility: true,
     visibleToUserIds: [],
     scopingRules: [],
+    contactCategories: [],
     processIds: [],
     permissions: {
       canHide: true,
@@ -169,6 +172,7 @@ function sectionToForm(s: SectionDefinition): SectionFormState {
     userVisibility: s.userVisibility !== false,
     visibleToUserIds: s.visibleToUserIds ? s.visibleToUserIds.map(String) : [],
     scopingRules: rules,
+    contactCategories: s.contactCategories ? [...s.contactCategories] : [],
     processIds: s.processIds ? [...s.processIds] : [],
     permissions: {
       canHide: s.permissions?.canHide !== false,
@@ -182,6 +186,7 @@ function sectionToForm(s: SectionDefinition): SectionFormState {
 export interface AdminSectionDrawerProps {
   section: SectionDefinition | null;
   initialModule: Exclude<FieldModule, "deal">;
+  initialContactCategory?: string;
   isAdmin?: boolean;
   zIndex?: number;
   activeProcessId?: string;
@@ -194,6 +199,7 @@ export interface AdminSectionDrawerProps {
 export function AdminSectionDrawer({
   section,
   initialModule,
+  initialContactCategory,
   isAdmin = true,
   zIndex = 500,
   activeProcessId,
@@ -204,6 +210,9 @@ export function AdminSectionDrawer({
 }: AdminSectionDrawerProps) {
   const isEdit = Boolean(section);
   const { addCustomSection, updateCustomSection, getAllFields } = useFieldRegistry();
+  const availableContactCategories = useContactCategories();
+  const [newCustomCategoryInput, setNewCustomCategoryInput] = useState("");
+  const [showAddCustomCategoryBox, setShowAddCustomCategoryBox] = useState(false);
   const hasActiveProcessContext = Boolean(
     activeProcessId || activeProcessName || (processStages && processStages.length > 0)
   );
@@ -238,19 +247,26 @@ export function AdminSectionDrawer({
 
     if (isEdit) {
       const init = sectionToForm(section!);
+      const finalCats = init.contactCategories && init.contactCategories.length > 0
+        ? init.contactCategories
+        : (initialContactCategory ? [initialContactCategory] : (init.module === "client" ? ["Lead"] : []));
       const finalProcessIds = activeProcessId && (!init.processIds || init.processIds.length === 0)
         ? [activeProcessId]
         : (targetProc && (!init.processIds || init.processIds.length === 0) ? [targetProc.id] : init.processIds);
       const finalRules = (!init.scopingRules || init.scopingRules.length === 0) && inheritedRules.length > 0
         ? inheritedRules
         : init.scopingRules;
-      return { ...init, processIds: finalProcessIds, scopingRules: finalRules };
+      return { ...init, contactCategories: finalCats, processIds: finalProcessIds, scopingRules: finalRules };
     }
 
     const def = defaultSectionForm(initialModule);
+    const initialCats = initialContactCategory
+      ? [initialContactCategory]
+      : (initialModule === "client" ? ["Lead"] : []);
     const resolvedProcessIds = activeProcessId ? [activeProcessId] : (targetProc ? [targetProc.id] : def.processIds);
     return {
       ...def,
+      contactCategories: def.contactCategories.length > 0 ? def.contactCategories : initialCats,
       processIds: resolvedProcessIds,
       scopingRules: inheritedRules.length > 0 ? inheritedRules : def.scopingRules,
     };
@@ -552,6 +568,9 @@ export function AdminSectionDrawer({
       userVisibility: form.userVisibility,
       visibleToUserIds: !isAdmin && form.userVisibility !== false && form.visibleToUserIds.length > 0 ? form.visibleToUserIds : undefined,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
+      contactCategories: (form.selectedModules.includes("client") || form.module === "client") && form.contactCategories.length > 0
+        ? form.contactCategories
+        : undefined,
       processIds: (form.selectedModules.includes("process") || form.module === "process") ? (form.processIds.length > 0 ? form.processIds : (activeProcessId ? [activeProcessId] : undefined)) : undefined,
       isReusable: additionalModules.length > 0,
       reusableModules: additionalModules.length > 0 ? additionalModules : undefined,
@@ -654,6 +673,98 @@ export function AdminSectionDrawer({
               )}
             </div>
           </div>
+
+          {/* Contact Category Selector (when module includes 'client') */}
+          {(form.selectedModules.includes("client") || form.module === "client") && (() => {
+            const currentCat = form.contactCategories?.[0] || initialContactCategory || "Lead";
+            const dropdownCats = Array.from(
+              new Set([...availableContactCategories, ...(form.contactCategories || [])])
+            ).filter(Boolean);
+
+            return (
+              <div className="space-y-2 p-3 bg-slate-50/80 border border-slate-200 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Contact Category
+                    </label>
+                    <InfoTooltip text="Assign this section to a specific contact category (Lead, Client, Supplier, Vendor, or custom)." size="sm" />
+                  </div>
+                </div>
+
+                <div className="relative border border-slate-200 rounded-xl bg-white px-3 py-2 flex items-center">
+                  <select
+                    value={currentCat}
+                    onChange={(e) => {
+                      if (e.target.value === "__add_new__") {
+                        setShowAddCustomCategoryBox(true);
+                      } else {
+                        setShowAddCustomCategoryBox(false);
+                        setForm((p) => ({ ...p, contactCategories: [e.target.value] }));
+                      }
+                    }}
+                    className="w-full bg-transparent text-xs font-semibold text-slate-800 pr-6 outline-none cursor-pointer appearance-none"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {dropdownCats.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                    <option value="__add_new__">+ Add Category...</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+
+                {showAddCustomCategoryBox && (
+                  <div className="flex items-center gap-2 pt-1 animate-in fade-in duration-150">
+                    <input
+                      type="text"
+                      value={newCustomCategoryInput}
+                      onChange={(e) => setNewCustomCategoryInput(e.target.value)}
+                      placeholder="New category name..."
+                      className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newCustomCategoryInput.trim()) {
+                          const added = newCustomCategoryInput.trim();
+                          addContactCategory(added);
+                          setForm((p) => ({ ...p, contactCategories: [added] }));
+                          setNewCustomCategoryInput("");
+                          setShowAddCustomCategoryBox(false);
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newCustomCategoryInput.trim()) {
+                          const added = newCustomCategoryInput.trim();
+                          addContactCategory(added);
+                          setForm((p) => ({ ...p, contactCategories: [added] }));
+                          setNewCustomCategoryInput("");
+                          setShowAddCustomCategoryBox(false);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 cursor-pointer shadow-xs"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddCustomCategoryBox(false);
+                        setNewCustomCategoryInput("");
+                      }}
+                      className="px-3 py-1.5 border border-slate-200 text-slate-600 text-xs font-semibold rounded-lg hover:bg-slate-100 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Process Workflow Selector (when module includes 'process') */}
           {isProcessActive && (() => {

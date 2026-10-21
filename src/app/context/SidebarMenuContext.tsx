@@ -25,7 +25,7 @@ export interface SidebarMenuConfig {
 }
 
 export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
-  version: 6,
+  version: 7,
   defaultStartPage: "/",
   sections: [
     {
@@ -34,7 +34,7 @@ export const DEFAULT_SIDEBAR_CONFIG: SidebarMenuConfig = {
       defaultExpanded: true,
       items: [
         { id: "overview", label: "Overview", iconName: "LayoutDashboard", path: "/", visible: true, isFeatured: true },
-        { id: "clients", label: "Clients", iconName: "Users", path: "/clients", visible: true, isFeatured: true },
+        { id: "clients", label: "Contact", iconName: "Users", path: "/clients", visible: true, isFeatured: true },
         { id: "call-logs", label: "Call Logs", iconName: "Phone", path: "/call-logs", visible: true, isFeatured: true },
         { id: "chats", label: "Chats", iconName: "MessageCircle", path: "/chats", visible: true, isFeatured: true },
         { id: "processes", label: "Process", iconName: "RefreshCw", path: "/deals", visible: true, isFeatured: true },
@@ -133,6 +133,7 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
                 ...sec,
                 items: items.map((it: NavItemConfig) => ({
                   ...it,
+                  label: it.id === "clients" ? "Contact" : it.label,
                   isFeatured: it.isFeatured !== undefined ? it.isFeatured : true,
                 })),
               };
@@ -145,7 +146,7 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
             }
             return sec;
           });
-          const migrated = { ...parsed, version: 6, sections: migratedSections };
+          const migrated = { ...parsed, version: 7, sections: migratedSections };
           localStorage.setItem(storageKey, JSON.stringify(migrated));
           return migrated;
         }
@@ -159,7 +160,7 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
           });
           parsed.sections = parsed.sections.map((sec: NavSectionConfig) => {
             if (sec.id === "workspace") {
-              const items = [...sec.items];
+              let items = [...sec.items];
               const apptIdx = items.findIndex((it) => it.id === "appointments");
               const scribeIdx = items.findIndex((it) => it.id === "scribe");
               if (apptIdx !== -1 && scribeIdx !== -1 && apptIdx > scribeIdx) {
@@ -167,6 +168,7 @@ function loadAndMigrateConfig(storageKey: string): SidebarMenuConfig {
                 const newScribeIdx = items.findIndex((it) => it.id === "scribe");
                 items.splice(newScribeIdx, 0, apptItem);
               }
+              items = items.map((it) => (it.id === "clients" ? { ...it, label: "Contact" } : it));
               return { ...sec, items };
             }
             if (sec.id === "billing") return { ...sec, title: "REVENUE & INSIGHTS" };

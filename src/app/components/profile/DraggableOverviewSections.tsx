@@ -95,6 +95,7 @@ export interface DraggableOverviewSectionsProps {
   customFieldsModule?: FieldModule;
   highlightRequiredKeys?: string[];
   renderCustomSection?: (section: OverviewSection) => React.ReactNode;
+  contactCategory?: string;
 }
 
 
@@ -267,7 +268,15 @@ export default function DraggableOverviewSections({
   customFieldsModule = "client",
   highlightRequiredKeys = [],
   renderCustomSection,
+  contactCategory,
 }: DraggableOverviewSectionsProps) {
+  const effectiveContactCategory =
+    contactCategory ||
+    client?.contact_type ||
+    client?.contactType ||
+    (client as any)?.category ||
+    undefined;
+
   const { getAllFields, getAllSections, addCustomSection, updateCustomSection, deleteCustomSection, updateCustomField } = useFieldRegistry();
   const { activeOrganization } = useOrganization();
 
@@ -1807,6 +1816,7 @@ export default function DraggableOverviewSections({
           activeProcessId={activeProcessId}
           activeProcessName={activeProcessName}
           processStages={activeProcessStages}
+          contactCategory={effectiveContactCategory}
           onClose={() => {
             setFieldModalOpen(false);
             setTargetSectionIdForField(null);
@@ -1819,6 +1829,7 @@ export default function DraggableOverviewSections({
       {createFieldModalOpen && (
         <CreateFieldModal
           lockModule={customFieldsModule}
+          initialContactCategory={effectiveContactCategory}
           activeProcessId={activeProcessId}
           activeProcessName={activeProcessName}
           processStages={activeProcessStages}

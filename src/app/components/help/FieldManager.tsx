@@ -1,13 +1,20 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Search, X, ChevronDown, Plus, Asterisk, Check, ChevronRight } from "lucide-react";
-import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg } from "../../context/FieldRegistryContext";
+import {
+  useFieldRegistry,
+  FieldDefinition,
+  FieldModule,
+  isFieldMatchingOrg,
+  isFieldMatchingContactCategory,
+} from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
+import { useContactCategories, addContactCategory } from "../../../lib/contactCategoriesStore";
 import { toast } from "sonner";
 import { AdminFieldDrawer } from "../../pages/admin/components/AdminFieldDrawer";
 
 const MODULE_LABELS: Record<Exclude<FieldModule, "deal">, string> = {
-  client: "Client Fields",
+  client: "Contact Fields",
   process: "Process Fields",
   appointment: "Appointment Fields",
   invoice: "Invoice Fields",
@@ -23,7 +30,7 @@ const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appoi
 
 // Module → singular noun for prose labels
 const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plural: string }> = {
-  client: { singular: "client", plural: "clients" },
+  client: { singular: "contact", plural: "contacts" },
   process: { singular: "process", plural: "processes" },
   appointment: { singular: "appointment", plural: "appointments" },
   invoice: { singular: "invoice", plural: "invoices" },
@@ -42,6 +49,7 @@ export interface CreateFieldModalProps {
   activeProcessName?: string;
   processStages?: Array<{ id: string; name: string; color?: string }>;
   isAdmin?: boolean;
+  initialContactCategory?: string;
   onClose: () => void;
   onCreated?: (field: FieldDefinition) => void;
 }
@@ -53,6 +61,7 @@ export function CreateFieldModal({
   activeProcessName,
   processStages,
   isAdmin = true,
+  initialContactCategory,
   onClose,
   onCreated,
 }: CreateFieldModalProps) {
@@ -65,6 +74,7 @@ export function CreateFieldModal({
       field={null}
       initialModule={normModule}
       lockModule={Boolean(lockModule)}
+      initialContactCategory={initialContactCategory}
       activeProcessId={activeProcessId}
       activeProcessName={activeProcessName}
       processStages={processStages}
@@ -88,6 +98,7 @@ export interface SelectFieldsModalProps {
   activeProcessName?: string;
   processStages?: Array<{ id: string; name: string; color?: string }>;
   isAdmin?: boolean;
+  contactCategory?: string;
 }
 
 export function SelectFieldsModal({
@@ -101,9 +112,24 @@ export function SelectFieldsModal({
   activeProcessName,
   processStages,
   isAdmin = true,
+  contactCategory,
 }: SelectFieldsModalProps) {
   const { getAllFields, updateCustomField } = useFieldRegistry();
   const { activeOrganization } = useOrganization();
+  const contactCategories = useContactCategories();
+  const [selectedContactCategory, setSelectedContactCategory] = useState<string>(
+    () => contactCategory || "all"
+  );
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+
+  useEffect(() => {
+    if (contactCategory) {
+      setSelectedContactCategory(contactCategory);
+    }
+  }, [contactCategory]);
+
   const [fieldSearchQuery, setFieldSearchQuery] = useState("");
   const [selectedFieldsForModal, setSelectedFieldsForModal] = useState<string[]>(
     () => initiallySelected || currentFieldKeys || []
@@ -170,16 +196,19 @@ export function SelectFieldsModal({
     }));
   };
 
-  // Compile all fields grouped by module, strictly obeying activeOrganization scope
+  // Compile all fields grouped by module, strictly obeying activeOrganization scope and contact category
   const groupedFieldsList = targetModules.map(module => {
     const procId = activeProcessId || activeProcessName;
-    const fields = getAllFields(module).filter(f =>
-      isFieldMatchingOrg(f, activeOrganization, procId) &&
-      f.label.toLowerCase().includes(fieldSearchQuery.toLowerCase())
-    );
+    const fields = getAllFields(module).filter(f => {
+      if (!isFieldMatchingOrg(f, activeOrganization, procId)) return false;
+      if (module === "client" && selectedContactCategory && selectedContactCategory !== "all") {
+        if (!isFieldMatchingContactCategory(f, selectedContactCategory)) return false;
+      }
+      return f.label.toLowerCase().includes(fieldSearchQuery.toLowerCase());
+    });
     return {
       module,
-      label: MODULE_NOUN[module]?.plural.toUpperCase() || module.toUpperCase(),
+      label: module === "client" ? "CONTACT" : (MODULE_NOUN[module]?.plural.toUpperCase() || module.toUpperCase()),
       fields,
     };
   }).filter(g => g.fields.length > 0);
@@ -206,9 +235,9 @@ export function SelectFieldsModal({
         className="fixed bg-white rounded-xl shadow-2xl flex flex-col"
         style={{
           zIndex: 10000,
-          width: "500px",
+          width: "520px",
           maxWidth: "92vw",
-          maxHeight: "80vh",
+          maxHeight: "82vh",
           top: "50%",
           left: "50%",
           transform: "translate(-50%, -50%)",
@@ -227,15 +256,19 @@ export function SelectFieldsModal({
         </div>
 
         {/* Search */}
-        <div className="p-4 border-b border-gray-50 flex-shrink-0">
+        <div className="p-3.5 border-b border-gray-100 flex-shrink-0 bg-gray-50/40">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               value={fieldSearchQuery}
               onChange={(e) => setFieldSearchQuery(e.target.value)}
-              placeholder="Search fields across all categories..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
+              placeholder={
+                selectedContactCategory !== "all"
+                  ? `Search ${selectedContactCategory} contact fields...`
+                  : "Search contact fields..."
+              }
+              className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-blue-500 transition-colors shadow-2xs"
             />
           </div>
         </div>
@@ -247,16 +280,126 @@ export function SelectFieldsModal({
 
             return (
               <div key={group.module} className="border border-gray-100 rounded-xl overflow-hidden shadow-sm bg-white">
-                <button
-                  type="button"
-                  onClick={() => toggleSection(group.module)}
-                  className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50/50 hover:bg-gray-50 transition-colors border-b border-gray-100 text-left"
-                >
-                  <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    {group.label} ({group.fields.length})
-                  </span>
-                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
-                </button>
+                {group.module === "client" ? (
+                  <div className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50/60 hover:bg-gray-50 transition-colors border-b border-gray-100 text-left">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection(group.module)}
+                        className="flex items-center gap-1.5 hover:text-blue-600 transition-colors cursor-pointer"
+                      >
+                        <span className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                          CONTACT
+                        </span>
+                        <span className="text-xs font-bold text-gray-400">
+                          ({group.fields.length})
+                        </span>
+                        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                      </button>
+
+                      <span className="text-gray-300 font-light text-xs">|</span>
+
+                      {/* Contact Category Filter Dropdown */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowCategoryDropdown(!showCategoryDropdown);
+                          }}
+                          className="h-7 px-2.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 transition-colors cursor-pointer shadow-2xs"
+                        >
+                          <span className="text-gray-400 font-normal text-[11px]">Category:</span>
+                          <span className="max-w-[120px] truncate text-blue-600 font-bold text-[11px]">
+                            {selectedContactCategory === "all" ? "All Categories" : selectedContactCategory}
+                          </span>
+                          <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${showCategoryDropdown ? "rotate-180" : ""}`} />
+                        </button>
+
+                        {showCategoryDropdown && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-[10001]"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowCategoryDropdown(false);
+                              }}
+                            />
+                            <div
+                              className="absolute left-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-xl shadow-xl z-[10002] py-1 max-h-56 overflow-y-auto"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedContactCategory("all");
+                                  setShowCategoryDropdown(false);
+                                }}
+                                className={`w-full text-left px-3 py-1.5 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${
+                                  selectedContactCategory === "all"
+                                    ? "bg-blue-50 text-blue-600 font-bold"
+                                    : "text-gray-700 hover:bg-gray-50"
+                                }`}
+                              >
+                                <span>All Categories</span>
+                                {selectedContactCategory === "all" && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                              </button>
+                              {contactCategories.map((cat) => (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedContactCategory(cat);
+                                    setShowCategoryDropdown(false);
+                                  }}
+                                  className={`w-full text-left px-3 py-1.5 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${
+                                    selectedContactCategory === cat
+                                      ? "bg-blue-50 text-blue-600 font-bold"
+                                      : "text-gray-700 hover:bg-gray-50"
+                                  }`}
+                                >
+                                  <span className="truncate">{cat}</span>
+                                  {selectedContactCategory === cat && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                                </button>
+                              ))}
+                              <div className="my-1 border-t border-gray-100" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowCategoryDropdown(false);
+                                  setIsAddCategoryOpen(true);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                Add Category...
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(group.module)}
+                      className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                    >
+                      <ChevronDown className={`w-4 h-4 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(group.module)}
+                    className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50/50 hover:bg-gray-50 transition-colors border-b border-gray-100 text-left cursor-pointer"
+                  >
+                    <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+                      {group.label} ({group.fields.length})
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                  </button>
+                )}
 
                 {!isCollapsed && (
                   <div className="p-3 space-y-2">
@@ -290,9 +433,11 @@ export function SelectFieldsModal({
                                   </span>
                                 )}
                               </div>
-                              <span className="text-[9px] text-gray-400 truncate capitalize">
-                                {f.source === "system" ? "system" : f.inputType}
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[9px] text-gray-400 truncate capitalize">
+                                  {f.source === "system" ? "system" : f.inputType}
+                                </span>
+                              </div>
                             </div>
                           </label>
                         );
@@ -355,6 +500,7 @@ export function SelectFieldsModal({
       {createFieldModalOpenFor && (
         <CreateFieldModal
           lockModule={createFieldModalOpenFor}
+          initialContactCategory={selectedContactCategory !== "all" ? selectedContactCategory : (contactCategory || "Lead")}
           activeProcessId={activeProcessId}
           activeProcessName={activeProcessName}
           processStages={resolvedProcessStages}
@@ -365,6 +511,69 @@ export function SelectFieldsModal({
             setCreateFieldModalOpenFor(null);
           }}
         />
+      )}
+
+      {/* Add Category Modal Popup */}
+      {isAddCategoryOpen && (
+        <div className="fixed inset-0 z-[10005] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-2xl p-5 w-80 max-w-[90vw] space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-800">Add New Category</h3>
+              <button
+                type="button"
+                onClick={() => setIsAddCategoryOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="e.g. Partners, Vendors, Employees"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newCategoryName.trim()) {
+                  addContactCategory(newCategoryName.trim());
+                  setSelectedContactCategory(newCategoryName.trim());
+                  setNewCategoryName("");
+                  setIsAddCategoryOpen(false);
+                  toast.success("Category added successfully");
+                }
+              }}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-blue-500"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddCategoryOpen(false);
+                  setNewCategoryName("");
+                }}
+                className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (newCategoryName.trim()) {
+                    addContactCategory(newCategoryName.trim());
+                    setSelectedContactCategory(newCategoryName.trim());
+                    setNewCategoryName("");
+                    setIsAddCategoryOpen(false);
+                    toast.success("Category added successfully");
+                  }
+                }}
+                disabled={!newCategoryName.trim()}
+                className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg cursor-pointer"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
