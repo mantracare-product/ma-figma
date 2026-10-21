@@ -236,13 +236,15 @@ const NODE_LABELS: Record<ChatbotFlowNode["type"], string> = {
 const CHANNEL_CLASSES: Record<ChannelType, string> = {
   whatsapp: "bg-green-50 border border-green-200 text-green-700 hover:bg-green-100",
   sms: "bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100",
-  website: "bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100"
+  website: "bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100",
+  email: "bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100"
 };
 
 const CHANNEL_LABELS: Record<ChannelType, string> = {
   whatsapp: "WhatsApp",
   sms: "SMS",
-  website: "Website"
+  website: "Website",
+  email: "Email"
 };
 
 // ── Option Source Constants & Helpers ──────────────────────────────────────

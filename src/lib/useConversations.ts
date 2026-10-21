@@ -29,7 +29,7 @@ export interface Conversation {
   contactName: string;
   phoneNumber: string;
   inboxNumber?: string;
-  channel: "whatsapp" | "sms" | "website";
+  channel: "whatsapp" | "sms" | "website" | "email";
   lastMessage: string;
   timestamp: string;
   unreadCount: number;
@@ -53,7 +53,7 @@ export interface Conversation {
 }
 
 export interface SessionWindowStatus {
-  channel: "whatsapp" | "sms" | "website";
+  channel: "whatsapp" | "sms" | "website" | "email";
   lastInboundAt: string | null;
   hoursRemaining: number | null;
   isExpired: boolean;
@@ -813,6 +813,62 @@ export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
     botStatus: "off",
     assignedPersonId: "",
   },
+  // Email Channel Mock Conversations
+  {
+    id: "conv-email-1",
+    clientId: "CL-001",
+    contactName: "Jonathan Hayes",
+    phoneNumber: "jonathan.hayes@acmecorp.com",
+    inboxNumber: "support@mantracare.com",
+    channel: "email",
+    lastMessage: "Please find the signed contract and NDA attached.",
+    timestamp: "11:20 AM",
+    unreadCount: 1,
+    status: "open",
+    messages: [
+      { id: "msg-e1-1", text: "Hi Jonathan, following up on our proposal discussion from yesterday. Please review the agreement.", timestamp: "Yesterday, 3:00 PM", sender: "me", status: "read" },
+      { id: "msg-e1-2", text: "Please find the signed contract and NDA attached.", timestamp: "11:20 AM", sender: "contact" },
+    ],
+    botStatus: "off",
+    assignedPersonId: "1",
+  },
+  {
+    id: "conv-email-2",
+    clientId: "CL-002",
+    contactName: "Claire Bennett",
+    phoneNumber: "c.bennett@healthplus.org",
+    inboxNumber: "support@mantracare.com",
+    channel: "email",
+    lastMessage: "Can we schedule a demo for our medical team next Tuesday?",
+    timestamp: "Yesterday",
+    unreadCount: 0,
+    status: "open",
+    messages: [
+      { id: "msg-e2-1", text: "Can we schedule a demo for our medical team next Tuesday?", timestamp: "Yesterday, 10:15 AM", sender: "contact" },
+      { id: "msg-e2-2", text: "Hi Claire, Tuesday at 2:00 PM works great. Sending over the calendar invite now.", timestamp: "Yesterday, 11:00 AM", sender: "me", status: "read" },
+    ],
+    botStatus: "off",
+    assignedPersonId: "",
+  },
+  {
+    id: "conv-email-3",
+    clientId: "CL-003",
+    contactName: "Robert Hughes",
+    phoneNumber: "robert.hughes@apexlabs.com",
+    inboxNumber: "support@mantracare.com",
+    channel: "email",
+    lastMessage: "Thank you for the quick resolution on our invoice query.",
+    timestamp: "2 days ago",
+    unreadCount: 0,
+    status: "resolved",
+    messages: [
+      { id: "msg-e3-1", text: "Hello, could you clarify the billing breakdown on invoice #INV-2026-08?", timestamp: "3 days ago, 9:00 AM", sender: "contact" },
+      { id: "msg-e3-2", text: "Hi Robert, the adjustment has been applied and an updated receipt was sent to your billing portal.", timestamp: "2 days ago, 4:30 PM", sender: "me", status: "read" },
+      { id: "msg-e3-3", text: "Thank you for the quick resolution on our invoice query.", timestamp: "2 days ago, 5:10 PM", sender: "contact" },
+    ],
+    botStatus: "off",
+    assignedPersonId: "",
+  },
 ];
 
 export function getStoredConversations(): Conversation[] {
@@ -997,6 +1053,7 @@ export function useConversations() {
       if (channel === "sms") return rawType === "sms";
       if (channel === "whatsapp") return rawType === "whatsapp";
       if (channel === "website") return rawType === "website_message" || rawType === "website";
+      if (channel === "email") return rawType === "email" || rawType === "email_message";
       return false;
     });
 
@@ -1058,7 +1115,7 @@ export function useConversations() {
     // Dual-write to activityEngine so Activity Tab timeline updates immediately
     if (conv) {
       const targetClientId = conv.clientId || "CL-001";
-      const actType = conv.channel === "sms" ? "sms" : conv.channel === "website" ? "website_message" : "whatsapp";
+      const actType = conv.channel === "sms" ? "sms" : conv.channel === "website" ? "website_message" : conv.channel === "email" ? "email" : "whatsapp";
       appendActivity({
         type: actType as any,
         clientId: targetClientId,

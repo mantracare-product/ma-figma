@@ -61,16 +61,22 @@ import {
   PhoneCall,
   Code,
   Layers,
+  Mail,
+  RefreshCw,
+  FileEdit,
+  AlertOctagon,
 } from "lucide-react";
 import TemplateLibraryDrawer from "../components/chats/TemplateLibraryDrawer";
 import DrawerShell from "../components/ui/DrawerShell";
 import { LibraryTemplate } from "../../lib/templateLibrary";
 import { useWhatsappTemplates } from "../../lib/useWhatsappTemplates";
-import TableComponent, { TableColumn, TableRowAction } from "../components/ui/TableComponent";
+import TableComponent, { TableColumn, TableRowAction, TableBulkAction } from "../components/ui/TableComponent";
 import { useConversations, Message as ConvMessage, Conversation as ConvConversation, computeSessionWindow } from "../../lib/useConversations";
 import ConversationHeader from "../components/chats/ConversationHeader";
 import MessageThreadList from "../components/chats/MessageThreadList";
 import MessageComposerBar from "../components/chats/MessageComposerBar";
+import WebmailView, { EmailFolder } from "../components/chats/WebmailView";
+import EmailTemplateDrawer, { EmailTemplate } from "../components/chats/EmailTemplateDrawer";
 export type Message = ConvMessage;
 export type Conversation = ConvConversation;
 import PageHeader from "../components/layout/PageHeader";
@@ -829,7 +835,9 @@ export default function Chats() {
   const { conversations, setConversations, sendMessage: storeSendMessage, sendTemplate: storeSendTemplate } = useConversations();
   const [selectedConversationId, setSelectedConversationId] = useState<string>("conv-1");
   const [chatSearch, setChatSearch] = useState("");
-  const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website" | null>("whatsapp");
+  const [emailSearch, setEmailSearch] = useState("");
+  const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website" | "email" | null>("whatsapp");
+  const [showChannelDropdown, setShowChannelDropdown] = useState(false);
   const [numberFilter, setNumberFilter] = useState<string>("");
 
   useEffect(() => {
@@ -904,15 +912,247 @@ export default function Chats() {
   const [assignAgentMenuOpen, setAssignAgentMenuOpen] = useState(false);
   const gearMenuRef = useRef<HTMLDivElement>(null);
   const numberDropdownRef = useRef<HTMLDivElement>(null);
+  const channelDropdownRef = useRef<HTMLDivElement>(null);
   const viewFilterDropdownRef = useRef<HTMLDivElement>(null);
+  const [activeEmailFolder, setActiveEmailFolder] = useState<EmailFolder>("inbox");
+  const [emailUnreadCount, setEmailUnreadCount] = useState<number>(7);
+  const [showEmailFolderDropdown, setShowEmailFolderDropdown] = useState(false);
+  const emailFolderDropdownRef = useRef<HTMLDivElement>(null);
+  const [showEmailGearMenu, setShowEmailGearMenu] = useState(false);
+  const emailGearMenuRef = useRef<HTMLDivElement>(null);
+  const [emailTemplateSearch, setEmailTemplateSearch] = useState("");
+  const [showEmailTemplateDrawer, setShowEmailTemplateDrawer] = useState(false);
+  const [editingEmailTemplate, setEditingEmailTemplate] = useState<EmailTemplate | null>(null);
+  const [selectedEmailTemplateIds, setSelectedEmailTemplateIds] = useState<Set<string>>(new Set());
+
+  const DEFAULT_EMAIL_TEMPLATES: EmailTemplate[] = [
+    {
+      id: "em-tpl-1",
+      name: "Appointment Confirmation & Prep",
+      subject: "Your Appointment Confirmation with {{doctor_name}} - Mantra Care",
+      category: "Appointment Reminder",
+      preheader: "Details and preparation instructions for your upcoming appointment.",
+      bodyText:
+        "Hi {{client_name}},\n\nYour upcoming consultation has been confirmed for {{appointment_date}} at {{appointment_time}} with Dr. {{doctor_name}} at {{clinic_name}}.\n\nPlease arrive 10 minutes prior to your scheduled time or test your camera and microphone for video consultation.\n\nWarm regards,\n{{clinic_name}} Care Team",
+      lastModified: "Today at 10:15 AM",
+      createdAt: "2026-10-15",
+    },
+    {
+      id: "em-tpl-2",
+      name: "Post-Consultation Care Plan & Follow-Up",
+      subject: "Summary & Next Steps Following Your Consultation - {{client_name}}",
+      category: "Follow-up",
+      preheader: "Your personalized treatment summary and follow-up guidelines.",
+      bodyText:
+        "Hello {{client_name}},\n\nThank you for meeting with Dr. {{doctor_name}} today. Attached is a summary of your treatment plan and prescribed recommendations.\n\nIf you have any questions or experience symptoms, please reply to this email or book your follow-up slot.\n\nBest regards,\nMantra Care Clinical Team",
+      lastModified: "Oct 20 at 3:45 PM",
+      createdAt: "2026-10-18",
+    },
+    {
+      id: "em-tpl-3",
+      name: "New Client Welcome & Medical Intake",
+      subject: "Welcome to Mantra Care! Please Complete Your Health Intake",
+      category: "Welcome / Onboarding",
+      preheader: "Complete your online medical profile before your first visit.",
+      bodyText:
+        "Welcome to Mantra Care, {{client_name}}!\n\nTo help us prepare for your upcoming visit, please log in to your patient portal and complete your digital medical history form.\n\nPortal Link: {{portal_url}}\n\nSincerely,\nClient Experience Team",
+      lastModified: "Oct 18 at 9:00 AM",
+      createdAt: "2026-10-12",
+    },
+    {
+      id: "em-tpl-4",
+      name: "Itemized Invoice & Payment Receipt",
+      subject: "Receipt for Your Recent Visit - Mantra Care",
+      category: "Billing",
+      preheader: "Payment confirmation and itemized superbill for your records.",
+      bodyText:
+        "Dear {{client_name}},\n\nThank you for your payment for services rendered on {{appointment_date}} with {{doctor_name}}.\n\nA copy of your itemized superbill and payment receipt is attached for your insurance records.\n\nBilling Department\nMantra Care",
+      lastModified: "Oct 15 at 1:30 PM",
+      createdAt: "2026-10-10",
+    },
+    {
+      id: "em-tpl-5",
+      name: "Annual Preventive Health Checkup",
+      subject: "Time for Your Annual Health Assessment, {{client_name}}",
+      category: "Clinical Care",
+      preheader: "Schedule your routine wellness exam with Mantra Care.",
+      bodyText:
+        "Hi {{client_name}},\n\nOur records show it is time for your annual routine health checkup. Regular preventive evaluations are essential for proactive health management.\n\nPlease reply or visit {{portal_url}} to choose a convenient date.\n\nStay well,\nMantra Care",
+      lastModified: "Oct 12 at 11:20 AM",
+      createdAt: "2026-10-05",
+    },
+  ];
+
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>(() => {
+    try {
+      const stored = localStorage.getItem("emailTemplates");
+      return stored ? JSON.parse(stored) : DEFAULT_EMAIL_TEMPLATES;
+    } catch {
+      return DEFAULT_EMAIL_TEMPLATES;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("emailTemplates", JSON.stringify(emailTemplates));
+    } catch {}
+  }, [emailTemplates]);
+
+  const filteredEmailTemplates = useMemo(() => {
+    if (!emailTemplateSearch.trim()) return emailTemplates;
+    const q = emailTemplateSearch.toLowerCase().trim();
+    return emailTemplates.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.subject.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q) ||
+        (t.preheader && t.preheader.toLowerCase().includes(q)) ||
+        t.bodyText.toLowerCase().includes(q)
+    );
+  }, [emailTemplates, emailTemplateSearch]);
+
+  const handleSaveEmailTemplate = (saved: EmailTemplate) => {
+    setEmailTemplates((prev) => {
+      const exists = prev.some((t) => t.id === saved.id);
+      if (exists) {
+        return prev.map((t) => (t.id === saved.id ? saved : t));
+      }
+      return [saved, ...prev];
+    });
+    setShowEmailTemplateDrawer(false);
+    setEditingEmailTemplate(null);
+  };
+
+  const handleDeleteEmailTemplate = (id: string) => {
+    setEmailTemplates((prev) => prev.filter((t) => t.id !== id));
+    toast.success("Email template deleted");
+  };
+
+  const handleDuplicateEmailTemplate = (tpl: EmailTemplate) => {
+    const duplicated: EmailTemplate = {
+      ...tpl,
+      id: `em-tpl-${Date.now()}`,
+      name: `${tpl.name} (Copy)`,
+      lastModified: "Just now",
+      createdAt: new Date().toISOString().split("T")[0],
+    };
+    setEmailTemplates((prev) => [duplicated, ...prev]);
+    toast.success(`Duplicated "${tpl.name}"`);
+  };
+
+  const emailTemplateColumns: TableColumn<EmailTemplate>[] = [
+    {
+      id: "name",
+      header: "TEMPLATE NAME & PREHEADER",
+      align: "left",
+      render: (tpl) => (
+        <div className="flex flex-col gap-0.5 text-left py-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              setEditingEmailTemplate(tpl);
+              setShowEmailTemplateDrawer(true);
+            }}
+            className="text-xs font-bold text-[#1E293B] hover:text-[#1456f0] transition-colors text-left cursor-pointer flex items-center gap-1.5"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <Mail className="w-3.5 h-3.5 text-[#0284C7] shrink-0" />
+            <span>{tpl.name}</span>
+          </button>
+          {tpl.preheader && (
+            <span className="text-[11px] text-slate-400 line-clamp-1 max-w-[340px]">
+              {tpl.preheader}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "subject",
+      header: "SUBJECT LINE",
+      align: "left",
+      render: (tpl) => (
+        <span className="text-xs font-medium text-slate-700 line-clamp-1 max-w-[360px]" title={tpl.subject}>
+          {tpl.subject}
+        </span>
+      ),
+    },
+    {
+      id: "category",
+      header: "CATEGORY",
+      align: "center",
+      render: (tpl) => {
+        const categoryColorMap: Record<string, string> = {
+          "Appointment Reminder": "bg-blue-50 text-blue-700 border-blue-200/80",
+          "Follow-up": "bg-emerald-50 text-emerald-700 border-emerald-200/80",
+          "Welcome / Onboarding": "bg-purple-50 text-purple-700 border-purple-200/80",
+          "Billing": "bg-amber-50 text-amber-700 border-amber-200/80",
+          "Clinical Care": "bg-rose-50 text-rose-700 border-rose-200/80",
+        };
+        const colorCls = categoryColorMap[tpl.category] || "bg-slate-100 text-slate-700 border-slate-200";
+        return (
+          <span className={`text-[10px] font-bold border rounded-full px-2.5 py-0.5 uppercase tracking-wide inline-flex items-center gap-1 ${colorCls}`}>
+            {tpl.category}
+          </span>
+        );
+      },
+    },
+    {
+      id: "lastModified",
+      header: "LAST MODIFIED",
+      align: "left",
+      render: (tpl) => (
+        <span className="text-xs text-slate-500 font-mono tabular-nums">
+          {tpl.lastModified}
+        </span>
+      ),
+    },
+  ];
+
+  const emailTemplateRowActions: TableRowAction<EmailTemplate>[] = [
+    {
+      label: "Edit Template",
+      icon: <Pencil className="w-3.5 h-3.5 text-blue-500" />,
+      onClick: (tpl) => {
+        setEditingEmailTemplate(tpl);
+        setShowEmailTemplateDrawer(true);
+      },
+    },
+    {
+      label: "Duplicate",
+      icon: <Copy className="w-3.5 h-3.5 text-slate-500" />,
+      onClick: (tpl) => handleDuplicateEmailTemplate(tpl),
+    },
+    {
+      label: "Delete",
+      icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+      isDanger: true,
+      onClick: (tpl) => handleDeleteEmailTemplate(tpl.id),
+    },
+  ];
+
+  const emailTemplateBulkActions: TableBulkAction[] = [
+    {
+      label: "Delete Selected",
+      icon: <Trash2 className="w-3.5 h-3.5 text-red-500" />,
+      isDanger: true,
+      onClick: (selectedIds) => {
+        setEmailTemplates((prev) => prev.filter((t) => !selectedIds.has(t.id)));
+        setSelectedEmailTemplateIds(new Set());
+        toast.success(`Deleted ${selectedIds.size} template(s)`);
+      },
+    },
+  ];
+
   const { processes, getWorkflowStepsForStage } = useProcessStore();
   const [showAssignBotModal, setShowAssignBotModal] = useState(false);
   const [showEnrollCampaignModal, setShowEnrollCampaignModal] = useState(false);
   const [showTestProcessDrawer, setShowTestProcessDrawer] = useState(false);
   const widgetSettingsSaveRef = useRef<(() => void) | null>(null);
 
-  const handleChannelChange = (channel: "whatsapp" | "sms" | "website") => {
+  const handleChannelChange = (channel: "whatsapp" | "sms" | "website" | "email") => {
     setChannelFilter(channel);
+    setShowChannelDropdown(false);
     setActiveTab("chats");
   };
 
@@ -927,7 +1167,7 @@ export default function Chats() {
   };
 
   const subMode = useMemo(() => {
-    if (channelFilter === "whatsapp" && activeTab === "templates") return "templates";
+    if ((channelFilter === "whatsapp" || channelFilter === "email") && activeTab === "templates") return "templates";
     if (channelFilter === "website" && activeTab === "website-settings") return "settings";
     return "inbox";
   }, [channelFilter, activeTab]);
@@ -939,7 +1179,10 @@ export default function Chats() {
         setShowUseTemplateDropdown(false);
         setAssignAgentMenuOpen(false);
         setShowNumberFilterDropdown(false);
+        setShowChannelDropdown(false);
         setShowViewFilterDropdown(false);
+        setShowEmailGearMenu(false);
+        setShowEmailFolderDropdown(false);
       }
     };
     const handleClickOutside = (e: MouseEvent) => {
@@ -947,11 +1190,20 @@ export default function Chats() {
         setShowComposerGearMenu(false);
         setAssignAgentMenuOpen(false);
       }
+      if (channelDropdownRef.current && !channelDropdownRef.current.contains(e.target as Node)) {
+        setShowChannelDropdown(false);
+      }
       if (numberDropdownRef.current && !numberDropdownRef.current.contains(e.target as Node)) {
         setShowNumberFilterDropdown(false);
       }
       if (viewFilterDropdownRef.current && !viewFilterDropdownRef.current.contains(e.target as Node)) {
         setShowViewFilterDropdown(false);
+      }
+      if (emailGearMenuRef.current && !emailGearMenuRef.current.contains(e.target as Node)) {
+        setShowEmailGearMenu(false);
+      }
+      if (emailFolderDropdownRef.current && !emailFolderDropdownRef.current.contains(e.target as Node)) {
+        setShowEmailFolderDropdown(false);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -996,7 +1248,7 @@ export default function Chats() {
     } | null;
 
     if (state?.channel) {
-      if (state.channel === "whatsapp" || state.channel === "sms" || state.channel === "website") {
+      if (state.channel === "whatsapp" || state.channel === "sms" || state.channel === "website" || state.channel === "email") {
         setChannelFilter(state.channel);
       } else {
         setChannelFilter("all");
@@ -1181,6 +1433,10 @@ export default function Chats() {
     }
     if (channelFilter === "sms") {
       return Array.from(new Set(conversations.filter((c) => c.channel === "sms" && c.inboxNumber).map((c) => c.inboxNumber!)));
+    }
+    if (channelFilter === "email") {
+      const convEmails = conversations.filter((c) => c.channel === "email" && c.inboxNumber).map((c) => c.inboxNumber!);
+      return Array.from(new Set(["navodya@mantra.care", ...convEmails, "support@mantracare.com"]));
     }
     return [];
   }, [channelFilter, conversations]);
@@ -1728,15 +1984,147 @@ export default function Chats() {
 
         {/* ── Official PageTopBar matching DESIGN.md & other pages ── */}
         <PageTopBar
-          modes={[
-            { id: "whatsapp", label: "WhatsApp" },
-            { id: "sms", label: "SMS" },
-            { id: "website", label: "Website" },
-          ]}
-          activeMode={channelFilter || "whatsapp"}
-          onModeChange={(mode) => handleChannelChange(mode as any)}
           leftElement={
             <div className="flex items-center gap-2">
+              {/* Channel Dropdown: WhatsApp, SMS, Website, Email */}
+              <div className="relative shrink-0" ref={channelDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowChannelDropdown((prev) => !prev);
+                    setShowNumberFilterDropdown(false);
+                    setShowViewFilterDropdown(false);
+                  }}
+                  className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-bold text-[#1E293B] flex items-center gap-2 transition-colors shadow-2xs cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                  title="Select Channel"
+                >
+                  {channelFilter === "whatsapp" && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#25D366]" />
+                      <Phone className="w-3.5 h-3.5 text-[#128C7E]" />
+                      <span className="text-[#128C7E] font-bold">WhatsApp</span>
+                    </div>
+                  )}
+                  {channelFilter === "sms" && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#10B981]" />
+                      <MessageSquare className="w-3.5 h-3.5 text-[#10B981]" />
+                      <span className="text-[#10B981] font-bold">SMS</span>
+                    </div>
+                  )}
+                  {channelFilter === "website" && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#6366F1]" />
+                      <Globe className="w-3.5 h-3.5 text-[#6366F1]" />
+                      <span className="text-[#6366F1] font-bold">Website</span>
+                    </div>
+                  )}
+                  {channelFilter === "email" && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#0284C7]" />
+                      <Mail className="w-3.5 h-3.5 text-[#0284C7]" />
+                      <span className="text-[#0284C7] font-bold">Email</span>
+                    </div>
+                  )}
+                  {channelFilter === "all" && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-slate-400" />
+                      <MessageCircle className="w-3.5 h-3.5 text-slate-600" />
+                      <span className="text-slate-700 font-bold">All Channels</span>
+                    </div>
+                  )}
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-[#94a3b8] transition-transform ${
+                      showChannelDropdown ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {showChannelDropdown && (
+                  <div
+                    className="absolute left-0 mt-1 w-52 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleChannelChange("whatsapp")}
+                      className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                        channelFilter === "whatsapp" ? "text-[#128C7E] font-bold bg-emerald-50/60" : "text-[#1E293B]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-6 h-6 rounded-lg bg-[#25D366]/15 flex items-center justify-center text-[#128C7E]">
+                          <Phone className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="font-bold">WhatsApp</div>
+                          <div className="text-[10px] text-muted-foreground font-normal">Direct messaging</div>
+                        </div>
+                      </div>
+                      {channelFilter === "whatsapp" && <Check className="w-3.5 h-3.5 text-[#128C7E]" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleChannelChange("sms")}
+                      className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                        channelFilter === "sms" ? "text-[#10B981] font-bold bg-emerald-50/60" : "text-[#1E293B]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-6 h-6 rounded-lg bg-[#10B981]/15 flex items-center justify-center text-[#10B981]">
+                          <MessageSquare className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="font-bold">SMS</div>
+                          <div className="text-[10px] text-muted-foreground font-normal">Twilio carrier</div>
+                        </div>
+                      </div>
+                      {channelFilter === "sms" && <Check className="w-3.5 h-3.5 text-[#10B981]" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleChannelChange("website")}
+                      className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                        channelFilter === "website" ? "text-[#6366F1] font-bold bg-indigo-50/60" : "text-[#1E293B]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-6 h-6 rounded-lg bg-[#6366F1]/15 flex items-center justify-center text-[#6366F1]">
+                          <Globe className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="font-bold">Website</div>
+                          <div className="text-[10px] text-muted-foreground font-normal">Live chat widget</div>
+                        </div>
+                      </div>
+                      {channelFilter === "website" && <Check className="w-3.5 h-3.5 text-[#6366F1]" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleChannelChange("email")}
+                      className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                        channelFilter === "email" ? "text-[#0284C7] font-bold bg-sky-50/60" : "text-[#1E293B]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-6 h-6 rounded-lg bg-[#0284C7]/15 flex items-center justify-center text-[#0284C7]">
+                          <Mail className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <div className="font-bold">Email</div>
+                          <div className="text-[10px] text-muted-foreground font-normal">Gmail / Outlook</div>
+                        </div>
+                      </div>
+                      {channelFilter === "email" && <Check className="w-3.5 h-3.5 text-[#0284C7]" />}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Sub-modes: Inbox vs Templates for WhatsApp, Inbox vs Settings for Website */}
               {channelFilter === "whatsapp" && (
                 <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border/80 rounded-xl gap-0.5">
@@ -1796,7 +2184,7 @@ export default function Chats() {
                 </div>
               )}
 
-              {/* Phone Number Selector: Placed before search bar */}
+              {/* Phone Number Selector: For WhatsApp and SMS */}
               {subMode === "inbox" && (channelFilter === "whatsapp" || channelFilter === "sms") && (
                 <div className="relative shrink-0" ref={numberDropdownRef}>
                   <button
@@ -1804,6 +2192,7 @@ export default function Chats() {
                     onClick={() => {
                       setShowNumberFilterDropdown((prev) => !prev);
                       setShowViewFilterDropdown(false);
+                      setShowChannelDropdown(false);
                     }}
                     className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-semibold text-[#1E293B] flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer font-mono tabular-nums"
                     style={{ fontFamily: "Outfit, sans-serif" }}
@@ -1848,24 +2237,227 @@ export default function Chats() {
                   )}
                 </div>
               )}
+
+              {/* Email Channel Navigation: First ask Mail vs Templates, then ask for account & folders if Mail */}
+              {channelFilter === "email" && (
+                <>
+                  <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border/80 rounded-xl gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleSubModeChange("inbox")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                        subMode === "inbox"
+                          ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                          : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <span>Mail</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSubModeChange("templates")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                        subMode === "templates"
+                          ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                          : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <span>Templates</span>
+                    </button>
+                  </div>
+
+                  {/* If Mail is selected, ask to choose account, sync button & folders dropdown */}
+                  {subMode === "inbox" && (
+                    <>
+                      <div className="relative shrink-0" ref={numberDropdownRef}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowNumberFilterDropdown((prev) => !prev);
+                            setShowEmailFolderDropdown(false);
+                            setShowViewFilterDropdown(false);
+                            setShowChannelDropdown(false);
+                          }}
+                          className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-semibold text-[#1E293B] flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer font-mono tabular-nums"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                          title="Select Mailbox"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-[#0284C7]" />
+                          <span className="truncate max-w-[170px]">
+                            {numberFilter || availableNumbersForChannel[0] || "navodya@mantra.care"}
+                          </span>
+                          <ChevronDown
+                            className={`w-3.5 h-3.5 text-[#94a3b8] transition-transform ${
+                              showNumberFilterDropdown ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+
+                        {showNumberFilterDropdown && (
+                          <div
+                            className="absolute left-0 mt-1 w-64 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100 font-mono tabular-nums"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            {availableNumbersForChannel.map((num) => (
+                              <button
+                                key={num}
+                                type="button"
+                                onClick={() => {
+                                  setNumberFilter(num);
+                                  setShowNumberFilterDropdown(false);
+                                }}
+                                className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                                  (numberFilter || availableNumbersForChannel[0]) === num
+                                    ? "text-[#1456f0] font-bold bg-blue-50/60"
+                                    : "text-[#1E293B]"
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <Mail className="w-3.5 h-3.5 text-[#0284C7] shrink-0" />
+                                  <span className="truncate">{num}</span>
+                                </div>
+                                {(numberFilter || availableNumbersForChannel[0]) === num && (
+                                  <Check className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Folder Dropdown: Inbox (default), Drafts, Sent, Spam, Trash */}
+                      <div className="relative shrink-0" ref={emailFolderDropdownRef}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowEmailFolderDropdown((prev) => !prev);
+                            setShowNumberFilterDropdown(false);
+                            setShowChannelDropdown(false);
+                            setShowViewFilterDropdown(false);
+                          }}
+                          className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-semibold text-[#1E293B] flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer capitalize"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                          title="Select email folder"
+                        >
+                          {activeEmailFolder === "inbox" ? (
+                            <Inbox className="w-3.5 h-3.5 text-slate-600" />
+                          ) : activeEmailFolder === "drafts" ? (
+                            <FileEdit className="w-3.5 h-3.5 text-slate-600" />
+                          ) : activeEmailFolder === "sent" ? (
+                            <Send className="w-3.5 h-3.5 text-slate-600" />
+                          ) : activeEmailFolder === "spam" ? (
+                            <AlertOctagon className="w-3.5 h-3.5 text-slate-600" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5 text-slate-600" />
+                          )}
+                          <span>
+                            {activeEmailFolder === "inbox"
+                              ? "Inbox"
+                              : activeEmailFolder === "drafts"
+                              ? "Drafts"
+                              : activeEmailFolder === "sent"
+                              ? "Sent"
+                              : activeEmailFolder === "spam"
+                              ? "Spam"
+                              : "Trash"}
+                          </span>
+                          {activeEmailFolder === "inbox" && emailUnreadCount > 0 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full font-mono tabular-nums bg-[#1E293B] text-white">
+                              {emailUnreadCount}
+                            </span>
+                          )}
+                          <ChevronDown
+                            className={`w-3.5 h-3.5 text-[#94a3b8] transition-transform ${
+                              showEmailFolderDropdown ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+
+                        {showEmailFolderDropdown && (
+                          <div
+                            className="absolute left-0 mt-1 w-44 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            {(
+                              [
+                                { id: "inbox" as const, label: "Inbox", icon: <Inbox className="w-3.5 h-3.5" /> },
+                                { id: "drafts" as const, label: "Drafts", icon: <FileEdit className="w-3.5 h-3.5" /> },
+                                { id: "sent" as const, label: "Sent", icon: <Send className="w-3.5 h-3.5" /> },
+                                { id: "spam" as const, label: "Spam", icon: <AlertOctagon className="w-3.5 h-3.5" /> },
+                                { id: "trash" as const, label: "Trash", icon: <Trash2 className="w-3.5 h-3.5" /> },
+                              ] as const
+                            ).map((f) => {
+                              const isSelected = activeEmailFolder === f.id;
+                              return (
+                                <button
+                                  key={f.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveEmailFolder(f.id);
+                                    setShowEmailFolderDropdown(false);
+                                  }}
+                                  className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                                    isSelected ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className={isSelected ? "text-[#1456f0]" : "text-slate-500"}>
+                                      {f.icon}
+                                    </span>
+                                    <span>{f.label}</span>
+                                    {f.id === "inbox" && emailUnreadCount > 0 && (
+                                      <span
+                                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full font-mono tabular-nums ${
+                                          isSelected ? "bg-[#1456f0] text-white" : "bg-slate-100 text-slate-700"
+                                        }`}
+                                      >
+                                        {emailUnreadCount}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {isSelected && <Check className="w-3.5 h-3.5 text-[#1456f0] shrink-0" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
             </div>
           }
           searchQuery={
-            subMode === "templates"
+            channelFilter === "email"
+              ? subMode === "templates"
+                ? emailTemplateSearch
+                : emailSearch
+              : subMode === "templates"
               ? templateSearch
               : subMode === "settings"
               ? widgetSettingsSearch
               : chatSearch
           }
           onSearchChange={
-            subMode === "templates"
+            channelFilter === "email"
+              ? subMode === "templates"
+                ? setEmailTemplateSearch
+                : setEmailSearch
+              : subMode === "templates"
               ? setTemplateSearch
               : subMode === "settings"
               ? setWidgetSettingsSearch
               : setChatSearch
           }
           searchPlaceholder={
-            subMode === "templates"
+            channelFilter === "email"
+              ? subMode === "templates"
+                ? "Search email templates (name, subject, body)..."
+                : "Search emails (from, subject, body)..."
+              : subMode === "templates"
               ? "Search templates..."
               : subMode === "settings"
               ? "Search widget settings (theme, intake, position, hours, code)..."
@@ -1925,8 +2517,37 @@ export default function Chats() {
               </div>
             ) : undefined
           }
+          secondaryActions={
+            channelFilter === "email" && subMode === "inbox" ? (
+              <button
+                type="button"
+                onClick={() => toast.success("Mailbox synchronized")}
+                className="h-[36px] w-[36px] bg-white hover:bg-slate-50 border border-border rounded-xl flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer shrink-0"
+                title="Synchronize mailbox"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            ) : undefined
+          }
           primaryAction={
-            subMode === "templates"
+            channelFilter === "email"
+              ? subMode === "templates"
+                ? {
+                    label: "New Template",
+                    icon: <Plus className="w-4 h-4" />,
+                    onClick: () => {
+                      setEditingEmailTemplate(null);
+                      setShowEmailTemplateDrawer(true);
+                    },
+                  }
+                : {
+                    label: "Compose Email",
+                    icon: <Plus className="w-4 h-4" />,
+                    onClick: () => {
+                      window.dispatchEvent(new CustomEvent("open-webmail-compose"));
+                    },
+                  }
+              : subMode === "templates"
               ? {
                   label: "New Template",
                   icon: <Plus className="w-4 h-4" />,
@@ -1946,10 +2567,120 @@ export default function Chats() {
                 }
               : undefined
           }
+          afterPrimaryAction={
+            channelFilter === "email" && subMode === "inbox" ? (
+              <div className="relative shrink-0" ref={emailGearMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowEmailGearMenu((prev) => !prev)}
+                  className="w-[36px] h-[36px] rounded-xl border border-border bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-colors shadow-2xs flex items-center justify-center cursor-pointer"
+                  title="Mailbox Settings"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+
+                {showEmailGearMenu && (
+                  <div
+                    className="absolute right-0 top-full mt-1.5 w-52 rounded-xl border border-gray-200/90 bg-white shadow-xl p-1 z-50 text-xs font-semibold text-[#1E293B] animate-in fade-in zoom-in-95 duration-100"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toast.info("Blacklist manager opened");
+                        setShowEmailGearMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 cursor-pointer"
+                    >
+                      <Shield className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Blacklist</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toast.info("Email contacts directory opened");
+                        setShowEmailGearMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 cursor-pointer"
+                    >
+                      <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                      <span>My email contacts</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent("open-webmail-signatures"));
+                        setShowEmailGearMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50/60 text-[#1456f0] transition-colors flex items-center gap-2 font-bold cursor-pointer"
+                    >
+                      <FileEdit className="w-3.5 h-3.5 text-[#1456f0]" />
+                      <span>Edit signature</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent("mark-all-webmail-read"));
+                        setShowEmailGearMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-700 cursor-pointer"
+                    >
+                      <CheckCheck className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Mark all as read</span>
+                    </button>
+                    <div className="my-1 border-t border-gray-100" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigate("/settings");
+                        setShowEmailGearMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-700 cursor-pointer"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-slate-400" />
+                      <span>CRM Integration</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigate("/settings");
+                        setShowEmailGearMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-700 cursor-pointer"
+                    >
+                      <Settings className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Mailbox settings</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toast.info("Opening external email portal");
+                        setShowEmailGearMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-700 cursor-pointer"
+                    >
+                      <Share2 className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Open email</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : undefined
+          }
         />
 
         {/* ── Main Content Area Below Topbar ── */}
         {activeTab === "chats" && (
+          channelFilter === "email" ? (
+            <WebmailView
+              searchQuery={emailSearch}
+              activeFolder={activeEmailFolder}
+              onFolderChange={setActiveEmailFolder}
+              onUnreadCountChange={setEmailUnreadCount}
+              onOpenMailboxSettings={() => navigate("/settings")}
+              onOpenCrmSettings={() => navigate("/settings")}
+            />
+          ) : (
           <div className="flex gap-5 sm:gap-6 h-[calc(100vh-230px)] min-h-[620px]">
             {/* ── Left Side Panel: Contacts List (Separate Div / Card) ── */}
             <div className="w-[330px] sm:w-[360px] shrink-0 bg-white rounded-none border border-gray-200/90 shadow-xs flex flex-col overflow-hidden">
@@ -2078,10 +2809,30 @@ export default function Chats() {
               )}
             </div>
           </div>
+          )
         )}
 
-        {/* ── Tab: WhatsApp Templates (Table View + Side Drawer) ── */}
+        {/* ── Tab: WhatsApp or Email Templates (Table View + Side Drawer) ── */}
         {activeTab === "templates" && (
+          channelFilter === "email" ? (
+            <TableComponent<EmailTemplate>
+              className="rounded-2xl border-gray-200/90 shadow-xs"
+              data={filteredEmailTemplates}
+              columns={emailTemplateColumns}
+              getRowId={(tpl) => tpl.id}
+              rowActions={emailTemplateRowActions}
+              enableSelection={true}
+              selectedIds={selectedEmailTemplateIds}
+              onSelectionChange={(ids) => setSelectedEmailTemplateIds(new Set(Array.from(ids) as string[]))}
+              bulkActions={emailTemplateBulkActions}
+              onRowClick={(tpl) => {
+                setEditingEmailTemplate(tpl);
+                setShowEmailTemplateDrawer(true);
+              }}
+              defaultRowsPerPage={20}
+              emptyMessage="No email templates found. Click '+ New Template' to create reusable email templates with merge tags."
+            />
+          ) : (
           <>
             {(() => {
               const templateColumns: TableColumn<WhatsappTemplate>[] = [
@@ -2652,6 +3403,7 @@ export default function Chats() {
               </div>
             </DrawerShell>
           </>
+          )
         )}
 
         {/* ── Tab: Website Widget Settings ── */}
@@ -2832,6 +3584,16 @@ export default function Chats() {
         onClose={() => { setShowApprovalModal(false); setApprovingTemplate(null); }}
         template={approvingTemplate}
         onSubmit={handleTemplateApprovalSubmit}
+      />
+
+      <EmailTemplateDrawer
+        isOpen={showEmailTemplateDrawer}
+        onClose={() => {
+          setShowEmailTemplateDrawer(false);
+          setEditingEmailTemplate(null);
+        }}
+        template={editingEmailTemplate}
+        onSave={handleSaveEmailTemplate}
       />
 
       <HowItWorksModal

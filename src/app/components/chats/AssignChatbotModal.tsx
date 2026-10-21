@@ -7,7 +7,7 @@ import { getStoredBots, CHATBOT_BOTS_EVENT } from "../../../lib/useChatbotBots";
 interface AssignChatbotModalProps {
   isOpen: boolean;
   onClose: () => void;
-  channel: "whatsapp" | "sms" | "website";
+  channel: "whatsapp" | "sms" | "website" | "email";
   assignedPersonId?: string;
   assignedBotId?: string;
   onAssign: (bot: Bot) => void;

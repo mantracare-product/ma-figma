@@ -32,7 +32,7 @@ export interface ConversationShape {
   id: string;
   contactName: string;
   phoneNumber: string;
-  channel: "whatsapp" | "sms" | "website";
+  channel: "whatsapp" | "sms" | "website" | "email";
   lastMessage: string;
   timestamp: string;
   unreadCount: number;

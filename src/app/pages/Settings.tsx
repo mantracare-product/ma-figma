@@ -2917,8 +2917,11 @@ export default function Settings() {
     { id: "other-telephony", name: "Other Provider", description: "Custom telephony provider", category: "telephony", connected: false },
 
     // Mailbox
-    { id: "gmail", name: "Gmail", description: "Google email service for business communication", category: "mailbox", connected: false },
+    { id: "gmail", name: "Gmail", description: "Google email service for business communication", category: "mailbox", connected: true },
     { id: "outlook", name: "Outlook", description: "Microsoft email and calendar integration", category: "mailbox", connected: false },
+    { id: "exchange", name: "Exchange", description: "Microsoft Exchange corporate email server", category: "mailbox", connected: false },
+    { id: "yahoo", name: "Yahoo! Mail", description: "Yahoo email service integration", category: "mailbox", connected: false },
+    { id: "imap", name: "Other (IMAP/SMTP)", description: "Custom IMAP and SMTP corporate mailbox", category: "mailbox", connected: false },
 
     // SMS
     { id: "twilio-sms", name: "Twilio", description: "Cloud communications platform for SMS", category: "sms", connected: false },
@@ -2937,15 +2940,51 @@ export default function Settings() {
   ]);
   // Mailbox Modal State
   const [showMailboxModal, setShowMailboxModal] = useState(false);
-  const [selectedMailboxProvider, setSelectedMailboxProvider] = useState<"gmail" | "outlook" | null>(null);
-  const [mailboxImportRange, setMailboxImportRange] = useState("1 week");
-  const [mailboxImportEmails, setMailboxImportEmails] = useState(false);
+  const [selectedMailboxProvider, setSelectedMailboxProvider] = useState<"gmail" | "outlook" | "exchange" | "yahoo" | "imap" | null>(null);
+  const [mailboxConnectedEmail, setMailboxConnectedEmail] = useState<string>("support@mantracare.com");
+  const [mailboxIsAuthenticated, setMailboxIsAuthenticated] = useState<boolean>(true);
+  const [mailboxImportEmails, setMailboxImportEmails] = useState(true);
+  const [mailboxImportRange, setMailboxImportRange] = useState("week");
   const [mailboxOutgoingSenderName, setMailboxOutgoingSenderName] = useState(false);
+  const [mailboxSenderNameText, setMailboxSenderNameText] = useState("MantraCare Support");
   const [mailboxDailyEmailLimit, setMailboxDailyEmailLimit] = useState(false);
-  const [mailboxCRMIntegration, setMailboxCRMIntegration] = useState(false);
+  const [mailboxDailyLimitValue, setMailboxDailyLimitValue] = useState(500);
+  const [mailboxCRMIntegration, setMailboxCRMIntegration] = useState(true);
+
+  // CRM Integration sub-fields
+  const [mailboxCrmImportEmails, setMailboxCrmImportEmails] = useState(true);
+  const [mailboxCrmImportRange, setMailboxCrmImportRange] = useState("week");
+  const [mailboxCrmRouteToManagers, setMailboxCrmRouteToManagers] = useState(false);
+  const [mailboxCrmCreateIncomingEnabled, setMailboxCrmCreateIncomingEnabled] = useState(true);
+  const [mailboxCrmCreateIncomingType, setMailboxCrmCreateIncomingType] = useState<"Lead" | "Contact" | "Deal">("Lead");
+  const [mailboxCrmCreateOutgoingEnabled, setMailboxCrmCreateOutgoingEnabled] = useState(true);
+  const [mailboxCrmCreateOutgoingType, setMailboxCrmCreateOutgoingType] = useState<"Contact" | "Lead">("Contact");
+  const [mailboxCrmVcardContacts, setMailboxCrmVcardContacts] = useState(true);
+  const [mailboxCrmLeadSource, setMailboxCrmLeadSource] = useState("E-Mail");
+  const [mailboxCrmLeadAddresses, setMailboxCrmLeadAddresses] = useState("All addresses");
+  const [mailboxCrmQueueUsers, setMailboxCrmQueueUsers] = useState<string[]>(["Isabella Miller"]);
+
+  // Calendar Integration
   const [mailboxAddToCalendar, setMailboxAddToCalendar] = useState(true);
-  const [mailboxUsers, setMailboxUsers] = useState<string[]>([]);
-  const [mailboxUserInput, setMailboxUserInput] = useState("");
+
+  // Mailbox Access
+  const [mailboxAccessUsers, setMailboxAccessUsers] = useState<string[]>(["Isabella Miller"]);
+  const [showAddMemberModal, setShowAddMemberModal] = useState<"crm" | "access" | null>(null);
+
+  // Configure Folders Modal State
+  const [showConfigureFoldersModal, setShowConfigureFoldersModal] = useState(false);
+  const [folderSyncSelectAll, setFolderSyncSelectAll] = useState(true);
+  const [folderSyncInbox, setFolderSyncInbox] = useState(true);
+  const [folderSyncAllMail, setFolderSyncAllMail] = useState(true);
+  const [folderSyncImportant, setFolderSyncImportant] = useState(true);
+  const [folderSyncStarred, setFolderSyncStarred] = useState(true);
+  const [folderSyncSent, setFolderSyncSent] = useState(true);
+  const [folderSyncDrafts, setFolderSyncDrafts] = useState(true);
+  const [folderSyncSpam, setFolderSyncSpam] = useState(true);
+  const [folderSyncBin, setFolderSyncBin] = useState(true);
+  const [folderRuleSent, setFolderRuleSent] = useState("not specified");
+  const [folderRuleDeleted, setFolderRuleDeleted] = useState("not specified");
+  const [folderRuleSpam, setFolderRuleSpam] = useState("not specified");
   // SMS Modal State
   const [showSMSModal, setShowSMSModal] = useState(false);
   const [smsTwilioSID, setSmsTwilioSID] = useState("");
@@ -7565,7 +7604,7 @@ export default function Settings() {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => {
-                                    setSelectedMailboxProvider(integration.id as "gmail" | "outlook");
+                                    setSelectedMailboxProvider(integration.id as any);
                                     setShowMailboxModal(true);
                                   }}
                                 >
@@ -7576,7 +7615,7 @@ export default function Settings() {
                                   variant="primary"
                                   size="sm"
                                   onClick={() => {
-                                    setSelectedMailboxProvider(integration.id as "gmail" | "outlook");
+                                    setSelectedMailboxProvider(integration.id as any);
                                     setShowMailboxModal(true);
                                   }}
                                 >
@@ -11452,147 +11491,670 @@ export default function Settings() {
           onClose={() => setShowMailboxModal(false)}
           title={
             <div className="flex items-center gap-3">
-              {selectedMailboxProvider === "gmail" ? (
-                <div className="w-8 h-8 rounded-lg bg-white border border-border flex items-center justify-center shadow-sm">
-                  <svg viewBox="0 0 48 48" className="w-5 h-5">
-                    <g>
-                      <path fill="#EA4335" d="M6 8v32h12V27.7L6 8z" />
-                      <path fill="#34A853" d="M42 8v32H30V27.7L42 8z" />
-                      <path fill="#4285F4" d="M6 8l18 12.3L42 8H6z" />
-                      <path fill="#FBBC05" d="M18 27.7V40h12V27.7L24 31.7l-6-4z" />
-                    </g>
-                  </svg>
-                </div>
-              ) : (
-                <div className="w-8 h-8 rounded-lg bg-[#0078D4] flex items-center justify-center shadow-sm">
-                  <svg viewBox="0 0 32 32" className="w-5 h-5" fill="white">
-                    <rect x="2" y="8" width="14" height="18" rx="1" fill="white" opacity="0.9" />
-                    <ellipse cx="9" cy="17" rx="4" ry="5" fill="#0078D4" />
-                    <rect x="16" y="4" width="14" height="6" rx="0.5" fill="white" opacity="0.8" />
-                    <rect x="16" y="11" width="14" height="6" rx="0.5" fill="white" opacity="0.6" />
-                    <rect x="16" y="18" width="14" height="6" rx="0.5" fill="white" opacity="0.4" />
-                  </svg>
-                </div>
-              )}
-              <span>Mailbox Integration</span>
+              <span className="font-semibold text-base text-foreground">Mailbox Integration</span>
+              <span className="text-muted-foreground hover:text-foreground cursor-pointer text-xs">📌</span>
             </div>
           }
           footer={
-            <>
+            <div className="flex items-center gap-3 w-full">
               <button
+                type="button"
                 onClick={() => setShowMailboxModal(false)}
-                className="flex-1 px-4 py-2 border border-border text-sm font-semibold rounded-lg hover:bg-muted transition-colors uppercase tracking-wide"
+                className="flex-1 px-4 py-2 border border-border text-xs font-semibold rounded-lg hover:bg-muted transition-colors uppercase tracking-wider"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setIntegrations(integrations.map((i) => i.id === selectedMailboxProvider ? { ...i, connected: true } : i));
                   setShowMailboxModal(false);
                 }}
-                className="flex-1 px-4 py-2 bg-[#10B981] text-white text-sm font-semibold rounded-lg hover:bg-[#059669] transition-colors uppercase tracking-wide"
+                className="flex-1 px-4 py-2 bg-[#2FC6F6] hover:bg-[#20B5E4] text-white text-xs font-semibold rounded-lg transition-colors uppercase tracking-wider shadow-sm"
               >
-                Connect
+                Save
               </button>
-            </>
+            </div>
           }
         >
-          <div className="space-y-5">
-            {/* Outgoing email parameters */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-foreground">Outgoing email parameters</h3>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={mailboxOutgoingSenderName}
-                  onChange={(e) => setMailboxOutgoingSenderName(e.target.checked)}
-                  className="w-4 h-4 rounded text-primary mt-0.5"
-                />
-                <span className="text-sm">Use the same sender name for every message instead of the actual sender</span>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={mailboxDailyEmailLimit}
-                  onChange={(e) => setMailboxDailyEmailLimit(e.target.checked)}
-                  className="w-4 h-4 rounded text-primary mt-0.5"
-                />
-                <span className="text-sm">Set daily email limit</span>
-              </label>
-            </div>
-
-            {/* CRM Integration */}
-            <div className="flex items-center justify-between py-3 border-t border-border">
-              <h3 className="text-sm font-semibold">CRM integration</h3>
+          <div className="space-y-6 text-sm text-foreground">
+            {/* Top Provider Card (Screenshot 1) */}
+            <div className="p-4 rounded-xl border border-border bg-card shadow-sm flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                {selectedMailboxProvider === "gmail" ? (
+                  <div className="flex items-center gap-2">
+                    <svg viewBox="0 0 48 48" className="w-8 h-8 shrink-0">
+                      <path fill="#EA4335" d="M6 8v32h12V27.7L6 8z" />
+                      <path fill="#34A853" d="M42 8v32H30V27.7L42 8z" />
+                      <path fill="#4285F4" d="M6 8l18 12.3L42 8H6z" />
+                      <path fill="#FBBC05" d="M18 27.7V40h12V27.7L24 31.7l-6-4z" />
+                    </svg>
+                    <span className="text-lg font-bold tracking-tight text-foreground">Gmail</span>
+                  </div>
+                ) : selectedMailboxProvider === "outlook" ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-[#0078D4] flex items-center justify-center shrink-0">
+                      <span className="text-white font-bold text-xs">O</span>
+                    </div>
+                    <span className="text-lg font-bold tracking-tight text-foreground">Outlook</span>
+                  </div>
+                ) : selectedMailboxProvider === "exchange" ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-[#0078D4] flex items-center justify-center shrink-0">
+                      <span className="text-white font-bold text-xs">E</span>
+                    </div>
+                    <span className="text-lg font-bold tracking-tight text-foreground">Exchange</span>
+                  </div>
+                ) : selectedMailboxProvider === "yahoo" ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-[#6001D2] flex items-center justify-center shrink-0">
+                      <span className="text-white font-bold text-xs">Y!</span>
+                    </div>
+                    <span className="text-lg font-bold tracking-tight text-foreground">Yahoo!</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 text-primary">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <span className="text-lg font-bold tracking-tight text-foreground">IMAP / SMTP</span>
+                  </div>
+                )}
+              </div>
               <button
-                onClick={() => setMailboxCRMIntegration(!mailboxCRMIntegration)}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${mailboxCRMIntegration ? "bg-primary" : "bg-switch-background"}`}
+                type="button"
+                onClick={() => setMailboxIsAuthenticated(!mailboxIsAuthenticated)}
+                className={`px-5 py-2 text-xs font-bold rounded tracking-wider uppercase transition-colors shadow-sm whitespace-nowrap ${
+                  mailboxIsAuthenticated
+                    ? "bg-[#2FC6F6] hover:bg-[#20B5E4] text-white"
+                    : "bg-muted text-foreground hover:bg-muted/80 border border-border"
+                }`}
               >
-                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${mailboxCRMIntegration ? "translate-x-4.5" : "translate-x-0.5"}`} />
+                {mailboxIsAuthenticated ? "AUTHENTICATION" : "AUTHENTICATE"}
               </button>
             </div>
 
-            {/* Calendar Integration */}
-            <div className="border-t border-border pt-4 space-y-2">
-              <h3 className="text-sm font-semibold">Calendar integration</h3>
-              <label className="flex items-center gap-3 cursor-pointer">
+            {/* Email import range & Edit more parameters (Screenshot 1) */}
+            <div className="space-y-2 pt-1">
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={mailboxImportEmails}
+                  onChange={(e) => setMailboxImportEmails(e.target.checked)}
+                  className="w-4 h-4 rounded text-primary border-border focus:ring-0 cursor-pointer"
+                />
+                <span className="text-sm text-foreground">
+                  Import emails from{" "}
+                  <select
+                    value={mailboxImportRange}
+                    onChange={(e) => setMailboxImportRange(e.target.value)}
+                    className="underline decoration-dotted font-medium text-primary bg-transparent border-none p-0 cursor-pointer focus:outline-none"
+                  >
+                    <option value="day">day</option>
+                    <option value="3 days">3 days</option>
+                    <option value="week">week</option>
+                    <option value="month">month</option>
+                    <option value="all time">all time</option>
+                  </select>{" "}
+                  up until today into your Bitrix24 mailbox
+                </span>
+              </label>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowConfigureFoldersModal(true)}
+                  className="text-xs text-[#0070BA] dark:text-[#2FC6F6] underline decoration-dotted underline-offset-4 hover:opacity-80 transition-opacity font-medium ml-6.5"
+                >
+                  Edit more parameters
+                </button>
+              </div>
+            </div>
+
+            {/* Outgoing email parameters (Screenshot 1) */}
+            <div className="pt-4 border-t border-border space-y-3">
+              <h4 className="text-sm font-semibold text-foreground">Outgoing email parameters</h4>
+              <div className="space-y-2.5">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={mailboxOutgoingSenderName}
+                    onChange={(e) => setMailboxOutgoingSenderName(e.target.checked)}
+                    className="w-4 h-4 rounded text-primary border-border focus:ring-0 mt-0.5 cursor-pointer"
+                  />
+                  <span className="text-sm text-foreground">Use the same sender name for every message instead of the actual sender</span>
+                </label>
+                {mailboxOutgoingSenderName && (
+                  <div className="ml-6.5">
+                    <input
+                      type="text"
+                      value={mailboxSenderNameText}
+                      onChange={(e) => setMailboxSenderNameText(e.target.value)}
+                      placeholder="Default Sender Name"
+                      className="w-full max-w-sm px-3 py-1.5 text-xs rounded-lg border border-input bg-input-background focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                )}
+
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={mailboxDailyEmailLimit}
+                    onChange={(e) => setMailboxDailyEmailLimit(e.target.checked)}
+                    className="w-4 h-4 rounded text-primary border-border focus:ring-0 mt-0.5 cursor-pointer"
+                  />
+                  <span className="text-sm text-foreground">Set daily email limit</span>
+                </label>
+                {mailboxDailyEmailLimit && (
+                  <div className="ml-6.5 flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={mailboxDailyLimitValue}
+                      onChange={(e) => setMailboxDailyLimitValue(Number(e.target.value))}
+                      className="w-32 px-3 py-1.5 text-xs rounded-lg border border-input bg-input-background focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <span className="text-xs text-muted-foreground">emails / day</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CRM Integration Section (Screenshot 1 & 2) */}
+            <div className="pt-4 border-t border-border space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-foreground">CRM integration</h4>
+                <button
+                  type="button"
+                  onClick={() => setMailboxCRMIntegration(!mailboxCRMIntegration)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    mailboxCRMIntegration ? "bg-[#2FC6F6]" : "bg-muted"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      mailboxCRMIntegration ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {mailboxCRMIntegration && (
+                <div className="space-y-4 pl-1">
+                  {/* Import emails into CRM */}
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={mailboxCrmImportEmails}
+                        onChange={(e) => setMailboxCrmImportEmails(e.target.checked)}
+                        className="w-4 h-4 rounded text-primary border-border focus:ring-0 mt-0.5 cursor-pointer"
+                      />
+                      <span className="text-sm text-foreground">
+                        Import emails received since{" "}
+                        <select
+                          value={mailboxCrmImportRange}
+                          onChange={(e) => setMailboxCrmImportRange(e.target.value)}
+                          className="underline decoration-dotted font-medium text-primary bg-transparent border-none p-0 cursor-pointer focus:outline-none"
+                        >
+                          <option value="day">day</option>
+                          <option value="3 days">3 days</option>
+                          <option value="week">week</option>
+                          <option value="month">month</option>
+                          <option value="all time">all time</option>
+                        </select>{" "}
+                        into the CRM, and convert each into an activity
+                      </span>
+                    </label>
+
+                    {/* Yellow callout */}
+                    <div className="ml-6.5 p-3 rounded-md bg-[#FFF8E7] dark:bg-amber-950/30 border border-[#FDE4A0] dark:border-amber-800/40 text-xs text-[#8A6D3B] dark:text-amber-300 leading-relaxed">
+                      Attention! Emails received within the selected time frame before the integration start date will be imported into the CRM, converted into activities, and may be accessible to other users before access permissions are set up.
+                    </div>
+                  </div>
+
+                  {/* Route emails */}
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={mailboxCrmRouteToManagers}
+                      onChange={(e) => setMailboxCrmRouteToManagers(e.target.checked)}
+                      className="w-4 h-4 rounded text-primary border-border focus:ring-0 cursor-pointer"
+                    />
+                    <span className="text-sm text-foreground">Route emails from existing clients to assigned CRM managers</span>
+                  </label>
+
+                  {/* Create incoming */}
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={mailboxCrmCreateIncomingEnabled}
+                        onChange={(e) => setMailboxCrmCreateIncomingEnabled(e.target.checked)}
+                        className="w-4 h-4 rounded text-primary border-border focus:ring-0 cursor-pointer"
+                      />
+                      <span className="text-sm text-foreground">
+                        Create{" "}
+                        <select
+                          value={mailboxCrmCreateIncomingType}
+                          onChange={(e) => setMailboxCrmCreateIncomingType(e.target.value as any)}
+                          className="underline decoration-dotted font-medium text-primary bg-transparent border-none p-0 cursor-pointer focus:outline-none"
+                        >
+                          <option value="Lead">Lead</option>
+                          <option value="Contact">Contact</option>
+                          <option value="Deal">Deal</option>
+                        </select>{" "}
+                        for incoming messages from new email address
+                      </span>
+                    </label>
+                    <div className="ml-6.5 p-3 rounded-md bg-[#FFF8E7] dark:bg-amber-950/30 border border-[#FDE4A0] dark:border-amber-800/40 text-xs text-[#8A6D3B] dark:text-amber-300 leading-relaxed">
+                      Attention! Any incoming email from a new sender will create a selected item in CRM that may be accessible to other users before access permissions are set up.
+                    </div>
+                  </div>
+
+                  {/* Create outgoing */}
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={mailboxCrmCreateOutgoingEnabled}
+                        onChange={(e) => setMailboxCrmCreateOutgoingEnabled(e.target.checked)}
+                        className="w-4 h-4 rounded text-primary border-border focus:ring-0 cursor-pointer"
+                      />
+                      <span className="text-sm text-foreground">
+                        Create{" "}
+                        <select
+                          value={mailboxCrmCreateOutgoingType}
+                          onChange={(e) => setMailboxCrmCreateOutgoingType(e.target.value as any)}
+                          className="underline decoration-dotted font-medium text-primary bg-transparent border-none p-0 cursor-pointer focus:outline-none"
+                        >
+                          <option value="Contact">Contact</option>
+                          <option value="Lead">Lead</option>
+                        </select>{" "}
+                        for outgoing messages to new email address
+                      </span>
+                    </label>
+                    <div className="ml-6.5 p-3 rounded-md bg-[#FFF8E7] dark:bg-amber-950/30 border border-[#FDE4A0] dark:border-amber-800/40 text-xs text-[#8A6D3B] dark:text-amber-300 leading-relaxed">
+                      Attention! Any new outgoing email to a new email address will create a selected item in CRM that may be accessible to other users before access permissions are set up.
+                    </div>
+                  </div>
+
+                  {/* Attached vCard */}
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={mailboxCrmVcardContacts}
+                      onChange={(e) => setMailboxCrmVcardContacts(e.target.checked)}
+                      className="w-4 h-4 rounded text-primary border-border focus:ring-0 cursor-pointer"
+                    />
+                    <span className="text-sm text-foreground">Create contacts using attached vCard</span>
+                  </label>
+
+                  {/* Lead and contact source */}
+                  <div className="flex items-center gap-2 text-sm text-foreground">
+                    <span className="text-muted-foreground">Lead and contact source:</span>
+                    <select
+                      value={mailboxCrmLeadSource}
+                      onChange={(e) => setMailboxCrmLeadSource(e.target.value)}
+                      className="underline decoration-dotted font-medium text-primary bg-transparent border-none p-0 cursor-pointer focus:outline-none"
+                    >
+                      <option value="E-Mail">E-Mail</option>
+                      <option value="Website">Website</option>
+                      <option value="Advertising">Advertising</option>
+                      <option value="Phone Call">Phone Call</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  {/* Create new lead for each new incoming message */}
+                  <div className="flex items-center gap-2 text-sm text-foreground">
+                    <span className="text-muted-foreground">Create new lead for each new incoming message from</span>
+                    <select
+                      value={mailboxCrmLeadAddresses}
+                      onChange={(e) => setMailboxCrmLeadAddresses(e.target.value)}
+                      className="underline decoration-dotted font-medium text-primary bg-transparent border-none p-0 cursor-pointer focus:outline-none"
+                    >
+                      <option value="All addresses">addresses ▾</option>
+                      <option value="External only">external only</option>
+                      <option value="Whitelist">specific whitelist</option>
+                    </select>
+                  </div>
+
+                  {/* Lead and contact distribution queue */}
+                  <div className="space-y-2 pt-1">
+                    <span className="text-xs font-medium text-muted-foreground block">Lead and contact distribution queue:</span>
+                    <div className="flex flex-wrap items-center gap-2 p-2 rounded-lg border border-border bg-input-background min-h-[40px]">
+                      {mailboxCrmQueueUsers.map((user) => (
+                        <span
+                          key={user}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#EBF6FE] dark:bg-sky-950/40 text-[#127AC2] dark:text-sky-300 text-xs font-medium border border-[#D0E7FA] dark:border-sky-800/40"
+                        >
+                          <span className="w-4 h-4 rounded-full bg-[#2FC6F6] text-white flex items-center justify-center text-[10px] font-bold">
+                            {user.charAt(0)}
+                          </span>
+                          <span>{user}</span>
+                          <button
+                            type="button"
+                            onClick={() => setMailboxCrmQueueUsers(mailboxCrmQueueUsers.filter((u) => u !== user))}
+                            className="hover:text-destructive text-muted-foreground ml-0.5"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+
+                      {/* Add Button with quick picker */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowAddMemberModal(showAddMemberModal === "crm" ? null : "crm")}
+                          className="text-xs font-semibold text-[#127AC2] dark:text-sky-400 hover:underline px-1 py-0.5 cursor-pointer flex items-center gap-1"
+                        >
+                          + Add
+                        </button>
+                        {showAddMemberModal === "crm" && (
+                          <div className="absolute left-0 top-full mt-1 w-48 rounded-lg border border-border bg-popover shadow-lg p-1 z-30 space-y-0.5">
+                            {["Sarah Jenkins", "Dr. Emily Chen", "Alex Rivera", "David Miller", "Isabella Miller"]
+                              .filter((u) => !mailboxCrmQueueUsers.includes(u))
+                              .map((name) => (
+                                <button
+                                  key={name}
+                                  type="button"
+                                  onClick={() => {
+                                    setMailboxCrmQueueUsers([...mailboxCrmQueueUsers, name]);
+                                    setShowAddMemberModal(null);
+                                  }}
+                                  className="w-full text-left px-2.5 py-1.5 text-xs rounded hover:bg-muted text-foreground flex items-center gap-2"
+                                >
+                                  <span className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold">
+                                    {name.charAt(0)}
+                                  </span>
+                                  {name}
+                                </button>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Calendar Integration (Screenshot 1) */}
+            <div className="pt-4 border-t border-border space-y-2">
+              <h4 className="text-sm font-semibold text-foreground">Calendar integration</h4>
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={mailboxAddToCalendar}
                   onChange={(e) => setMailboxAddToCalendar(e.target.checked)}
-                  className="w-4 h-4 rounded text-primary"
+                  className="w-4 h-4 rounded text-primary border-border focus:ring-0 cursor-pointer"
                 />
-                <span className="text-sm">Automatically add events to calendar</span>
+                <span className="text-sm text-foreground">Automatically add events to calendar</span>
               </label>
             </div>
 
-            {/* Mailbox Access */}
-            <div className="border-t border-border pt-4 space-y-3">
-              <h3 className="text-sm font-semibold">Mailbox access</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
+            {/* Mailbox Access (Screenshot 3) */}
+            <div className="pt-4 border-t border-border space-y-3">
+              <h4 className="text-sm font-semibold text-foreground">Mailbox access</h4>
+
+              {/* Yellow info box */}
+              <div className="p-3 rounded-md bg-[#FFF8E7] dark:bg-amber-950/30 border border-[#FDE4A0] dark:border-amber-800/40 text-xs text-[#8A6D3B] dark:text-amber-300 leading-relaxed">
                 Give the employees access permission to this mailbox so they could receive and reply to email messages. {"It's"} a simple, effortless way to set up a collaboration environment for your sales department or helpdesk service.
-              </p>
-              {/* User pills */}
-              <div className="flex flex-wrap gap-2 min-h-[32px] p-2 rounded-lg border border-input bg-input-background">
-                {mailboxUsers.map((user) => (
-                  <span key={user} className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
-                    {user}
-                    <button onClick={() => setMailboxUsers(mailboxUsers.filter((u) => u !== user))} className="hover:text-destructive">
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+              </div>
+
+              {/* User pills & Add */}
+              <div className="flex flex-wrap items-center gap-2 p-2 rounded-lg border border-border bg-input-background min-h-[40px]">
+                {mailboxAccessUsers.map((user) => (
+                  <span
+                    key={user}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#EBF6FE] dark:bg-sky-950/40 text-[#127AC2] dark:text-sky-300 text-xs font-medium border border-[#D0E7FA] dark:border-sky-800/40"
+                  >
+                    <span className="w-4 h-4 rounded-full bg-[#2FC6F6] text-white flex items-center justify-center text-[10px] font-bold">
+                      {user.charAt(0)}
+                    </span>
+                    <span>{user}</span>
+                    <button
+                      type="button"
+                      onClick={() => setMailboxAccessUsers(mailboxAccessUsers.filter((u) => u !== user))}
+                      className="hover:text-destructive text-muted-foreground ml-0.5"
+                    >
+                      ×
                     </button>
                   </span>
                 ))}
-                <input
-                  type="text"
-                  value={mailboxUserInput}
-                  onChange={(e) => setMailboxUserInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if ((e.key === "Enter" || e.key === ",") && mailboxUserInput.trim()) {
-                      e.preventDefault();
-                      setMailboxUsers([...mailboxUsers, mailboxUserInput.trim()]);
-                      setMailboxUserInput("");
-                    }
-                  }}
-                  placeholder="Type name and press Enter..."
-                  className="flex-1 min-w-24 text-xs bg-transparent outline-none placeholder:text-muted-foreground"
-                />
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddMemberModal(showAddMemberModal === "access" ? null : "access")}
+                    className="text-xs font-semibold text-[#127AC2] dark:text-sky-400 hover:underline px-1 py-0.5 cursor-pointer flex items-center gap-1"
+                  >
+                    + Add
+                  </button>
+                  {showAddMemberModal === "access" && (
+                    <div className="absolute left-0 top-full mt-1 w-48 rounded-lg border border-border bg-popover shadow-lg p-1 z-30 space-y-0.5">
+                      {["Sarah Jenkins", "Dr. Emily Chen", "Alex Rivera", "David Miller", "Isabella Miller"]
+                        .filter((u) => !mailboxAccessUsers.includes(u))
+                        .map((name) => (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => {
+                              setMailboxAccessUsers([...mailboxAccessUsers, name]);
+                              setShowAddMemberModal(null);
+                            }}
+                            className="w-full text-left px-2.5 py-1.5 text-xs rounded hover:bg-muted text-foreground flex items-center gap-2"
+                          >
+                            <span className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold">
+                              {name.charAt(0)}
+                            </span>
+                            {name}
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
               </div>
-              <button
-                onClick={() => {
-                  if (mailboxUserInput.trim()) {
-                    setMailboxUsers([...mailboxUsers, mailboxUserInput.trim()]);
-                    setMailboxUserInput("");
-                  }
-                }}
-                className="text-primary text-sm hover:underline"
-              >
-                + Add
-              </button>
             </div>
           </div>
         </Drawer>
+
+        {/* Configure Folders Modal (Screenshot 4) */}
+        <Modal
+          isOpen={showConfigureFoldersModal}
+          onClose={() => setShowConfigureFoldersModal(false)}
+          title={
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-base text-foreground">Configure Folders</span>
+              <span className="text-muted-foreground text-xs">📌</span>
+            </div>
+          }
+          footer={
+            <div className="flex items-center justify-end gap-2 w-full">
+              <Button variant="outline" size="sm" onClick={() => setShowConfigureFoldersModal(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => setShowConfigureFoldersModal(false)}>
+                Save
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-6 text-sm text-foreground">
+            {/* Synchronize Folders section */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold text-foreground">Synchronize folders</h4>
+              <div className="space-y-2 border border-border rounded-lg p-3 bg-muted/20">
+                <label className="flex items-center gap-2 cursor-pointer font-medium">
+                  <input
+                    type="checkbox"
+                    checked={folderSyncSelectAll}
+                    onChange={(e) => {
+                      const val = e.target.checked;
+                      setFolderSyncSelectAll(val);
+                      setFolderSyncInbox(val);
+                      setFolderSyncAllMail(val);
+                      setFolderSyncImportant(val);
+                      setFolderSyncStarred(val);
+                      setFolderSyncSent(val);
+                      setFolderSyncDrafts(val);
+                      setFolderSyncSpam(val);
+                      setFolderSyncBin(val);
+                    }}
+                    className="w-4 h-4 rounded text-primary border-border focus:ring-0"
+                  />
+                  <span>Select all</span>
+                </label>
+
+                <div className="pl-4 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={folderSyncInbox}
+                      onChange={(e) => setFolderSyncInbox(e.target.checked)}
+                      className="w-4 h-4 rounded text-primary border-border focus:ring-0"
+                    />
+                    <span>Inbox</span>
+                  </label>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-foreground font-medium">
+                      <span className="w-3.5 h-3.5 flex items-center justify-center border border-border rounded text-[10px] leading-none text-muted-foreground font-bold">−</span>
+                      <input
+                        type="checkbox"
+                        checked={folderSyncAllMail && folderSyncImportant && folderSyncStarred && folderSyncSent && folderSyncDrafts && folderSyncSpam && folderSyncBin}
+                        onChange={(e) => {
+                          const val = e.target.checked;
+                          setFolderSyncAllMail(val);
+                          setFolderSyncImportant(val);
+                          setFolderSyncStarred(val);
+                          setFolderSyncSent(val);
+                          setFolderSyncDrafts(val);
+                          setFolderSyncSpam(val);
+                          setFolderSyncBin(val);
+                        }}
+                        className="w-4 h-4 rounded text-primary border-border focus:ring-0"
+                      />
+                      <span>[Gmail] (7/7)</span>
+                    </div>
+
+                    <div className="pl-8 space-y-1.5 text-xs text-muted-foreground">
+                      <label className="flex items-center gap-2 cursor-pointer hover:text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={folderSyncAllMail}
+                          onChange={(e) => setFolderSyncAllMail(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-primary border-border focus:ring-0"
+                        />
+                        <span>All Mail</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer hover:text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={folderSyncImportant}
+                          onChange={(e) => setFolderSyncImportant(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-primary border-border focus:ring-0"
+                        />
+                        <span>Important</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer hover:text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={folderSyncStarred}
+                          onChange={(e) => setFolderSyncStarred(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-primary border-border focus:ring-0"
+                        />
+                        <span>Starred</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer hover:text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={folderSyncSent}
+                          onChange={(e) => setFolderSyncSent(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-primary border-border focus:ring-0"
+                        />
+                        <span>Sent</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer hover:text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={folderSyncDrafts}
+                          onChange={(e) => setFolderSyncDrafts(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-primary border-border focus:ring-0"
+                        />
+                        <span>Drafts</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer hover:text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={folderSyncSpam}
+                          onChange={(e) => setFolderSyncSpam(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-primary border-border focus:ring-0"
+                        />
+                        <span>Spam</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer hover:text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={folderSyncBin}
+                          onChange={(e) => setFolderSyncBin(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded text-primary border-border focus:ring-0"
+                        />
+                        <span>Bin</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Folder Rules section */}
+            <div className="space-y-3 pt-3 border-t border-border">
+              <h4 className="text-sm font-semibold text-foreground">Folder rules</h4>
+              <div className="space-y-2.5 text-xs">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-foreground">Save sent emails to folder:</span>
+                  <select
+                    value={folderRuleSent}
+                    onChange={(e) => setFolderRuleSent(e.target.value)}
+                    className="underline decoration-dotted text-primary bg-transparent border-none p-0 cursor-pointer focus:outline-none"
+                  >
+                    <option value="not specified">not specified</option>
+                    <option value="[Gmail]/Sent Mail">[Gmail]/Sent Mail</option>
+                    <option value="Sent">Sent</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-foreground">Move deleted emails to folder:</span>
+                  <select
+                    value={folderRuleDeleted}
+                    onChange={(e) => setFolderRuleDeleted(e.target.value)}
+                    className="underline decoration-dotted text-primary bg-transparent border-none p-0 cursor-pointer focus:outline-none"
+                  >
+                    <option value="not specified">not specified</option>
+                    <option value="[Gmail]/Bin">[Gmail]/Bin</option>
+                    <option value="Trash">Trash</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-foreground">Move spam to folder:</span>
+                  <select
+                    value={folderRuleSpam}
+                    onChange={(e) => setFolderRuleSpam(e.target.value)}
+                    className="underline decoration-dotted text-primary bg-transparent border-none p-0 cursor-pointer focus:outline-none"
+                  >
+                    <option value="not specified">not specified</option>
+                    <option value="[Gmail]/Spam">[Gmail]/Spam</option>
+                    <option value="Junk">Junk</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Modal>
 
         {/* Twilio SMS Connection Drawer */}
         <Drawer
