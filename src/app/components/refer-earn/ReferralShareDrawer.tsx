@@ -35,6 +35,7 @@ const CONNECTED_ACCOUNTS: Record<ShareChannel, Array<{ value: string; label: str
     { value: "support@company.com", label: "support@company.com" },
     { value: "notifications@company.com", label: "notifications@company.com" },
   ],
+  patient_app: [],
 };
 
 interface WhatsappTemplate {
@@ -220,6 +221,7 @@ const CHANNEL_CONFIG: Record<ShareChannel, { label: string; icon: React.ReactNod
   sms: { label: "SMS", icon: <MessageSquare className="w-4 h-4" /> },
   whatsapp: { label: "WhatsApp", icon: <MessageCircle className="w-4 h-4" /> },
   email: { label: "Email", icon: <Mail className="w-4 h-4" /> },
+  patient_app: { label: "Patient Companion App", icon: <MessageSquare className="w-4 h-4" /> },
 };
 
 export default function ReferralShareDrawer({ target, onClose, onSend }: ReferralShareDrawerProps) {
@@ -246,6 +248,7 @@ export default function ReferralShareDrawer({ target, onClose, onSend }: Referra
     sms: "Send SMS",
     whatsapp: "Send via WhatsApp",
     email: "Send Email",
+    patient_app: "Share to Companion App",
   };
 
   const handleChannelChange = (newChannel: ShareChannel) => {

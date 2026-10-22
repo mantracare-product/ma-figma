@@ -32,6 +32,7 @@ const CONNECTED_ACCOUNTS: Record<ShareChannel, Array<{ value: string; label: str
     { value: "support@mantracare.com", label: "support@mantracare.com" },
     { value: "documents@mantracare.com", label: "documents@mantracare.com" },
   ],
+  patient_app: [],
 };
 
 const ALL_CRM_CLIENTS: ShareClient[] = [
@@ -349,6 +350,7 @@ const CHANNEL_CONFIG: Record<ShareChannel, { label: string; icon: React.ReactNod
   sms: { label: "SMS", icon: <MessageSquare className="w-4 h-4 text-emerald-600" /> },
   whatsapp: { label: "WhatsApp", icon: <MessageCircle className="w-4 h-4 text-emerald-600" /> },
   email: { label: "Email", icon: <Mail className="w-4 h-4 text-blue-600" /> },
+  patient_app: { label: "Patient Companion App", icon: <MessageSquare className="w-4 h-4 text-blue-600" /> },
 };
 
 export interface ShareDocumentDrawerProps {
@@ -430,6 +432,7 @@ export default function ShareDocumentDrawer({
     sms: "Send SMS",
     whatsapp: "Send via WhatsApp",
     email: "Send Email",
+    patient_app: "Share to Companion App",
   };
 
   const handleChannelChange = (newChannel: string) => {

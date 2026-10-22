@@ -1,8 +1,9 @@
 // ShareRecipientPicker.tsx
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Search, X, Filter, Plus, Check } from "lucide-react";
 import { toast } from "sonner";
 import { ShareClient, ShareLiteralRecipient, ShareChannel } from "./shareTypes";
+import { getStoredClients } from "../../../lib/clientsStore";
 
 interface MockClient extends ShareClient {
   status: "Active" | "Lead" | "Inactive";
@@ -69,8 +70,29 @@ export default function ShareRecipientPicker({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Merge stored CRM clients with default mock clients
+  const availableClients: MockClient[] = useMemo(() => {
+    try {
+      const stored = getStoredClients();
+      if (stored && stored.length > 0) {
+        const mapped: MockClient[] = stored.map((c, i) => ({
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          status: (c.status as any) || "Active",
+          tag: (c as any).tag || (i % 2 === 0 ? "VIP" : "General"),
+        }));
+        const seenIds = new Set(mapped.map((m) => m.id));
+        const extraMocks = MOCK_CLIENTS.filter((m) => !seenIds.has(m.id));
+        return [...mapped, ...extraMocks];
+      }
+    } catch {}
+    return MOCK_CLIENTS;
+  }, []);
+
   // Filter clients by search query & segment
-  const filteredClients = MOCK_CLIENTS.filter((c) => {
+  const filteredClients = availableClients.filter((c) => {
     const matchesSearch = !searchQuery.trim() ||
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -104,6 +126,8 @@ export default function ShareRecipientPicker({
     if (channel === "email") {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       return emailRegex.test(val);
+    } else if (channel === "patient_app") {
+      return val.trim().length >= 2;
     } else {
       const digitsOnly = val.replace(/\D/g, "");
       return digitsOnly.length >= 7;
@@ -115,7 +139,12 @@ export default function ShareRecipientPicker({
     if (!trimmed) return;
 
     if (!validateLiteral(trimmed)) {
-      const label = channel === "email" ? "valid email address" : "valid phone number";
+      const label =
+        channel === "email"
+          ? "valid email address"
+          : channel === "patient_app"
+          ? "valid patient identifier"
+          : "valid phone number";
       toast.error(`Please enter a ${label}`);
       return;
     }
@@ -140,10 +169,18 @@ export default function ShareRecipientPicker({
   };
 
   const totalCount = selectedClients.length + selectedLiterals.length;
-  const literalLabel = channel === "email" ? "Email Address" : "Phone Number";
+  const literalLabel =
+    channel === "email"
+      ? "Email Address"
+      : channel === "patient_app"
+      ? "Patient Identifier"
+      : "Phone Number";
+
   const literalPlaceholder =
     channel === "email"
       ? "Or enter email address manually..."
+      : channel === "patient_app"
+      ? "Or enter patient name / email / ID manually..."
       : "Or enter phone number manually...";
 
   return (
