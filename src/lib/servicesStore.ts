@@ -22,6 +22,10 @@ export interface Service {
   assignedEmployees?: (number | string)[];
   createdAt?: string;
   activity?: string;
+  locationIds?: string[];
+  maxSeats?: number;
+  locationSeats?: Record<string, number>;
+  locationEmployees?: Record<string, (number | string)[]>;
   color?: string;
   customFields?: Record<string, any>;
 }
@@ -69,6 +73,8 @@ export const INIT_FORM = {
   tax: 0,
   isActive: true,
   assignedEmployeeIds: [] as (number | string)[],
+  locationIds: [] as string[],
+  maxSeats: 1,
   customFields: {} as Record<string, any>,
 };
 

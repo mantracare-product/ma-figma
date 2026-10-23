@@ -10,6 +10,8 @@ export interface DrawerShellProps {
   width?: string; // e.g. "max-w-2xl" | "max-w-3xl"
   zIndex?: number; // e.g. 600, 650, 700
   headerRight?: React.ReactNode;
+  tabs?: React.ReactNode;
+  bodyClassName?: string;
   footer?: React.ReactNode;
   isGenerating?: boolean;
   children: React.ReactNode;
@@ -24,6 +26,8 @@ export default function DrawerShell({
   width = "max-w-[70vw]",
   zIndex = 600,
   headerRight,
+  tabs,
+  bodyClassName,
   footer,
   isGenerating = false,
   children,
@@ -94,8 +98,15 @@ export default function DrawerShell({
           </div>
         </div>
 
+        {/* Optional Tabs Bar */}
+        {tabs && (
+          <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-2.5">
+            {tabs}
+          </div>
+        )}
+
         {/* Drawer Scrollable Body */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6 min-h-0">
+        <div className={`flex-1 overflow-y-auto overflow-x-hidden min-h-0 ${bodyClassName !== undefined ? bodyClassName : "p-6 space-y-6"}`}>
           {children}
         </div>
 

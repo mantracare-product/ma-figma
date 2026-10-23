@@ -11,6 +11,10 @@ import {
   Building2,
   AlertTriangle,
   Clock,
+  Layers,
+  User,
+  UserCheck,
+  Stethoscope,
 } from "lucide-react";
 import { getStoredClients } from "../../../lib/clientsStore";
 import { useOrganization } from "../../context/OrganizationContext";
@@ -24,6 +28,7 @@ import { PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { findRoomForAppointment, Room } from "../../../lib/roomsStore";
+import { getServiceSlots, isServiceEnabledAtLocation, timeToMinutes, ServiceSlot } from "../../../lib/serviceAvailability";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +77,7 @@ export interface BookingFormValues {
   primaryInsurance?: string;
   secondaryInsurance?: string;
   source?: string;
+  bookingType?: "service" | "specialist";
 }
 
 export interface ScheduleAppointmentDrawerProps {
@@ -458,6 +464,10 @@ export default function ScheduleAppointmentDrawer({
       duration: number;
       tax?: number;
       assignedEmployees?: (number | string)[];
+      locationIds?: string[];
+      maxSeats?: number;
+      locationSeats?: Record<string, number>;
+      locationEmployees?: Record<string, (number | string)[]>;
     }> = [];
     const seenNames = new Set<string>();
     try {
@@ -473,6 +483,10 @@ export default function ScheduleAppointmentDrawer({
               duration: s.duration || 30,
               tax: s.tax || 0,
               assignedEmployees: s.assignedEmployees,
+              locationIds: s.locationIds,
+              maxSeats: s.maxSeats,
+              locationSeats: (s as any).locationSeats,
+              locationEmployees: (s as any).locationEmployees,
             });
           }
         });
@@ -505,7 +519,7 @@ export default function ScheduleAppointmentDrawer({
   // ── Organization Locations ──
   const { activeOrganization } = useOrganization();
   const orgLocations = useMemo(() => {
-    const list: Array<{ id: string; name: string; address?: string; phone?: string; timezone?: string; type?: string }> = [];
+    const list: Array<{ id: string; name: string; address?: string; phone?: string; timezone?: string; type?: string; workingHours?: any; daysOff?: any[] }> = [];
     const seen = new Set<string>();
 
     try {
@@ -531,6 +545,8 @@ export default function ScheduleAppointmentDrawer({
                 phone: l.phone,
                 timezone: l.timezone,
                 type: l.type,
+                workingHours: l.workingHours,
+                daysOff: l.daysOff,
               });
             }
           });
@@ -569,6 +585,86 @@ export default function ScheduleAppointmentDrawer({
 
     return list;
   }, [activeOrganization, locVersion]);
+
+  // ── Service-enabled Locations filter (both modes: locationIds absent = all) ──
+  const filteredLocations = useMemo(() => {
+    if (!values.serviceId) return orgLocations;
+    const srv = allAvailableServices.find((s) => String(s.id) === String(values.serviceId));
+    if (!srv || !srv.locationIds || srv.locationIds.length === 0) {
+      return orgLocations; // absent = all locations
+    }
+    return orgLocations.filter((loc) => isServiceEnabledAtLocation(srv, loc));
+  }, [values.serviceId, allAvailableServices, orgLocations]);
+
+  // If only one remains, preselect it
+  useEffect(() => {
+    if (values.serviceId && filteredLocations.length === 1) {
+      const onlyLoc = filteredLocations[0].name;
+      if (values.location !== onlyLoc) {
+        handleLocationSelect(onlyLoc);
+      }
+    }
+  }, [values.serviceId, filteredLocations, values.location]);
+
+  // ── Booking Mode: "service" | "specialist" ──
+  const [localBookingType, setLocalBookingType] = useState<"service" | "specialist">(
+    values.bookingType || "service"
+  );
+
+  useEffect(() => {
+    if (values.bookingType) {
+      setLocalBookingType(values.bookingType);
+    }
+  }, [values.bookingType]);
+
+  const currentBookingType: "service" | "specialist" = values.bookingType || localBookingType;
+
+  // Switching resets location, doctor, date and slot
+  const handleToggleBookingType = (newType: "service" | "specialist") => {
+    if (newType === currentBookingType) return;
+    setLocalBookingType(newType);
+    onChange({
+      bookingType: newType,
+      location: "",
+      provider: null,
+      date: "",
+      startHour: 9,
+      startMinute: 0,
+    });
+  };
+
+  // ── Doctors assigned to the service for "Responsible (optional)" in Service mode ──
+  const serviceResponsibleDoctors = useMemo(() => {
+    const srv = allAvailableServices.find((s) => String(s.id) === String(values.serviceId));
+    if (srv) {
+      if (srv.locationEmployees && values.location) {
+        const selectedLocName = values.location.toLowerCase().trim();
+        const matchedLocObj = orgLocations.find((ol) => ol.name.toLowerCase() === selectedLocName);
+        const locEmps = srv.locationEmployees[matchedLocObj?.id || ""] ||
+                        srv.locationEmployees[values.location] ||
+                        srv.locationEmployees[selectedLocName];
+        if (Array.isArray(locEmps) && locEmps.length > 0) {
+          const locEmpIds = new Set(locEmps.map(String));
+          const matched = allEmployeesList.filter((e) => locEmpIds.has(String(e.id)));
+          if (matched.length > 0) return matched;
+        }
+      }
+      if (srv.assignedEmployees && srv.assignedEmployees.length > 0) {
+        const assignedIds = new Set(srv.assignedEmployees.map(String));
+        const matched = allEmployeesList.filter((e) => assignedIds.has(String(e.id)));
+        if (matched.length > 0) return matched;
+      }
+    }
+    return allEmployeesList;
+  }, [values.serviceId, values.location, allAvailableServices, allEmployeesList, orgLocations]);
+
+  const serviceResponsibleOptions: DropdownOption[] = useMemo(() => {
+    return serviceResponsibleDoctors.map((e) => ({
+      value: String(e.id),
+      label: e.name,
+      meta: e.email,
+    }));
+  }, [serviceResponsibleDoctors]);
 
   // ── Provider Location Availability & Days Off Notice ──
   const providerAvailabilityNotice = useMemo(() => {
@@ -656,13 +752,25 @@ export default function ScheduleAppointmentDrawer({
       const selectedSrv = allAvailableServices.find(
         (s) => String(s.id) === String(values.serviceId)
       );
-      if (selectedSrv?.assignedEmployees && selectedSrv.assignedEmployees.length > 0) {
-        const assignedIds = new Set(selectedSrv.assignedEmployees.map(String));
-        const serviceMatched = list.filter(
-          (emp) => assignedIds.has(String(emp.id))
-        );
-        if (serviceMatched.length > 0) {
-          list = serviceMatched;
+      if (selectedSrv) {
+        let matchedServiceEmps: typeof list = [];
+        if (selectedSrv.locationEmployees && values.location) {
+          const selectedLocName = values.location.toLowerCase().trim();
+          const matchedLocObj = orgLocations.find((ol) => ol.name.toLowerCase() === selectedLocName);
+          const locEmps = selectedSrv.locationEmployees[matchedLocObj?.id || ""] ||
+                          selectedSrv.locationEmployees[values.location] ||
+                          selectedSrv.locationEmployees[selectedLocName];
+          if (Array.isArray(locEmps) && locEmps.length > 0) {
+            const locEmpIds = new Set(locEmps.map(String));
+            matchedServiceEmps = list.filter((emp) => locEmpIds.has(String(emp.id)));
+          }
+        }
+        if (matchedServiceEmps.length === 0 && selectedSrv.assignedEmployees && selectedSrv.assignedEmployees.length > 0) {
+          const assignedIds = new Set(selectedSrv.assignedEmployees.map(String));
+          matchedServiceEmps = list.filter((emp) => assignedIds.has(String(emp.id)));
+        }
+        if (matchedServiceEmps.length > 0) {
+          list = matchedServiceEmps;
         }
       }
     }
@@ -764,6 +872,45 @@ export default function ScheduleAppointmentDrawer({
     const targetLocObj = orgLocations.find((l) => l.name.toLowerCase() === targetLoc.toLowerCase());
     const locId = targetLocObj?.id || "loc-1";
 
+    // In specialist doctor mode: availability needs both the service being offered at the location and the doctor's availability at that location
+    if (selectedSrv && targetLocObj && !isServiceEnabledAtLocation(selectedSrv, targetLocObj)) {
+      return {
+        generatedSlots: [],
+        slotDuration: duration,
+        dayOffNotice: `${selectedSrv.name} is not offered at ${targetLocObj.name}.`,
+      };
+    }
+
+    if (targetLocObj) {
+      if (targetLocObj.daysOff && Array.isArray(targetLocObj.daysOff)) {
+        const isLocDayOff = targetLocObj.daysOff.some((d: any) => d.date === values.date);
+        if (isLocDayOff) {
+          return {
+            generatedSlots: [],
+            slotDuration: duration,
+            dayOffNotice: `${targetLocObj.name} is closed on this date.`,
+          };
+        }
+      }
+
+      if (targetLocObj.workingHours && targetLocObj.workingHours[dayKey]) {
+        const locWh = targetLocObj.workingHours[dayKey];
+        if (locWh.enabled === false) {
+          return {
+            generatedSlots: [],
+            slotDuration: duration,
+            dayOffNotice: `${targetLocObj.name} is closed on ${dayKey.charAt(0).toUpperCase() + dayKey.slice(1)}s.`,
+          };
+        }
+        if (locWh.start) {
+          startMin = Math.max(startMin, timeToMinutes(locWh.start));
+        }
+        if (locWh.end) {
+          endMin = Math.min(endMin, timeToMinutes(locWh.end));
+        }
+      }
+    }
+
     try {
       // Check stored custom slots for [user + location]
       const savedUserSlots = localStorage.getItem(
@@ -809,6 +956,17 @@ export default function ScheduleAppointmentDrawer({
     // Special allowance: Admin User at California Branch is available on working days
     if (!isDayEnabled && (values.provider.name.toLowerCase().includes("admin") || String(values.provider.id) === "1")) {
       isDayEnabled = true;
+    }
+
+    // Clamp doctor's operating hours to location operating hours
+    if (targetLocObj?.workingHours?.[dayKey]) {
+      const locWh = targetLocObj.workingHours[dayKey];
+      if (locWh.start) {
+        startMin = Math.max(startMin, timeToMinutes(locWh.start));
+      }
+      if (locWh.end) {
+        endMin = Math.min(endMin, timeToMinutes(locWh.end));
+      }
     }
 
     if (!isDayEnabled) {
@@ -869,6 +1027,51 @@ export default function ScheduleAppointmentDrawer({
     };
   }, [values.provider, values.date, values.location, values.serviceId, allAvailableServices, orgLocations, activeOrganization.id]);
 
+  // ── Compute Available Slots for Service mode ──
+  const serviceModeSlots: ServiceSlot[] = useMemo(() => {
+    if (currentBookingType !== "service" || !values.serviceId || !values.location || !values.date) {
+      return [];
+    }
+    const srv = allAvailableServices.find((s) => String(s.id) === String(values.serviceId));
+    const loc = orgLocations.find((l) => l.name.toLowerCase() === values.location?.toLowerCase());
+    if (!srv || !loc) return [];
+    try {
+      const allAppts = appointmentService.getAppointments();
+      return getServiceSlots(srv as any, loc, values.date, allAppts);
+    } catch {
+      return [];
+    }
+  }, [currentBookingType, values.serviceId, values.location, values.date, allAvailableServices, orgLocations]);
+
+  const selectedSrv = useMemo(() => {
+    return allAvailableServices.find((s) => String(s.id) === String(values.serviceId));
+  }, [allAvailableServices, values.serviceId]);
+
+  const activeSlotDuration = selectedSrv?.duration || slotDuration || 30;
+
+  const activeSlots = useMemo(() => {
+    if (currentBookingType === "service") {
+      return serviceModeSlots.map((s) => ({
+        hour: s.hour,
+        minute: s.minute,
+        timeStr: s.timeStr,
+        label12: s.label12,
+        disabled: s.isFull,
+        remaining: s.remaining,
+        isServiceSlot: true,
+      }));
+    }
+    return generatedSlots.map((s) => ({
+      hour: s.hour,
+      minute: s.minute,
+      timeStr: s.timeStr,
+      label12: s.label12,
+      disabled: s.isBooked,
+      remaining: undefined,
+      isServiceSlot: false,
+    }));
+  }, [currentBookingType, serviceModeSlots, generatedSlots]);
+
   // Auto-sync sessionType with location (online/virtual -> video, physical branch -> inPerson)
   useEffect(() => {
     if (values.location) {
@@ -880,20 +1083,20 @@ export default function ScheduleAppointmentDrawer({
     }
   }, [values.location, values.sessionType]);
 
-  // Auto-select first available slot if current slot is invalid or not in generated slots
+  // Auto-select first available slot if current slot is invalid or not in active slots
   useEffect(() => {
-    if (generatedSlots.length > 0) {
-      const matchesCurrent = generatedSlots.some(
-        (s) => s.hour === values.startHour && s.minute === values.startMinute && !s.isBooked
+    if (activeSlots.length > 0) {
+      const matchesCurrent = activeSlots.some(
+        (s) => s.hour === values.startHour && s.minute === values.startMinute && !s.disabled
       );
       if (!matchesCurrent) {
-        const firstAvail = generatedSlots.find((s) => !s.isBooked);
+        const firstAvail = activeSlots.find((s) => !s.disabled);
         if (firstAvail) {
           onChange({ startHour: firstAvail.hour, startMinute: firstAvail.minute });
         }
       }
     }
-  }, [generatedSlots, values.startHour, values.startMinute]);
+  }, [activeSlots, values.startHour, values.startMinute]);
 
   // ── Handlers ──
   const handleServiceSelect = (serviceId: string) => {
@@ -960,12 +1163,18 @@ export default function ScheduleAppointmentDrawer({
   // ── Validation ──
   const isServiceComplete = Boolean(values.serviceId || values.serviceName);
   const isLocationComplete = Boolean(values.location && values.location.trim());
-  const isParticipantsComplete = Boolean(values.client && values.provider);
+  const isParticipantsComplete = currentBookingType === "service"
+    ? Boolean(values.client)
+    : Boolean(values.client && values.provider && values.provider.id !== "");
   const isScheduleComplete = Boolean(values.date);
   const isFormComplete = isServiceComplete && isLocationComplete && isParticipantsComplete && isScheduleComplete;
 
+  const doctorSummary = values.provider && values.provider.id !== "" && values.provider.name !== "Unassigned"
+    ? ` with ${values.provider.name}`
+    : "";
+
   const summaryText = isFormComplete
-    ? `${values.sessionType === "video" ? "Online Video" : values.location} · ${fmtShortDate()} · ${fmt12(values.startHour, values.startMinute)} – ${fmt12(endHour, endMin)} · ${values.client?.name} with ${values.provider?.name}`
+    ? `${values.sessionType === "video" ? "Online Video" : values.location} · ${fmtShortDate()} · ${fmt12(values.startHour, values.startMinute)} – ${fmt12(endHour, endMin)} · ${values.client?.name}${doctorSummary}`
     : "";
 
   // ── Dropdown option builders ──
@@ -994,7 +1203,7 @@ export default function ScheduleAppointmentDrawer({
 
   const locationOptions: DropdownOption[] = [
     { value: "", label: "Select a location" },
-    ...orgLocations.map((loc) => {
+    ...filteredLocations.map((loc) => {
       const isOnline = loc.type === "online" || loc.name.toLowerCase() === "online";
       return {
         value: loc.name,
@@ -1003,6 +1212,24 @@ export default function ScheduleAppointmentDrawer({
       };
     }),
   ];
+
+  const handleSaveClick = () => {
+    if (!isFormComplete) return;
+    if (currentBookingType === "service") {
+      const finalProvider = values.provider && values.provider.id !== ""
+        ? values.provider
+        : { id: "" as any, name: "Unassigned", email: "" };
+      onChange({
+        provider: finalProvider,
+        bookingType: "service",
+      });
+    } else {
+      onChange({
+        bookingType: "specialist",
+      });
+    }
+    onSave();
+  };
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -1039,7 +1266,7 @@ export default function ScheduleAppointmentDrawer({
             </button>
             <button
               type="button"
-              onClick={onSave}
+              onClick={handleSaveClick}
               disabled={!isFormComplete || isSaving || (mode !== "reschedule" && !appointmentAutomationConfigured)}
               className="flex-1 py-2.5 rounded-lg font-semibold text-sm transition-all"
               style={{
@@ -1057,6 +1284,36 @@ export default function ScheduleAppointmentDrawer({
       }
     >
       <div className="space-y-3 pb-4">
+        {/* Booking Type Segmented Control */}
+        <div className="bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => handleToggleBookingType("service")}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              currentBookingType === "service"
+                ? "bg-white text-slate-900 shadow-xs border border-slate-200/60"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <Layers className="w-3.5 h-3.5 text-blue-600" />
+            <span>Service</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleToggleBookingType("specialist")}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              currentBookingType === "specialist"
+                ? "bg-white text-slate-900 shadow-xs border border-slate-200/60"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Responsible</span>
+          </button>
+        </div>
+
         {mode !== "reschedule" && !appointmentAutomationConfigured && (
           <div className="px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 flex items-center justify-between">
             <span className="flex items-center gap-2">
@@ -1117,24 +1374,27 @@ export default function ScheduleAppointmentDrawer({
                 onChange={handleClientSelect}
               />
             </FieldRow>
-            <FieldRow label="Schedule With (Responsible Staff)" required>
-              <CustomDropdown
-                value={values.provider ? String(values.provider.id) : ""}
-                options={providerOptions}
-                placeholder={
-                  values.serviceId || values.location
-                    ? "Select assigned doctor / provider"
-                    : "Select a user"
-                }
-                onChange={(val) => {
-                  const emp = allEmployeesList.find((x) => String(x.id) === val);
-                  onChange({ provider: emp || null });
-                }}
-              />
-            </FieldRow>
 
-            {/* Auto-allocated Room Box — displayed after mapping Service, Location, and Responsible Staff */}
-            {values.sessionType !== "video" && values.location && values.serviceId && values.provider && (
+            {currentBookingType === "specialist" && (
+              <FieldRow label="Responsible" required>
+                <CustomDropdown
+                  value={values.provider && values.provider.id !== "" ? String(values.provider.id) : ""}
+                  options={providerOptions}
+                  placeholder={
+                    values.serviceId || values.location
+                      ? "Select assigned responsible person"
+                      : "Select a user"
+                  }
+                  onChange={(val) => {
+                    const emp = allEmployeesList.find((x) => String(x.id) === val);
+                    onChange({ provider: emp || null });
+                  }}
+                />
+              </FieldRow>
+            )}
+
+            {/* Auto-allocated Room Box — displayed after mapping Service, Location, and Responsible in responsible booking */}
+            {currentBookingType === "specialist" && values.sessionType !== "video" && values.location && values.serviceId && values.provider && values.provider.id !== "" && (
               allocatedRoom ? (
                 <div className="mt-2.5 p-2.5 rounded-lg border border-blue-200/80 bg-blue-50/60 flex items-start gap-2.5">
                   <div className="w-7 h-7 rounded-md bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
@@ -1161,7 +1421,7 @@ export default function ScheduleAppointmentDrawer({
                 <div className="mt-2.5 p-2.5 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 text-xs text-slate-500 flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
                   <span style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    No room mapped for this location, service & responsible provider.
+                    No room mapped for this location, service & responsible person.
                   </span>
                 </div>
               )
@@ -1189,41 +1449,70 @@ export default function ScheduleAppointmentDrawer({
 
             {/* Available Slots */}
             <FieldRow label="Available Slots" required>
-              {!values.provider ? (
+              {currentBookingType === "specialist" && !values.provider ? (
                 <div className="py-2.5 px-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-xs text-slate-400" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  Select a responsible staff member under Participants to view available slots.
+                  Select a responsible person under Participants to view available slots.
+                </div>
+              ) : currentBookingType === "service" && !values.location ? (
+                <div className="py-2.5 px-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-xs text-slate-400" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  Select a location above to view available service slots.
                 </div>
               ) : !values.date ? (
                 <div className="py-2.5 px-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-xs text-slate-400" style={{ fontFamily: "DM Sans, sans-serif" }}>
                   Select an appointment date above to view available time slots.
                 </div>
-              ) : generatedSlots.length === 0 ? (
+              ) : activeSlots.length === 0 ? (
                 <div className="py-2.5 px-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                  <span>{dayOffNotice || `No open slots found for ${values.provider.name} on this date.`}</span>
+                  <span>
+                    {currentBookingType === "service"
+                      ? "No open slots found for this service at the selected location on this date."
+                      : (dayOffNotice || `No open slots found for ${values.provider?.name} on this date.`)}
+                  </span>
                 </div>
               ) : (
                 <div className="space-y-2">
                   <div className="grid grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1">
-                    {generatedSlots.map((slot) => {
+                    {activeSlots.map((slot) => {
                       const isSelected = values.startHour === slot.hour && values.startMinute === slot.minute;
                       return (
                         <button
                           key={`${slot.hour}:${slot.minute}`}
                           type="button"
-                          disabled={slot.isBooked}
+                          disabled={slot.disabled}
                           onClick={() => onChange({ startHour: slot.hour, startMinute: slot.minute })}
-                          className={`py-1.5 px-2 rounded-lg text-xs transition-all text-center ${
+                          className={`py-1.5 px-2 rounded-lg text-xs transition-all text-center flex flex-col items-center justify-center cursor-pointer ${
                             isSelected
                               ? "bg-slate-900 text-white font-semibold shadow-xs"
-                              : slot.isBooked
+                              : slot.disabled
                               ? "bg-slate-100 text-slate-400 border border-slate-200/60 line-through cursor-not-allowed opacity-60"
                               : "bg-slate-50/80 hover:bg-white text-slate-700 border border-slate-200 hover:border-slate-300 font-medium"
                           }`}
                           style={{ fontFamily: "DM Sans, sans-serif" }}
-                          title={slot.isBooked ? "Slot already booked" : `${slot.label12} (${slotDuration} min)`}
+                          title={
+                            slot.disabled
+                              ? slot.isServiceSlot
+                                ? "Service is fully booked for this time slot"
+                                : "Slot already booked"
+                              : slot.isServiceSlot
+                              ? `${slot.label12} (${slot.remaining} seats left)`
+                              : `${slot.label12} (${activeSlotDuration} min)`
+                          }
                         >
-                          {slot.label12}
+                          <span>{slot.label12}</span>
+                          {slot.isServiceSlot && (
+                            <span
+                              className={`text-[10px] font-medium mt-0.5 ${
+                                slot.disabled
+                                  ? "text-slate-400"
+                                  : isSelected
+                                  ? "text-slate-200"
+                                  : "text-emerald-600"
+                              }`}
+                            >
+                              {slot.remaining} left
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -1236,14 +1525,14 @@ export default function ScheduleAppointmentDrawer({
                         Selected Time: <strong className="text-slate-900 font-semibold">{fmt12(values.startHour, values.startMinute)} – {fmt12(endHour, endMin)}</strong>
                       </span>
                     </span>
-                    <span className="text-slate-400 font-medium">{slotDuration} min</span>
+                    <span className="text-slate-400 font-medium">{activeSlotDuration} min</span>
                   </div>
                 </div>
               )}
             </FieldRow>
 
             {/* Real-time Provider Location & Day Off Notice */}
-            {providerAvailabilityNotice && (
+            {providerAvailabilityNotice && (currentBookingType === "specialist" || (values.provider && values.provider.id !== "")) && (
               <div
                 className={`p-2.5 rounded-xl border flex items-center gap-2 text-xs transition-all ${
                   providerAvailabilityNotice.type === "warning"

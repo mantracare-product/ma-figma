@@ -146,6 +146,7 @@ export interface Appointment {
   tokenNumber?: string;
   checkedInAt?: string;
   source?: string;
+  bookingType?: "service" | "specialist";
 }
 
 export interface CreateAppointmentPayload {
@@ -173,6 +174,7 @@ export interface CreateAppointmentPayload {
   lineItems?: any[];
   discountAmount?: number;
   source?: "MA-Client" | "Inbound Call" | "Walked In" | "screen" | "call" | "webhook" | "import" | "ai" | string;
+  bookingType?: "service" | "specialist";
 }
 
 export interface CreateAppointmentOptions {
@@ -713,6 +715,7 @@ class AppointmentService {
       roomStationId,
       roomName,
       source: payload.source,
+      bookingType: payload.bookingType,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

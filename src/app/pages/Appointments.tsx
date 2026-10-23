@@ -379,6 +379,7 @@ export default function Appointments() {
   const [bookingDiscountAmount, setBookingDiscountAmount] = useState(0);
   const [bookingLocation, setBookingLocation] = useState("Main Clinic — Suite 400");
   const [bookingSource, setBookingSource] = useState<string>("Inbound Call");
+  const [bookingType, setBookingType] = useState<"service" | "specialist">("service");
 
   // Client search and filter state
   const [clientSearchQuery, setClientSearchQuery] = useState("");
@@ -572,6 +573,7 @@ export default function Appointments() {
 
     setBookingTitle(apt.title || `Appointment with ${apt.clientName}`);
     setBookingDescription(apt.description || "");
+    setBookingType((apt as any).bookingType || "specialist");
 
     const prov = employees.find((e) => String(e.id) === String(apt.employeeId)) || null;
     setSelectedProvider(prov);
@@ -620,7 +622,7 @@ export default function Appointments() {
 
     const finalTitle = (bookingTitle.trim() || `${selectedClient.name} — Appointment`).trim();
 
-    if (!selectedClient || !selectedProvider || !selectedDate || !finalTitle) {
+    if (!selectedClient || !selectedDate || !finalTitle || (bookingType === "specialist" && (!selectedProvider || !selectedProvider.id))) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -651,8 +653,9 @@ export default function Appointments() {
         clientName: selectedClient.name,
         clientEmail: selectedClient.email,
         clientPhone: selectedClient.phone,
-        employeeId: selectedProvider.id,
+        employeeId: selectedProvider?.id || "",
         serviceId: bookingServiceId ? Number(bookingServiceId) : 1,
+        bookingType,
         date: selectedDate,
         time: timeStr,
         duration: 60,
@@ -712,6 +715,7 @@ export default function Appointments() {
     setBookingStartHour(9);
     setBookingStartMinute(0);
     setBookingLocation("Main Clinic — Suite 400");
+    setBookingType("service");
     setBookingGenerateInvoice(hasAppointmentInvoiceAutomation(selectedProcessFilter && selectedProcessFilter !== "all" ? selectedProcessFilter : undefined));
     setBookingLineItems([]);
     setBookingDiscountAmount(0);
@@ -1559,6 +1563,7 @@ export default function Appointments() {
         }}
         mode={drawerMode}
         values={{
+          bookingType,
           title: bookingTitle,
           description: bookingDescription,
           note: bookingNote,
@@ -1579,6 +1584,7 @@ export default function Appointments() {
           source: bookingSource,
         }}
         onChange={(patch) => {
+          if (patch.bookingType !== undefined) setBookingType(patch.bookingType);
           if (patch.title !== undefined) setBookingTitle(patch.title);
           if (patch.description !== undefined) setBookingDescription(patch.description);
           if (patch.note !== undefined) setBookingNote(patch.note);

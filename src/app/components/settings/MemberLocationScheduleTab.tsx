@@ -19,7 +19,6 @@ import { toast } from "sonner";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import ClockTimePicker from "../ui/ClockTimePicker";
-import SlotDurationPicker from "../ui/SlotDurationPicker";
 
 export interface DayTimeSlot {
   start: string;
@@ -937,19 +936,6 @@ export default function MemberLocationScheduleTab({
                                   value={slot.end}
                                   onChange={(newTime) =>
                                     handleUpdateSlot(key, slotIdx, "end", newTime)
-                                  }
-                                />
-
-                                {/* Duration with Custom Option */}
-                                <SlotDurationPicker
-                                  value={slot.durationMinutes}
-                                  onChange={(newDuration) =>
-                                    handleUpdateSlot(
-                                      key,
-                                      slotIdx,
-                                      "durationMinutes",
-                                      newDuration
-                                    )
                                   }
                                 />
 

@@ -18,7 +18,6 @@ import { useOrganization } from "../../context/OrganizationContext";
 import TargetUserDropdown from "./TargetUserDropdown";
 import { useTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import ClockTimePicker from "../ui/ClockTimePicker";
-import SlotDurationPicker from "../ui/SlotDurationPicker";
 import TargetUserLocationBar from "./TargetUserLocationBar";
 
 export interface DayTimeSlot {
@@ -815,20 +814,6 @@ export default function TeamAvailabilityTab({
                               <ClockTimePicker
                                 value={slot.end}
                                 onChange={(newTime) => handleUpdateSlot(key, slotIdx, "end", newTime)}
-                              />
-                            </div>
-
-                            {/* Slot Duration with Subtext */}
-                            <div className="flex flex-col gap-1">
-                              <span
-                                className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-0.5"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                Slot Duration
-                              </span>
-                              <SlotDurationPicker
-                                value={slot.durationMinutes}
-                                onChange={(newDuration) => handleUpdateSlot(key, slotIdx, "durationMinutes", newDuration)}
                               />
                             </div>
 

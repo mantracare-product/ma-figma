@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import {
   Plus, Edit2, Trash2, Search, Clock,
   ChevronDown, Check, MoreVertical, ToggleLeft, ToggleRight, Briefcase,
-  Settings, Tag, X, Percent, Layers, GripVertical, Building2, MapPin, Navigation
+  Settings, Tag, X, Percent, Layers, GripVertical, Building2, MapPin, Navigation, Video,
+  Users, UserCheck, UserPlus, AlertCircle, Copy
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import PageTopBar from "../components/layout/PageTopBar";
@@ -20,7 +21,7 @@ import { AdminSectionDrawer } from "./admin/components/AdminSectionDrawer";
 import {
   Service, CURRENCIES, INIT_FORM, getCurrencySymbol,
   getStoredServices, addService, updateService, deleteService,
-  toggleServiceActive, onServicesChanged,
+  toggleServiceActive, onServicesChanged, EMPLOYEES,
 } from "../../lib/servicesStore";
 import { useTeamMembers } from "../../lib/teamStore";
 import { useOrganization } from "../context/OrganizationContext";
@@ -63,13 +64,28 @@ function saveCategoryToStore(catName: string) {
   } catch {}
 }
 
+export interface AvailabilityRule {
+  id: string;
+  locationId: string; // "all" or loc.id / loc.name
+  seats: number;
+  assignedUserIds: (number | string)[];
+}
+
 export default function Services() {
   const [services, setServices] = useState<Service[]>(getStoredServices);
   const { teamMembers } = useTeamMembers();
 
   // Dynamic team members list
   const allTeamEmps = useMemo(() => {
-    if (!teamMembers || teamMembers.length === 0) return [];
+    if (!teamMembers || teamMembers.length === 0) {
+      return EMPLOYEES.map((e) => ({
+        id: e.id,
+        name: e.name,
+        role: e.role,
+        initials: e.initials,
+        email: `${e.name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+      }));
+    }
     return teamMembers.map((m) => ({
       id: m.id,
       name: m.name,
@@ -123,6 +139,29 @@ export default function Services() {
     return activeOrganization.locations && activeOrganization.locations.length > 0
       ? activeOrganization.locations
       : [activeOrganization.location || "California"];
+  }, [activeOrganization]);
+
+  const fullOrgLocations = useMemo<Array<{ id: string; name: string; address?: string }>>(() => {
+    try {
+      const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization.id}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((l: any, idx: number) => ({
+            id: l.id || `loc-${idx + 1}`,
+            name: l.name || `Location ${idx + 1}`,
+            address: l.address,
+          }));
+        }
+      }
+    } catch {}
+    const locNames = activeOrganization.locations && activeOrganization.locations.length > 0
+      ? activeOrganization.locations
+      : [activeOrganization.location || "California"];
+    return locNames.map((name: string, idx: number) => ({
+      id: `loc-${idx + 1}`,
+      name,
+    }));
   }, [activeOrganization]);
 
   const [roomSearchQuery, setRoomSearchQuery] = useState("");
@@ -326,7 +365,6 @@ export default function Services() {
     assignedStaff: true,
     created: true,
     activity: true,
-    status: true,
   });
 
   // Category combobox state in drawer
@@ -372,16 +410,11 @@ export default function Services() {
       title: "Pricing & Duration",
       fieldKeys: ["duration", "price", "tax"],
     },
-    {
-      id: "sec-service-assignment",
-      title: "Staff & Availability",
-      fieldKeys: ["assignedEmployees", "isActive"],
-    },
   ], []);
 
   const [serviceSections, setServiceSections] = useState<OverviewSection[]>(CANONICAL_SERVICE_SECTIONS);
 
-  // Sync with registry sections
+  // Sync with registry sections (always omitting isActive and assignedEmployees from Overview)
   useEffect(() => {
     try {
       const regSections = getAllSections("service");
@@ -389,29 +422,42 @@ export default function Services() {
         setServiceSections((prev) => {
           const map = new Map<string, OverviewSection>();
           CANONICAL_SERVICE_SECTIONS.forEach((s) => map.set(s.id, s));
-          regSections.forEach((rs) => {
-            const existing = map.get(rs.id);
-            if (existing) {
-              map.set(rs.id, {
-                ...existing,
-                title: rs.title || existing.title,
-                fieldKeys: Array.from(new Set([...existing.fieldKeys, ...(rs.fieldKeys || [])])),
-              });
-            } else {
-              map.set(rs.id, {
-                id: rs.id,
-                title: rs.title,
-                description: rs.description,
-                isCustom: rs.source !== "system",
-                fieldKeys: rs.fieldKeys || [],
-              });
-            }
-          });
+          regSections
+            .filter((rs) => rs.id !== "sec-service-assignment")
+            .forEach((rs) => {
+              const existing = map.get(rs.id);
+              if (existing) {
+                map.set(rs.id, {
+                  ...existing,
+                  title: rs.title || existing.title,
+                  fieldKeys: Array.from(new Set([...existing.fieldKeys, ...(rs.fieldKeys || [])])).filter((k) => k !== "isActive" && k !== "assignedEmployees"),
+                });
+              } else {
+                map.set(rs.id, {
+                  id: rs.id,
+                  title: rs.title,
+                  description: rs.description,
+                  isCustom: rs.source !== "system",
+                  fieldKeys: (rs.fieldKeys || []).filter((k) => k !== "isActive" && k !== "assignedEmployees"),
+                });
+              }
+            });
           return Array.from(map.values());
         });
       }
     } catch {}
   }, [allServiceSections]);
+
+  // Drawer Tabs: "overview" (service info, pricing, custom fields) vs "availability" (locations, capacity, location-wise responsible staff)
+  const [drawerActiveTab, setDrawerActiveTab] = useState<"overview" | "availability">("overview");
+
+  const [availabilityRules, setAvailabilityRules] = useState<AvailabilityRule[]>([
+    { id: "rule-init", locationId: "all", seats: 1, assignedUserIds: [] },
+  ]);
+
+  const [activeStaffDropdownLocId, setActiveStaffDropdownLocId] = useState<string | null>(null);
+  const [staffSearchQuery, setStaffSearchQuery] = useState("");
+  const staffDropdownRef = useRef<HTMLDivElement>(null);
 
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({
     name: "",
@@ -422,10 +468,83 @@ export default function Services() {
     price: 0,
     tax: 0,
     isActive: true,
-    assignedEmployees: [],
   });
 
+  useEffect(() => {
+    if (!activeStaffDropdownLocId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (staffDropdownRef.current && !staffDropdownRef.current.contains(e.target as Node)) {
+        setActiveStaffDropdownLocId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [activeStaffDropdownLocId]);
+
+  const handleAddAvailabilityRule = () => {
+    const usedLocs = new Set(availabilityRules.map((r) => r.locationId));
+    const nextUnused = fullOrgLocations.find((l) => !usedLocs.has(l.id) && !usedLocs.has(l.name));
+    const nextLocId = nextUnused ? nextUnused.id : (fullOrgLocations[0]?.id || "all");
+
+    setAvailabilityRules((prev) => [
+      ...prev,
+      {
+        id: `rule-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        locationId: nextLocId,
+        seats: 1,
+        assignedUserIds: [],
+      },
+    ]);
+  };
+
+  const handleUpdateRuleLocation = (ruleId: string, locationId: string) => {
+    setAvailabilityRules((prev) =>
+      prev.map((r) => (r.id === ruleId ? { ...r, locationId } : r))
+    );
+  };
+
+  const handleUpdateRuleSeats = (ruleId: string, seats: number) => {
+    const validSeats = isNaN(seats) ? 1 : Math.max(1, seats);
+    setAvailabilityRules((prev) =>
+      prev.map((r) => (r.id === ruleId ? { ...r, seats: validSeats } : r))
+    );
+  };
+
+  const handleToggleRuleUser = (ruleId: string, userId: number | string) => {
+    setAvailabilityRules((prev) =>
+      prev.map((r) => {
+        if (r.id !== ruleId) return r;
+        const strId = String(userId);
+        const exists = r.assignedUserIds.some((id) => String(id) === strId);
+        const updated = exists
+          ? r.assignedUserIds.filter((id) => String(id) !== strId)
+          : [...r.assignedUserIds, userId];
+        return { ...r, assignedUserIds: updated };
+      })
+    );
+  };
+
+  const handleRemoveRuleUser = (ruleId: string, userId: number | string) => {
+    setAvailabilityRules((prev) =>
+      prev.map((r) =>
+        r.id === ruleId
+          ? { ...r, assignedUserIds: r.assignedUserIds.filter((id) => String(id) !== String(userId)) }
+          : r
+      )
+    );
+  };
+
+  const handleDeleteRule = (ruleId: string) => {
+    setAvailabilityRules((prev) => prev.filter((r) => r.id !== ruleId));
+  };
+
   const resetForm = () => {
+    setDrawerActiveTab("overview");
+    setActiveStaffDropdownLocId(null);
+    setStaffSearchQuery("");
+    setAvailabilityRules([
+      { id: "rule-init", locationId: "all", seats: 1, assignedUserIds: [] },
+    ]);
     setFieldValues({
       name: "",
       category: "General",
@@ -435,7 +554,6 @@ export default function Services() {
       price: 0,
       tax: 0,
       isActive: true,
-      assignedEmployees: [],
     });
     setEditingService(null);
   };
@@ -448,8 +566,64 @@ export default function Services() {
   const handleAdd = () => {
     const name = String(fieldValues["name"] || "").trim();
     if (!name) { toast.error("Service name is required"); return; }
+
+    if (availabilityRules.length === 0) {
+      toast.error("Please add at least one availability rule");
+      return;
+    }
+
+    const hasAll = availabilityRules.some((r) => r.locationId === "all");
+    const specificRules = availabilityRules.filter((r) => r.locationId !== "all");
+
+    let locationIds: string[] | undefined = undefined;
+    let maxSeats = 1;
+    let locationSeats: Record<string, number> | undefined = undefined;
+    let locationEmployees: Record<string, (string | number)[]> | undefined = undefined;
+    const allAssignedIds = new Set<string | number>();
+
+    if (hasAll && specificRules.length === 0) {
+      const allRule = availabilityRules.find((r) => r.locationId === "all")!;
+      maxSeats = Math.max(1, allRule.seats || 1);
+      allRule.assignedUserIds.forEach((id) => allAssignedIds.add(id));
+      locationIds = undefined;
+    } else {
+      const locIdsList: string[] = [];
+      const seatsMap: Record<string, number> = {};
+      const empsMap: Record<string, (string | number)[]> = {};
+
+      availabilityRules.forEach((r) => {
+        if (r.locationId === "all") {
+          maxSeats = Math.max(1, r.seats || 1);
+          r.assignedUserIds.forEach((id) => allAssignedIds.add(id));
+        } else {
+          locIdsList.push(r.locationId);
+          const matchedLoc = fullOrgLocations.find((l) => l.id === r.locationId || l.name === r.locationId);
+          seatsMap[r.locationId] = Math.max(1, r.seats || 1);
+          if (matchedLoc) {
+            seatsMap[matchedLoc.name] = Math.max(1, r.seats || 1);
+          }
+          empsMap[r.locationId] = r.assignedUserIds;
+          if (matchedLoc) {
+            empsMap[matchedLoc.name] = r.assignedUserIds;
+          }
+          r.assignedUserIds.forEach((id) => allAssignedIds.add(id));
+        }
+      });
+
+      locationIds = locIdsList.length > 0 ? locIdsList : undefined;
+      locationSeats = Object.keys(seatsMap).length > 0 ? seatsMap : undefined;
+      locationEmployees = Object.keys(empsMap).length > 0 ? empsMap : undefined;
+      if (!hasAll && specificRules.length > 0) {
+        maxSeats = specificRules[0].seats || 1;
+      }
+    }
+
+    const assignedEmployees = Array.from(allAssignedIds);
     const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
-    const SYSTEM_KEYS = new Set(["name", "category", "cptCode", "description", "duration", "price", "tax", "isActive", "assignedEmployees"]);
+
+    const SYSTEM_KEYS = new Set([
+      "name", "category", "cptCode", "description", "duration", "price", "tax", "isActive", "assignedEmployees"
+    ]);
     const customFields: Record<string, any> = {};
     Object.entries(fieldValues).forEach(([k, v]) => {
       if (!SYSTEM_KEYS.has(k)) {
@@ -466,8 +640,12 @@ export default function Services() {
       price: Number(fieldValues["price"]) || 0,
       currency: "USD",
       tax: Number(fieldValues["tax"]) || 0,
-      isActive: fieldValues["isActive"] !== false,
-      assignedEmployees: Array.isArray(fieldValues["assignedEmployees"]) ? fieldValues["assignedEmployees"] : [],
+      isActive: true,
+      assignedEmployees,
+      locationIds,
+      maxSeats,
+      locationSeats,
+      locationEmployees,
       createdAt: nowStr,
       activity: `Created ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
       customFields,
@@ -482,7 +660,63 @@ export default function Services() {
     if (!editingService) return;
     const name = String(fieldValues["name"] || "").trim();
     if (!name) { toast.error("Service name is required"); return; }
-    const SYSTEM_KEYS = new Set(["name", "category", "cptCode", "description", "duration", "price", "tax", "isActive", "assignedEmployees"]);
+
+    if (availabilityRules.length === 0) {
+      toast.error("Please add at least one availability rule");
+      return;
+    }
+
+    const hasAll = availabilityRules.some((r) => r.locationId === "all");
+    const specificRules = availabilityRules.filter((r) => r.locationId !== "all");
+
+    let locationIds: string[] | undefined = undefined;
+    let maxSeats = 1;
+    let locationSeats: Record<string, number> | undefined = undefined;
+    let locationEmployees: Record<string, (string | number)[]> | undefined = undefined;
+    const allAssignedIds = new Set<string | number>();
+
+    if (hasAll && specificRules.length === 0) {
+      const allRule = availabilityRules.find((r) => r.locationId === "all")!;
+      maxSeats = Math.max(1, allRule.seats || 1);
+      allRule.assignedUserIds.forEach((id) => allAssignedIds.add(id));
+      locationIds = undefined;
+    } else {
+      const locIdsList: string[] = [];
+      const seatsMap: Record<string, number> = {};
+      const empsMap: Record<string, (string | number)[]> = {};
+
+      availabilityRules.forEach((r) => {
+        if (r.locationId === "all") {
+          maxSeats = Math.max(1, r.seats || 1);
+          r.assignedUserIds.forEach((id) => allAssignedIds.add(id));
+        } else {
+          locIdsList.push(r.locationId);
+          const matchedLoc = fullOrgLocations.find((l) => l.id === r.locationId || l.name === r.locationId);
+          seatsMap[r.locationId] = Math.max(1, r.seats || 1);
+          if (matchedLoc) {
+            seatsMap[matchedLoc.name] = Math.max(1, r.seats || 1);
+          }
+          empsMap[r.locationId] = r.assignedUserIds;
+          if (matchedLoc) {
+            empsMap[matchedLoc.name] = r.assignedUserIds;
+          }
+          r.assignedUserIds.forEach((id) => allAssignedIds.add(id));
+        }
+      });
+
+      locationIds = locIdsList.length > 0 ? locIdsList : undefined;
+      locationSeats = Object.keys(seatsMap).length > 0 ? seatsMap : undefined;
+      locationEmployees = Object.keys(empsMap).length > 0 ? empsMap : undefined;
+      if (!hasAll && specificRules.length > 0) {
+        maxSeats = specificRules[0].seats || 1;
+      }
+    }
+
+    const assignedEmployees = Array.from(allAssignedIds);
+
+    const SYSTEM_KEYS = new Set([
+      "name", "category", "cptCode", "description", "duration", "price", "tax", "isActive", "assignedEmployees"
+    ]);
     const customFields: Record<string, any> = {};
     Object.entries(fieldValues).forEach(([k, v]) => {
       if (!SYSTEM_KEYS.has(k)) {
@@ -499,8 +733,12 @@ export default function Services() {
       price: Number(fieldValues["price"]) || 0,
       currency: "USD",
       tax: Number(fieldValues["tax"]) || 0,
-      isActive: fieldValues["isActive"] !== false,
-      assignedEmployees: Array.isArray(fieldValues["assignedEmployees"]) ? fieldValues["assignedEmployees"] : [],
+      isActive: true,
+      assignedEmployees,
+      locationIds,
+      maxSeats,
+      locationSeats,
+      locationEmployees,
       activity: `Updated ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
       customFields,
     });
@@ -512,6 +750,43 @@ export default function Services() {
 
   const openEdit = (service: Service) => {
     setEditingService(service);
+    setDrawerActiveTab("overview");
+    setActiveStaffDropdownLocId(null);
+    setStaffSearchQuery("");
+
+    // Build availability rules from service
+    const rules: AvailabilityRule[] = [];
+    if (Array.isArray(service.locationIds) && service.locationIds.length > 0) {
+      service.locationIds.forEach((locId, idx) => {
+        const matchedLoc = fullOrgLocations.find((l) => l.id === locId || l.name === locId);
+        const locSeats =
+          service.locationSeats?.[locId] ??
+          (matchedLoc ? service.locationSeats?.[matchedLoc.name] : undefined) ??
+          service.maxSeats ??
+          1;
+        const locEmps =
+          service.locationEmployees?.[locId] ??
+          (matchedLoc ? service.locationEmployees?.[matchedLoc.name] : undefined) ??
+          service.assignedEmployees ??
+          [];
+        rules.push({
+          id: `rule-${locId}-${idx}`,
+          locationId: locId,
+          seats: Number(locSeats) || 1,
+          assignedUserIds: Array.isArray(locEmps) ? locEmps : [],
+        });
+      });
+    }
+    if (rules.length === 0) {
+      rules.push({
+        id: "rule-all",
+        locationId: "all",
+        seats: service.maxSeats || 1,
+        assignedUserIds: service.assignedEmployees || [],
+      });
+    }
+    setAvailabilityRules(rules);
+
     setFieldValues({
       name: service.name || "",
       category: service.category || "General",
@@ -520,8 +795,7 @@ export default function Services() {
       duration: service.duration ?? 30,
       price: service.price ?? 0,
       tax: service.tax ?? 0,
-      isActive: service.isActive !== false,
-      assignedEmployees: service.assignedEmployees || [],
+      isActive: true,
       ...(service.customFields || {}),
     });
     setShowEditDrawer(true);
@@ -569,7 +843,332 @@ export default function Services() {
     );
   };
 
+  const renderDrawerTabs = () => (
+    <div className="flex items-center p-1 bg-slate-100 rounded-xl gap-1">
+      <button
+        type="button"
+        onClick={() => setDrawerActiveTab("overview")}
+        className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs transition-all cursor-pointer ${
+          drawerActiveTab === "overview"
+            ? "bg-white text-slate-900 shadow-2xs font-bold"
+            : "text-slate-500 hover:text-slate-800 font-semibold"
+        }`}
+        style={{ fontFamily: "Outfit, sans-serif" }}
+      >
+        <Layers className="w-3.5 h-3.5 text-blue-600" />
+        <span>Overview</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setDrawerActiveTab("availability")}
+        className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs transition-all cursor-pointer ${
+          drawerActiveTab === "availability"
+            ? "bg-white text-slate-900 shadow-2xs font-bold"
+            : "text-slate-500 hover:text-slate-800 font-semibold"
+        }`}
+        style={{ fontFamily: "Outfit, sans-serif" }}
+      >
+        <Clock className="w-3.5 h-3.5 text-blue-600" />
+        <span>Availability</span>
+        {availabilityRules.length > 0 && (
+          <span className="px-1.5 py-0.2 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full">
+            {availabilityRules.length}
+          </span>
+        )}
+      </button>
+    </div>
+  );
 
+  const renderAvailabilityTab = () => {
+    const filteredStaffList = allTeamEmps.filter((e) =>
+      e.name.toLowerCase().includes(staffSearchQuery.toLowerCase()) ||
+      e.role.toLowerCase().includes(staffSearchQuery.toLowerCase()) ||
+      (e.email && e.email.toLowerCase().includes(staffSearchQuery.toLowerCase()))
+    );
+
+    return (
+      <div className="space-y-4 animate-in fade-in duration-200">
+        {/* Availability Header info */}
+        <div className="flex items-center justify-between pb-1">
+          <div>
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Location & Availability Rules
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Specify offering location, concurrent capacity (seats), and assigned practitioners.
+            </p>
+          </div>
+          <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+            {availabilityRules.length} {availabilityRules.length === 1 ? "rule" : "rules"}
+          </span>
+        </div>
+
+        {/* Availability Rules Cards */}
+        <div className="space-y-3">
+          {availabilityRules.length === 0 ? (
+            <div className="p-6 text-center bg-slate-50 border border-dashed border-slate-300 rounded-2xl space-y-2">
+              <MapPin className="w-6 h-6 text-slate-400 mx-auto" />
+              <p className="text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                No availability rules configured
+              </p>
+              <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                Add an availability rule to define where clients can book this service and who provides it.
+              </p>
+            </div>
+          ) : (
+            availabilityRules.map((rule, idx) => {
+              const assignedUsers = allTeamEmps.filter((e) =>
+                rule.assignedUserIds.some((id) => String(id) === String(e.id))
+              );
+              const isStaffPickerOpen = activeStaffDropdownLocId === rule.id;
+
+              return (
+                <div
+                  key={rule.id}
+                  className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs hover:border-slate-300 transition-all space-y-3 relative group"
+                >
+                  {/* Card Header */}
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold flex items-center justify-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <span className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {rule.locationId === "all"
+                          ? "Universal Offering"
+                          : fullOrgLocations.find((l) => l.id === rule.locationId || l.name === rule.locationId)?.name || "Location Rule"}
+                      </span>
+                      {rule.locationId === "all" ? (
+                        <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md">
+                          All Locations
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                          Branch Specific
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Delete rule button */}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRule(rule.id)}
+                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      title="Delete availability rule"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Fields: Location & Seats */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
+                    {/* Location */}
+                    <div className="sm:col-span-8 space-y-1">
+                      <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <MapPin className="w-3 h-3 text-blue-600" />
+                        <span>Location <span className="text-rose-500">*</span></span>
+                      </label>
+                      <select
+                        value={rule.locationId}
+                        onChange={(e) => handleUpdateRuleLocation(rule.id, e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 transition-colors cursor-pointer outline-none shadow-2xs"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        <option value="all">🌐 All Locations (Universal Offering)</option>
+                        {fullOrgLocations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>
+                            📍 {loc.name} {loc.name.toLowerCase() === "online" ? "(Virtual)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Seat Capacity */}
+                    <div className="sm:col-span-4 space-y-1">
+                      <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <Users className="w-3 h-3 text-blue-600" />
+                        <span>Seats <span className="text-rose-500">*</span></span>
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={rule.seats}
+                        onChange={(e) => handleUpdateRuleSeats(rule.id, parseInt(e.target.value, 10))}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-bold text-slate-800 text-center transition-colors outline-none shadow-2xs"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Assign User Section */}
+                  <div className="pt-2 border-t border-slate-100 space-y-2 relative">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <UserPlus className="w-3 h-3 text-blue-600" />
+                        <span>Assign User(s)</span>
+                        {assignedUsers.length > 0 && (
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            ({assignedUsers.length} assigned)
+                          </span>
+                        )}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setStaffSearchQuery("");
+                          setActiveStaffDropdownLocId(isStaffPickerOpen ? null : rule.id);
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        <UserPlus className="w-3 h-3" />
+                        <span>{assignedUsers.length > 0 ? "Edit Users" : "+ Assign User"}</span>
+                      </button>
+                    </div>
+
+                    {/* Assigned User Chips */}
+                    {assignedUsers.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {assignedUsers.map((emp) => (
+                          <div
+                            key={emp.id}
+                            className="inline-flex items-center gap-1.5 pl-1.5 pr-2 py-1 bg-slate-50 border border-slate-200 rounded-lg group/chip hover:border-slate-300 transition-colors"
+                          >
+                            <div className="w-4 h-4 rounded-full bg-slate-800 text-white text-[8px] font-bold flex items-center justify-center shrink-0">
+                              {emp.initials}
+                            </div>
+                            <span className="text-xs font-semibold text-slate-800 leading-tight" style={{ fontFamily: "Outfit, sans-serif" }}>
+                              {emp.name}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveRuleUser(rule.id, emp.id)}
+                              className="ml-0.5 text-slate-400 hover:text-rose-600 cursor-pointer p-0.5 rounded hover:bg-rose-50 transition-colors"
+                              title="Remove user"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-400 italic">
+                        No specific practitioner assigned. Available to all team members.
+                      </p>
+                    )}
+
+                    {/* Staff Selection Popover */}
+                    {isStaffPickerOpen && (
+                      <div
+                        ref={staffDropdownRef}
+                        className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl p-2.5 space-y-2 animate-in fade-in-80 zoom-in-95 max-w-sm"
+                      >
+                        <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                          <span className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            Assign Practitioners
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setActiveStaffDropdownLocId(null)}
+                            className="text-slate-400 hover:text-slate-600 p-1 rounded-md cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                          <input
+                            type="text"
+                            placeholder="Search by name or role..."
+                            value={staffSearchQuery}
+                            onChange={(e) => setStaffSearchQuery(e.target.value)}
+                            className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                            autoFocus
+                          />
+                        </div>
+
+                        <div className="max-h-48 overflow-y-auto space-y-1">
+                          {filteredStaffList.length === 0 ? (
+                            <div className="text-center py-3 text-xs text-slate-400">
+                              No practitioners matching "{staffSearchQuery}"
+                            </div>
+                          ) : (
+                            filteredStaffList.map((emp) => {
+                              const isChecked = rule.assignedUserIds.some((id) => String(id) === String(emp.id));
+                              return (
+                                <button
+                                  key={emp.id}
+                                  type="button"
+                                  onClick={() => handleToggleRuleUser(rule.id, emp.id)}
+                                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                                    isChecked ? "bg-blue-50/80 text-blue-900 font-semibold" : "text-slate-700 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
+                                      isChecked ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300 bg-white"
+                                    }`}>
+                                      {isChecked && <Check className="w-2.5 h-2.5" />}
+                                    </div>
+                                    <div className="w-5 h-5 rounded-full bg-slate-700 text-white text-[9px] font-bold flex items-center justify-center shrink-0">
+                                      {emp.initials}
+                                    </div>
+                                    <div className="text-left">
+                                      <span className="text-xs font-bold text-slate-800 block" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                        {emp.name}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400 block leading-tight">
+                                        {emp.role}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {isChecked && <UserCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            {assignedUsers.length} selected
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setActiveStaffDropdownLocId(null)}
+                            className="px-3 py-1 bg-slate-800 text-white text-xs font-semibold rounded-lg hover:bg-slate-900 transition-colors cursor-pointer"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            Done
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Small Add Availability Button Below Cards */}
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={handleAddAvailabilityRule}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg border border-blue-200/80 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-98"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <Plus className="w-3.5 h-3.5 text-blue-600" />
+            <span>Add Availability</span>
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   const renderFooterBtns = (onSave: () => void, label: string, icon: React.ReactNode) => (
     <div className="flex items-center gap-2 w-full justify-end">
@@ -702,7 +1301,6 @@ export default function Services() {
                 { key: "cptCode", label: "CPT Code", getValue: (s) => s.cptCode || "" },
                 { key: "description", label: "Description", getValue: (s) => s.description || "" },
                 { key: "tax", label: "Tax (%)", getValue: (s) => (s.tax ? `${s.tax}%` : "0%") },
-                { key: "active", label: "Status", getValue: (s) => (s.isActive !== false ? "Active" : "Inactive") },
                 { key: "color", label: "Color Tag", getValue: (s) => s.color || "" },
               ]}
             />
@@ -833,22 +1431,6 @@ export default function Services() {
                     </span>
                   ),
                 },
-                {
-                  id: "status",
-                  header: "Status",
-                  align: "center",
-                  render: (service) => (
-                    <span
-                      className={`inline-flex items-center gap-1 text-xs font-bold ${
-                        service.isActive ? 'text-emerald-600' : 'text-slate-400'
-                      }`}
-                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${service.isActive ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                      {service.isActive ? "Active" : "Inactive"}
-                    </span>
-                  ),
-                },
               ];
 
               const serviceRowActions: TableRowAction<Service>[] = [
@@ -856,11 +1438,6 @@ export default function Services() {
                   label: "Edit",
                   icon: <Edit2 className="w-3.5 h-3.5" />,
                   onClick: (service) => openEdit(service),
-                },
-                {
-                  label: "Toggle Status",
-                  icon: <ToggleLeft className="w-3.5 h-3.5" />,
-                  onClick: (service) => handleToggleActive(service.id),
                 },
                 {
                   label: "Delete",
@@ -1222,7 +1799,7 @@ export default function Services() {
         </div>
       </DrawerShell>
 
-        <DrawerShell
+      <DrawerShell
         isOpen={showAddDrawer}
         onClose={() => { setShowAddDrawer(false); resetForm(); }}
         title="Add New Product"
@@ -1230,18 +1807,22 @@ export default function Services() {
         icon={<Plus className="w-4 h-4 text-blue-600" />}
         width="max-w-xl"
         zIndex={600}
+        tabs={renderDrawerTabs()}
+        bodyClassName="p-5 sm:p-6 space-y-5"
         footer={renderFooterBtns(handleAdd, "Add Product", <Plus className="w-4 h-4" />)}
       >
-        <div className="p-4 sm:p-5">
+        {drawerActiveTab === "overview" ? (
           <DraggableOverviewSections
             mode="service"
             customFieldsModule="service"
-            sections={serviceSections}
+            sections={serviceSections.filter((s) => s.id !== "sec-service-assignment")}
             onSectionsChange={setServiceSections}
             fieldValues={fieldValues}
             onFieldValueChange={(k, v) => setFieldValues((prev) => ({ ...prev, [k]: v }))}
           />
-        </div>
+        ) : (
+          renderAvailabilityTab()
+        )}
       </DrawerShell>
 
       <DrawerShell
@@ -1252,18 +1833,22 @@ export default function Services() {
         icon={<Briefcase className="w-4 h-4 text-blue-600" />}
         width="max-w-xl"
         zIndex={600}
+        tabs={renderDrawerTabs()}
+        bodyClassName="p-5 sm:p-6 space-y-5"
         footer={renderFooterBtns(handleEdit, "Save Changes", <Check className="w-4 h-4" />)}
       >
-        <div className="p-4 sm:p-5">
+        {drawerActiveTab === "overview" ? (
           <DraggableOverviewSections
             mode="service"
             customFieldsModule="service"
-            sections={serviceSections}
+            sections={serviceSections.filter((s) => s.id !== "sec-service-assignment")}
             onSectionsChange={setServiceSections}
             fieldValues={fieldValues}
             onFieldValueChange={(k, v) => setFieldValues((prev) => ({ ...prev, [k]: v }))}
           />
-        </div>
+        ) : (
+          renderAvailabilityTab()
+        )}
       </DrawerShell>
 
       {/* Section-specific Field Selection Modal */}
