@@ -1152,6 +1152,7 @@ export default function WebForms() {
         "Full Name": client.name,
         "Email": client.email,
         "Phone": client.phone,
+        "Channel": channel === "patient_app" ? "Patient Companion App" : channel.toUpperCase(),
       },
     }));
 
@@ -1165,6 +1166,7 @@ export default function WebForms() {
       status: "sent",
       fields: {
         "Recipient": rec.value,
+        "Channel": channel === "patient_app" ? "Patient Companion App" : channel.toUpperCase(),
       },
     }));
 
@@ -1184,6 +1186,7 @@ export default function WebForms() {
           "Full Name": client.name,
           "Email": client.email,
           "Phone": client.phone,
+          "Channel": channel === "patient_app" ? "Patient Companion App" : channel.toUpperCase(),
         },
       });
     });
@@ -1193,6 +1196,12 @@ export default function WebForms() {
         prevForms.map((f) =>
           f.id === formId ? { ...f, submissions: f.submissions + clients.length } : f
         )
+      );
+    }
+
+    if (channel === "patient_app") {
+      toast.success(
+        `Shared to Patient Companion App for ${clients.length + literals.length} recipient${clients.length + literals.length === 1 ? "" : "s"}!`
       );
     }
   };

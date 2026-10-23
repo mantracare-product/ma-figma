@@ -51,5 +51,9 @@ export function appendClientSubmission(
   const id = `SUB-${String(Date.now()).slice(-8)}-${Math.floor(Math.random() * 1000)}`;
   const newSub: ClientFormSubmission = { id, ...sub };
   saveClientSubmissions([newSub, ...all]);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("clientFormSubmissions_updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
   return newSub;
 }
