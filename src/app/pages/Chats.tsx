@@ -89,6 +89,7 @@ import { InfoTooltip } from "../components/help/InfoTooltip";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
 import AssignChatbotModal from "../components/chats/AssignChatbotModal";
+import AssignResponsibleModal from "../components/chats/AssignResponsibleModal";
 import EnrollCampaignModal from "../components/chats/EnrollCampaignModal";
 import CampaignShareModal from "../components/chats/CampaignShareModal";
 import { getClientList } from "../../lib/getClientList";
@@ -1343,6 +1344,22 @@ export default function Chats() {
     const nextStatus = current === "active" ? "paused" : "active";
     setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, botStatus: nextStatus } : c));
     toast.success(`Bot is now ${nextStatus}`);
+  };
+
+  const handleAssignPerson = (personId: string, personName: string) => {
+    if (!activeConversation) return;
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === selectedConversationId
+          ? {
+              ...c,
+              assignedPersonId: personId,
+              botStatus: personId ? "off" : c.botStatus,
+            }
+          : c
+      )
+    );
+    toast.success(personId ? `Assigned to ${personName}` : "Conversation unassigned");
   };
 
   const handleAssignBot = (bot: BotType) => {
@@ -2730,6 +2747,7 @@ export default function Chats() {
                     onSendMessage={handleSendMessage}
                     onSendTemplate={handleSendTemplateDirectly}
                     onEnrollCampaign={handleEnrollCampaign}
+                    onAssignResponsible={handleAssignPerson}
                   />
                 </>
               ) : (
@@ -3481,6 +3499,14 @@ export default function Chats() {
           onAssign={handleAssignBot}
         />
       )}
+
+      <AssignResponsibleModal
+        isOpen={assignAgentMenuOpen}
+        onClose={() => setAssignAgentMenuOpen(false)}
+        currentAssignedId={activeConversation?.assignedPersonId}
+        contactName={activeConversation?.contactName}
+        onAssign={handleAssignPerson}
+      />
 
       {LEGACY_CHATBOT_MODULE_ENABLED && (
         <EnrollCampaignModal
