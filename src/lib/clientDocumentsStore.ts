@@ -20,6 +20,7 @@ export interface StoredClientDocument {
   rawDocxBase64?: string;
   pdfBase64?: string;
   pdfBlobUrl?: string;
+  showToPatient?: boolean;
 }
 
 export const CLIENT_DOCUMENTS_EVENT = "clientDocuments_updated";

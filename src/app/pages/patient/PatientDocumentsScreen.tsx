@@ -39,7 +39,6 @@ export default function PatientDocumentsScreen() {
   const context = useOutletContext<OutletContextType>();
   const activeClient = context?.activeClient;
 
-  const [filterTab, setFilterTab] = useState<"all" | "clinic" | "uploads">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [storeTick, setStoreTick] = useState(0);
 
@@ -85,6 +84,7 @@ export default function PatientDocumentsScreen() {
         uploadedBy: doctorName,
         status: "Verified",
         notes: "Prescribed Amoxicillin & Ibuprofen for 7 days post-consultation.",
+        showToPatient: true,
       },
       {
         id: `seed-summary-${activeClient.id}`,
@@ -97,6 +97,7 @@ export default function PatientDocumentsScreen() {
         uploadedBy: doctorName,
         status: "Verified",
         notes: "Comprehensive routine assessment with normal BP and heart rate.",
+        showToPatient: true,
       },
       {
         id: `seed-ins-${activeClient.id}`,
@@ -109,11 +110,12 @@ export default function PatientDocumentsScreen() {
         uploadedBy: "Mantra Billing Desk",
         status: "Verified",
         notes: "Payer coverage active under Blue Cross PPO with zero deductible copay.",
+        showToPatient: true,
       },
     ];
   }, [activeClient]);
 
-  // Load client documents
+  // Load client documents (respecting showToPatient flag)
   const allDocuments: StoredClientDocument[] = useMemo(() => {
     if (!activeClient?.id) return [];
     const stored = getStoredClientDocuments(activeClient.id);
@@ -123,23 +125,16 @@ export default function PatientDocumentsScreen() {
     defaultDocs.forEach((d) => map.set(d.id, d));
     stored.forEach((d) => map.set(d.id, d));
 
-    return Array.from(map.values()).sort(
-      (a, b) => new Date(b.uploadedDate).getTime() - new Date(a.uploadedDate).getTime()
-    );
+    return Array.from(map.values())
+      .filter((doc) => doc.showToPatient !== false)
+      .sort(
+        (a, b) => new Date(b.uploadedDate).getTime() - new Date(a.uploadedDate).getTime()
+      );
   }, [activeClient?.id, defaultDocs, storeTick]);
 
-  // Filtered documents
+  // Filtered documents by search query (unified list, no clinic vs uploads bifurcation)
   const filteredDocuments = useMemo(() => {
     return allDocuments.filter((doc) => {
-      // Tab filter
-      const isPatientUpload =
-        doc.status === "Pending Review" ||
-        doc.uploadedBy.toLowerCase() === (activeClient?.name || "").toLowerCase() ||
-        doc.uploadedBy.toLowerCase().includes("patient");
-
-      if (filterTab === "clinic" && isPatientUpload) return false;
-      if (filterTab === "uploads" && !isPatientUpload) return false;
-
       // Search query filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -151,7 +146,7 @@ export default function PatientDocumentsScreen() {
 
       return true;
     });
-  }, [allDocuments, filterTab, searchQuery, activeClient?.name]);
+  }, [allDocuments, searchQuery]);
 
   // Handle file picker selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -224,6 +219,7 @@ export default function PatientDocumentsScreen() {
         status: "Pending Review",
         notes: documentNotes.trim() || `Patient self-uploaded ${uploadCategory} for review.`,
         pdfBase64: fileBase64 || undefined,
+        showToPatient: true,
       };
 
       saveClientDocument(newDoc);
@@ -285,55 +281,34 @@ export default function PatientDocumentsScreen() {
         </div>
       </div>
 
-      {/* ── Filter & Search Toolbar ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        {/* Segmented Tab Filter */}
-        <div className="flex items-center p-1 bg-slate-100 rounded-2xl border border-slate-200/80 max-w-sm">
-          <button
-            type="button"
-            onClick={() => setFilterTab("all")}
-            className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              filterTab === "all"
-                ? "bg-white text-slate-900 shadow-2xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            All ({allDocuments.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterTab("clinic")}
-            className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              filterTab === "clinic"
-                ? "bg-white text-slate-900 shadow-2xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            Clinic Records
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterTab("uploads")}
-            className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              filterTab === "uploads"
-                ? "bg-white text-slate-900 shadow-2xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            My Uploads
-          </button>
+      {/* ── Search & Filter Toolbar (Unified View) ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200/70 inline-flex items-center gap-1.5">
+            <FileText className="w-3.5 h-3.5 text-blue-600" />
+            <span>{allDocuments.length} {allDocuments.length === 1 ? "Document" : "Documents"} Available</span>
+          </span>
         </div>
 
         {/* Search Input */}
-        <div className="relative max-w-xs w-full">
+        <div className="relative flex-1 sm:max-w-xs w-full">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search documents..."
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+            placeholder="Search records, prescriptions, forms..."
+            className="w-full pl-9 pr-8 py-1.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -348,20 +323,16 @@ export default function PatientDocumentsScreen() {
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
               {searchQuery
                 ? `No documents matching "${searchQuery}". Try a different search term.`
-                : filterTab === "uploads"
-                ? "You haven't uploaded any documents yet. Use the Upload Document button above to submit photo ID or insurance cards."
-                : "No clinical documents currently on file."}
+                : "No medical documents or records currently on file."}
             </p>
-            {filterTab === "uploads" && (
-              <button
-                type="button"
-                onClick={() => setIsUploadModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Upload Now</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setIsUploadModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Upload Document</span>
+            </button>
           </div>
         ) : (
           filteredDocuments.map((doc) => {

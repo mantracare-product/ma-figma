@@ -462,65 +462,10 @@ function WhatsAppSmsBlock({
       {/* WhatsApp Reply-Window Status Indicator */}
       {isWhatsapp && (
         <div className="mt-2 pt-1">
-          {session.freeFormAllowed ? (
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200" style={{ fontFamily: "Outfit, sans-serif" }}>
-              <Clock className="w-3 h-3 text-blue-600" />
-              <span>Reply window: {h}h {m}m left</span>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200" style={{ fontFamily: "Outfit, sans-serif" }}>
-                <AlertTriangle className="w-3 h-3 text-amber-600" />
-                <span>Session expired — template message required</span>
-              </div>
-
-              {!showTemplatePicker ? (
-                <div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowTemplatePicker(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors cursor-pointer"
-                  >
-                    <Send className="w-3.5 h-3.5" /> Send Template
-                  </button>
-                </div>
-              ) : (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-xs" onClick={(e) => e.stopPropagation()}>
-                  <p className="font-semibold text-amber-900">Select Approved Template</p>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={selectedTplId}
-                      onChange={(e) => setSelectedTplId(e.target.value)}
-                      className="flex-1 text-xs px-2.5 py-1.5 bg-white border border-amber-300 rounded-lg"
-                    >
-                      {approvedTemplates.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} ({t.category})
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={handleSendTemplateFromCard}
-                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shadow-sm"
-                    >
-                      Send
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowTemplatePicker(false)}
-                      className="px-2 py-1.5 text-gray-500 hover:text-gray-700"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200" style={{ fontFamily: "Outfit, sans-serif" }}>
+            <Clock className="w-3 h-3 text-blue-600" />
+            <span>Reply window: {h}h {m}m left</span>
+          </div>
         </div>
       )}
 

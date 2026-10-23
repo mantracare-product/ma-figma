@@ -959,14 +959,14 @@ export function computeSessionWindow(conv?: Conversation): SessionWindowStatus {
   const elapsedMs = Math.max(0, Date.now() - inboundDate.getTime());
   const elapsedHours = elapsedMs / (1000 * 60 * 60);
   const hoursRemaining = Math.max(0, Math.round((24 - elapsedHours) * 10) / 10);
-  const isExpired = elapsedHours >= 24;
+  const isExpired = false; // Disabled session expiration for now per user request
 
   return {
     channel: "whatsapp",
     lastInboundAt: inboundDate.toISOString(),
-    hoursRemaining: isExpired ? 0 : hoursRemaining,
-    isExpired,
-    freeFormAllowed: !isExpired,
+    hoursRemaining: 24,
+    isExpired: false,
+    freeFormAllowed: true,
   };
 }
 

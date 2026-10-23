@@ -1,4 +1,4 @@
-export type ShareChannel = "sms" | "whatsapp" | "email";
+export type ShareChannel = "sms" | "whatsapp" | "email" | "patient_app";
 export type ShareTargetKind = "form" | "flow";
 
 export interface ShareTarget {

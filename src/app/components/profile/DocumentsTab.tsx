@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  FileText, FileSpreadsheet, FileImage, Plus, Search, Eye, Download,
+  FileText, FileSpreadsheet, FileImage, Plus, Search, Eye, EyeOff, Download,
   Trash2, MoreVertical, ChevronDown, ChevronRight, Upload, PlusCircle, Sparkles,
   Folder, Tag, Info, User, Layers
 } from "lucide-react";
@@ -217,6 +217,48 @@ export default function DocumentsTab({
       const cName = client.name || "Client";
       const initialDocs: StoredClientDocument[] = [
         {
+          id: `seed-rx-${client.id}`,
+          clientId: client.id,
+          name: "Outpatient_Prescription_Medication_Schedule.pdf",
+          category: "Prescription",
+          valueBy: "Provider Order",
+          fileType: "pdf",
+          fileSize: "420 KB",
+          uploadedDate: "2026-10-10 14:30",
+          uploadedBy: client.responsible || "Dr. Rajesh Patel",
+          status: "Verified",
+          notes: "Prescribed Amoxicillin & Ibuprofen for 7 days post-consultation.",
+          showToPatient: true,
+        },
+        {
+          id: `seed-summary-${client.id}`,
+          clientId: client.id,
+          name: "Clinical_Consultation_Summary_and_Vitals.pdf",
+          category: "Clinical Summary",
+          valueBy: "Consultation Record",
+          fileType: "pdf",
+          fileSize: "850 KB",
+          uploadedDate: "2026-10-10 14:00",
+          uploadedBy: client.responsible || "Dr. Rajesh Patel",
+          status: "Verified",
+          notes: "Comprehensive routine assessment with normal BP and heart rate.",
+          showToPatient: true,
+        },
+        {
+          id: `seed-ins-${client.id}`,
+          clientId: client.id,
+          name: "Insurance_Verification_and_Benefits_Assignment.pdf",
+          category: "Consent forms",
+          valueBy: "Payer Verification",
+          fileType: "pdf",
+          fileSize: "520 KB",
+          uploadedDate: "2026-09-15 10:15",
+          uploadedBy: "Mantra Billing Desk",
+          status: "Verified",
+          notes: "Payer coverage active under Blue Cross PPO with zero deductible copay.",
+          showToPatient: true,
+        },
+        {
           id: `doc-1-${client.id}`,
           clientId: client.id,
           name: `${cName.replace(/\s+/g, "_")}_KYC_Identity.pdf`,
@@ -228,6 +270,7 @@ export default function DocumentsTab({
           uploadedBy: cName,
           status: "Verified",
           notes: "Government photo ID & address verification matched.",
+          showToPatient: true,
         },
         {
           id: `doc-2-${client.id}`,
@@ -241,6 +284,7 @@ export default function DocumentsTab({
           uploadedBy: client.responsible || "John Smith",
           status: "Verified",
           notes: "Standard terms and conditions e-signed.",
+          showToPatient: true,
         },
         {
           id: `doc-3-${client.id}`,
@@ -254,6 +298,7 @@ export default function DocumentsTab({
           uploadedBy: cName,
           status: "Pending Review",
           notes: "Submitted for financial clearance step.",
+          showToPatient: false,
         },
         {
           id: `doc-4-${client.id}`,
@@ -267,6 +312,7 @@ export default function DocumentsTab({
           uploadedBy: "System",
           status: "Verified",
           notes: "Generated from WebForm response submission.",
+          showToPatient: true,
         },
       ];
 
@@ -301,6 +347,22 @@ export default function DocumentsTab({
         }
         return d;
       })
+    );
+  };
+
+  const handleToggleShowToPatient = (doc: StoredClientDocument) => {
+    const isShown = doc.showToPatient ?? true;
+    const nextVal = !isShown;
+    const updatedDoc: StoredClientDocument = {
+      ...doc,
+      showToPatient: nextVal,
+    };
+    saveClientDocument(updatedDoc);
+    setDocuments((prev) => prev.map((d) => (d.id === doc.id ? updatedDoc : d)));
+    toast.success(
+      nextVal
+        ? `"${doc.name}" is now visible to the patient.`
+        : `"${doc.name}" is now hidden from the patient.`
     );
   };
 
@@ -397,6 +459,7 @@ export default function DocumentsTab({
       notes: `Generated using template: ${template.name}`,
       templateId: template.id,
       generatedContent: generatedText,
+      showToPatient: true,
     };
     saveClientDocument(newDoc);
     toast.success(`Generated "${template.name}"!`);
@@ -427,6 +490,7 @@ export default function DocumentsTab({
       uploadedBy: client.responsible || "Admin User",
       status: "Verified",
       notes: `Uploaded file (${file.name})`,
+      showToPatient: true,
     };
     saveClientDocument(newDoc);
     toast.success(`Uploaded "${file.name}"!`);
@@ -765,6 +829,48 @@ export default function DocumentsTab({
             ),
           },
           {
+            id: "showToPatient",
+            key: "showToPatient",
+            header: "Show to Patient",
+            accessorKey: "showToPatient",
+            render: (doc) => {
+              const isShown = doc.showToPatient ?? true;
+              return (
+                <div
+                  className="flex items-center gap-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleToggleShowToPatient(doc)}
+                    className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      isShown ? "bg-emerald-500" : "bg-slate-300"
+                    }`}
+                    title={
+                      isShown
+                        ? "Visible to patient in portal (click to hide)"
+                        : "Hidden from patient (click to make visible)"
+                    }
+                    aria-label={isShown ? "Hide from patient" : "Show to patient"}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        isShown ? "translate-x-3" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                  <span
+                    className={`text-[11px] font-medium ${
+                      isShown ? "text-emerald-700 font-semibold" : "text-slate-400"
+                    }`}
+                  >
+                    {isShown ? "Visible" : "Hidden"}
+                  </span>
+                </div>
+              );
+            },
+          },
+          {
             id: "fileSize",
             key: "fileSize",
             header: "Size",
@@ -788,21 +894,30 @@ export default function DocumentsTab({
             ? "No documents attached to this invoice yet. Upload or generate a document to get started."
             : "No documents found for this client."
         }
-        rowActions={[
+        rowActions={(doc) => [
           {
             label: "Preview",
             icon: <Eye className="w-3.5 h-3.5 text-slate-500" />,
-            onClick: (doc) => setPreviewDoc(doc),
+            onClick: (d) => setPreviewDoc(d),
+          },
+          {
+            label: (doc.showToPatient ?? true) ? "Hide from Patient" : "Show to Patient",
+            icon: (doc.showToPatient ?? true) ? (
+              <EyeOff className="w-3.5 h-3.5 text-amber-600" />
+            ) : (
+              <Eye className="w-3.5 h-3.5 text-emerald-600" />
+            ),
+            onClick: (d) => handleToggleShowToPatient(d),
           },
           {
             label: "Download",
             icon: <Download className="w-3.5 h-3.5 text-slate-500" />,
-            onClick: (doc) => handleDownloadDoc(doc),
+            onClick: (d) => handleDownloadDoc(d),
           },
           {
             label: "Delete",
             icon: <Trash2 className="w-3.5 h-3.5 text-rose-500" />,
-            onClick: (doc) => handleDeleteDoc(doc.id, doc.name),
+            onClick: (d) => handleDeleteDoc(d.id, d.name),
             isDanger: true,
           },
         ]}
@@ -839,7 +954,9 @@ export default function DocumentsTab({
           entityId={entityId}
           invoiceData={invoiceData}
           onDocumentGenerated={(doc) => {
-            setDocuments((prev) => [doc, ...prev.filter((d) => d.id !== doc.id)]);
+            const docWithFlag = { ...doc, showToPatient: doc.showToPatient ?? true };
+            saveClientDocument(docWithFlag);
+            setDocuments((prev) => [docWithFlag, ...prev.filter((d) => d.id !== doc.id)]);
           }}
         />
       )}

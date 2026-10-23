@@ -128,6 +128,21 @@ export default function ConversationThreadDrawer({
     toast.success(`Enrolled in campaign "${campaign.name}"`);
   };
 
+  const handleAssignResponsible = (personId: string, personName: string) => {
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === conversation.id
+          ? {
+              ...c,
+              assignedPersonId: personId,
+              botStatus: personId ? "off" : c.botStatus,
+            }
+          : c
+      )
+    );
+    toast.success(personId ? `Assigned to ${personName}` : "Conversation unassigned");
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-xs flex justify-end transition-opacity">
       <div className="w-full max-w-xl bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
@@ -151,6 +166,7 @@ export default function ConversationThreadDrawer({
           onSendMessage={handleSendMessage}
           onSendTemplate={handleSendTemplate}
           onEnrollCampaign={handleEnrollCampaign}
+          onAssignResponsible={handleAssignResponsible}
         />
       </div>
     </div>

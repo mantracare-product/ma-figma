@@ -1,7 +1,7 @@
 // ShareFormDrawer.tsx
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { X, Copy, Link2, MessageSquare, Mail, MessageCircle, AlertTriangle, Plus } from "lucide-react";
+import { X, Copy, Link2, MessageSquare, Mail, MessageCircle, AlertTriangle, Plus, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import VariablePickerButton from "../process/VariablePickerButton";
 import {
@@ -33,6 +33,7 @@ const CONNECTED_ACCOUNTS: Record<ShareChannel, Array<{ value: string; label: str
     { value: "support@company.com", label: "support@company.com" },
     { value: "notifications@company.com", label: "notifications@company.com" },
   ],
+  patient_app: [],
 };
 
 interface WhatsappTemplate {
@@ -201,12 +202,51 @@ function WhatsAppPanel({ onCloseDrawer }: { onCloseDrawer: () => void }) {
   );
 }
 
+// ─── Patient Companion App Panel ─────────────────────────────────────────────
+
+function PatientAppPanel({ formName }: { formName: string }) {
+  const defaultMsg = `Please complete the ${formName} form in your companion app prior to your next consultation.`;
+  const [message, setMessage] = useState(defaultMsg);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-sm font-semibold" style={LABEL_STYLE}>
+            Companion App Note (Optional)
+          </label>
+          <VariablePickerButton
+            targetRef={textareaRef}
+            value={message}
+            onChange={setMessage}
+            label="{ } Insert Variable"
+          />
+        </div>
+        <textarea
+          ref={textareaRef}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={3}
+          placeholder="Type a note or instructions for the patient..."
+          className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+          style={{ fontFamily: "Outfit, sans-serif" }}
+        />
+        <p className="text-xs mt-1.5" style={MUTED_STYLE}>
+          This form will be immediately assigned to the patient's companion app under <strong>Forms &amp; Questionnaires</strong>.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Drawer ──────────────────────────────────────────────────────────────
 
 const CHANNEL_CONFIG: Record<ShareChannel, { label: string; icon: React.ReactNode }> = {
   sms: { label: "SMS", icon: <MessageSquare className="w-4 h-4" /> },
   whatsapp: { label: "WhatsApp", icon: <MessageCircle className="w-4 h-4" /> },
   email: { label: "Email", icon: <Mail className="w-4 h-4" /> },
+  patient_app: { label: "Patient Companion App", icon: <Smartphone className="w-4 h-4" /> },
 };
 
 export default function ShareFormDrawer({ target, onClose, onSend }: ShareFormDrawerProps) {
@@ -237,6 +277,7 @@ export default function ShareFormDrawer({ target, onClose, onSend }: ShareFormDr
     sms: "Send SMS",
     whatsapp: "Send via WhatsApp",
     email: "Send Email",
+    patient_app: "Share to Companion App",
   };
 
   const handleChannelChange = (newChannel: ShareChannel) => {
@@ -258,7 +299,11 @@ export default function ShareFormDrawer({ target, onClose, onSend }: ShareFormDr
         connectedAccount,
       });
     }
-    toast.success(`Ready to send via ${CHANNEL_CONFIG[channel].label}`);
+    if (channel === "patient_app") {
+      toast.success(`Form "${target.name}" shared to Patient Companion App!`);
+    } else {
+      toast.success(`Ready to send via ${CHANNEL_CONFIG[channel].label}`);
+    }
     onClose();
   };
 
@@ -339,28 +384,43 @@ export default function ShareFormDrawer({ target, onClose, onSend }: ShareFormDr
               <option value="sms">SMS</option>
               <option value="whatsapp">WhatsApp</option>
               <option value="email">Email</option>
+              <option value="patient_app">Patient Companion App</option>
             </select>
           </div>
 
-          {/* 3. Connected Account */}
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold" style={LABEL_STYLE}>
-              Connected Account
-            </label>
-            <select
-              value={connectedAccount}
-              onChange={(e) => setConnectedAccount(e.target.value)}
-              className={SELECT_STYLE}
-              style={SELECT_INLINE}
-            >
-              <option value="">Select {CHANNEL_CONFIG[channel].label} account...</option>
-              {CONNECTED_ACCOUNTS[channel].map((acc) => (
-                <option key={acc.value} value={acc.value}>
-                  {acc.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* 3. Connected Account / Delivery Channel */}
+          {channel === "patient_app" ? (
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold" style={LABEL_STYLE}>
+                Delivery Destination
+              </label>
+              <div className="flex items-center gap-2.5 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700">
+                <Smartphone className="w-4 h-4 text-blue-600 shrink-0" />
+                <span style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Direct Sync to Patient Companion App / Portal
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold" style={LABEL_STYLE}>
+                Connected Account
+              </label>
+              <select
+                value={connectedAccount}
+                onChange={(e) => setConnectedAccount(e.target.value)}
+                className={SELECT_STYLE}
+                style={SELECT_INLINE}
+              >
+                <option value="">Select {CHANNEL_CONFIG[channel].label} account...</option>
+                {CONNECTED_ACCOUNTS[channel]?.map((acc) => (
+                  <option key={acc.value} value={acc.value}>
+                    {acc.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* 4. Combined Recipients Section (Single Picker) */}
           <div className="space-y-2">
@@ -380,6 +440,7 @@ export default function ShareFormDrawer({ target, onClose, onSend }: ShareFormDr
           {channel === "sms" && <SmsPanel formUrl={formUrl} />}
           {channel === "email" && <EmailPanel formName={target.name} formUrl={formUrl} />}
           {channel === "whatsapp" && <WhatsAppPanel onCloseDrawer={onClose} />}
+          {channel === "patient_app" && <PatientAppPanel formName={target.name} />}
         </div>
 
         {/* Sticky footer */}
