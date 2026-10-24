@@ -139,4 +139,39 @@ describe("Service Location Rooms Configuration & Sync", () => {
     expect(refreshed?.status).toBe("no-show");
     expect(refreshed?.currentStageId).toBe("appt-7");
   });
+
+  it("should support booking appointments by service and by responsible specialist", () => {
+    // 1. By Service booking
+    const byService = appointmentService.createAppointment({
+      clientName: "Alice Smith",
+      clientEmail: "alice@example.com",
+      clientPhone: "+15559876543",
+      employeeId: 101,
+      serviceId: 1,
+      date: "2026-10-25",
+      time: "11:00 AM",
+      location: "Downtown Clinic",
+      bookingType: "service",
+    });
+
+    expect(byService.appointment).toBeDefined();
+    expect(byService.appointment.bookingType).toBe("service");
+
+    // 2. By Responsible Specialist booking
+    const bySpecialist = appointmentService.createAppointment({
+      clientName: "Bob Jones",
+      clientEmail: "bob@example.com",
+      clientPhone: "+15558765432",
+      employeeId: 102,
+      serviceId: 2,
+      date: "2026-10-26",
+      time: "02:30 PM",
+      location: "Westside Branch",
+      bookingType: "specialist",
+    });
+
+    expect(bySpecialist.appointment).toBeDefined();
+    expect(bySpecialist.appointment.bookingType).toBe("specialist");
+    expect(bySpecialist.appointment.employeeId).toBe(102);
+  });
 });
