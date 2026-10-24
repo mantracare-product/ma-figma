@@ -811,7 +811,7 @@ export default function Chats() {
     setCollapsed(true);
   }, [setCollapsed]);
 
-  const TAB_ORDER = ["chats", "campaigns", "templates", "chatbot", "website-settings", "companion-settings"] as const;
+  const TAB_ORDER = ["chats", "campaigns", "templates", "chatbot"] as const;
   type TabKey = typeof TAB_ORDER[number];
   const [activeTab, setActiveTab] = useState<TabKey>("chats");
 
@@ -827,7 +827,6 @@ export default function Chats() {
     }
     else if (tabParam === "campaigns") setActiveTab("campaigns");
     else if (tabParam === "chatbot" && LEGACY_CHATBOT_MODULE_ENABLED) setActiveTab("chatbot");
-    else if (tabParam === "companion-settings") setActiveTab("companion-settings");
     else setActiveTab("chats");
   }, [location.search]);
 
@@ -1149,7 +1148,10 @@ export default function Chats() {
   const [showAssignBotModal, setShowAssignBotModal] = useState(false);
   const [showEnrollCampaignModal, setShowEnrollCampaignModal] = useState(false);
   const [showTestProcessDrawer, setShowTestProcessDrawer] = useState(false);
+  const [showWebsiteSettingsDrawer, setShowWebsiteSettingsDrawer] = useState(false);
+  const [showCompanionSettingsDrawer, setShowCompanionSettingsDrawer] = useState(false);
   const widgetSettingsSaveRef = useRef<(() => void) | null>(null);
+  const companionSaveRef = useRef<(() => void) | null>(null);
 
   const handleChannelChange = (channel: "whatsapp" | "sms" | "website" | "email" | "companion") => {
     setChannelFilter(channel);
@@ -1157,24 +1159,16 @@ export default function Chats() {
     setActiveTab("chats");
   };
 
-  const handleSubModeChange = (mode: "inbox" | "templates" | "settings") => {
+  const handleSubModeChange = (mode: "inbox" | "templates") => {
     if (mode === "inbox") {
       setActiveTab("chats");
     } else if (mode === "templates") {
       setActiveTab("templates");
-    } else if (mode === "settings") {
-      if (channelFilter === "companion") {
-        setActiveTab("companion-settings");
-      } else {
-        setActiveTab("website-settings");
-      }
     }
   };
 
   const subMode = useMemo(() => {
     if ((channelFilter === "whatsapp" || channelFilter === "email") && activeTab === "templates") return "templates";
-    if (channelFilter === "website" && activeTab === "website-settings") return "settings";
-    if (channelFilter === "companion" && activeTab === "companion-settings") return "settings";
     return "inbox";
   }, [channelFilter, activeTab]);
 
@@ -2140,7 +2134,7 @@ export default function Chats() {
                 )}
               </div>
 
-              {/* Sub-modes: Inbox vs Templates for WhatsApp, Inbox vs Settings for Website, Inbox vs Settings for Companion */}
+              {/* Sub-modes: Inbox vs Templates for WhatsApp only */}
               {channelFilter === "whatsapp" && (
                 <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border/80 rounded-xl gap-0.5">
                   <button
@@ -2170,62 +2164,21 @@ export default function Chats() {
                 </div>
               )}
 
-              {channelFilter === "website" && (
-                <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border/80 rounded-xl gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => handleSubModeChange("inbox")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
-                      subMode === "inbox"
-                        ? "bg-white text-[#1E293B] shadow-2xs font-bold"
-                        : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
-                    }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <span>Inbox</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSubModeChange("settings")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
-                      subMode === "settings"
-                        ? "bg-white text-[#1E293B] shadow-2xs font-bold"
-                        : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
-                    }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <span>Widget Settings</span>
-                  </button>
-                </div>
-              )}
-
-              {channelFilter === "companion" && (
-                <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border/80 rounded-xl gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => handleSubModeChange("inbox")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
-                      subMode === "inbox"
-                        ? "bg-white text-[#1E293B] shadow-2xs font-bold"
-                        : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
-                    }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <span>Inbox</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSubModeChange("settings")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
-                      subMode === "settings"
-                        ? "bg-white text-[#1E293B] shadow-2xs font-bold"
-                        : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
-                    }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <span>Settings</span>
-                  </button>
-                </div>
+              {/* Clean Gear Settings Button for Website and Companion */}
+              {(channelFilter === "website" || channelFilter === "companion") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (channelFilter === "website") setShowWebsiteSettingsDrawer(true);
+                    else setShowCompanionSettingsDrawer(true);
+                  }}
+                  className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-bold text-slate-700 flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                  title={channelFilter === "website" ? "Website Widget Settings" : "Companion Settings"}
+                >
+                  <Settings className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Settings</span>
+                </button>
               )}
 
               {/* Phone Number Selector: For WhatsApp and SMS */}
@@ -2475,8 +2428,6 @@ export default function Chats() {
                 : emailSearch
               : subMode === "templates"
               ? templateSearch
-              : subMode === "settings"
-              ? widgetSettingsSearch
               : chatSearch
           }
           onSearchChange={
@@ -2486,8 +2437,6 @@ export default function Chats() {
                 : setEmailSearch
               : subMode === "templates"
               ? setTemplateSearch
-              : subMode === "settings"
-              ? setWidgetSettingsSearch
               : setChatSearch
           }
           searchPlaceholder={
@@ -2497,68 +2446,13 @@ export default function Chats() {
                 : "Search emails (from, subject, body)..."
               : subMode === "templates"
               ? "Search templates..."
-              : subMode === "settings"
-              ? channelFilter === "companion"
-                ? "Search Care Bot settings..."
-                : "Search widget settings (theme, intake, position, hours, code)..."
               : channelFilter === "website"
               ? "Search visitor chats..."
               : channelFilter === "companion"
               ? "Search Companion client chats..."
               : "Search conversations..."
           }
-          customFilterModalContent={
-            subMode === "settings" ? (
-              <div className="p-3 space-y-3 max-h-[380px] overflow-y-auto">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                  <div className="flex items-center gap-1.5">
-                    <Sliders className="w-3.5 h-3.5 text-[#1456f0]" />
-                    <span className="text-xs font-bold text-[#1E293B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Widget Settings Directory
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    {filteredWidgetSettings.length} of {WIDGET_SETTINGS_ITEMS.length} settings
-                  </span>
-                </div>
-
-                {filteredWidgetSettings.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-slate-400 space-y-1">
-                    <p className="font-semibold text-slate-600">No settings found matching &quot;{widgetSettingsSearch}&quot;</p>
-                    <p className="text-[11px]">Try searching for theme, intake, position, hours, queue, or code.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {filteredWidgetSettings.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => handleJumpToSetting(item.id)}
-                        className="p-2.5 rounded-xl border border-[#E2E8F0] hover:border-[#1456f0] hover:bg-blue-50/50 transition-all text-left flex items-start gap-2.5 cursor-pointer group"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 group-hover:bg-[#1456f0] group-hover:text-white text-[#1456f0] flex items-center justify-center shrink-0 transition-colors">
-                          {item.icon}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-1 mb-0.5">
-                            <span className="text-xs font-bold text-[#1E293B] group-hover:text-[#1456f0] transition-colors truncate">
-                              {item.title}
-                            </span>
-                            <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 shrink-0">
-                              {item.category.split(" ")[0]}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-slate-500 line-clamp-2 leading-tight">
-                            {item.description}
-                          </p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : undefined
-          }
+          customFilterModalContent={undefined}
           secondaryActions={
             channelFilter === "email" && subMode === "inbox" ? (
               <button
@@ -2595,16 +2489,6 @@ export default function Chats() {
                   icon: <Plus className="w-4 h-4" />,
                   onClick: () => {
                     handleCreateNewTemplate();
-                  },
-                }
-              : subMode === "settings"
-              ? {
-                  label: "Save Configuration",
-                  icon: <Check className="w-4 h-4" />,
-                  onClick: () => {
-                    if (widgetSettingsSaveRef.current) {
-                      widgetSettingsSaveRef.current();
-                    }
                   },
                 }
               : undefined
@@ -2686,6 +2570,18 @@ export default function Chats() {
                   </div>
                 )}
               </div>
+            ) : (channelFilter === "website" || channelFilter === "companion") ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (channelFilter === "website") setShowWebsiteSettingsDrawer(true);
+                  else setShowCompanionSettingsDrawer(true);
+                }}
+                className="w-[36px] h-[36px] rounded-xl border border-border bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition-colors shadow-2xs flex items-center justify-center cursor-pointer"
+                title={channelFilter === "website" ? "Website Widget Settings" : "Companion Settings"}
+              >
+                <Settings className="w-4 h-4" />
+              </button>
             ) : undefined
           }
         />
@@ -3428,34 +3324,90 @@ export default function Chats() {
           )
         )}
 
-        {/* ── Tab: Website Widget Settings ── */}
-        {activeTab === "website-settings" && (
-          <WebsiteWidgetSettingsTab
-            searchQuery={widgetSettingsSearch}
-            onClearSearch={() => setWidgetSettingsSearch("")}
-            registerSaveHandler={(fn) => {
-              widgetSettingsSaveRef.current = fn;
-            }}
-            onNavigateToInbox={() => {
-              setActiveTab("chats");
-              setChannelFilter("website");
-            }}
-          />
-        )}
-
-        {/* ── Tab: Companion Care Bot Settings ── */}
-        {activeTab === "companion-settings" && (
-          <CompanionSettingsTab
-            registerSaveHandler={(fn) => {
-              widgetSettingsSaveRef.current = fn;
-            }}
-            onNavigateToInbox={() => {
-              setActiveTab("chats");
-              setChannelFilter("companion");
-            }}
-          />
-        )}
       </div>
+
+      {/* ── Slim Side Drawer: Website Widget Settings ── */}
+      <DrawerShell
+        isOpen={showWebsiteSettingsDrawer}
+        onClose={() => setShowWebsiteSettingsDrawer(false)}
+        title="Website Widget Settings"
+        subtitle="Configure chat widget design, working hours, and requirement mapping."
+        icon={<Globe className="w-4 h-4 text-[#6366F1]" />}
+        width="max-w-2xl sm:max-w-3xl"
+        zIndex={600}
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <button
+              type="button"
+              onClick={() => setShowWebsiteSettingsDrawer(false)}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (widgetSettingsSaveRef.current) widgetSettingsSaveRef.current();
+                setShowWebsiteSettingsDrawer(false);
+              }}
+              className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <Check className="w-4 h-4" />
+              <span>Save Configuration</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="p-4">
+          <WebsiteWidgetSettingsTab
+            registerSaveHandler={(fn) => {
+              widgetSettingsSaveRef.current = fn;
+            }}
+            onNavigateToInbox={() => setShowWebsiteSettingsDrawer(false)}
+          />
+        </div>
+      </DrawerShell>
+
+      {/* ── Slim Side Drawer: Companion Care Bot Settings ── */}
+      <DrawerShell
+        isOpen={showCompanionSettingsDrawer}
+        onClose={() => setShowCompanionSettingsDrawer(false)}
+        title="Companion Settings"
+        subtitle="Configure patient portal Care Bot, intent greeting, and process mapping."
+        icon={<Bot className="w-4 h-4 text-[#2563EB]" />}
+        width="max-w-xl sm:max-w-2xl"
+        zIndex={600}
+        footer={
+          <div className="flex items-center justify-end gap-2 w-full">
+            <button
+              type="button"
+              onClick={() => setShowCompanionSettingsDrawer(false)}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (companionSaveRef.current) companionSaveRef.current();
+                setShowCompanionSettingsDrawer(false);
+              }}
+              className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              <Check className="w-4 h-4" />
+              <span>Save Settings</span>
+            </button>
+          </div>
+        }
+      >
+        <CompanionSettingsTab
+          isDrawer
+          registerSaveHandler={(fn) => {
+            companionSaveRef.current = fn;
+          }}
+          onNavigateToInbox={() => setShowCompanionSettingsDrawer(false)}
+        />
+      </DrawerShell>
 
 
       {/* Campaign Row Actions Menu */}
