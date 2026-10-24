@@ -26,7 +26,7 @@ import {
 import { useTeamMembers } from "../../lib/teamStore";
 import { useOrganization } from "../context/OrganizationContext";
 import {
-  Room, getStoredRooms, addRoom, updateRoom, deleteRoom, onRoomsChanged
+  Room, getStoredRooms, syncServiceRooms
 } from "../../lib/roomsStore";
 
 // Re-export for any other file that imports Service from here
@@ -66,9 +66,12 @@ function saveCategoryToStore(catName: string) {
 
 export interface AvailabilityRule {
   id: string;
-  locationId: string; // "all" or loc.id / loc.name
+  locationId: string; // specific location id or name, never "all"
   seats: number;
   assignedUserIds: (number | string)[];
+  roomNumber?: string;
+  roomName?: string; // Label (Name of the room)
+  direction?: string; // Directions / Walking guidance
 }
 
 export default function Services() {
@@ -117,14 +120,7 @@ export default function Services() {
   const [empSearch, setEmpSearch] = useState("");
   const [showEmpDrop, setShowEmpDrop] = useState(false);
 
-  // ── Rooms Tab State & Handlers ──
-  const [activeMainTab, setActiveMainTab] = useState<"services" | "rooms">("services");
-  const [rooms, setRooms] = useState<Room[]>(getStoredRooms);
   const { activeOrganization } = useOrganization();
-
-  useEffect(() => {
-    return onRoomsChanged(() => setRooms(getStoredRooms()));
-  }, []);
 
   const orgLocations = useMemo(() => {
     try {
@@ -164,130 +160,6 @@ export default function Services() {
     }));
   }, [activeOrganization]);
 
-  const [roomSearchQuery, setRoomSearchQuery] = useState("");
-  const [roomLocationFilter, setRoomLocationFilter] = useState("all");
-  const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>([]);
-  const [showAddRoomDrawer, setShowAddRoomDrawer] = useState(false);
-  const [showEditRoomDrawer, setShowEditRoomDrawer] = useState(false);
-  const [editingRoom, setEditingRoom] = useState<Room | null>(null);
-
-  const [roomForm, setRoomForm] = useState({
-    roomNumber: "",
-    name: "",
-    direction: "",
-    location: "California",
-    serviceId: "",
-    responsibleId: "",
-    isActive: true,
-  });
-
-  const resetRoomForm = () => {
-    setRoomForm({
-      roomNumber: "",
-      name: "",
-      direction: "",
-      location: orgLocations[0] || "California",
-      serviceId: "",
-      responsibleId: "",
-      isActive: true,
-    });
-    setEditingRoom(null);
-  };
-
-  const openAddRoom = () => {
-    resetRoomForm();
-    setShowAddRoomDrawer(true);
-  };
-
-  const openEditRoom = (room: Room) => {
-    setEditingRoom(room);
-    setRoomForm({
-      roomNumber: room.roomNumber,
-      name: room.name,
-      direction: room.direction || "",
-      location: room.location || orgLocations[0] || "California",
-      serviceId: room.serviceId !== undefined ? String(room.serviceId) : "",
-      responsibleId: room.responsibleId !== undefined ? String(room.responsibleId) : "",
-      isActive: room.isActive !== false,
-    });
-    setShowEditRoomDrawer(true);
-  };
-
-  const handleSaveRoom = (isEdit: boolean) => {
-    if (!roomForm.roomNumber.trim() || !roomForm.name.trim()) {
-      toast.error("Please provide both Room Number and Room Name");
-      return;
-    }
-
-    const matchedService = services.find((s) => String(s.id) === String(roomForm.serviceId));
-    const matchedEmp = allTeamEmps.find((e) => String(e.id) === String(roomForm.responsibleId));
-
-    if (isEdit && editingRoom) {
-      updateRoom(editingRoom.id, {
-        roomNumber: roomForm.roomNumber.trim(),
-        name: roomForm.name.trim(),
-        direction: roomForm.direction.trim(),
-        location: roomForm.location,
-        serviceId: roomForm.serviceId ? roomForm.serviceId : undefined,
-        serviceName: matchedService ? matchedService.name : undefined,
-        responsibleId: roomForm.responsibleId ? roomForm.responsibleId : undefined,
-        responsibleName: matchedEmp ? matchedEmp.name : undefined,
-        isActive: roomForm.isActive,
-      });
-      toast.success(`Room ${roomForm.roomNumber} updated successfully`);
-      setShowEditRoomDrawer(false);
-    } else {
-      addRoom({
-        roomNumber: roomForm.roomNumber.trim(),
-        name: roomForm.name.trim(),
-        direction: roomForm.direction.trim(),
-        location: roomForm.location,
-        serviceId: roomForm.serviceId ? roomForm.serviceId : undefined,
-        serviceName: matchedService ? matchedService.name : undefined,
-        responsibleId: roomForm.responsibleId ? roomForm.responsibleId : undefined,
-        responsibleName: matchedEmp ? matchedEmp.name : undefined,
-        isActive: roomForm.isActive,
-      });
-      toast.success(`Room ${roomForm.roomNumber} added successfully`);
-      setShowAddRoomDrawer(false);
-    }
-    setRooms(getStoredRooms());
-    resetRoomForm();
-  };
-
-  const handleDeleteRoom = (id: string, name: string) => {
-    deleteRoom(id);
-    setRooms(getStoredRooms());
-    toast.success(`Room "${name}" deleted`);
-  };
-
-  const handleToggleRoomActive = (id: string) => {
-    const rm = rooms.find((r) => r.id === id);
-    if (!rm) return;
-    updateRoom(id, { isActive: !rm.isActive });
-    setRooms(getStoredRooms());
-    toast.success(`Room ${rm.roomNumber} marked ${!rm.isActive ? "active" : "inactive"}`);
-  };
-
-  const filteredRooms = useMemo(() => {
-    return rooms.filter((r) => {
-      const q = roomSearchQuery.toLowerCase().trim();
-      const matchQuery =
-        !q ||
-        r.roomNumber.toLowerCase().includes(q) ||
-        r.name.toLowerCase().includes(q) ||
-        (r.direction && r.direction.toLowerCase().includes(q)) ||
-        (r.location && r.location.toLowerCase().includes(q)) ||
-        (r.serviceName && r.serviceName.toLowerCase().includes(q)) ||
-        (r.responsibleName && r.responsibleName.toLowerCase().includes(q));
-
-      const matchLoc =
-        roomLocationFilter === "all" ||
-        (r.location && r.location.toLowerCase() === roomLocationFilter.toLowerCase());
-
-      return matchQuery && matchLoc;
-    });
-  }, [rooms, roomSearchQuery, roomLocationFilter]);
 
   // Row selection state
   const [selectedServiceIds, setSelectedServiceIds] = useState<number[]>([]);
@@ -451,9 +323,7 @@ export default function Services() {
   // Drawer Tabs: "overview" (service info, pricing, custom fields) vs "availability" (locations, capacity, location-wise responsible staff)
   const [drawerActiveTab, setDrawerActiveTab] = useState<"overview" | "availability">("overview");
 
-  const [availabilityRules, setAvailabilityRules] = useState<AvailabilityRule[]>([
-    { id: "rule-init", locationId: "all", seats: 1, assignedUserIds: [] },
-  ]);
+  const [availabilityRules, setAvailabilityRules] = useState<AvailabilityRule[]>([]);
 
   const [activeStaffDropdownLocId, setActiveStaffDropdownLocId] = useState<string | null>(null);
   const [staffSearchQuery, setStaffSearchQuery] = useState("");
@@ -484,7 +354,7 @@ export default function Services() {
   const handleAddAvailabilityRule = () => {
     const usedLocs = new Set(availabilityRules.map((r) => r.locationId));
     const nextUnused = fullOrgLocations.find((l) => !usedLocs.has(l.id) && !usedLocs.has(l.name));
-    const nextLocId = nextUnused ? nextUnused.id : (fullOrgLocations[0]?.id || "all");
+    const nextLocId = nextUnused ? nextUnused.id : (fullOrgLocations[0]?.id || "loc-1");
 
     setAvailabilityRules((prev) => [
       ...prev,
@@ -493,20 +363,16 @@ export default function Services() {
         locationId: nextLocId,
         seats: 1,
         assignedUserIds: [],
+        roomNumber: "",
+        roomName: "",
+        direction: "",
       },
     ]);
   };
 
-  const handleUpdateRuleLocation = (ruleId: string, locationId: string) => {
+  const handleUpdateRuleField = (ruleId: string, field: keyof AvailabilityRule, value: any) => {
     setAvailabilityRules((prev) =>
-      prev.map((r) => (r.id === ruleId ? { ...r, locationId } : r))
-    );
-  };
-
-  const handleUpdateRuleSeats = (ruleId: string, seats: number) => {
-    const validSeats = isNaN(seats) ? 1 : Math.max(1, seats);
-    setAvailabilityRules((prev) =>
-      prev.map((r) => (r.id === ruleId ? { ...r, seats: validSeats } : r))
+      prev.map((r) => (r.id === ruleId ? { ...r, [field]: value } : r))
     );
   };
 
@@ -542,9 +408,7 @@ export default function Services() {
     setDrawerActiveTab("overview");
     setActiveStaffDropdownLocId(null);
     setStaffSearchQuery("");
-    setAvailabilityRules([
-      { id: "rule-init", locationId: "all", seats: 1, assignedUserIds: [] },
-    ]);
+    setAvailabilityRules([]);
     setFieldValues({
       name: "",
       category: "General",
@@ -568,56 +432,44 @@ export default function Services() {
     if (!name) { toast.error("Service name is required"); return; }
 
     if (availabilityRules.length === 0) {
-      toast.error("Please add at least one availability rule");
+      toast.error("Please add at least one location in Availability");
       return;
     }
 
-    const hasAll = availabilityRules.some((r) => r.locationId === "all");
-    const specificRules = availabilityRules.filter((r) => r.locationId !== "all");
-
-    let locationIds: string[] | undefined = undefined;
-    let maxSeats = 1;
-    let locationSeats: Record<string, number> | undefined = undefined;
-    let locationEmployees: Record<string, (string | number)[]> | undefined = undefined;
+    const locIdsList: string[] = [];
+    const seatsMap: Record<string, number> = {};
+    const empsMap: Record<string, (string | number)[]> = {};
+    const locationRooms: Record<string, { roomNumber?: string; roomName?: string; direction?: string }> = {};
     const allAssignedIds = new Set<string | number>();
 
-    if (hasAll && specificRules.length === 0) {
-      const allRule = availabilityRules.find((r) => r.locationId === "all")!;
-      maxSeats = Math.max(1, allRule.seats || 1);
-      allRule.assignedUserIds.forEach((id) => allAssignedIds.add(id));
-      locationIds = undefined;
-    } else {
-      const locIdsList: string[] = [];
-      const seatsMap: Record<string, number> = {};
-      const empsMap: Record<string, (string | number)[]> = {};
+    availabilityRules.forEach((r) => {
+      locIdsList.push(r.locationId);
+      const matchedLoc = fullOrgLocations.find((l) => l.id === r.locationId || l.name === r.locationId);
+      const seats = Math.max(1, r.seats || 1);
+      seatsMap[r.locationId] = seats;
+      empsMap[r.locationId] = r.assignedUserIds;
+      locationRooms[r.locationId] = {
+        roomNumber: r.roomNumber || "",
+        roomName: r.roomName || "",
+        direction: r.direction || "",
+      };
 
-      availabilityRules.forEach((r) => {
-        if (r.locationId === "all") {
-          maxSeats = Math.max(1, r.seats || 1);
-          r.assignedUserIds.forEach((id) => allAssignedIds.add(id));
-        } else {
-          locIdsList.push(r.locationId);
-          const matchedLoc = fullOrgLocations.find((l) => l.id === r.locationId || l.name === r.locationId);
-          seatsMap[r.locationId] = Math.max(1, r.seats || 1);
-          if (matchedLoc) {
-            seatsMap[matchedLoc.name] = Math.max(1, r.seats || 1);
-          }
-          empsMap[r.locationId] = r.assignedUserIds;
-          if (matchedLoc) {
-            empsMap[matchedLoc.name] = r.assignedUserIds;
-          }
-          r.assignedUserIds.forEach((id) => allAssignedIds.add(id));
-        }
-      });
-
-      locationIds = locIdsList.length > 0 ? locIdsList : undefined;
-      locationSeats = Object.keys(seatsMap).length > 0 ? seatsMap : undefined;
-      locationEmployees = Object.keys(empsMap).length > 0 ? empsMap : undefined;
-      if (!hasAll && specificRules.length > 0) {
-        maxSeats = specificRules[0].seats || 1;
+      if (matchedLoc) {
+        seatsMap[matchedLoc.name] = seats;
+        empsMap[matchedLoc.name] = r.assignedUserIds;
+        locationRooms[matchedLoc.name] = {
+          roomNumber: r.roomNumber || "",
+          roomName: r.roomName || "",
+          direction: r.direction || "",
+        };
       }
-    }
+      r.assignedUserIds.forEach((id) => allAssignedIds.add(id));
+    });
 
+    const locationIds = locIdsList.length > 0 ? locIdsList : undefined;
+    const locationSeats = Object.keys(seatsMap).length > 0 ? seatsMap : undefined;
+    const locationEmployees = Object.keys(empsMap).length > 0 ? empsMap : undefined;
+    const maxSeats = availabilityRules[0]?.seats || 1;
     const assignedEmployees = Array.from(allAssignedIds);
     const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
 
@@ -646,10 +498,13 @@ export default function Services() {
       maxSeats,
       locationSeats,
       locationEmployees,
+      locationRooms,
       createdAt: nowStr,
       activity: `Created ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
       customFields,
     });
+    // Sync rooms dynamically to roomsStore
+    syncServiceRooms(s.id, s.name, availabilityRules, allTeamEmps, fullOrgLocations);
     setServices(getStoredServices());
     toast.success(`"${s.name}" added`);
     setShowAddDrawer(false);
@@ -662,56 +517,44 @@ export default function Services() {
     if (!name) { toast.error("Service name is required"); return; }
 
     if (availabilityRules.length === 0) {
-      toast.error("Please add at least one availability rule");
+      toast.error("Please add at least one location in Availability");
       return;
     }
 
-    const hasAll = availabilityRules.some((r) => r.locationId === "all");
-    const specificRules = availabilityRules.filter((r) => r.locationId !== "all");
-
-    let locationIds: string[] | undefined = undefined;
-    let maxSeats = 1;
-    let locationSeats: Record<string, number> | undefined = undefined;
-    let locationEmployees: Record<string, (string | number)[]> | undefined = undefined;
+    const locIdsList: string[] = [];
+    const seatsMap: Record<string, number> = {};
+    const empsMap: Record<string, (string | number)[]> = {};
+    const locationRooms: Record<string, { roomNumber?: string; roomName?: string; direction?: string }> = {};
     const allAssignedIds = new Set<string | number>();
 
-    if (hasAll && specificRules.length === 0) {
-      const allRule = availabilityRules.find((r) => r.locationId === "all")!;
-      maxSeats = Math.max(1, allRule.seats || 1);
-      allRule.assignedUserIds.forEach((id) => allAssignedIds.add(id));
-      locationIds = undefined;
-    } else {
-      const locIdsList: string[] = [];
-      const seatsMap: Record<string, number> = {};
-      const empsMap: Record<string, (string | number)[]> = {};
+    availabilityRules.forEach((r) => {
+      locIdsList.push(r.locationId);
+      const matchedLoc = fullOrgLocations.find((l) => l.id === r.locationId || l.name === r.locationId);
+      const seats = Math.max(1, r.seats || 1);
+      seatsMap[r.locationId] = seats;
+      empsMap[r.locationId] = r.assignedUserIds;
+      locationRooms[r.locationId] = {
+        roomNumber: r.roomNumber || "",
+        roomName: r.roomName || "",
+        direction: r.direction || "",
+      };
 
-      availabilityRules.forEach((r) => {
-        if (r.locationId === "all") {
-          maxSeats = Math.max(1, r.seats || 1);
-          r.assignedUserIds.forEach((id) => allAssignedIds.add(id));
-        } else {
-          locIdsList.push(r.locationId);
-          const matchedLoc = fullOrgLocations.find((l) => l.id === r.locationId || l.name === r.locationId);
-          seatsMap[r.locationId] = Math.max(1, r.seats || 1);
-          if (matchedLoc) {
-            seatsMap[matchedLoc.name] = Math.max(1, r.seats || 1);
-          }
-          empsMap[r.locationId] = r.assignedUserIds;
-          if (matchedLoc) {
-            empsMap[matchedLoc.name] = r.assignedUserIds;
-          }
-          r.assignedUserIds.forEach((id) => allAssignedIds.add(id));
-        }
-      });
-
-      locationIds = locIdsList.length > 0 ? locIdsList : undefined;
-      locationSeats = Object.keys(seatsMap).length > 0 ? seatsMap : undefined;
-      locationEmployees = Object.keys(empsMap).length > 0 ? empsMap : undefined;
-      if (!hasAll && specificRules.length > 0) {
-        maxSeats = specificRules[0].seats || 1;
+      if (matchedLoc) {
+        seatsMap[matchedLoc.name] = seats;
+        empsMap[matchedLoc.name] = r.assignedUserIds;
+        locationRooms[matchedLoc.name] = {
+          roomNumber: r.roomNumber || "",
+          roomName: r.roomName || "",
+          direction: r.direction || "",
+        };
       }
-    }
+      r.assignedUserIds.forEach((id) => allAssignedIds.add(id));
+    });
 
+    const locationIds = locIdsList.length > 0 ? locIdsList : undefined;
+    const locationSeats = Object.keys(seatsMap).length > 0 ? seatsMap : undefined;
+    const locationEmployees = Object.keys(empsMap).length > 0 ? empsMap : undefined;
+    const maxSeats = availabilityRules[0]?.seats || 1;
     const assignedEmployees = Array.from(allAssignedIds);
 
     const SYSTEM_KEYS = new Set([
@@ -739,9 +582,12 @@ export default function Services() {
       maxSeats,
       locationSeats,
       locationEmployees,
+      locationRooms,
       activity: `Updated ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
       customFields,
     });
+    // Sync rooms dynamically to roomsStore
+    syncServiceRooms(editingService.id, name, availabilityRules, allTeamEmps, fullOrgLocations);
     setServices(getStoredServices());
     toast.success(`"${name}" updated`);
     setShowEditDrawer(false);
@@ -754,37 +600,57 @@ export default function Services() {
     setActiveStaffDropdownLocId(null);
     setStaffSearchQuery("");
 
-    // Build availability rules from service
+    // Build availability rules from service and load any location rooms
+    const existingRooms = getStoredRooms().filter((r) => String(r.serviceId) === String(service.id));
     const rules: AvailabilityRule[] = [];
-    if (Array.isArray(service.locationIds) && service.locationIds.length > 0) {
-      service.locationIds.forEach((locId, idx) => {
-        const matchedLoc = fullOrgLocations.find((l) => l.id === locId || l.name === locId);
-        const locSeats =
-          service.locationSeats?.[locId] ??
-          (matchedLoc ? service.locationSeats?.[matchedLoc.name] : undefined) ??
-          service.maxSeats ??
-          1;
-        const locEmps =
-          service.locationEmployees?.[locId] ??
-          (matchedLoc ? service.locationEmployees?.[matchedLoc.name] : undefined) ??
-          service.assignedEmployees ??
-          [];
-        rules.push({
-          id: `rule-${locId}-${idx}`,
-          locationId: locId,
-          seats: Number(locSeats) || 1,
-          assignedUserIds: Array.isArray(locEmps) ? locEmps : [],
-        });
-      });
-    }
-    if (rules.length === 0) {
+
+    const effectiveLocIds = Array.isArray(service.locationIds) && service.locationIds.length > 0
+      ? service.locationIds
+      : fullOrgLocations.map((l) => l.id);
+
+    effectiveLocIds.forEach((locId, idx) => {
+      const matchedLoc = fullOrgLocations.find((l) => l.id === locId || l.name === locId);
+      const locSeats =
+        service.locationSeats?.[locId] ??
+        (matchedLoc ? service.locationSeats?.[matchedLoc.name] : undefined) ??
+        service.maxSeats ??
+        1;
+      const locEmps =
+        service.locationEmployees?.[locId] ??
+        (matchedLoc ? service.locationEmployees?.[matchedLoc.name] : undefined) ??
+        service.assignedEmployees ??
+        [];
+
+      const roomConfig =
+        service.locationRooms?.[locId] ??
+        (matchedLoc ? service.locationRooms?.[matchedLoc.name] : undefined);
+      const matchingStoredRoom = existingRooms.find(
+        (r) => r.location === (matchedLoc?.name || locId) || r.location === locId
+      );
+
       rules.push({
-        id: "rule-all",
-        locationId: "all",
+        id: `rule-${locId}-${idx}`,
+        locationId: locId,
+        seats: Number(locSeats) || 1,
+        assignedUserIds: Array.isArray(locEmps) ? locEmps : [],
+        roomNumber: roomConfig?.roomNumber || matchingStoredRoom?.roomNumber || "",
+        roomName: roomConfig?.roomName || matchingStoredRoom?.name || "",
+        direction: roomConfig?.direction || matchingStoredRoom?.direction || "",
+      });
+    });
+
+    if (rules.length === 0 && fullOrgLocations.length > 0) {
+      rules.push({
+        id: `rule-${fullOrgLocations[0].id}-0`,
+        locationId: fullOrgLocations[0].id,
         seats: service.maxSeats || 1,
         assignedUserIds: service.assignedEmployees || [],
+        roomNumber: "",
+        roomName: "",
+        direction: "",
       });
     }
+
     setAvailabilityRules(rules);
 
     setFieldValues({
@@ -934,19 +800,11 @@ export default function Services() {
                         {idx + 1}
                       </span>
                       <span className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {rule.locationId === "all"
-                          ? "Universal Offering"
-                          : fullOrgLocations.find((l) => l.id === rule.locationId || l.name === rule.locationId)?.name || "Location Rule"}
+                        {fullOrgLocations.find((l) => l.id === rule.locationId || l.name === rule.locationId)?.name || "Location Configuration"}
                       </span>
-                      {rule.locationId === "all" ? (
-                        <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md">
-                          All Locations
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md">
-                          Branch Specific
-                        </span>
-                      )}
+                      <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                        Branch Configuration
+                      </span>
                     </div>
 
                     {/* Delete rule button */}
@@ -954,13 +812,13 @@ export default function Services() {
                       type="button"
                       onClick={() => handleDeleteRule(rule.id)}
                       className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                      title="Delete availability rule"
+                      title="Remove this location"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
-                  {/* Fields: Location & Seats */}
+                  {/* Row 1: Location & Seats */}
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
                     {/* Location */}
                     <div className="sm:col-span-8 space-y-1">
@@ -970,11 +828,10 @@ export default function Services() {
                       </label>
                       <select
                         value={rule.locationId}
-                        onChange={(e) => handleUpdateRuleLocation(rule.id, e.target.value)}
+                        onChange={(e) => handleUpdateRuleField(rule.id, "locationId", e.target.value)}
                         className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 transition-colors cursor-pointer outline-none shadow-2xs"
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       >
-                        <option value="all">🌐 All Locations (Universal Offering)</option>
                         {fullOrgLocations.map((loc) => (
                           <option key={loc.id} value={loc.id}>
                             📍 {loc.name} {loc.name.toLowerCase() === "online" ? "(Virtual)" : ""}
@@ -993,11 +850,65 @@ export default function Services() {
                         type="number"
                         min={1}
                         value={rule.seats}
-                        onChange={(e) => handleUpdateRuleSeats(rule.id, parseInt(e.target.value, 10))}
+                        onChange={(e) => handleUpdateRuleField(rule.id, "seats", parseInt(e.target.value, 10) || 1)}
                         className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-bold text-slate-800 text-center transition-colors outline-none shadow-2xs"
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       />
                     </div>
+                  </div>
+
+                  {/* Row 2: Room Number & Label (Name of the room) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start pt-1">
+                    {/* Room Number */}
+                    <div className="sm:col-span-5 space-y-1">
+                      <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <Building2 className="w-3 h-3 text-blue-600" />
+                        <span>Room Number</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={rule.roomNumber || ""}
+                        onChange={(e) => handleUpdateRuleField(rule.id, "roomNumber", e.target.value)}
+                        placeholder="e.g. 101, Suite 4B"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-medium text-slate-800 transition-colors outline-none shadow-2xs"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                    </div>
+
+                    {/* Label (Name of the room) */}
+                    <div className="sm:col-span-7 space-y-1">
+                      <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <Layers className="w-3 h-3 text-blue-600" />
+                        <span>Label (Name of the room)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={rule.roomName || ""}
+                        onChange={(e) => handleUpdateRuleField(rule.id, "roomName", e.target.value)}
+                        placeholder="e.g. Consultation Room 1"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-medium text-slate-800 transition-colors outline-none shadow-2xs"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 3: Directions */}
+                  <div className="space-y-1 pt-1">
+                    <label className="block text-[11px] font-semibold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <Navigation className="w-3 h-3 text-blue-600" />
+                      <span>Directions</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={rule.direction || ""}
+                      onChange={(e) => handleUpdateRuleField(rule.id, "direction", e.target.value)}
+                      placeholder="e.g. Ground floor, turn left past main reception desk"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-medium text-slate-800 transition-colors outline-none shadow-2xs"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    />
+                    <p className="text-[10px] text-slate-400">
+                      Walking directions spoken and displayed to patients by AI Receptionist.
+                    </p>
                   </div>
 
                   {/* Assign User Section */}
@@ -1163,7 +1074,7 @@ export default function Services() {
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
             <Plus className="w-3.5 h-3.5 text-blue-600" />
-            <span>Add Availability</span>
+            <span>Add Location</span>
           </button>
         </div>
       </div>
@@ -1211,593 +1122,249 @@ export default function Services() {
           </div>
         </PageHeader>
 
-        {activeMainTab === "services" ? (
-          <>
-            {/* Action / Search Toolbar powered by PageTopBar */}
-            <PageTopBar
-              isBottomPanelAttached={true}
-              modes={[
-                { id: "services", label: "Products & Services", badge: services.length },
-                { id: "rooms", label: "Rooms", badge: rooms.length },
-              ]}
-              activeMode={activeMainTab}
-              onModeChange={(m) => setActiveMainTab(m as "services" | "rooms")}
-              searchQuery={searchQuery}
-              onSearchChange={(v) => {
-                setSearchQuery(v);
+        {/* Action / Search Toolbar powered by PageTopBar */}
+        <PageTopBar
+          isBottomPanelAttached={true}
+          searchQuery={searchQuery}
+          onSearchChange={(v) => {
+            setSearchQuery(v);
+            setCurrentPage(1);
+          }}
+          searchPlaceholder="Search product/services..."
+          filterPresets={[
+            {
+              id: "all",
+              label: "All Services",
+              count: services.length,
+              isActive: !searchQuery,
+              onClick: () => {
+                setSearchQuery("");
                 setCurrentPage(1);
-              }}
-              searchPlaceholder="Search product/services..."
-              filterPresets={[
-                {
-                  id: "all",
-                  label: "All Services",
-                  count: services.length,
-                  isActive: !searchQuery,
-                  onClick: () => {
-                    setSearchQuery("");
-                    setCurrentPage(1);
-                  },
-                },
-                ...categoryList.slice(0, 4).map((cat) => ({
-                  id: cat.toLowerCase(),
-                  label: cat,
-                  count: services.filter((s) => s.category === cat).length,
-                  isActive: searchQuery.toLowerCase() === cat.toLowerCase(),
-                  onClick: () => {
-                    setSearchQuery(cat);
-                    setCurrentPage(1);
-                  },
-                })),
-              ]}
-              filterFields={[
-                {
-                  id: "name",
-                  label: "Service Name / Code",
-                  type: "text",
-                  placeholder: "Filter by name or CPT code...",
-                  value: searchQuery,
-                  onChange: (val) => {
-                    setSearchQuery(val || "");
-                    setCurrentPage(1);
-                  },
-                },
-                {
-                  id: "category",
-                  label: "Category",
-                  type: "select",
-                  value: searchQuery,
-                  onChange: (val) => {
-                    setSearchQuery(val === "all" ? "" : val || "");
-                    setCurrentPage(1);
-                  },
-                  options: [
-                    { label: "All Categories", value: "all" },
-                    ...categoryList.map((c) => ({ label: c, value: c })),
-                  ],
-                },
-              ]}
-              onExport={() => setShowExportModal(true)}
-              primaryAction={{
-                label: "Add Product",
-                icon: <Plus className="w-4 h-4" />,
-                onClick: openAdd,
-              }}
+              },
+            },
+            ...categoryList.slice(0, 4).map((cat) => ({
+              id: cat.toLowerCase(),
+              label: cat,
+              count: services.filter((s) => s.category === cat).length,
+              isActive: searchQuery.toLowerCase() === cat.toLowerCase(),
+              onClick: () => {
+                setSearchQuery(cat);
+                setCurrentPage(1);
+              },
+            })),
+          ]}
+          filterFields={[
+            {
+              id: "name",
+              label: "Service Name / Code",
+              type: "text",
+              placeholder: "Filter by name or CPT code...",
+              value: searchQuery,
+              onChange: (val) => {
+                setSearchQuery(val || "");
+                setCurrentPage(1);
+              },
+            },
+            {
+              id: "category",
+              label: "Category",
+              type: "select",
+              value: searchQuery,
+              onChange: (val) => {
+                setSearchQuery(val === "all" ? "" : val || "");
+                setCurrentPage(1);
+              },
+              options: [
+                { label: "All Categories", value: "all" },
+                ...categoryList.map((c) => ({ label: c, value: c })),
+              ],
+            },
+          ]}
+          onExport={() => setShowExportModal(true)}
+          primaryAction={{
+            label: "Add Product",
+            icon: <Plus className="w-4 h-4" />,
+            onClick: openAdd,
+          }}
+        />
+
+        {/* Unified DataExportModal */}
+        <DataExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          title="Export Products & Services"
+          subtitle="Export catalog items, pricing, CPT codes, and categories"
+          data={services}
+          filenamePrefix="products_services"
+          allFields={[
+            { key: "name", label: "Product / Service Name", getValue: (s) => s.name },
+            { key: "category", label: "Category", getValue: (s) => s.category },
+            { key: "price", label: "Price", getValue: (s) => `${getCurrencySymbol(s.currency)}${s.price.toFixed(2)}` },
+            { key: "duration", label: "Duration (mins)", getValue: (s) => `${s.duration} mins` },
+            { key: "cptCode", label: "CPT Code", getValue: (s) => s.cptCode || "" },
+            { key: "description", label: "Description", getValue: (s) => s.description || "" },
+            { key: "tax", label: "Tax (%)", getValue: (s) => (s.tax ? `${s.tax}%` : "0%") },
+            { key: "color", label: "Color Tag", getValue: (s) => s.color || "" },
+          ]}
+        />
+
+        {/* Table View Connected with TableComponent */}
+        {(() => {
+          const serviceColumns: TableColumn<Service>[] = [
+            {
+              id: "name",
+              header: "Product / Service",
+              align: "left",
+              render: (service) => (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEdit(service);
+                  }}
+                  className="text-xs font-bold text-slate-900 hover:text-blue-600 transition-colors text-left truncate cursor-pointer"
+                  style={{ fontFamily: 'DM Sans, sans-serif' }}
+                >
+                  {service.name}
+                </button>
+              ),
+            },
+            {
+              id: "cptCode",
+              header: "CPT / Code",
+              align: "left",
+              render: (service) => (
+                service.cptCode ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-none text-[10px] font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80">
+                    {service.cptCode}
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-400 italic font-sans">—</span>
+                )
+              ),
+            },
+            {
+              id: "category",
+              header: "Category",
+              align: "left",
+              render: (service) => (
+                <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  {service.category || "General"}
+                </span>
+              ),
+            },
+            {
+              id: "duration",
+              header: "Duration",
+              align: "left",
+              render: (service) => (
+                <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  {service.duration} min
+                </span>
+              ),
+            },
+            {
+              id: "price",
+              header: "Price",
+              align: "left",
+              render: (service) => (
+                <span className="text-xs font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  {getCurrencySymbol(service.currency)} {service.price}
+                </span>
+              ),
+            },
+            {
+              id: "tax",
+              header: "Tax",
+              align: "left",
+              render: (service) => (
+                Boolean(service.tax && service.tax > 0) ? (
+                  <span className="text-xs font-medium text-slate-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    {service.tax}%
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-400 italic font-sans">—</span>
+                )
+              ),
+            },
+            {
+              id: "assignedStaff",
+              header: "Responsible",
+              align: "left",
+              render: (service) => {
+                const assignedEmps = allTeamEmps.filter((e) =>
+                  service.assignedEmployees?.some((id) => String(id) === String(e.id))
+                );
+                return assignedEmps.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 items-center">
+                    {assignedEmps.map((emp) => (
+                      <span
+                        key={emp.id}
+                        className="inline-flex items-center px-1.5 py-0.5 rounded-none text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/80"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        {emp.name}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-slate-400 italic" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    Unassigned
+                  </span>
+                );
+              },
+            },
+            {
+              id: "created",
+              header: "Created",
+              align: "left",
+              render: (service) => (
+                <span className="text-xs text-slate-600 font-medium" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  {service.createdAt || "2024-04-12"}
+                </span>
+              ),
+            },
+            {
+              id: "activity",
+              header: "Activity",
+              align: "left",
+              render: (service) => (
+                <span className="text-xs text-slate-500 font-normal" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  {service.activity || "Apr 12"}
+                </span>
+              ),
+            },
+          ];
+
+          const serviceRowActions: TableRowAction<Service>[] = [
+            {
+              label: "Edit",
+              icon: <Edit2 className="w-3.5 h-3.5" />,
+              onClick: (service) => openEdit(service),
+            },
+            {
+              label: "Delete",
+              icon: <Trash2 className="w-3.5 h-3.5" />,
+              isDanger: true,
+              onClick: (service) => handleDelete(service.id, service.name),
+            },
+          ];
+
+          return (
+            <TableComponent
+              data={filteredServices}
+              columns={serviceColumns}
+              getRowId={(s) => s.id}
+              rowActions={serviceRowActions}
+              selectedIds={new Set(selectedServiceIds)}
+              onSelectionChange={(ids) => setSelectedServiceIds(Array.from(ids) as number[])}
+              onRowClick={(service) => openEdit(service)}
+              defaultRowsPerPage={20}
+              emptyMessage="No products or services found matching your filters."
             />
-
-            {/* Unified DataExportModal */}
-            <DataExportModal
-              isOpen={showExportModal}
-              onClose={() => setShowExportModal(false)}
-              title="Export Products & Services"
-              subtitle="Export catalog items, pricing, CPT codes, and categories"
-              data={services}
-              filenamePrefix="products_services"
-              allFields={[
-                { key: "name", label: "Product / Service Name", getValue: (s) => s.name },
-                { key: "category", label: "Category", getValue: (s) => s.category },
-                { key: "price", label: "Price", getValue: (s) => `${getCurrencySymbol(s.currency)}${s.price.toFixed(2)}` },
-                { key: "duration", label: "Duration (mins)", getValue: (s) => `${s.duration} mins` },
-                { key: "cptCode", label: "CPT Code", getValue: (s) => s.cptCode || "" },
-                { key: "description", label: "Description", getValue: (s) => s.description || "" },
-                { key: "tax", label: "Tax (%)", getValue: (s) => (s.tax ? `${s.tax}%` : "0%") },
-                { key: "color", label: "Color Tag", getValue: (s) => s.color || "" },
-              ]}
-            />
-
-            {/* Table View Connected with TableComponent */}
-            {(() => {
-              const serviceColumns: TableColumn<Service>[] = [
-                {
-                  id: "name",
-                  header: "Product / Service",
-                  align: "left",
-                  render: (service) => (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEdit(service);
-                      }}
-                      className="text-xs font-bold text-slate-900 hover:text-blue-600 transition-colors text-left truncate cursor-pointer"
-                      style={{ fontFamily: 'DM Sans, sans-serif' }}
-                    >
-                      {service.name}
-                    </button>
-                  ),
-                },
-                {
-                  id: "cptCode",
-                  header: "CPT / Code",
-                  align: "left",
-                  render: (service) => (
-                    service.cptCode ? (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-none text-[10px] font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80">
-                        {service.cptCode}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400 italic font-sans">—</span>
-                    )
-                  ),
-                },
-                {
-                  id: "category",
-                  header: "Category",
-                  align: "left",
-                  render: (service) => (
-                    <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                      {service.category || "General"}
-                    </span>
-                  ),
-                },
-                {
-                  id: "duration",
-                  header: "Duration",
-                  align: "left",
-                  render: (service) => (
-                    <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                      {service.duration} min
-                    </span>
-                  ),
-                },
-                {
-                  id: "price",
-                  header: "Price",
-                  align: "left",
-                  render: (service) => (
-                    <span className="text-xs font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                      {getCurrencySymbol(service.currency)} {service.price}
-                    </span>
-                  ),
-                },
-                {
-                  id: "tax",
-                  header: "Tax",
-                  align: "left",
-                  render: (service) => (
-                    Boolean(service.tax && service.tax > 0) ? (
-                      <span className="text-xs font-medium text-slate-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        {service.tax}%
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400 italic font-sans">—</span>
-                    )
-                  ),
-                },
-                {
-                  id: "assignedStaff",
-                  header: "Responsible",
-                  align: "left",
-                  render: (service) => {
-                    const assignedEmps = allTeamEmps.filter((e) =>
-                      service.assignedEmployees?.some((id) => String(id) === String(e.id))
-                    );
-                    return assignedEmps.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 items-center">
-                        {assignedEmps.map((emp) => (
-                          <span
-                            key={emp.id}
-                            className="inline-flex items-center px-1.5 py-0.5 rounded-none text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/80"
-                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                          >
-                            {emp.name}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-slate-400 italic" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Unassigned
-                      </span>
-                    );
-                  },
-                },
-                {
-                  id: "created",
-                  header: "Created",
-                  align: "left",
-                  render: (service) => (
-                    <span className="text-xs text-slate-600 font-medium" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                      {service.createdAt || "2024-04-12"}
-                    </span>
-                  ),
-                },
-                {
-                  id: "activity",
-                  header: "Activity",
-                  align: "left",
-                  render: (service) => (
-                    <span className="text-xs text-slate-500 font-normal" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                      {service.activity || "Apr 12"}
-                    </span>
-                  ),
-                },
-              ];
-
-              const serviceRowActions: TableRowAction<Service>[] = [
-                {
-                  label: "Edit",
-                  icon: <Edit2 className="w-3.5 h-3.5" />,
-                  onClick: (service) => openEdit(service),
-                },
-                {
-                  label: "Delete",
-                  icon: <Trash2 className="w-3.5 h-3.5" />,
-                  isDanger: true,
-                  onClick: (service) => handleDelete(service.id, service.name),
-                },
-              ];
-
-              return (
-                <TableComponent
-                  data={filteredServices}
-                  columns={serviceColumns}
-                  getRowId={(s) => s.id}
-                  rowActions={serviceRowActions}
-                  selectedIds={new Set(selectedServiceIds)}
-                  onSelectionChange={(ids) => setSelectedServiceIds(Array.from(ids) as number[])}
-                  onRowClick={(service) => openEdit(service)}
-                  defaultRowsPerPage={20}
-                  emptyMessage="No products or services found matching your filters."
-                />
-              );
-            })()}
-          </>
-        ) : (
-          <>
-            {/* Rooms Toolbar powered by PageTopBar */}
-            <PageTopBar
-              isBottomPanelAttached={true}
-              modes={[
-                { id: "services", label: "Products & Services", badge: services.length },
-                { id: "rooms", label: "Rooms", badge: rooms.length },
-              ]}
-              activeMode={activeMainTab}
-              onModeChange={(m) => setActiveMainTab(m as "services" | "rooms")}
-              searchQuery={roomSearchQuery}
-              onSearchChange={setRoomSearchQuery}
-              searchPlaceholder="Search rooms (room #, name, location, guidance)..."
-              filterPresets={[
-                {
-                  id: "all",
-                  label: "All Rooms",
-                  count: rooms.length,
-                  isActive: roomLocationFilter === "all",
-                  onClick: () => setRoomLocationFilter("all"),
-                },
-                ...orgLocations.map((loc) => ({
-                  id: loc.toLowerCase(),
-                  label: loc,
-                  count: rooms.filter((r) => r.location?.toLowerCase() === loc.toLowerCase()).length,
-                  isActive: roomLocationFilter.toLowerCase() === loc.toLowerCase(),
-                  onClick: () => setRoomLocationFilter(loc),
-                })),
-              ]}
-              filterFields={[
-                {
-                  id: "location",
-                  label: "Location",
-                  type: "select",
-                  value: roomLocationFilter,
-                  onChange: (val) => setRoomLocationFilter(val || "all"),
-                  options: [
-                    { label: "All Locations", value: "all" },
-                    ...orgLocations.map((loc) => ({ label: loc, value: loc })),
-                  ],
-                },
-              ]}
-              primaryAction={{
-                label: "Add Room",
-                icon: <Plus className="w-4 h-4" />,
-                onClick: openAddRoom,
-              }}
-            />
-
-            {/* Table View for Rooms with TableComponent */}
-            {(() => {
-              const roomColumns: TableColumn<Room>[] = [
-                {
-                  id: "roomNumber",
-                  header: "Room #",
-                  align: "left",
-                  render: (room) => (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-bold bg-slate-100 text-slate-800 border border-slate-200">
-                      #{room.roomNumber}
-                    </span>
-                  ),
-                },
-                {
-                  id: "name",
-                  header: "Room / Station",
-                  align: "left",
-                  render: (room) => (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditRoom(room);
-                      }}
-                      className="text-xs font-bold text-slate-900 hover:text-blue-600 transition-colors text-left truncate cursor-pointer"
-                      style={{ fontFamily: 'DM Sans, sans-serif' }}
-                    >
-                      {room.name}
-                    </button>
-                  ),
-                },
-                {
-                  id: "location",
-                  header: "Location",
-                  align: "left",
-                  render: (room) => (
-                    <span className="inline-flex items-center gap-1 text-xs text-slate-700 font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      {room.location || "California"}
-                    </span>
-                  ),
-                },
-                {
-                  id: "service",
-                  header: "Assigned Service",
-                  align: "left",
-                  render: (room) => (
-                    room.serviceName ? (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/60" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        {room.serviceName}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400 italic font-sans">All Services</span>
-                    )
-                  ),
-                },
-                {
-                  id: "responsible",
-                  header: "Responsible Staff",
-                  align: "left",
-                  render: (room) => (
-                    room.responsibleName ? (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        {room.responsibleName}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400 italic font-sans">Unassigned</span>
-                    )
-                  ),
-                },
-                {
-                  id: "direction",
-                  header: "Walking Directions / Guidance",
-                  align: "left",
-                  render: (room) => (
-                    <span className="text-xs text-slate-600 line-clamp-1 max-w-xs" title={room.direction} style={{ fontFamily: 'Outfit, sans-serif' }}>
-                      {room.direction || "—"}
-                    </span>
-                  ),
-                },
-                {
-                  id: "status",
-                  header: "Status",
-                  align: "center",
-                  render: (room) => (
-                    <span
-                      className={`inline-flex items-center gap-1 text-xs font-bold ${
-                        room.isActive !== false ? 'text-emerald-600' : 'text-slate-400'
-                      }`}
-                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${room.isActive !== false ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                      {room.isActive !== false ? "Active" : "Inactive"}
-                    </span>
-                  ),
-                },
-              ];
-
-              const roomRowActions: TableRowAction<Room>[] = [
-                {
-                  label: "Edit Room",
-                  icon: <Edit2 className="w-3.5 h-3.5" />,
-                  onClick: (room) => openEditRoom(room),
-                },
-                {
-                  label: "Toggle Status",
-                  icon: <ToggleLeft className="w-3.5 h-3.5" />,
-                  onClick: (room) => handleToggleRoomActive(room.id),
-                },
-                {
-                  label: "Delete",
-                  icon: <Trash2 className="w-3.5 h-3.5" />,
-                  isDanger: true,
-                  onClick: (room) => handleDeleteRoom(room.id, room.name),
-                },
-              ];
-
-              return (
-                <TableComponent
-                  data={filteredRooms}
-                  columns={roomColumns}
-                  getRowId={(r) => r.id}
-                  rowActions={roomRowActions}
-                  selectedIds={new Set(selectedRoomIds)}
-                  onSelectionChange={(ids) => setSelectedRoomIds(Array.from(ids) as string[])}
-                  onRowClick={(room) => openEditRoom(room)}
-                  defaultRowsPerPage={20}
-                  emptyMessage="No clinic rooms configured matching your search."
-                />
-              );
-            })()}
-          </>
-        )}
+          );
+        })()}
       </div>
-
-      {/* Add / Edit Room Drawer */}
-      <DrawerShell
-        isOpen={showAddRoomDrawer || showEditRoomDrawer}
-        onClose={() => { setShowAddRoomDrawer(false); setShowEditRoomDrawer(false); resetRoomForm(); }}
-        title={showEditRoomDrawer ? `Edit Room ${roomForm.roomNumber}` : "Add New Room"}
-        subtitle="Define room number, walking guidance, location, and service assignment"
-        icon={<Building2 className="w-4 h-4 text-blue-600" />}
-        width="max-w-lg"
-        zIndex={600}
-        footer={
-          <div className="flex items-center gap-2 w-full justify-end">
-            <button
-              type="button"
-              onClick={() => { setShowAddRoomDrawer(false); setShowEditRoomDrawer(false); resetRoomForm(); }}
-              className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSaveRoom(showEditRoomDrawer)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors cursor-pointer shadow-xs"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              {showEditRoomDrawer ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-              {showEditRoomDrawer ? "Save Changes" : "Add Room"}
-            </button>
-          </div>
-        }
-      >
-        <div className="p-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Room Number <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={roomForm.roomNumber}
-                onChange={(e) => setRoomForm((prev) => ({ ...prev, roomNumber: e.target.value }))}
-                placeholder="e.g. 101, 204"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Room / Station Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={roomForm.name}
-                onChange={(e) => setRoomForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="e.g. Consultation Room 1"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Location (Clinic Branch) <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={roomForm.location}
-              onChange={(e) => setRoomForm((prev) => ({ ...prev, location: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              {orgLocations.map((loc) => (
-                <option key={loc} value={loc}>
-                  {loc}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Associated Service
-              </label>
-              <select
-                value={roomForm.serviceId}
-                onChange={(e) => setRoomForm((prev) => ({ ...prev, serviceId: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="">Any / All Services</option>
-                {services.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Responsible Practitioner
-              </label>
-              <select
-                value={roomForm.responsibleId}
-                onChange={(e) => setRoomForm((prev) => ({ ...prev, responsibleId: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="">Unassigned / Any Doctor</option>
-                {allTeamEmps.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.name} ({emp.role})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Walking Directions / Wayfinding Guidance
-            </label>
-            <textarea
-              rows={3}
-              value={roomForm.direction}
-              onChange={(e) => setRoomForm((prev) => ({ ...prev, direction: e.target.value }))}
-              placeholder="e.g. Walk past the main reception desk, turn left at corridor B; Room 101 is the first door on the right."
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            />
-            <p className="text-[11px] text-slate-400 mt-1">
-              AI Receptionist speaks and displays these exact walking directions when guiding patients to this room.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 pt-2">
-            <input
-              type="checkbox"
-              id="roomIsActive"
-              checked={roomForm.isActive}
-              onChange={(e) => setRoomForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-            />
-            <label htmlFor="roomIsActive" className="text-xs font-medium text-slate-700 cursor-pointer" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Room is active and available for appointment allocation
-            </label>
-          </div>
-        </div>
-      </DrawerShell>
 
       <DrawerShell
         isOpen={showAddDrawer}

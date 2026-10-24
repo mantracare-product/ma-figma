@@ -26,6 +26,7 @@ export interface Service {
   maxSeats?: number;
   locationSeats?: Record<string, number>;
   locationEmployees?: Record<string, (number | string)[]>;
+  locationRooms?: Record<string, { roomNumber?: string; roomName?: string; direction?: string }>;
   color?: string;
   customFields?: Record<string, any>;
 }

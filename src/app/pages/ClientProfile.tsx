@@ -6,7 +6,7 @@ import {
   Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle,
   Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Wallet, CreditCard, AlertTriangle, Pencil, LayoutGrid, List, Workflow, Layers, Mic,
   GripVertical, MoreVertical, Settings as SettingsIcon, Share2, Send, Stethoscope, Video,
-  Tag, ShieldCheck, UserPlus, Info,
+  Tag, ShieldCheck, UserPlus, Info, UserX,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -3555,11 +3555,47 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       },
                     },
                     {
+                      label: "Edit Details",
+                      icon: <Pencil className="w-3.5 h-3.5 text-indigo-600" />,
+                      onClick: (apt) => {
+                        setActivityBookingValues({
+                          title: apt.title || "Consultation",
+                          description: apt.notes || "",
+                          note: apt.notes || "",
+                          tags: "",
+                          processId: apt.processId || selectedApptProc.id || "",
+                          stageId: apt.currentStageId || "",
+                          date: apt.date || new Date().toISOString().split("T")[0],
+                          startHour: 10,
+                          startMinute: 0,
+                          sessionType: "video",
+                          client: { id: client.id, name: client.name, email: client.email || "", phone: client.phone || "" },
+                          provider: { id: apt.employeeId || 1, name: ALL_EMPLOYEES_MAP[String(apt.employeeId)] || "John Smith", email: "provider@healthcare.com" },
+                          generateInvoice: false,
+                        });
+                        setShowScheduleApptFromActivity(true);
+                      },
+                    },
+                    {
                       label: "Mark as Complete",
                       icon: <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />,
                       hidden: (apt: any) => apt.status === "completed",
                       onClick: (apt) => {
                         handleUpdateApptStatus(apt.id, "completed");
+                      },
+                    },
+                    {
+                      label: "No Show",
+                      icon: <UserX className="w-3.5 h-3.5 text-slate-600" />,
+                      hidden: (apt: any) => apt.status === "no-show" || apt.status === "no_show" || apt.status === "cancelled",
+                      onClick: (apt) => {
+                        try {
+                          appointmentService.markNoShow(apt.id);
+                          setAppointmentRefreshKey((k) => k + 1);
+                          toast.success("Appointment marked as No Show");
+                        } catch {
+                          handleUpdateApptStatus(apt.id, "no-show");
+                        }
                       },
                     },
                     {

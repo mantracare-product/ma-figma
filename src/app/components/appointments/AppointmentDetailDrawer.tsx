@@ -31,6 +31,7 @@ import {
   Settings,
   XCircle,
   Mic,
+  UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 import NewConsultationDrawer from "../scribe/NewConsultationDrawer";
@@ -69,6 +70,7 @@ export interface AppointmentDetailDrawerProps {
   onUpdateAppointment?: (updated: any) => void;
   onReschedule?: (appointment: any) => void;
   onMarkComplete?: (id: number | string) => void;
+  onMarkNoShow?: (id: number | string) => void;
   onDelete?: (id: number | string) => void;
   employees: Array<{ id: number | string; name: string; email?: string; role?: string }>;
   services: Array<{ id: number | string; name: string; duration?: number; price?: number }>;
@@ -112,6 +114,7 @@ export default function AppointmentDetailDrawer({
   onUpdateAppointment,
   onReschedule,
   onMarkComplete,
+  onMarkNoShow,
   onDelete,
   employees = [],
   services = [],
@@ -122,6 +125,13 @@ export default function AppointmentDetailDrawer({
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<"overview" | "documents" | "invoices" | "calls">("overview");
+
+  // Ensure Overview tab is active when drawer opens or appointment changes
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab("overview");
+    }
+  }, [isOpen, appointment?.id]);
 
   // Invoices Sub-drawers & State
   const [invoiceSearchQuery, setInvoiceSearchQuery] = useState("");
@@ -760,6 +770,27 @@ export default function AppointmentDetailDrawer({
               >
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                 Mark as Complete
+              </button>
+            )}
+
+            {effectiveAppt.status !== "no-show" && effectiveAppt.status !== "no_show" && effectiveAppt.status !== "completed" && effectiveAppt.status !== "cancelled" && (
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    const noShow = appointmentService.markNoShow(effectiveAppt.id);
+                    setLiveAppointment(noShow);
+                    if (onUpdateAppointment) onUpdateAppointment(noShow);
+                    if (onMarkNoShow) onMarkNoShow(effectiveAppt.id);
+                    toast.success("Appointment marked as No Show");
+                  } catch (e) {
+                    console.warn(e);
+                  }
+                }}
+                className="px-3.5 py-1.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <UserX className="w-3.5 h-3.5 text-slate-600" />
+                No Show
               </button>
             )}
 

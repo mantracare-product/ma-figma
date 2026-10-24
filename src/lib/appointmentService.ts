@@ -1023,6 +1023,81 @@ class AppointmentService {
   }
 
   /**
+   * Mark an appointment as No-show
+   * Updates status to 'no-show' and transitions to No-show stage if available.
+   * Emits appointment.no_show event and appends activity.
+   */
+  public markNoShow(id: number | string, notes?: string): Appointment {
+    const all = this.getAppointments();
+    const existing = all.find((a) => String(a.id) === String(id));
+    if (!existing) throw new Error(`[AppointmentService] Appointment ${id} not found.`);
+
+    const proc = getStoredProcesses().find((p) => p.id === existing.processId) || this.getAppointmentProcess();
+    const noShowStage = proc?.stages?.find(
+      (s) =>
+        s.systemCategory === "no_show" ||
+        s.name.toLowerCase().includes("no-show") ||
+        s.name.toLowerCase().includes("no show")
+    );
+
+    const previousStageId = existing.currentStageId || "";
+    const newStageId = noShowStage?.id || existing.currentStageId || "";
+    const newStageName = noShowStage?.name || "No-show";
+
+    const updatedAppointment: Appointment = {
+      ...existing,
+      status: "no-show",
+      statusLabel: newStageName,
+      currentStageId: newStageId,
+      notes: notes ? `${existing.notes ? existing.notes + " | " : ""}No-show: ${notes}` : existing.notes,
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.saveAppointments(all.map((a) => (String(a.id) === String(id) ? updatedAppointment : a)));
+
+    const formattedApptId = !isNaN(Number(id))
+      ? `APT-${Number(id).toString().padStart(4, "0")}`
+      : `APT-${id}`;
+
+    if (previousStageId && noShowStage && previousStageId !== newStageId) {
+      logStageMove({
+        orgId: "default",
+        recordType: "appointment",
+        recordId: String(id),
+        fromStageId: previousStageId,
+        toStageId: newStageId,
+        toStageName: newStageName,
+        processId: proc.id,
+        processName: proc.name,
+        cause: { type: "manual", ruleName: "Marked as No-show" },
+      });
+    }
+
+    appendActivity({
+      clientId: existing.clientId || formattedApptId,
+      appointmentId: String(id),
+      processId: existing.processId || proc.id,
+      processName: proc.name,
+      type: "appointment_no_show" as any,
+      status: "no_show",
+      date: existing.date,
+      time: existing.time,
+      location: existing.location,
+      notes: notes || existing.notes,
+      appointmentTitle: existing.title,
+      createdBy: "user",
+      details: {
+        primary: `Appointment #${formattedApptId} marked as No Show`,
+        secondary: `Patient did not attend scheduled visit on ${existing.date} at ${existing.time}`,
+      },
+    });
+
+    eventBus.emit("appointment.no_show", "appointment", String(id), updatedAppointment);
+
+    return updatedAppointment;
+  }
+
+  /**
    * Check in an appointment
    * Updates status without hardcoding stage. Stage movement is driven by automations on appointment.checked_in.
    */

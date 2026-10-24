@@ -30,6 +30,7 @@ import {
   Check,
   Settings,
   Mic,
+  UserX,
 } from "lucide-react";
 import NewConsultationDrawer from "../components/scribe/NewConsultationDrawer";
 import { appointmentService, hasAppointmentAutomation, Appointment } from "../../lib/appointmentService";
@@ -1501,6 +1502,14 @@ export default function Appointments() {
                     },
                   },
                   {
+                    label: "Edit Details",
+                    icon: <Edit className="w-3.5 h-3.5 text-indigo-600" />,
+                    onClick: (apt) => {
+                      setSelectedAppointmentForDrawer(apt);
+                      setIsDetailDrawerOpen(true);
+                    },
+                  },
+                  {
                     label: "Reschedule",
                     icon: <Clock className="w-3.5 h-3.5 text-amber-600" />,
                     onClick: (apt) => openBookingDrawerForReschedule(apt),
@@ -1515,6 +1524,21 @@ export default function Appointments() {
                         setAppointments(appointmentService.getAppointments() as any);
                         setStoreTick((t) => t + 1);
                         toast.success("Appointment marked as completed");
+                      } catch (e) {
+                        console.warn(e);
+                      }
+                    },
+                  },
+                  {
+                    label: "No Show",
+                    icon: <UserX className="w-3.5 h-3.5 text-slate-600" />,
+                    hidden: (apt) => apt.status === "no-show" || (apt.status as any) === "no_show" || apt.status === "cancelled",
+                    onClick: (apt) => {
+                      try {
+                        appointmentService.markNoShow(apt.id);
+                        setAppointments(appointmentService.getAppointments() as any);
+                        setStoreTick((t) => t + 1);
+                        toast.success("Appointment marked as No Show");
                       } catch (e) {
                         console.warn(e);
                       }
@@ -1663,6 +1687,17 @@ export default function Appointments() {
             setAppointments(appointmentService.getAppointments() as any);
             if (selectedAppointmentForDrawer && selectedAppointmentForDrawer.id === id) {
               setSelectedAppointmentForDrawer(completed);
+            }
+          } catch (e) {
+            console.warn(e);
+          }
+        }}
+        onMarkNoShow={(id) => {
+          try {
+            const noShow = appointmentService.markNoShow(id);
+            setAppointments(appointmentService.getAppointments() as any);
+            if (selectedAppointmentForDrawer && selectedAppointmentForDrawer.id === id) {
+              setSelectedAppointmentForDrawer(noShow);
             }
           } catch (e) {
             console.warn(e);

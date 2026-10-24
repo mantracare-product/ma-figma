@@ -276,3 +276,53 @@ export function onRoomsChanged(listener: () => void): () => void {
     window.removeEventListener("storage", listener);
   };
 }
+
+export function syncServiceRooms(
+  serviceId: number | string,
+  serviceName: string,
+  rules: Array<{
+    locationId: string;
+    roomNumber?: string;
+    roomName?: string;
+    direction?: string;
+    assignedUserIds?: (number | string)[];
+  }>,
+  allTeamEmps: Array<{ id: number | string; name: string }>,
+  locations: Array<{ id: string; name: string }>
+): void {
+  const allRooms = getStoredRooms();
+  const srvIdStr = String(serviceId);
+  const remaining = allRooms.filter(
+    (r) => String(r.serviceId) !== srvIdStr && !r.id.startsWith(`rm-svc-${srvIdStr}-`)
+  );
+
+  const newRooms: Room[] = [];
+  const now = new Date().toISOString();
+
+  rules.forEach((rule) => {
+    if (!rule.roomNumber && !rule.roomName && !rule.direction) return;
+    const matchedLoc = locations.find((l) => l.id === rule.locationId || l.name === rule.locationId);
+    const locName = matchedLoc?.name || rule.locationId;
+    const firstEmp = rule.assignedUserIds?.[0]
+      ? allTeamEmps.find((e) => String(e.id) === String(rule.assignedUserIds![0]))
+      : undefined;
+
+    newRooms.push({
+      id: `rm-svc-${srvIdStr}-${rule.locationId.replace(/[^a-zA-Z0-9_-]/g, "_")}`,
+      roomNumber: rule.roomNumber || "",
+      name: rule.roomName || (rule.roomNumber ? `Room ${rule.roomNumber}` : "Consultation Room"),
+      direction: rule.direction || "",
+      location: locName,
+      serviceId: srvIdStr,
+      serviceName: serviceName,
+      responsibleId: firstEmp ? String(firstEmp.id) : undefined,
+      responsibleName: firstEmp?.name,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+
+  saveRooms([...remaining, ...newRooms]);
+}
+

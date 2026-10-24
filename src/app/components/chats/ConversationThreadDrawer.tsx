@@ -28,6 +28,7 @@ export default function ConversationThreadDrawer({
 }: ConversationThreadDrawerProps) {
   const {
     conversations,
+    setConversations,
     getConversation,
     findConversationForClient,
     findOrCreateConversationForClient,
