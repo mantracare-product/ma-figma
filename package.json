@@ -9,7 +9,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:webhook": "node utility/test-whatsapp-webhook.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
