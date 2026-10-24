@@ -1,10 +1,11 @@
-export type ChannelType = "whatsapp" | "sms" | "website" | "email";
+export type ChannelType = "whatsapp" | "sms" | "website" | "email" | "companion";
 
 export const CHANNEL_CLASSES: Record<ChannelType, string> = {
   whatsapp: "bg-[#ecfdf5] border border-emerald-200/60 text-[#047857]",
   sms: "bg-blue-50 border border-blue-200/60 text-[#1456f0]",
   website: "bg-slate-100 border border-slate-200/80 text-slate-700",
   email: "bg-rose-50 border border-rose-200/60 text-rose-700",
+  companion: "bg-indigo-50 border border-indigo-200/60 text-indigo-700",
 };
 
 export const CHANNEL_LABELS: Record<ChannelType, string> = {
@@ -12,4 +13,5 @@ export const CHANNEL_LABELS: Record<ChannelType, string> = {
   sms: "SMS",
   website: "Website",
   email: "Email",
+  companion: "Companion",
 };

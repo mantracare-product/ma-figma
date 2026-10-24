@@ -10,7 +10,7 @@ import { cloneLibraryBotNodes, LibraryBot } from "../../../lib/chatbotLibrary";
 import { useChatbotBots } from "../../../lib/useChatbotBots";
 import TableComponent, { TableColumn } from "../ui/TableComponent";
 
-export type ChannelType = "whatsapp" | "sms" | "website" | "email";
+export type ChannelType = "whatsapp" | "sms" | "website" | "email" | "companion";
 
 export interface Bot {
   id: string;
@@ -167,14 +167,16 @@ const CHANNEL_CLASSES: Record<ChannelType, string> = {
   whatsapp: "bg-green-50 border border-green-200 text-green-700",
   sms: "bg-blue-50 border border-blue-200 text-blue-700",
   website: "bg-purple-50 border border-purple-200 text-purple-700",
-  email: "bg-sky-50 border border-sky-200 text-sky-700"
+  email: "bg-sky-50 border border-sky-200 text-sky-700",
+  companion: "bg-indigo-50 border border-indigo-200 text-indigo-700",
 };
 
 const CHANNEL_LABELS: Record<ChannelType, string> = {
   whatsapp: "WhatsApp",
   sms: "SMS",
   website: "Website",
-  email: "Email"
+  email: "Email",
+  companion: "Companion",
 };
 
 import { availableProcesses } from "../ui/ProcessStageSelect";

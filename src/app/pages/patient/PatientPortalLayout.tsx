@@ -18,6 +18,7 @@ import {
   Menu,
   X,
   ClipboardList,
+  Bot,
 } from "lucide-react";
 import { toast } from "sonner";
 import maLogo from "../../../imports/ma_logo-1.png";
@@ -31,6 +32,7 @@ import {
 } from "../../../lib/useProcessStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import DevPatientSwitcherModal from "./components/DevPatientSwitcherModal";
+import CareBotDrawer from "./components/CareBotDrawer";
 
 export const STAGE_ROUTES: Record<string, string> = {
   "Client Checked In": "/patient/book",
@@ -52,6 +54,7 @@ export default function PatientPortalLayout() {
 
   const [isDevSwitcherOpen, setIsDevSwitcherOpen] = useState(false);
   const [isNavDrawerOpen, setIsNavDrawerOpen] = useState(false);
+  const [isCareBotOpen, setIsCareBotOpen] = useState(false);
   const [showOrgDropdown, setShowOrgDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const orgMenuRef = useRef<HTMLDivElement>(null);
@@ -375,6 +378,27 @@ export default function PatientPortalLayout() {
                   </NavLink>
                 );
               })}
+
+              {/* Care Bot Action Item in Navigation */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNavDrawerOpen(false);
+                  setIsCareBotOpen(true);
+                }}
+                className="w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold text-slate-700 hover:text-blue-700 hover:bg-blue-50/70 border border-slate-200/60 bg-gradient-to-r from-blue-50/40 to-indigo-50/30 transition-all cursor-pointer group mt-2"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-5 h-5 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                    <Bot className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="truncate">Care Bot</span>
+                </div>
+                <span className="text-[10px] font-bold text-blue-700 bg-blue-100/90 px-2 py-0.5 rounded-full">
+                  Chat
+                </span>
+              </button>
             </div>
 
             {/* Drawer Bottom Profile & Dev Switcher Footer */}
@@ -539,6 +563,31 @@ export default function PatientPortalLayout() {
           </div>
         </main>
       </div>
+
+      {/* Floating Care Bot Launcher Button */}
+      <button
+        type="button"
+        onClick={() => setIsCareBotOpen(true)}
+        className="fixed bottom-6 right-6 z-40 bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2.5 shadow-lg shadow-blue-600/30 flex items-center gap-2 text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer"
+        style={{ fontFamily: "Outfit, sans-serif" }}
+        title="Open Care Bot"
+        aria-label="Open Care Bot"
+      >
+        <Bot className="w-4 h-4" />
+        <span>Care Bot</span>
+        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+      </button>
+
+      {/* Care Bot Interactive Drawer */}
+      <CareBotDrawer
+        isOpen={isCareBotOpen}
+        onClose={() => setIsCareBotOpen(false)}
+        activeClient={activeClient}
+        onCheckIn={() => {
+          outletContext.onStageChange("Client Checked In");
+          toast.success("Checked in successfully for your visit!");
+        }}
+      />
 
       {/* Dev Patient Switcher Modal */}
       <DevPatientSwitcherModal

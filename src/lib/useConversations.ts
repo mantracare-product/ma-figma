@@ -29,7 +29,7 @@ export interface Conversation {
   contactName: string;
   phoneNumber: string;
   inboxNumber?: string;
-  channel: "whatsapp" | "sms" | "website" | "email";
+  channel: "whatsapp" | "sms" | "website" | "email" | "companion";
   lastMessage: string;
   timestamp: string;
   unreadCount: number;
@@ -53,7 +53,7 @@ export interface Conversation {
 }
 
 export interface SessionWindowStatus {
-  channel: "whatsapp" | "sms" | "website" | "email";
+  channel: "whatsapp" | "sms" | "website" | "email" | "companion";
   lastInboundAt: string | null;
   hoursRemaining: number | null;
   isExpired: boolean;
@@ -869,6 +869,44 @@ export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
     botStatus: "off",
     assignedPersonId: "",
   },
+  // ── Companion Channel Mock Conversations (Client / Patient Portal) ──
+  {
+    id: "conv-comp-1",
+    clientId: "CL-001",
+    contactName: "Sarah Johnson",
+    phoneNumber: "+1 (555) 123-4567",
+    inboxNumber: "Companion Portal",
+    channel: "companion",
+    lastMessage: "I need to confirm if my insurance pre-authorization went through for Friday's visit.",
+    timestamp: "10:14 AM",
+    unreadCount: 1,
+    status: "open",
+    messages: [
+      { id: "msg-comp-1-1", text: "Hi Sarah! Welcome to Companion. How can we help you today?", timestamp: new Date(Date.now() - 3600000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), sender: "me", origin: "bot", status: "read" },
+      { id: "msg-comp-1-2", text: "I need to confirm if my insurance pre-authorization went through for Friday's visit.", timestamp: new Date(Date.now() - 1800000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), sender: "contact" },
+    ],
+    botStatus: "active",
+    assignedPersonId: "1",
+  },
+  {
+    id: "conv-comp-2",
+    clientId: "CL-004",
+    contactName: "David Miller",
+    phoneNumber: "+1 (555) 345-6789",
+    inboxNumber: "Companion Portal",
+    channel: "companion",
+    lastMessage: "Could you send me an itemized receipt for invoice #INV-2026-04?",
+    timestamp: "09:30 AM",
+    unreadCount: 0,
+    status: "open",
+    messages: [
+      { id: "msg-comp-2-1", text: "Hello David! How can we assist you today?", timestamp: new Date(Date.now() - 7200000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), sender: "me", origin: "bot", status: "read" },
+      { id: "msg-comp-2-2", text: "Could you send me an itemized receipt for invoice #INV-2026-04?", timestamp: new Date(Date.now() - 5400000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), sender: "contact" },
+      { id: "msg-comp-2-3", text: "Sure thing David, I have attached your paid statement to your billing tab in Companion.", timestamp: new Date(Date.now() - 3600000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), sender: "me", status: "read" },
+    ],
+    botStatus: "off",
+    assignedPersonId: "2",
+  },
 ];
 
 export function getStoredConversations(): Conversation[] {
@@ -998,7 +1036,7 @@ export function useConversations() {
     clientId?: string;
     phone?: string;
     name?: string;
-    channel?: "whatsapp" | "sms" | "website";
+    channel?: "whatsapp" | "sms" | "website" | "email" | "companion";
   }): Conversation | undefined => {
     let candidates = conversations;
     if (opts.channel) {
@@ -1027,7 +1065,7 @@ export function useConversations() {
     clientId?: string;
     phone?: string;
     name?: string;
-    channel?: "whatsapp" | "sms" | "website";
+    channel?: "whatsapp" | "sms" | "website" | "email" | "companion";
   }): Conversation => {
     const channel = opts.channel || "whatsapp";
     const existing = findConversationForClient({ ...opts, channel });
@@ -1054,6 +1092,7 @@ export function useConversations() {
       if (channel === "whatsapp") return rawType === "whatsapp";
       if (channel === "website") return rawType === "website_message" || rawType === "website";
       if (channel === "email") return rawType === "email" || rawType === "email_message";
+      if (channel === "companion") return rawType === "companion_message" || rawType === "companion";
       return false;
     });
 
