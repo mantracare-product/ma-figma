@@ -172,16 +172,30 @@ export default function PatientBookingScreen() {
     return team.find((d) => String(d.id) === String(selectedDoctorId)) || team[0];
   }, [team, selectedDoctorId]);
 
-  // Available services for the selected doctor (used in "specialist" / responsible mode)
-  const availableServicesForDoctor = useMemo(() => {
-    if (bookingType !== "specialist" || !selectedDoctorId) return services;
-    const matching = services.filter((s) =>
-      !s.assignedEmployees ||
-      s.assignedEmployees.length === 0 ||
-      s.assignedEmployees.some((id) => String(id) === String(selectedDoctorId))
-    );
-    return matching.length > 0 ? matching : services;
-  }, [bookingType, selectedDoctorId, services]);
+  // ── Available Doctors for the Selected Service (matches MA ScheduleAppointmentDrawer) ──
+  const serviceResponsibleDoctors = useMemo(() => {
+    const srv = selectedServiceObj;
+    if (srv) {
+      if (srv.locationEmployees && selectedLocation) {
+        const selectedLocName = selectedLocation.toLowerCase().trim();
+        const matchedLocObj = fullOrgLocations.find((ol) => ol.name.toLowerCase() === selectedLocName);
+        const locEmps = srv.locationEmployees[matchedLocObj?.id || ""] ||
+                        srv.locationEmployees[selectedLocation] ||
+                        srv.locationEmployees[selectedLocName];
+        if (Array.isArray(locEmps) && locEmps.length > 0) {
+          const locEmpIds = new Set(locEmps.map(String));
+          const matched = team.filter((e) => locEmpIds.has(String(e.id)));
+          if (matched.length > 0) return matched;
+        }
+      }
+      if (srv.assignedEmployees && srv.assignedEmployees.length > 0) {
+        const assignedIds = new Set(srv.assignedEmployees.map(String));
+        const matched = team.filter((e) => assignedIds.has(String(e.id)));
+        if (matched.length > 0) return matched;
+      }
+    }
+    return team;
+  }, [selectedServiceObj, selectedLocation, fullOrgLocations, team]);
 
   // Available locations for current service
   const availableLocations = useMemo(() => {
@@ -200,12 +214,15 @@ export default function PatientBookingScreen() {
     }
   }, [availableLocations, selectedLocation]);
 
-  // Sync service when doctor changes in "specialist" mode
+  // Sync doctor when service or location changes in "specialist" / responsible mode
   useEffect(() => {
-    if (bookingType === "specialist" && availableServicesForDoctor.length > 0 && !availableServicesForDoctor.some((s) => String(s.id) === String(selectedServiceId))) {
-      setSelectedServiceId(String(availableServicesForDoctor[0].id));
+    if (bookingType === "specialist" && serviceResponsibleDoctors.length > 0) {
+      const isCurrentValid = serviceResponsibleDoctors.some((d) => String(d.id) === String(selectedDoctorId));
+      if (!isCurrentValid) {
+        setSelectedDoctorId(String(serviceResponsibleDoctors[0].id));
+      }
     }
-  }, [bookingType, availableServicesForDoctor, selectedServiceId]);
+  }, [bookingType, serviceResponsibleDoctors, selectedDoctorId]);
 
   // ── Dynamic Room Allocation ──
   const allocatedRoom = useMemo(() => {
@@ -734,31 +751,11 @@ export default function PatientBookingScreen() {
                 </>
               ) : (
                 <>
-                  {/* Responsible Physician / Specialist First */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Responsible Physician / Specialist</span>
-                    </label>
-                    <select
-                      value={selectedDoctorId}
-                      onChange={(e) => setSelectedDoctorId(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      {team.map((doc) => (
-                        <option key={doc.id} value={doc.id}>
-                          {doc.name} {(doc as any).specialty || (doc as any).role ? `— ${(doc as any).specialty || (doc as any).role}` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Filtered Service Second */}
+                  {/* Service Selection First (Exact same flow as MA ScheduleAppointmentDrawer) */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
                       <Layers className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Available Service</span>
+                      <span>Service</span>
                     </label>
                     <select
                       value={selectedServiceId}
@@ -766,9 +763,36 @@ export default function PatientBookingScreen() {
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      {availableServicesForDoctor.map((srv) => (
+                      {services.map((srv) => (
                         <option key={srv.id} value={srv.id}>
                           {srv.name} ({srv.duration || 30} mins) — ${srv.price || 75}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Responsible Physician / Specialist Second (Filtered by Selected Service) */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 flex items-center justify-between" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <span className="flex items-center gap-1.5">
+                        <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Responsible Physician / Specialist</span>
+                      </span>
+                      {serviceResponsibleDoctors.length > 0 && (
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          ({serviceResponsibleDoctors.length} assigned)
+                        </span>
+                      )}
+                    </label>
+                    <select
+                      value={selectedDoctorId}
+                      onChange={(e) => setSelectedDoctorId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {serviceResponsibleDoctors.map((doc) => (
+                        <option key={doc.id} value={doc.id}>
+                          {doc.name} {(doc as any).specialty || (doc as any).role ? `— ${(doc as any).specialty || (doc as any).role}` : ""}
                         </option>
                       ))}
                     </select>
