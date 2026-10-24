@@ -5,29 +5,20 @@ import {
   ShieldCheck,
   Check,
   Send,
-  Sliders,
-  Palette,
-  MessageSquare,
-  HelpCircle,
   Plus,
   Trash2,
-  Calendar,
-  Receipt,
-  ClipboardList,
-  CheckCircle2,
   Lock,
-  ArrowRight,
-  Info,
   RefreshCw,
 } from "lucide-react";
 import {
   getCompanionWidgetConfig,
   saveCompanionWidgetConfig,
   CompanionWidgetConfig,
-  CompanionIntentPrompt,
-  DEFAULT_COMPANION_INTENTS,
+  CompanionRequirementItem,
 } from "../../../lib/companionWidgetStore";
+import { getStoredProcesses } from "../../../lib/useProcessStore";
 import { toast } from "sonner";
+import { InfoTooltip } from "../help/InfoTooltip";
 
 interface CompanionSettingsTabProps {
   onNavigateToInbox?: () => void;
@@ -48,15 +39,15 @@ const PRESET_COLORS = [
 export default function CompanionSettingsTab({
   onNavigateToInbox,
   registerSaveHandler,
-  searchQuery = "",
 }: CompanionSettingsTabProps) {
   const [config, setConfig] = useState<CompanionWidgetConfig>(getCompanionWidgetConfig);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [processes] = useState(() => getStoredProcesses());
 
   // Preview interactive state
   const [previewMessages, setPreviewMessages] = useState<
-    Array<{ id: string; sender: "bot" | "user"; text: string; actionLabel?: string }>
+    Array<{ id: string; sender: "bot" | "user"; text: string; processName?: string }>
   >([]);
+  const [selectedReqId, setSelectedReqId] = useState<string>("");
   const [previewInput, setPreviewInput] = useState("");
 
   // Sync initial preview messages from config
@@ -68,11 +59,13 @@ export default function CompanionSettingsTab({
         text: config.welcomeMessage || "Hi there! How can we help you today?",
       },
     ]);
-  }, [config.welcomeMessage]);
+    if (config.requirements?.length > 0 && !selectedReqId) {
+      setSelectedReqId(config.requirements[0].id);
+    }
+  }, [config.welcomeMessage, config.requirements]);
 
   const handleSave = () => {
     saveCompanionWidgetConfig(config);
-    setHasUnsavedChanges(false);
     toast.success("Companion Care Bot settings saved successfully!");
   };
 
@@ -84,70 +77,55 @@ export default function CompanionSettingsTab({
 
   const updateConfig = (patch: Partial<CompanionWidgetConfig>) => {
     setConfig((prev) => ({ ...prev, ...patch }));
-    setHasUnsavedChanges(true);
   };
 
-  const handleToggleIntent = (id: string) => {
-    const updated = config.intents.map((item) =>
-      item.id === id ? { ...item, enabled: !item.enabled } : item
-    );
-    updateConfig({ intents: updated });
+  // Requirement management matching WebsiteWidgetSettingsTab
+  const handleAddRequirement = () => {
+    const newReq: CompanionRequirementItem = {
+      id: `req-${Date.now()}`,
+      label: "New Patient Requirement",
+      processId: processes[0]?.id || "1",
+    };
+    updateConfig({
+      requirements: [...config.requirements, newReq],
+    });
   };
 
-  const handleUpdateIntentText = (id: string, label: string, reply: string) => {
-    const updated = config.intents.map((item) =>
-      item.id === id ? { ...item, label, botReply: reply } : item
-    );
-    updateConfig({ intents: updated });
+  const handleUpdateRequirement = (index: number, field: "label" | "processId", value: string) => {
+    const updated = [...config.requirements];
+    updated[index] = { ...updated[index], [field]: value };
+    updateConfig({ requirements: updated });
   };
 
-  const handlePreviewSend = (customText?: string) => {
-    const textToSend = customText || previewInput;
-    if (!textToSend.trim()) return;
+  const handleRemoveRequirement = (index: number) => {
+    if (config.requirements.length <= 1) return;
+    const updated = config.requirements.filter((_, i) => i !== index);
+    updateConfig({ requirements: updated });
+  };
 
-    const userMsg = { id: `u-${Date.now()}`, sender: "user" as const, text: textToSend };
+  const handlePreviewSend = (customReqId?: string) => {
+    const reqId = customReqId || selectedReqId;
+    const matchedReq = config.requirements.find((r) => r.id === reqId);
+    const targetProcess = processes.find((p) => p.id === matchedReq?.processId);
+
+    const userText = previewInput.trim()
+      ? `${matchedReq ? `[${matchedReq.label}] ` : ""}${previewInput.trim()}`
+      : matchedReq?.label || "General Inquiry";
+
+    const userMsg = { id: `u-${Date.now()}`, sender: "user" as const, text: userText };
     setPreviewMessages((prev) => [...prev, userMsg]);
-    if (!customText) setPreviewInput("");
+    setPreviewInput("");
 
-    // Simulate smart Care Bot response matching intent
     setTimeout(() => {
-      const lower = textToSend.toLowerCase();
-      let matchedIntent = config.intents.find(
-        (i) => i.enabled && lower.includes(i.label.toLowerCase().replace(/^[^\w\s]+/, "").trim())
-      );
-
-      if (!matchedIntent) {
-        if (lower.includes("book") || lower.includes("appointment") || lower.includes("doctor")) {
-          matchedIntent = config.intents.find((i) => i.intent === "book");
-        } else if (lower.includes("bill") || lower.includes("invoice") || lower.includes("pay")) {
-          matchedIntent = config.intents.find((i) => i.intent === "bills");
-        } else if (lower.includes("form") || lower.includes("intake") || lower.includes("questionnaire")) {
-          matchedIntent = config.intents.find((i) => i.intent === "forms");
-        } else if (lower.includes("checkin") || lower.includes("check in") || lower.includes("arrived")) {
-          matchedIntent = config.intents.find((i) => i.intent === "checkin");
-        }
-      }
-
-      if (matchedIntent) {
-        setPreviewMessages((prev) => [
-          ...prev,
-          {
-            id: `b-${Date.now()}`,
-            sender: "bot",
-            text: matchedIntent.botReply,
-            actionLabel: matchedIntent.actionLabel,
-          },
-        ]);
-      } else {
-        setPreviewMessages((prev) => [
-          ...prev,
-          {
-            id: `b-${Date.now()}`,
-            sender: "bot",
-            text: `I've noted that! Since you're signed into Companion, our care team has received your request and will follow up shortly.`,
-          },
-        ]);
-      }
+      setPreviewMessages((prev) => [
+        ...prev,
+        {
+          id: `b-${Date.now()}`,
+          sender: "bot",
+          text: `I've mapped your request to our "${targetProcess?.name || "Patient Care"}" process. Our care team has been notified and you can track your journey right here in Companion.`,
+          processName: targetProcess?.name,
+        },
+      ]);
     }, 450);
   };
 
@@ -164,7 +142,7 @@ export default function CompanionSettingsTab({
                   1. Intent-Matching First Message
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  The initial greeting presented to the patient. It immediately focuses on their intent without asking for redundant info.
+                  The initial greeting presented to the patient. It focuses on their intent without asking for redundant info.
                 </p>
               </div>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -184,7 +162,7 @@ export default function CompanionSettingsTab({
                 className="w-full text-xs font-medium text-slate-800 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all resize-none"
               />
               <p className="text-[11px] text-slate-400">
-                Tip: Keep it friendly and concise so patients immediately click an intent or type their question.
+                Tip: Keep it friendly and concise so patients immediately select their requirement or state their issue.
               </p>
             </div>
 
@@ -203,83 +181,69 @@ export default function CompanionSettingsTab({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Because patients in Companion are already authenticated, Care Bot never prompts for contact details or phone verification. The conversation is instantly connected to their patient record.
+                  Because patients in Companion are already authenticated, Care Bot never prompts for contact details or phone numbers. The conversation is linked to their patient chart.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* 2. Interactive Intent Quick Prompts */}
+          {/* 2. Requirement to Process Mapping (Matching Website Widget) */}
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex items-center gap-1.5">
                 <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  2. Quick Intent Action Chips
+                  2. Requirement to Process Mapping
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Suggestions displayed below the welcome message for one-tap patient routing.
-                </p>
+                <InfoTooltip text="Map each client requirement choice to its target process for automatic workflow routing and intake" />
               </div>
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={config.showIntentChips}
-                  onChange={(e) => updateConfig({ showIntentChips: e.target.checked })}
-                  className="rounded text-blue-600 focus:ring-blue-500"
-                />
-                <span>Show Chips</span>
-              </label>
+              <button
+                type="button"
+                onClick={handleAddRequirement}
+                className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer bg-blue-50 hover:bg-blue-100/70 px-2.5 py-1 rounded-lg transition-colors"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Requirement</span>
+              </button>
             </div>
 
+            <p className="text-xs text-slate-500">
+              When a patient opens the Care Bot, they can select their requirement to route their inquiry directly into the appropriate clinic process.
+            </p>
+
             <div className="space-y-2.5">
-              {config.intents.map((intent) => (
-                <div
-                  key={intent.id}
-                  className={`p-3 rounded-xl border transition-all ${
-                    intent.enabled
-                      ? "bg-white border-slate-200 shadow-2xs"
-                      : "bg-slate-50/60 border-dashed border-slate-200 opacity-60"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={intent.enabled}
-                        onChange={() => handleToggleIntent(intent.id)}
-                        className="rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        title="Toggle intent chip"
-                      />
-                      <input
-                        type="text"
-                        value={intent.label}
-                        onChange={(e) =>
-                          handleUpdateIntentText(intent.id, e.target.value, intent.botReply)
-                        }
-                        className="text-xs font-bold text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 focus:outline-none px-1 py-0.5 truncate"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      />
-                    </div>
-
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-semibold uppercase">
-                      {intent.intent}
-                    </span>
-                  </div>
-
-                  {intent.enabled && (
-                    <div className="mt-2 pl-6 space-y-1">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Care Bot Instant Response
-                      </label>
-                      <input
-                        type="text"
-                        value={intent.botReply}
-                        onChange={(e) =>
-                          handleUpdateIntentText(intent.id, intent.label, e.target.value)
-                        }
-                        className="w-full text-[11px] text-slate-600 bg-slate-50 border border-slate-200/80 rounded-lg px-2.5 py-1.5 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-                    </div>
+              {(config.requirements || []).map((req, idx) => (
+                <div key={req.id || idx} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={req.label}
+                    onChange={(e) => handleUpdateRequirement(idx, "label", e.target.value)}
+                    placeholder="Requirement (e.g. Book an Appointment)"
+                    className="flex-1 text-xs border border-slate-200 rounded-xl p-2 bg-slate-50 focus:bg-white text-slate-800 font-medium outline-none focus:ring-1 focus:ring-blue-500"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  />
+                  <span className="text-xs text-slate-400 font-mono">→</span>
+                  <select
+                    value={req.processId}
+                    onChange={(e) => handleUpdateRequirement(idx, "processId", e.target.value)}
+                    className="flex-1 text-xs border border-slate-200 rounded-xl p-2 bg-slate-50 focus:bg-white text-slate-800 font-medium outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {processes.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  {config.requirements.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveRequirement(idx)}
+                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg cursor-pointer transition-colors"
+                      title="Remove requirement"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   )}
                 </div>
               ))}
@@ -424,73 +388,64 @@ export default function CompanionSettingsTab({
                     {msg.text}
                   </div>
 
-                  {msg.actionLabel && (
-                    <div className="mt-2 w-full max-w-[85%]">
-                      <div className="p-2.5 rounded-xl bg-white border border-blue-200/80 shadow-2xs flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {msg.actionLabel}
-                        </span>
-                        <span
-                          className="px-2.5 py-1 rounded-lg text-[10px] font-bold text-white shadow-2xs"
-                          style={{ backgroundColor: config.themeColor }}
-                        >
-                          Open &rarr;
-                        </span>
-                      </div>
+                  {msg.processName && (
+                    <div className="mt-1.5">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/60 font-mono">
+                        Mapped to: {msg.processName}
+                      </span>
                     </div>
                   )}
                 </div>
               ))}
-
-              {/* Quick Intent Chips (shown when enabled) */}
-              {config.showIntentChips && previewMessages.length <= 2 && (
-                <div className="pt-2 space-y-1.5 animate-in fade-in duration-300">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block px-1">
-                    Quick Assistance
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {config.intents
-                      .filter((i) => i.enabled)
-                      .map((intent) => (
-                        <button
-                          key={intent.id}
-                          type="button"
-                          onClick={() => handlePreviewSend(intent.label)}
-                          className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100/90 border border-slate-200 text-xs font-semibold text-slate-700 transition-all shadow-2xs hover:shadow-xs cursor-pointer active:scale-95 text-left"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        >
-                          {intent.label}
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Mock Composer */}
-            <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2">
-              <input
-                type="text"
-                value={previewInput}
-                onChange={(e) => setPreviewInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handlePreviewSend();
-                  }
-                }}
-                placeholder="Ask Care Bot a question..."
-                className="flex-1 text-xs px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
-              />
-              <button
-                type="button"
-                onClick={() => handlePreviewSend()}
-                className="w-8 h-8 rounded-xl text-white flex items-center justify-center shrink-0 shadow-2xs hover:opacity-90 transition-opacity cursor-pointer"
-                style={{ backgroundColor: config.themeColor }}
-                title="Send test message"
-              >
-                <Send className="w-3.5 h-3.5" />
-              </button>
+            {/* Requirement Form Selector & Composer (Matching Website Widget Pre-chat requirement selector) */}
+            <div className="p-3 bg-white border-t border-slate-200 space-y-2">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Select Requirement (Process)
+                </label>
+                <select
+                  value={selectedReqId}
+                  onChange={(e) => setSelectedReqId(e.target.value)}
+                  className="w-full text-xs font-semibold px-2.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {config.requirements.map((req) => {
+                    const proc = processes.find((p) => p.id === req.processId);
+                    return (
+                      <option key={req.id} value={req.id}>
+                        {req.label} {proc ? `(${proc.name})` : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={previewInput}
+                  onChange={(e) => setPreviewInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handlePreviewSend();
+                    }
+                  }}
+                  placeholder="Ask a question or explain requirement..."
+                  className="flex-1 text-xs px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
+                />
+                <button
+                  type="button"
+                  onClick={() => handlePreviewSend()}
+                  className="w-8 h-8 rounded-xl text-white flex items-center justify-center shrink-0 shadow-2xs hover:opacity-90 transition-opacity cursor-pointer"
+                  style={{ backgroundColor: config.themeColor }}
+                  title="Send test message"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>

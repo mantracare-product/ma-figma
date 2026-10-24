@@ -5,16 +5,8 @@ import {
   Send,
   Bot,
   Sparkles,
-  Calendar,
-  Receipt,
-  ClipboardList,
-  CheckCircle2,
   ShieldCheck,
-  ArrowRight,
-  RefreshCw,
-  Clock,
-  Check,
-  CheckCheck,
+  ChevronRight,
 } from "lucide-react";
 import { Client } from "../../../../lib/clientsStore";
 import {
@@ -26,7 +18,9 @@ import {
   getCompanionWidgetConfig,
   CompanionWidgetConfig,
   COMPANION_WIDGET_CONFIG_EVENT,
+  CompanionRequirementItem,
 } from "../../../../lib/companionWidgetStore";
+import { getStoredProcesses } from "../../../../lib/useProcessStore";
 
 interface CareBotDrawerProps {
   isOpen: boolean;
@@ -42,17 +36,31 @@ export default function CareBotDrawer({
   onCheckIn,
 }: CareBotDrawerProps) {
   const navigate = useNavigate();
-  const { conversations, setConversations, sendMessage } = useConversations();
+  const { conversations, setConversations } = useConversations();
   const [config, setConfig] = useState<CompanionWidgetConfig>(getCompanionWidgetConfig);
+  const [processes] = useState(() => getStoredProcesses());
+  const [selectedReqId, setSelectedReqId] = useState<string>("");
   const [inputText, setInputText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Reload config on change
   useEffect(() => {
-    const handleConfigChange = () => setConfig(getCompanionWidgetConfig());
+    const handleConfigChange = () => {
+      const cfg = getCompanionWidgetConfig();
+      setConfig(cfg);
+      if (cfg.requirements?.length > 0 && !selectedReqId) {
+        setSelectedReqId(cfg.requirements[0].id);
+      }
+    };
     window.addEventListener(COMPANION_WIDGET_CONFIG_EVENT, handleConfigChange);
     return () => window.removeEventListener(COMPANION_WIDGET_CONFIG_EVENT, handleConfigChange);
-  }, []);
+  }, [selectedReqId]);
+
+  useEffect(() => {
+    if (config.requirements?.length > 0 && !selectedReqId) {
+      setSelectedReqId(config.requirements[0].id);
+    }
+  }, [config.requirements, selectedReqId]);
 
   // Find or create the Companion conversation for this client
   const clientConversation = conversations.find(
@@ -105,12 +113,19 @@ export default function CareBotDrawer({
 
   if (!isOpen) return null;
 
-  const handleSend = (textToSend?: string) => {
+  const handleSelectRequirement = (req: CompanionRequirementItem) => {
+    setSelectedReqId(req.id);
+    handleSend(req.label, req);
+  };
+
+  const handleSend = (textToSend?: string, specificReq?: CompanionRequirementItem) => {
     const text = textToSend || inputText;
     if (!text.trim() || !clientConversation) return;
 
     const convId = clientConversation.id;
     const nowTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const currentReq = specificReq || config.requirements.find((r) => r.id === selectedReqId) || config.requirements[0];
+    const targetProcess = processes.find((p) => p.id === currentReq?.processId);
 
     const userMsg: Message = {
       id: `msg-p-${Date.now()}`,
@@ -133,40 +148,33 @@ export default function CareBotDrawer({
     setConversations((prev) => prev.map((c) => (c.id === convId ? updatedConv : c)));
     if (!textToSend) setInputText("");
 
-    // Smart Intent Auto-reply matching config
+    // Auto-respond mapping to selected requirement & target process
     if (config.autoResponderEnabled && config.firstResponder === "ai") {
       setTimeout(() => {
         const lower = text.toLowerCase();
-        let matchedIntent = config.intents.find(
-          (i) => i.enabled && lower.includes(i.label.toLowerCase().replace(/^[^\w\s]+/, "").trim())
-        );
-
-        if (!matchedIntent) {
-          if (lower.includes("book") || lower.includes("appointment") || lower.includes("slot") || lower.includes("visit")) {
-            matchedIntent = config.intents.find((i) => i.intent === "book");
-          } else if (lower.includes("bill") || lower.includes("invoice") || lower.includes("pay") || lower.includes("cost")) {
-            matchedIntent = config.intents.find((i) => i.intent === "bills");
-          } else if (lower.includes("form") || lower.includes("intake") || lower.includes("questionnaire")) {
-            matchedIntent = config.intents.find((i) => i.intent === "forms");
-          } else if (lower.includes("checkin") || lower.includes("check in") || lower.includes("arrived")) {
-            matchedIntent = config.intents.find((i) => i.intent === "checkin");
-          }
-        }
-
         let botReplyText = "";
         let actionRoute = "";
         let actionLabel = "";
 
-        if (matchedIntent) {
-          botReplyText = matchedIntent.botReply;
-          actionRoute = matchedIntent.actionRoute || "";
-          actionLabel = matchedIntent.actionLabel || "";
-
-          if (matchedIntent.intent === "checkin" && onCheckIn) {
-            onCheckIn();
-          }
+        if (lower.includes("book") || currentReq?.label.toLowerCase().includes("book")) {
+          botReplyText = `I have routed your request to our "${targetProcess?.name || "Book Appointment"}" process. You can choose your doctor and slot below:`;
+          actionRoute = "/patient/book";
+          actionLabel = "Open Booking Slots";
+        } else if (lower.includes("bill") || lower.includes("pay") || lower.includes("invoice") || currentReq?.label.toLowerCase().includes("bill")) {
+          botReplyText = `Your inquiry is mapped to "${targetProcess?.name || "Billing & Payment"}". You can review your statement and pay online below:`;
+          actionRoute = "/patient/bill";
+          actionLabel = "View & Pay Invoices";
+        } else if (lower.includes("form") || lower.includes("intake") || currentReq?.label.toLowerCase().includes("intake") || currentReq?.label.toLowerCase().includes("form")) {
+          botReplyText = `Mapped to "${targetProcess?.name || "Intake Assessment"}". Please complete your questionnaires before your upcoming visit:`;
+          actionRoute = "/patient/forms";
+          actionLabel = "Complete Forms";
+        } else if (lower.includes("checkin") || lower.includes("check in") || lower.includes("arrived")) {
+          botReplyText = "You are checked in for today's visit! The clinical care team has received your arrival notice.";
+          actionRoute = "/patient/book";
+          actionLabel = "View Visit Status";
+          if (onCheckIn) onCheckIn();
         } else {
-          botReplyText = `Thank you, ${activeClient.name.split(" ")[0]}. I've shared this with your clinic care team and practitioner. They will respond here in Companion shortly.`;
+          botReplyText = `I've mapped your inquiry under "${targetProcess?.name || "Patient Care"}". Our team has been notified and will assist you shortly.`;
         }
 
         const botMsg: Message = {
@@ -188,7 +196,7 @@ export default function CareBotDrawer({
         };
 
         setConversations((prev) => prev.map((c) => (c.id === convId ? convWithBot : c)));
-      }, 500);
+      }, 450);
     }
   };
 
@@ -316,26 +324,25 @@ export default function CareBotDrawer({
             })
           )}
 
-          {/* Quick Intent Chips (shown when config allows) */}
-          {config.showIntentChips && (
+          {/* Requirement Options (Pre-Chat Requirement selector like website widget) */}
+          {config.requirements && config.requirements.length > 0 && (
             <div className="pt-2 space-y-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block px-1">
-                How can we help today?
+                Select Your Requirement
               </span>
               <div className="flex flex-wrap gap-1.5">
-                {config.intents
-                  .filter((i) => i.enabled)
-                  .map((intent) => (
-                    <button
-                      key={intent.id}
-                      type="button"
-                      onClick={() => handleSend(intent.label)}
-                      className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100/90 border border-slate-200 text-xs font-semibold text-slate-700 transition-all shadow-2xs hover:shadow-xs cursor-pointer active:scale-95 text-left flex items-center gap-1.5"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <span>{intent.label}</span>
-                    </button>
-                  ))}
+                {config.requirements.map((req) => (
+                  <button
+                    key={req.id}
+                    type="button"
+                    onClick={() => handleSelectRequirement(req)}
+                    className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100/90 border border-slate-200 text-xs font-semibold text-slate-700 transition-all shadow-2xs hover:shadow-xs cursor-pointer active:scale-95 text-left flex items-center gap-1.5"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <span>{req.label}</span>
+                    <ChevronRight className="w-3 h-3 text-slate-400" />
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -343,8 +350,31 @@ export default function CareBotDrawer({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Composer Bar */}
-        <div className="p-3 bg-white border-t border-slate-200 shrink-0">
+        {/* Composer Bar with Requirement Mapping Selector */}
+        <div className="p-3 bg-white border-t border-slate-200 shrink-0 space-y-2">
+          {config.requirements && config.requirements.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0">
+                Requirement:
+              </span>
+              <select
+                value={selectedReqId}
+                onChange={(e) => setSelectedReqId(e.target.value)}
+                className="flex-1 text-xs font-semibold px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {config.requirements.map((req) => {
+                  const proc = processes.find((p) => p.id === req.processId);
+                  return (
+                    <option key={req.id} value={req.id}>
+                      {req.label} {proc ? `(${proc.name})` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -356,7 +386,7 @@ export default function CareBotDrawer({
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="Ask Care Bot a question..."
+              placeholder="Type your message or inquiry..."
               className="flex-1 text-xs px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-800 transition-all"
             />
             <button
@@ -369,9 +399,9 @@ export default function CareBotDrawer({
               <Send className="w-4 h-4" />
             </button>
           </form>
-          <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2 px-1">
+          <div className="flex items-center justify-between text-[10px] text-slate-400 px-1">
             <span>Powered by MantraAssist Care Engine</span>
-            <span>Messages synced with clinic staff</span>
+            <span>Auto-mapped to clinic workflow</span>
           </div>
         </div>
       </div>

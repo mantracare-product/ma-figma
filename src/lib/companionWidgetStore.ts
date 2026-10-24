@@ -1,15 +1,10 @@
 export const COMPANION_WIDGET_CONFIG_EVENT = "companionWidgetConfig_updated";
 const STORAGE_KEY = "companionWidgetConfig";
 
-export interface CompanionIntentPrompt {
+export interface CompanionRequirementItem {
   id: string;
   label: string;
-  intent: "book" | "bills" | "forms" | "checkin" | "consult" | "support";
-  description: string;
-  botReply: string;
-  actionRoute?: string;
-  actionLabel?: string;
-  enabled: boolean;
+  processId: string;
 }
 
 export interface CompanionWidgetConfig {
@@ -17,68 +12,25 @@ export interface CompanionWidgetConfig {
   welcomeMessage: string;
   avatarUrl?: string;
   themeColor: string;
-  showIntentChips: boolean;
-  intents: CompanionIntentPrompt[];
+  enableRequirementSelect: boolean;
+  requirements: CompanionRequirementItem[];
+  defaultProcessId: string;
   autoResponderEnabled: boolean;
   firstResponder: "ai" | "human";
   aiHandoffPhrases: string;
   assignedStaffId?: string;
   portalHeaderTitle: string;
   portalSubtitle: string;
-  // Explicitly note that contact info is bypassed for authenticated clients
+  // Pre-authenticated patient bypass
   requireAuthBypass: boolean;
   updatedAt?: string;
 }
 
-export const DEFAULT_COMPANION_INTENTS: CompanionIntentPrompt[] = [
-  {
-    id: "intent-1",
-    label: "📅 Book an Appointment",
-    intent: "book",
-    description: "Find an open slot with our doctors or specialists",
-    botReply: "I can help you schedule an appointment with our specialist care team right away. Click below to view available services and booking slots:",
-    actionRoute: "/patient/book",
-    actionLabel: "Open Booking Screen",
-    enabled: true,
-  },
-  {
-    id: "intent-2",
-    label: "💳 View & Pay Invoices",
-    intent: "bills",
-    description: "Check your current balance and download statements",
-    botReply: "Here is your billing statement and outstanding balance. You can review your itemized charges and complete payment securely:",
-    actionRoute: "/patient/bill",
-    actionLabel: "View Invoices & Pay",
-    enabled: true,
-  },
-  {
-    id: "intent-3",
-    label: "📋 Complete Intake Forms",
-    intent: "forms",
-    description: "Submit medical questionnaires before your visit",
-    botReply: "Please fill out your pending medical questionnaire so our care team can review your medical history ahead of your visit:",
-    actionRoute: "/patient/forms",
-    actionLabel: "Open Intake Forms",
-    enabled: true,
-  },
-  {
-    id: "intent-4",
-    label: "📍 Check-in for Visit",
-    intent: "checkin",
-    description: "Notify the clinic front desk that you have arrived",
-    botReply: "Welcome to the clinic! I have notified the front desk and your care team that you are on-site.",
-    actionRoute: "/patient/book",
-    actionLabel: "View Visit Status",
-    enabled: true,
-  },
-  {
-    id: "intent-5",
-    label: "🩺 Ask Care Team",
-    intent: "consult",
-    description: "Send a direct query to your practitioner",
-    botReply: "I've flagged your question for your care team. A nurse or physician will reply to you directly here in Companion shortly.",
-    enabled: true,
-  },
+export const DEFAULT_COMPANION_REQUIREMENTS: CompanionRequirementItem[] = [
+  { id: "req-1", label: "Book an Appointment", processId: "1" },
+  { id: "req-2", label: "Billing & Payment Inquiry", processId: "3" },
+  { id: "req-3", label: "Medical Intake & Questionnaires", processId: "1" },
+  { id: "req-4", label: "Consultation & Care Team Query", processId: "2" },
 ];
 
 export const DEFAULT_COMPANION_CONFIG: CompanionWidgetConfig = {
@@ -86,8 +38,9 @@ export const DEFAULT_COMPANION_CONFIG: CompanionWidgetConfig = {
   welcomeMessage: "Hi there! How can we help you today?",
   avatarUrl: "",
   themeColor: "#2563EB",
-  showIntentChips: true,
-  intents: DEFAULT_COMPANION_INTENTS,
+  enableRequirementSelect: true,
+  requirements: DEFAULT_COMPANION_REQUIREMENTS,
+  defaultProcessId: "1",
   autoResponderEnabled: true,
   firstResponder: "ai",
   aiHandoffPhrases: "talk to doctor, speak to human, reception, emergency, urgent",
@@ -112,9 +65,11 @@ export function getCompanionWidgetConfig(): CompanionWidgetConfig {
     return {
       ...DEFAULT_COMPANION_CONFIG,
       ...parsed,
-      intents: Array.isArray(parsed.intents) && parsed.intents.length > 0
-        ? parsed.intents
-        : DEFAULT_COMPANION_INTENTS,
+      enableRequirementSelect: parsed.enableRequirementSelect !== undefined ? parsed.enableRequirementSelect : true,
+      requirements: Array.isArray(parsed.requirements) && parsed.requirements.length > 0
+        ? parsed.requirements
+        : DEFAULT_COMPANION_REQUIREMENTS,
+      defaultProcessId: parsed.defaultProcessId || "1",
       requireAuthBypass: true, // Always locked to true
     };
   } catch {
