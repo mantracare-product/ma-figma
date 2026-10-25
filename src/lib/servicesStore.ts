@@ -15,10 +15,12 @@ export interface Service {
   category?: string;
   cptCode?: string;
   duration: number;
+  slotDuration?: number;
   price: number;
   currency: string;
   tax?: number;
   isActive: boolean;
+  availableForAppointment?: boolean;
   assignedEmployees?: (number | string)[];
   createdAt?: string;
   activity?: string;
@@ -69,10 +71,12 @@ export const INIT_FORM = {
   category: "General",
   cptCode: "",
   duration: 30,
+  slotDuration: 30,
   price: 0,
   currency: "",
   tax: 0,
   isActive: true,
+  availableForAppointment: false,
   assignedEmployeeIds: [] as (number | string)[],
   locationIds: [] as string[],
   maxSeats: 1,
@@ -82,10 +86,10 @@ export const INIT_FORM = {
 // ─── Default seed data ────────────────────────────────────────────────────────
 
 const DEFAULT_SERVICES: Service[] = [
-  { id: 1, name: "Initial Consultation",  description: "Comprehensive first-time patient consultation and assessment", category: "Consultation", cptCode: "99204", duration: 60, price: 150, currency: "USD", tax: 5, isActive: true,  assignedEmployees: [1, 2], createdAt: "2024-04-13 14:30", activity: "Last updated Apr 13" },
-  { id: 2, name: "Follow-up Visit",       description: "Regular follow-up appointment for existing patients",          category: "Consultation", cptCode: "99213", duration: 30, price: 75,  currency: "USD", tax: 5, isActive: true,  assignedEmployees: [1, 2, 4], createdAt: "2024-04-12 11:15", activity: "Last updated Apr 12" },
-  { id: 3, name: "Dental Cleaning",       description: "Professional teeth cleaning and oral hygiene maintenance",     category: "Dental",       cptCode: "D1110", duration: 45, price: 120, currency: "USD", tax: 10, isActive: true,  assignedEmployees: [5, 6], createdAt: "2024-04-10 09:45", activity: "Last updated Apr 10" },
-  { id: 4, name: "X-Ray Imaging",         description: "Digital radiographic imaging for diagnostic purposes",         category: "Diagnostics",  cptCode: "70450", duration: 20, price: 80,  currency: "USD", tax: 0, isActive: false, assignedEmployees: [1], createdAt: "2024-04-08 16:20", activity: "Deactivated Apr 08" },
+  { id: 1, name: "Initial Consultation",  description: "Comprehensive first-time patient consultation and assessment", category: "Consultation", cptCode: "99204", duration: 60, slotDuration: 60, price: 150, currency: "USD", tax: 5, isActive: true,  availableForAppointment: true, assignedEmployees: [1, 2], createdAt: "2024-04-13 14:30", activity: "Last updated Apr 13" },
+  { id: 2, name: "Follow-up Visit",       description: "Regular follow-up appointment for existing patients",          category: "Consultation", cptCode: "99213", duration: 30, slotDuration: 30, price: 75,  currency: "USD", tax: 5, isActive: true,  availableForAppointment: true, assignedEmployees: [1, 2, 4], createdAt: "2024-04-12 11:15", activity: "Last updated Apr 12" },
+  { id: 3, name: "Dental Cleaning",       description: "Professional teeth cleaning and oral hygiene maintenance",     category: "Dental",       cptCode: "D1110", duration: 45, slotDuration: 45, price: 120, currency: "USD", tax: 10, isActive: true,  availableForAppointment: true, assignedEmployees: [5, 6], createdAt: "2024-04-10 09:45", activity: "Last updated Apr 10" },
+  { id: 4, name: "X-Ray Imaging",         description: "Digital radiographic imaging for diagnostic purposes",         category: "Diagnostics",  cptCode: "70450", duration: 20, slotDuration: 20, price: 80,  currency: "USD", tax: 0, isActive: false, availableForAppointment: false, assignedEmployees: [1], createdAt: "2024-04-08 16:20", activity: "Deactivated Apr 08" },
 ];
 
 // ─── Store helpers ────────────────────────────────────────────────────────────
@@ -103,11 +107,20 @@ function loadServices(): Service[] {
       };
       let changed = false;
       const enriched = parsed.map((s) => {
-        if (!s.cptCode && defaultCptMap[s.id]) {
+        let updated = { ...s };
+        if (!updated.cptCode && defaultCptMap[updated.id]) {
           changed = true;
-          return { ...s, cptCode: defaultCptMap[s.id] };
+          updated.cptCode = defaultCptMap[updated.id];
         }
-        return s;
+        if (updated.availableForAppointment === undefined) {
+          changed = true;
+          updated.availableForAppointment = updated.id !== 4;
+        }
+        if (updated.slotDuration === undefined) {
+          changed = true;
+          updated.slotDuration = updated.duration || 30;
+        }
+        return updated;
       });
       if (changed) {
         localStorage.setItem(STORE_KEY, JSON.stringify(enriched));

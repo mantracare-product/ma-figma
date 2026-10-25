@@ -15,7 +15,9 @@ import {
   User,
   UserCheck,
   Stethoscope,
+  Plus,
 } from "lucide-react";
+import ServiceDrawer from "../services/ServiceDrawer";
 import { getStoredClients } from "../../../lib/clientsStore";
 import { useOrganization } from "../../context/OrganizationContext";
 import { CustomSideDrawer } from "../ui/drawer";
@@ -113,12 +115,17 @@ function CustomDropdown({
   placeholder,
   onChange,
   disabled,
+  actionCta,
 }: {
   value: string;
   options: DropdownOption[];
   placeholder: string;
   onChange: (val: string) => void;
   disabled?: boolean;
+  actionCta?: {
+    label: string;
+    onClick: () => void;
+  };
 }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{ top: number; left: number; width: number; openUp: boolean }>({
@@ -258,6 +265,23 @@ function CustomDropdown({
                 );
               })
             )}
+            {actionCta && (
+              <div className="p-1.5 border-t border-slate-100 bg-slate-50 sticky bottom-0 z-10">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpen(false);
+                    actionCta.onClick();
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50/80 hover:bg-blue-100 transition-colors cursor-pointer shadow-2xs"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{actionCta.label}</span>
+                </button>
+              </div>
+            )}
           </div>,
           document.body
         )}
@@ -340,6 +364,7 @@ export default function ScheduleAppointmentDrawer({
   onOpenCreateField,
   isSaving = false,
 }: ScheduleAppointmentDrawerProps) {
+  const [showAddServiceDrawer, setShowAddServiceDrawer] = useState(false);
   // ── Available clients (synced directly with clientsStore to match Clients page) ──
   const allAvailableClients: ClientOption[] = useMemo(() => {
     const list: ClientOption[] = [];
@@ -474,13 +499,16 @@ export default function ScheduleAppointmentDrawer({
       const stored = storedServicesState;
       if (Array.isArray(stored)) {
         stored.forEach((s) => {
+          // Requirement: only services where available for appointment checkbox is marked
+          if (s.availableForAppointment !== true) return;
+          if (s.isActive === false) return;
           if (!seenNames.has(s.name.toLowerCase())) {
             seenNames.add(s.name.toLowerCase());
             list.push({
               id: String(s.id),
               name: s.name,
               price: s.price,
-              duration: s.duration || 30,
+              duration: s.slotDuration || s.duration || 30,
               tax: s.tax || 0,
               assignedEmployees: s.assignedEmployees,
               locationIds: s.locationIds,
@@ -606,32 +634,13 @@ export default function ScheduleAppointmentDrawer({
     }
   }, [values.serviceId, filteredLocations, values.location]);
 
-  // ── Booking Mode: "service" | "specialist" ──
-  const [localBookingType, setLocalBookingType] = useState<"service" | "specialist">(
-    values.bookingType || "service"
+  // Single tab booking workflow: if responsible practitioner is selected, use their availability; else slot-wise availability
+  const hasResponsible = Boolean(
+    values.provider &&
+    values.provider.id !== "" &&
+    values.provider.name !== "Unassigned"
   );
-
-  useEffect(() => {
-    if (values.bookingType) {
-      setLocalBookingType(values.bookingType);
-    }
-  }, [values.bookingType]);
-
-  const currentBookingType: "service" | "specialist" = values.bookingType || localBookingType;
-
-  // Switching resets location, doctor, date and slot
-  const handleToggleBookingType = (newType: "service" | "specialist") => {
-    if (newType === currentBookingType) return;
-    setLocalBookingType(newType);
-    onChange({
-      bookingType: newType,
-      location: "",
-      provider: null,
-      date: "",
-      startHour: 9,
-      startMinute: 0,
-    });
-  };
+  const currentBookingType: "service" | "specialist" = hasResponsible ? "specialist" : "service";
 
   // ── Doctors assigned to the service for "Responsible (optional)" in Service mode ──
   const serviceResponsibleDoctors = useMemo(() => {
@@ -1163,9 +1172,7 @@ export default function ScheduleAppointmentDrawer({
   // ── Validation ──
   const isServiceComplete = Boolean(values.serviceId || values.serviceName);
   const isLocationComplete = Boolean(values.location && values.location.trim());
-  const isParticipantsComplete = currentBookingType === "service"
-    ? Boolean(values.client)
-    : Boolean(values.client && values.provider && values.provider.id !== "");
+  const isParticipantsComplete = Boolean(values.client);
   const isScheduleComplete = Boolean(values.date);
   const isFormComplete = isServiceComplete && isLocationComplete && isParticipantsComplete && isScheduleComplete;
 
@@ -1188,7 +1195,7 @@ export default function ScheduleAppointmentDrawer({
   ];
 
   const providerOptions: DropdownOption[] = [
-    { value: "", label: values.serviceId || values.location ? "Select assigned doctor / provider" : "Select a user" },
+    { value: "", label: "No preference / Any available staff" },
     ...availableEmployeesForServiceAndLocation.map((e) => ({ value: String(e.id), label: e.name, meta: e.email })),
   ];
 
@@ -1215,12 +1222,9 @@ export default function ScheduleAppointmentDrawer({
 
   const handleSaveClick = () => {
     if (!isFormComplete) return;
-    if (currentBookingType === "service") {
-      const finalProvider = values.provider && values.provider.id !== ""
-        ? values.provider
-        : { id: "" as any, name: "Unassigned", email: "" };
+    if (!hasResponsible) {
       onChange({
-        provider: finalProvider,
+        provider: { id: "" as any, name: "Unassigned", email: "" },
         bookingType: "service",
       });
     } else {
@@ -1233,7 +1237,8 @@ export default function ScheduleAppointmentDrawer({
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <CustomSideDrawer
+    <>
+      <CustomSideDrawer
       isOpen={isOpen}
       onClose={onClose}
       maxWidth="max-w-full sm:max-w-[40vw]"
@@ -1284,36 +1289,6 @@ export default function ScheduleAppointmentDrawer({
       }
     >
       <div className="space-y-3 pb-4">
-        {/* Booking Type Segmented Control */}
-        <div className="bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => handleToggleBookingType("service")}
-            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              currentBookingType === "service"
-                ? "bg-white text-slate-900 shadow-xs border border-slate-200/60"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            <Layers className="w-3.5 h-3.5 text-blue-600" />
-            <span>Service</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleToggleBookingType("specialist")}
-            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              currentBookingType === "specialist"
-                ? "bg-white text-slate-900 shadow-xs border border-slate-200/60"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Responsible</span>
-          </button>
-        </div>
-
         {mode !== "reschedule" && !appointmentAutomationConfigured && (
           <div className="px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs font-medium text-amber-800 flex items-center justify-between">
             <span className="flex items-center gap-2">
@@ -1338,6 +1313,10 @@ export default function ScheduleAppointmentDrawer({
                 options={serviceOptions}
                 placeholder="Select a service"
                 onChange={handleServiceSelect}
+                actionCta={{
+                  label: "Add New Service",
+                  onClick: () => setShowAddServiceDrawer(true),
+                }}
               />
             </FieldRow>
           </div>
@@ -1375,26 +1354,24 @@ export default function ScheduleAppointmentDrawer({
               />
             </FieldRow>
 
-            {currentBookingType === "specialist" && (
-              <FieldRow label="Responsible" required>
-                <CustomDropdown
-                  value={values.provider && values.provider.id !== "" ? String(values.provider.id) : ""}
-                  options={providerOptions}
-                  placeholder={
-                    values.serviceId || values.location
-                      ? "Select assigned responsible person"
-                      : "Select a user"
-                  }
-                  onChange={(val) => {
+            <FieldRow label="Responsible (Optional)">
+              <CustomDropdown
+                value={values.provider && values.provider.id !== "" ? String(values.provider.id) : ""}
+                options={providerOptions}
+                placeholder="No preference / Any available staff"
+                onChange={(val) => {
+                  if (!val) {
+                    onChange({ provider: null });
+                  } else {
                     const emp = allEmployeesList.find((x) => String(x.id) === val);
                     onChange({ provider: emp || null });
-                  }}
-                />
-              </FieldRow>
-            )}
+                  }
+                }}
+              />
+            </FieldRow>
 
-            {/* Auto-allocated Room Box — displayed after mapping Service, Location, and Responsible in responsible booking */}
-            {currentBookingType === "specialist" && values.sessionType !== "video" && values.location && values.serviceId && values.provider && values.provider.id !== "" && (
+            {/* Auto-allocated Room Box — displayed if a responsible person is selected and mapped */}
+            {hasResponsible && values.sessionType !== "video" && values.location && values.serviceId && (
               allocatedRoom ? (
                 <div className="mt-2.5 p-2.5 rounded-lg border border-blue-200/80 bg-blue-50/60 flex items-start gap-2.5">
                   <div className="w-7 h-7 rounded-md bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
@@ -1421,7 +1398,7 @@ export default function ScheduleAppointmentDrawer({
                 <div className="mt-2.5 p-2.5 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 text-xs text-slate-500 flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
                   <span style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    No room mapped for this location, service & responsible person.
+                    No room mapped for this location & responsible person.
                   </span>
                 </div>
               )
@@ -1449,13 +1426,13 @@ export default function ScheduleAppointmentDrawer({
 
             {/* Available Slots */}
             <FieldRow label="Available Slots" required>
-              {currentBookingType === "specialist" && !values.provider ? (
+              {!values.serviceId ? (
                 <div className="py-2.5 px-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-xs text-slate-400" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  Select a responsible person under Participants to view available slots.
+                  Select a service above to view available time slots.
                 </div>
-              ) : currentBookingType === "service" && !values.location ? (
+              ) : !values.location ? (
                 <div className="py-2.5 px-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-xs text-slate-400" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  Select a location above to view available service slots.
+                  Select a location above to view available time slots.
                 </div>
               ) : !values.date ? (
                 <div className="py-2.5 px-3 bg-slate-50 border border-dashed border-slate-200 rounded-lg text-xs text-slate-400" style={{ fontFamily: "DM Sans, sans-serif" }}>
@@ -1465,9 +1442,9 @@ export default function ScheduleAppointmentDrawer({
                 <div className="py-2.5 px-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                   <span>
-                    {currentBookingType === "service"
-                      ? "No open slots found for this service at the selected location on this date."
-                      : (dayOffNotice || `No open slots found for ${values.provider?.name} on this date.`)}
+                    {hasResponsible
+                      ? (dayOffNotice || `No open slots found for ${values.provider?.name} on this date.`)
+                      : "No open slots found for this service at the selected location on this date."}
                   </span>
                 </div>
               ) : (
@@ -1532,7 +1509,7 @@ export default function ScheduleAppointmentDrawer({
             </FieldRow>
 
             {/* Real-time Provider Location & Day Off Notice */}
-            {providerAvailabilityNotice && (currentBookingType === "specialist" || (values.provider && values.provider.id !== "")) && (
+            {providerAvailabilityNotice && hasResponsible && (
               <div
                 className={`p-2.5 rounded-xl border flex items-center gap-2 text-xs transition-all ${
                   providerAvailabilityNotice.type === "warning"
@@ -1553,5 +1530,18 @@ export default function ScheduleAppointmentDrawer({
 
       </div>
     </CustomSideDrawer>
+
+      <ServiceDrawer
+        isOpen={showAddServiceDrawer}
+        onClose={() => setShowAddServiceDrawer(false)}
+        mode="add"
+        initialAvailableForAppointment={true}
+        zIndex={100005}
+        onSaved={(newSrv) => {
+          setShowAddServiceDrawer(false);
+          handleServiceSelect(String(newSrv.id));
+        }}
+      />
+    </>
   );
 }

@@ -10,8 +10,9 @@ import {
   Building2,
   Plus,
   X,
-  FileText,
   ChevronRight,
+  ChevronLeft,
+  ArrowLeft,
   ShieldCheck,
   Check,
   Layers,
@@ -83,7 +84,7 @@ export default function PatientBookingScreen() {
   // ── 2. Data Sources (Services, Locations, Team) ──
   const services = useMemo(() => {
     const list = getStoredServices();
-    return list.filter((s) => s.isActive !== false);
+    return list.filter((s) => s.availableForAppointment === true && s.isActive !== false);
   }, []);
 
   const fullOrgLocations = useMemo<LocationWithHours[]>(() => {
@@ -155,21 +156,90 @@ export default function PatientBookingScreen() {
 
   // ── 3. Booking Modal State ──
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [bookingType, setBookingType] = useState<"service" | "specialist">("service");
-  const [selectedServiceId, setSelectedServiceId] = useState<string>(() => String(services[0]?.id || "1"));
+  const [bookingStep, setBookingStep] = useState<1 | 2>(1);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedServiceId, setSelectedServiceId] = useState<string>(() => String(services[0]?.id || ""));
   const [selectedLocation, setSelectedLocation] = useState<string>(() => fullOrgLocations[0]?.name || "California");
-  const [selectedDoctorId, setSelectedDoctorId] = useState<string>(() => String(team[0]?.id || "1"));
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>(""); // "" = Any Available Staff (slot-wise)
+  const bookingType: "service" | "specialist" = selectedDoctorId ? "specialist" : "service";
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [selectedTime, setSelectedTime] = useState("09:00 AM");
-  const [notes, setNotes] = useState("Follow-up clinical consultation");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Timezone string e.g. "(GMT+05:30) Asia/Calcutta"
+  const userTimezoneLabel = useMemo(() => {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Calcutta";
+      const offsetMin = -new Date().getTimezoneOffset();
+      const sign = offsetMin >= 0 ? "+" : "-";
+      const hours = String(Math.floor(Math.abs(offsetMin) / 60)).padStart(2, "0");
+      const mins = String(Math.abs(offsetMin) % 60).padStart(2, "0");
+      return `(GMT${sign}${hours}:${mins}) ${tz}`;
+    } catch {
+      return "(GMT+05:30) Asia/Calcutta";
+    }
+  }, []);
+
+  // 7 Days starting from (today + weekOffset * 7)
+  const weekDays = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const baseDate = new Date(today);
+    baseDate.setDate(today.getDate() + weekOffset * 7);
+
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+    const list: Array<{
+      fullDateStr: string;
+      dayOfWeek: string;
+      dayNum: string;
+      monthStr: string;
+      isPast: boolean;
+      isToday: boolean;
+    }> = [];
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(baseDate);
+      d.setDate(baseDate.getDate() + i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const fullDateStr = `${y}-${m}-${day}`;
+
+      const compareDate = new Date(d);
+      compareDate.setHours(0, 0, 0, 0);
+      const isPast = compareDate < today;
+      const isToday = fullDateStr === new Date().toISOString().split("T")[0];
+
+      list.push({
+        fullDateStr,
+        dayOfWeek: dayNames[d.getDay()],
+        dayNum: String(d.getDate()),
+        monthStr: monthNames[d.getMonth()],
+        isPast,
+        isToday,
+      });
+    }
+
+    return list;
+  }, [weekOffset]);
+
+  // Auto-sync service selection
+  useEffect(() => {
+    if (services.length > 0 && (!selectedServiceId || !services.some((s) => String(s.id) === String(selectedServiceId)))) {
+      setSelectedServiceId(String(services[0].id));
+    }
+  }, [services, selectedServiceId]);
 
   const selectedServiceObj = useMemo(() => {
     return services.find((s) => String(s.id) === String(selectedServiceId)) || services[0];
   }, [services, selectedServiceId]);
 
   const selectedDoctorObj = useMemo(() => {
-    return team.find((d) => String(d.id) === String(selectedDoctorId)) || team[0];
+    if (!selectedDoctorId) return null;
+    return team.find((d) => String(d.id) === String(selectedDoctorId)) || null;
   }, [team, selectedDoctorId]);
 
   // ── Available Doctors for the Selected Service (matches MA ScheduleAppointmentDrawer) ──
@@ -214,15 +284,15 @@ export default function PatientBookingScreen() {
     }
   }, [availableLocations, selectedLocation]);
 
-  // Sync doctor when service or location changes in "specialist" / responsible mode
+  // Sync doctor when service or location changes: if chosen doctor is no longer in responsible list, clear selection
   useEffect(() => {
-    if (bookingType === "specialist" && serviceResponsibleDoctors.length > 0) {
+    if (selectedDoctorId && serviceResponsibleDoctors.length > 0) {
       const isCurrentValid = serviceResponsibleDoctors.some((d) => String(d.id) === String(selectedDoctorId));
       if (!isCurrentValid) {
-        setSelectedDoctorId(String(serviceResponsibleDoctors[0].id));
+        setSelectedDoctorId("");
       }
     }
-  }, [bookingType, serviceResponsibleDoctors, selectedDoctorId]);
+  }, [serviceResponsibleDoctors, selectedDoctorId]);
 
   // ── Dynamic Room Allocation ──
   const allocatedRoom = useMemo(() => {
@@ -376,7 +446,7 @@ export default function PatientBookingScreen() {
       });
     } catch {}
 
-    const duration = selectedServiceObj?.duration || 30;
+    const duration = selectedServiceObj?.slotDuration || selectedServiceObj?.duration || 30;
     const slots: Array<{
       hour: number;
       minute: number;
@@ -432,18 +502,20 @@ export default function PatientBookingScreen() {
     }));
   }, [bookingType, serviceModeSlots, specialistSlots]);
 
+  // Only show slots that are actually available in the patient portal (hide booked / full slots)
+  const availableSlotsForPatient = useMemo(() => {
+    return activeSlots.filter((slot) => !slot.disabled);
+  }, [activeSlots]);
+
   // Auto-select first available slot when slots change
   useEffect(() => {
-    if (activeSlots.length > 0) {
-      const matchesCurrent = activeSlots.some((s) => s.label12 === selectedTime && !s.disabled);
+    if (availableSlotsForPatient.length > 0) {
+      const matchesCurrent = availableSlotsForPatient.some((s) => s.label12 === selectedTime);
       if (!matchesCurrent) {
-        const firstAvail = activeSlots.find((s) => !s.disabled);
-        if (firstAvail) {
-          setSelectedTime(firstAvail.label12);
-        }
+        setSelectedTime(availableSlotsForPatient[0].label12);
       }
     }
-  }, [activeSlots, selectedTime]);
+  }, [availableSlotsForPatient, selectedTime]);
 
   const slotNotice = bookingType === "specialist" ? specialistSlots.notice : null;
 
@@ -458,8 +530,8 @@ export default function PatientBookingScreen() {
         : `${selectedServiceObj?.name || "Consultation"} with ${selectedDoctorObj?.name || "Doctor"}`;
 
       let assignedEmpId: number | undefined = undefined;
-      if (bookingType === "specialist") {
-        assignedEmpId = Number(selectedDoctorObj?.id) || 1;
+      if (selectedDoctorId) {
+        assignedEmpId = Number(selectedDoctorId) || Number(selectedDoctorObj?.id) || undefined;
       } else if (selectedServiceObj?.assignedEmployees && selectedServiceObj.assignedEmployees.length > 0) {
         assignedEmpId = Number(selectedServiceObj.assignedEmployees[0]) || undefined;
       }
@@ -475,9 +547,8 @@ export default function PatientBookingScreen() {
           location: selectedLocation,
           date,
           time: selectedTime,
-          duration: selectedServiceObj?.duration || 30,
+          duration: selectedServiceObj?.slotDuration || selectedServiceObj?.duration || 30,
           title,
-          notes,
           roomNumber: allocatedRoom?.roomNumber,
           roomStationId: allocatedRoom?.id,
           roomName: allocatedRoom?.name,
@@ -523,7 +594,11 @@ export default function PatientBookingScreen() {
 
         <button
           type="button"
-          onClick={() => setShowBookingModal(true)}
+          onClick={() => {
+            setBookingStep(1);
+            setWeekOffset(0);
+            setShowBookingModal(true);
+          }}
           className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm shadow-blue-500/25 transition-all cursor-pointer active:scale-95"
         >
           <Plus className="w-4 h-4" />
@@ -676,294 +751,334 @@ export default function PatientBookingScreen() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
             {/* Modal Header */}
-            <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
-              <div className="space-y-0.5">
-                <h3 className="text-lg font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>Book Appointment</h3>
-                <p className="text-xs text-slate-500 font-medium">
-                  {bookingType === "service"
-                    ? "Select consultation service, facility location, and available time slot"
-                    : "Select your specialist, service, and available time slot"}
-                </p>
+            {bookingStep === 1 ? (
+              <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                <div className="space-y-0.5">
+                  <h3 className="text-lg font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Schedule Appointment
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Step 1 of 2: Select service, clinic location & doctor
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBookingModal(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowBookingModal(false)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+            ) : (
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
+                <button
+                  type="button"
+                  onClick={() => setBookingStep(1)}
+                  className="inline-flex items-center gap-1.5 py-1 px-2.5 -ml-1 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <ArrowLeft className="w-4 h-4 text-slate-500" />
+                  <span>Back</span>
+                </button>
+
+                <h3 className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Schedule Appointment
+                </h3>
+
+                <button
+                  type="button"
+                  onClick={() => setShowBookingModal(false)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            )}
 
             {/* Modal Form */}
             <form onSubmit={handleCreateBooking} className="p-5 sm:p-6 overflow-y-auto space-y-4">
-              {/* Segmented Booking Type Tab Switcher */}
-              <div className="bg-slate-100 p-1 rounded-2xl border border-slate-200/80 flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setBookingType("service")}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                    bookingType === "service"
-                      ? "bg-white text-slate-900 shadow-xs border border-slate-200/60"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Layers className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Service</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBookingType("specialist")}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                    bookingType === "specialist"
-                      ? "bg-white text-slate-900 shadow-xs border border-slate-200/60"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Responsible</span>
-                </button>
-              </div>
-
-              {/* 1. Service Selection */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  <Layers className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Service</span>
-                </label>
-                <select
-                  value={selectedServiceId}
-                  onChange={(e) => setSelectedServiceId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  {services.map((srv) => (
-                    <option key={srv.id} value={srv.id}>
-                      {srv.name} ({srv.duration || 30} mins) — ${srv.price || 75}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 2. Facility Location (Follows Service) */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Facility Location</span>
-                </label>
-                <select
-                  value={selectedLocation}
-                  onChange={(e) => setSelectedLocation(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  {availableLocations.map((loc) => (
-                    <option key={loc.id || loc.name} value={loc.name}>
-                      {loc.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 3. Responsible Physician / Specialist (Follows Location in Responsible mode) */}
-              {bookingType === "specialist" && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 flex items-center justify-between" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    <span className="flex items-center gap-1.5">
-                      <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Responsible Physician / Specialist</span>
-                    </span>
-                    {serviceResponsibleDoctors.length > 0 && (
-                      <span className="text-[10px] text-slate-400 font-normal">
-                        ({serviceResponsibleDoctors.length} assigned)
-                      </span>
-                    )}
-                  </label>
-                  <select
-                    value={selectedDoctorId}
-                    onChange={(e) => setSelectedDoctorId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {serviceResponsibleDoctors.map((doc) => (
-                      <option key={doc.id} value={doc.id}>
-                        {doc.name} {(doc as any).specialty || (doc as any).role ? `— ${(doc as any).specialty || (doc as any).role}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* 4. Allocated Room Display */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    <Building2 className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Allocated Room</span>
-                  </label>
-                  {allocatedRoom && (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-                      Auto-assigned
-                    </span>
-                  )}
-                </div>
-                <div className="w-full px-3.5 py-2.5 bg-blue-50/70 border border-blue-200/90 rounded-xl text-xs text-blue-900 space-y-1">
-                  <div className="flex items-center gap-2 font-bold truncate">
-                    <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <span className="truncate">
-                      {allocatedRoom
-                        ? `Room ${allocatedRoom.roomNumber} (${allocatedRoom.name})`
-                        : "General Station"}
-                    </span>
-                  </div>
-                  {allocatedRoom?.direction && (
-                    <p className="text-[11px] text-blue-700 font-medium leading-tight flex items-center gap-1.5 pt-0.5" title={allocatedRoom.direction}>
-                      <Navigation className="w-3 h-3 shrink-0 text-blue-500" />
-                      <span><strong>Directions:</strong> {allocatedRoom.direction}</span>
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Date & Interactive Slots Grid (Matches MA ScheduleAppointmentDrawer) */}
-              <div className="space-y-3 pt-1">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Appointment Date</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  />
-                </div>
-
-                {/* Available Slots */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
+              {bookingStep === 1 ? (
+                <>
+                  {/* 1. Service Selection */}
+                  <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      <Clock className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Available Slots</span>
+                      <Layers className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Service <span className="text-rose-500">*</span></span>
                     </label>
-                    <span className="text-[11px] text-slate-400 font-medium">
-                      Duration: {selectedServiceObj?.duration || 30} mins
-                    </span>
+                    {services.length === 0 ? (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+                        No services currently available for appointments.
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedServiceId}
+                        onChange={(e) => setSelectedServiceId(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {services.map((srv) => (
+                          <option key={srv.id} value={srv.id}>
+                            {srv.name} ({srv.slotDuration || srv.duration || 30} mins) — ${srv.price || 75}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
 
-                  {!date ? (
-                    <div className="py-3 px-3.5 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-xs text-slate-400" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Select an appointment date above to view available time slots.
+                  {/* 2. Facility Location (Follows Service) */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Facility Location <span className="text-rose-500">*</span></span>
+                    </label>
+                    <select
+                      value={selectedLocation}
+                      onChange={(e) => setSelectedLocation(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {availableLocations.map((loc) => (
+                        <option key={loc.id || loc.name} value={loc.name}>
+                          {loc.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 3. Responsible Practitioner / Specialist (Optional) */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Responsible Practitioner <span className="text-[10px] font-normal text-slate-400">(Optional)</span></span>
+                      </label>
+                      {serviceResponsibleDoctors.length > 0 && (
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          ({serviceResponsibleDoctors.length} available)
+                        </span>
+                      )}
                     </div>
-                  ) : slotNotice ? (
-                    <div className="py-3 px-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>{slotNotice}</span>
+                    <select
+                      value={selectedDoctorId}
+                      onChange={(e) => setSelectedDoctorId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="">Any Available Staff / Unassigned (Slot-wise)</option>
+                      {serviceResponsibleDoctors.map((doc) => (
+                        <option key={doc.id} value={doc.id}>
+                          {doc.name} {(doc as any).specialty || (doc as any).role ? `— ${(doc as any).specialty || (doc as any).role}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-slate-400">
+                      {selectedDoctorId
+                        ? "Slots will show based on this practitioner's availability."
+                        : "Slots will show based on open facility capacity across available staff."}
+                    </p>
+                  </div>
+
+                  {/* Step 1 Continue CTA */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setBookingStep(2)}
+                      disabled={!selectedServiceId || !selectedLocation}
+                      className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-sm shadow-blue-500/25 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <span>Continue to Availability</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Doctor / Service Profile Bar (Matches reference design) */}
+                  <div className="flex items-center justify-between gap-3 p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200/80">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {selectedDoctorObj ? (
+                        (selectedDoctorObj as any).avatar ? (
+                          <img
+                            src={(selectedDoctorObj as any).avatar}
+                            alt={selectedDoctorObj.name}
+                            className="w-11 h-11 rounded-full object-cover border border-slate-200 shadow-2xs shrink-0"
+                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 font-bold text-sm flex items-center justify-center border border-blue-200 shrink-0">
+                            {selectedDoctorObj.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase()}
+                          </div>
+                        )
+                      ) : (
+                        <div className="w-11 h-11 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-200/80 shrink-0">
+                          <Stethoscope className="w-5 h-5" />
+                        </div>
+                      )}
+
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-bold text-slate-900 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {selectedDoctorObj ? selectedDoctorObj.name : selectedServiceObj?.name || "Consultation"}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 truncate font-medium">
+                          {selectedDoctorObj
+                            ? (selectedDoctorObj as any).specialty || (selectedDoctorObj as any).role || "Therapist / Practitioner"
+                            : `${selectedLocation} • Any Available Practitioner`}
+                        </p>
+                      </div>
                     </div>
-                  ) : activeSlots.length === 0 ? (
-                    <div className="py-3 px-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>
-                        {bookingType === "service"
-                          ? "No open slots found for this service at the selected location on this date."
-                          : `No open slots found for ${selectedDoctorObj?.name || "the specialist"} on this date.`}
-                      </span>
+
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-full text-xs font-semibold text-slate-600 shadow-2xs shrink-0">
+                      <Clock className="w-3.5 h-3.5 text-blue-600" />
+                      <span className="hidden sm:inline">{userTimezoneLabel}</span>
+                      <span className="sm:hidden">{userTimezoneLabel.split(" ")[0]}</span>
                     </div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1">
-                        {activeSlots.map((slot) => {
-                          const isSelected = selectedTime === slot.label12;
+                  </div>
+
+                  {/* 1. What days work best for you? (Week carousel matching reference) */}
+                  <div className="space-y-2.5 pt-1">
+                    <h3 className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      What days work best for you?
+                    </h3>
+
+                    <div className="flex items-center justify-between gap-1">
+                      <button
+                        type="button"
+                        disabled={weekOffset === 0}
+                        onClick={() => setWeekOffset((prev) => Math.max(0, prev - 1))}
+                        className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0"
+                        title="Previous week"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+
+                      <div className="grid grid-cols-7 gap-1 flex-1">
+                        {weekDays.map((day) => {
+                          const isSelected = date === day.fullDateStr;
                           return (
                             <button
-                              key={`${slot.hour}:${slot.minute}`}
+                              key={day.fullDateStr}
                               type="button"
-                              disabled={slot.disabled}
-                              onClick={() => setSelectedTime(slot.label12)}
-                              className={`py-2 px-2 rounded-xl text-xs transition-all text-center flex flex-col items-center justify-center cursor-pointer ${
+                              disabled={day.isPast}
+                              onClick={() => setDate(day.fullDateStr)}
+                              className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer ${
                                 isSelected
-                                  ? "bg-blue-600 text-white font-bold shadow-xs shadow-blue-500/25"
-                                  : slot.disabled
-                                  ? "bg-slate-100 text-slate-400 border border-slate-200/60 line-through cursor-not-allowed opacity-60"
-                                  : "bg-slate-50/80 hover:bg-white text-slate-700 border border-slate-200 hover:border-slate-300 font-semibold"
+                                  ? "bg-[#009beb] text-white shadow-md shadow-sky-500/25 scale-[1.03]"
+                                  : day.isPast
+                                  ? "text-slate-300 opacity-40 cursor-not-allowed"
+                                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                               }`}
-                              style={{ fontFamily: "DM Sans, sans-serif" }}
-                              title={
-                                slot.disabled
-                                  ? slot.isServiceSlot
-                                    ? "Fully booked for this time slot"
-                                    : "Slot already booked"
-                                  : slot.isServiceSlot
-                                  ? `${slot.label12} (${slot.remaining} seats left)`
-                                  : slot.label12
-                              }
                             >
-                              <span>{slot.label12}</span>
-                              {slot.isServiceSlot && (
-                                <span
-                                  className={`text-[9px] font-medium mt-0.5 ${
-                                    slot.disabled
-                                      ? "text-slate-400"
-                                      : isSelected
-                                      ? "text-blue-100"
-                                      : "text-emerald-600"
-                                  }`}
-                                >
-                                  {slot.remaining} left
-                                </span>
-                              )}
+                              <span className={`text-[11px] font-medium leading-none ${isSelected ? "text-sky-100" : "text-slate-400"}`}>
+                                {day.dayOfWeek}
+                              </span>
+                              <span
+                                className={`text-base sm:text-lg font-bold my-1 leading-none ${isSelected ? "text-white" : "text-slate-800"}`}
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              >
+                                {day.dayNum}
+                              </span>
+                              <span className={`text-[10px] font-medium leading-none ${isSelected ? "text-sky-100" : "text-slate-400"}`}>
+                                {day.monthStr}
+                              </span>
                             </button>
                           );
                         })}
                       </div>
 
-                      <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
-                        <span className="flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-blue-600" />
-                          <span>
-                            Selected Slot: <strong className="text-slate-900 font-bold">{selectedTime}</strong>
-                          </span>
-                        </span>
-                        <span className="text-[11px] text-slate-500 font-medium">
-                          {bookingType === "service" ? "Service Booking" : "Specialist Booking"}
+                      <button
+                        type="button"
+                        onClick={() => setWeekOffset((prev) => prev + 1)}
+                        className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                        title="Next week"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2. What time works? (3-column grid without counts, only available slots shown) */}
+                  <div className="space-y-2.5 pt-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        What time works?
+                      </h3>
+                      <span className="text-[11px] text-slate-400 font-medium">
+                        Duration: {selectedServiceObj?.slotDuration || selectedServiceObj?.duration || 30} mins
+                      </span>
+                    </div>
+
+                    {slotNotice ? (
+                      <div className="py-3 px-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-800 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>{slotNotice}</span>
+                      </div>
+                    ) : availableSlotsForPatient.length === 0 ? (
+                      <div className="py-8 px-4 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-center space-y-1">
+                        <p className="text-xs font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          No open slots on this date
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          Please select another day from the calendar above to view available appointments.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2.5 max-h-52 overflow-y-auto pr-1">
+                        {availableSlotsForPatient.map((slot) => {
+                          const isSelected = selectedTime === slot.label12;
+                          return (
+                            <button
+                              key={`${slot.hour}:${slot.minute}`}
+                              type="button"
+                              onClick={() => setSelectedTime(slot.label12)}
+                              className={`py-3 px-2 rounded-2xl text-xs transition-all text-center flex items-center justify-center cursor-pointer border ${
+                                isSelected
+                                  ? "bg-[#009beb] text-white font-bold shadow-md shadow-sky-500/25 border-[#009beb] scale-[1.02]"
+                                  : "bg-slate-50/90 hover:bg-slate-100 hover:border-slate-300 text-slate-700 border-slate-200/80 font-semibold"
+                              }`}
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <span>{slot.label12}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 3. Room Direction Guide (if allocated) */}
+                  {allocatedRoom && (
+                    <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-2xl flex items-center justify-between text-xs text-blue-900">
+                      <div className="flex items-center gap-2 truncate">
+                        <Building2 className="w-4 h-4 text-blue-600 shrink-0" />
+                        <span className="truncate">
+                          Assigned: <strong>Room {allocatedRoom.roomNumber} ({allocatedRoom.name})</strong>
                         </span>
                       </div>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 shrink-0">
+                        Auto-assigned
+                      </span>
                     </div>
                   )}
-                </div>
-              </div>
 
-              {/* Notes */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  <FileText className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Reason / Notes</span>
-                </label>
-                <input
-                  type="text"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="e.g. routine check-up, eye discomfort..."
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                />
-              </div>
-
-              {/* Submit CTA */}
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={isSubmitting || activeSlots.length === 0}
-                  className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-sm shadow-blue-500/25 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Check className="w-4 h-4" />
-                  <span>{isSubmitting ? "Confirming..." : "Confirm Booking"}</span>
-                </button>
-              </div>
+                  {/* Step 2 Submit CTA */}
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || availableSlotsForPatient.length === 0}
+                      className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-all shadow-sm shadow-blue-500/25 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>{isSubmitting ? "Confirming..." : `Confirm Booking • ${selectedTime}`}</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </form>
           </div>
         </div>

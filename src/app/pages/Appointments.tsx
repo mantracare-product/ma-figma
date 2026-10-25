@@ -623,7 +623,7 @@ export default function Appointments() {
 
     const finalTitle = (bookingTitle.trim() || `${selectedClient.name} — Appointment`).trim();
 
-    if (!selectedClient || !selectedDate || !finalTitle || (bookingType === "specialist" && (!selectedProvider || !selectedProvider.id))) {
+    if (!selectedClient || !selectedDate || !finalTitle) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -656,7 +656,7 @@ export default function Appointments() {
         clientPhone: selectedClient.phone,
         employeeId: selectedProvider?.id || "",
         serviceId: bookingServiceId ? Number(bookingServiceId) : 1,
-        bookingType,
+        bookingType: selectedProvider && selectedProvider.id ? "specialist" : "service",
         date: selectedDate,
         time: timeStr,
         duration: 60,
