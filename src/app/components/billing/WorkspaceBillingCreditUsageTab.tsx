@@ -43,7 +43,7 @@ import {
 import { TableComponent, TableColumn } from "../ui/TableComponent";
 import { useOrganization } from "../../context/OrganizationContext";
 
-export default function WorkspaceBillingCreditUsageTab() {
+export default function WorkspaceBillingCreditUsageTab({ hideHeader = true }: { hideHeader?: boolean } = {}) {
   const { activeOrganization } = useOrganization();
   const orgId = activeOrganization?.id || "demo";
 
@@ -181,7 +181,7 @@ export default function WorkspaceBillingCreditUsageTab() {
       },
       {
         id: "actionName",
-        header: "ACTION EVENT (FR-13)",
+        header: "ACTION EVENT",
         align: "left",
         width: "30%",
         render: (item) => (
@@ -200,7 +200,7 @@ export default function WorkspaceBillingCreditUsageTab() {
       },
       {
         id: "linkedFeature",
-        header: "FEATURE (FR-15)",
+        header: "FEATURE",
         align: "left",
         width: "18%",
         render: (item) => {
@@ -254,21 +254,23 @@ export default function WorkspaceBillingCreditUsageTab() {
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* ── Page Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2
-            className="text-2xl font-bold text-slate-900"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            Credit Usage Analytics
-          </h2>
-          <p
-            className="text-xs sm:text-sm text-slate-500 mt-0.5"
-            style={{ fontFamily: "DM Sans, sans-serif" }}
-          >
-            Feature-wise credit deduction analytics &amp; action tracking (PRD FR-13 to FR-15).
-          </p>
-        </div>
+      <div className={`flex flex-col sm:flex-row sm:items-center ${hideHeader ? "justify-end" : "justify-between"} gap-3`}>
+        {!hideHeader && (
+          <div>
+            <h2
+              className="text-2xl font-bold text-slate-900"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Credit Usage Analytics
+            </h2>
+            <p
+              className="text-xs sm:text-sm text-slate-500 mt-0.5"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              Feature-wise credit deduction analytics &amp; action tracking (PRD FR-13 to FR-15).
+            </p>
+          </div>
+        )}
 
         {/* Cadence Selector */}
         <div className="flex items-center gap-2">
@@ -309,7 +311,7 @@ export default function WorkspaceBillingCreditUsageTab() {
             {totalConsumed.toLocaleString()}
           </p>
           <p className="text-[11px] text-gray-400">
-            Sum of all feature deductions (FR-15)
+            Sum of all feature deductions
           </p>
         </div>
 
@@ -369,7 +371,7 @@ export default function WorkspaceBillingCreditUsageTab() {
             <div className="flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-blue-600" />
               <h3 className="text-lg font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Feature-Wise Deduction Graph (FR-15)
+                Feature-Wise Deduction Graph
               </h3>
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
@@ -446,7 +448,7 @@ export default function WorkspaceBillingCreditUsageTab() {
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <div>
               <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Active Credit Rates Per Action (FR-13)
+                Active Credit Rates Per Action
               </h3>
               <p className="text-xs text-gray-500">
                 Current modular deduction rates configured by administrators in the Admin Console.
@@ -485,7 +487,7 @@ export default function WorkspaceBillingCreditUsageTab() {
             <div className="flex items-center gap-2">
               <Zap className="w-4 h-4 text-amber-400" />
               <h4 className="text-sm font-bold uppercase tracking-wider text-amber-400">
-                Action Deduction Test (FR-14)
+                Action Deduction Test
               </h4>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
@@ -499,7 +501,7 @@ export default function WorkspaceBillingCreditUsageTab() {
               onClick={() => handleSimulateAction("act-call-in", 4, "4-min Inbound Call (2 credits/min = 8)")}
               className="w-full py-2 px-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs font-semibold flex items-center justify-between cursor-pointer transition-colors"
             >
-              <span>4-min Inbound Call (FR-14 example)</span>
+              <span>4-min Inbound Call</span>
               <span className="text-amber-400 font-bold font-mono">-8 cr</span>
             </button>
 

@@ -25,6 +25,7 @@ import ReceptionSettingsTab from "../components/reception/ReceptionSettingsTab";
 import WorkspaceBillingPlansTab from "../components/billing/WorkspaceBillingPlansTab";
 import WorkspaceBillingOverviewTab from "../components/billing/WorkspaceBillingOverviewTab";
 import WorkspaceBillingCreditUsageTab from "../components/billing/WorkspaceBillingCreditUsageTab";
+import Transactions from "./Transactions";
 import { getWorkspaceSubscription } from "../../lib/plansBillingStore";
 import MailboxAccountsSection from "../components/settings/MailboxAccountsSection";
 import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
@@ -62,6 +63,7 @@ import {
   HelpCircle,
   AlertCircle,
   CheckCircle,
+  Download,
   XCircle,
   CheckCircle2,
   ExternalLink,
@@ -687,7 +689,7 @@ export default function Settings() {
   const { tab: urlTab, subtab: urlSubtab } = useParams<{ tab?: string; subtab?: string }>();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("organization");
-  const [billingSubTab, setBillingSubTab] = useState<"overview" | "plans" | "payments" | "credit-usage">("overview");
+  const [billingSubTab, setBillingSubTab] = useState<"overview" | "plans" | "payments" | "credit-usage" | "transactions">("overview");
   const [billingExpanded, setBillingExpanded] = useState(true);
   const [selectedLanguage, setSelectedLanguage] = useState("English");
 
@@ -721,6 +723,28 @@ export default function Settings() {
 
   // Payment Method Modal State
   const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
+  const [savedPaymentMethods, setSavedPaymentMethods] = useState<Array<{
+    id: string;
+    provider: string;
+    last4: string;
+    expiryDate: string;
+    isDefault: boolean;
+  }>>([
+    {
+      id: "pm-1",
+      provider: "Visa",
+      last4: "4567",
+      expiryDate: "12/27",
+      isDefault: true,
+    },
+    {
+      id: "pm-2",
+      provider: "Mastercard",
+      last4: "8892",
+      expiryDate: "09/28",
+      isDefault: false,
+    },
+  ]);
   const [newPaymentData, setNewPaymentData] = useState({
     provider: "Visa",
     cardholderName: "",
@@ -753,17 +777,20 @@ export default function Settings() {
       path === "/settings/payments" ||
       path === "/settings/payment" ||
       path === "/settings/credit-usage" ||
+      path === "/settings/transactions" ||
       urlTab === "billing" ||
       urlTab === "plans" ||
       urlTab === "payments" ||
       urlTab === "payment" ||
       urlTab === "credit-usage" ||
+      urlTab === "transactions" ||
       urlTab === "overview" ||
       queryTab === "billing" ||
       queryTab === "plans" ||
       queryTab === "payments" ||
       queryTab === "payment" ||
       queryTab === "credit-usage" ||
+      queryTab === "transactions" ||
       queryTab === "overview";
 
     if (isBilling) {
@@ -774,8 +801,6 @@ export default function Settings() {
       if (!sub) {
         if (path.includes("/plans") || urlTab === "plans" || queryTab === "plans") {
           sub = "plans";
-        } else if (path.includes("/payment") || urlTab === "payments" || urlTab === "payment" || queryTab === "payments" || queryTab === "payment") {
-          sub = "payments";
         } else if (path.includes("/credit-usage") || urlTab === "credit-usage" || queryTab === "credit-usage") {
           sub = "credit-usage";
         } else {
@@ -785,8 +810,6 @@ export default function Settings() {
 
       if (sub === "plans") {
         setBillingSubTab("plans");
-      } else if (sub === "payments" || sub === "payment") {
-        setBillingSubTab("payments");
       } else if (sub === "credit-usage") {
         setBillingSubTab("credit-usage");
       } else {
@@ -4937,12 +4960,35 @@ export default function Settings() {
             )}
 
             {/* Unified Billing & Subscription Page */}
-            {(activeTab === "billing" || ["overview", "plans", "payments", "payment", "credit-usage"].includes(activeTab)) && (
+            {(activeTab === "billing" || ["overview", "plans", "payments", "payment", "credit-usage", "transactions"].includes(activeTab)) && (
               <div className="space-y-6">
                 {/* Billing Top Sub-Tabs Navigation */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 border-b border-slate-200 pb-3">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+                  <div>
+                    <h2
+                      className="text-2xl font-bold text-slate-900"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {(billingSubTab === "overview" || billingSubTab === "payments" || billingSubTab === "transactions") && "Plan Overview & Payment"}
+                      {billingSubTab === "plans" && "Plans & Subscriptions"}
+                      {billingSubTab === "credit-usage" && "Credit Usage"}
+                    </h2>
+                    <p
+                      className="text-xs sm:text-sm text-slate-500 mt-0.5"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      {(billingSubTab === "overview" || billingSubTab === "payments" || billingSubTab === "transactions") && (
+                        <>
+                          Manage included quotas, seats, payment methods, and billing details for{" "}
+                          <strong className="text-slate-800">{activeOrganization?.name || "Demo Mantra Care"}</strong>.
+                        </>
+                      )}
+                      {billingSubTab === "plans" && "Configure your organization plans, seats, and flexible add-ons."}
+                      {billingSubTab === "credit-usage" && "Track real-time feature credit consumption, deduction history, and active unit rates."}
+                    </p>
+                  </div>
 
-                  <div className="inline-flex p-1 bg-slate-100 rounded-2xl border border-slate-200/80 self-start sm:self-auto">
+                  <div className="inline-flex p-1 bg-slate-100 rounded-2xl border border-slate-200/80 self-start lg:self-auto shrink-0 flex-wrap gap-0.5">
                     <button
                       type="button"
                       onClick={() => {
@@ -4950,7 +4996,7 @@ export default function Settings() {
                         navigate("/settings/billing/overview");
                       }}
                       className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        billingSubTab === "overview"
+                        billingSubTab === "overview" || billingSubTab === "payments" || billingSubTab === "transactions"
                           ? "bg-[#181e25] text-white shadow-xs"
                           : "text-slate-600 hover:text-slate-900"
                       }`}
@@ -4976,21 +5022,6 @@ export default function Settings() {
                     <button
                       type="button"
                       onClick={() => {
-                        setBillingSubTab("payments");
-                        navigate("/settings/billing/payment");
-                      }}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        billingSubTab === "payments"
-                          ? "bg-[#181e25] text-white shadow-xs"
-                          : "text-slate-600 hover:text-slate-900"
-                      }`}
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      Payment
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
                         setBillingSubTab("credit-usage");
                         navigate("/settings/billing/credit-usage");
                       }}
@@ -5006,239 +5037,430 @@ export default function Settings() {
                   </div>
                 </div>
 
-                {/* Sub-tab 0: Overview (Plan Overview Matching Reference Design) */}
-                {billingSubTab === "overview" && (
-                  <WorkspaceBillingOverviewTab
-                    subscription={activeOrganization?.id ? getWorkspaceSubscription(activeOrganization.id) : null}
-                    onNavigateToPlans={() => {
-                      setBillingSubTab("plans");
-                      navigate("/settings/billing/plans");
-                    }}
-                    onNavigateToCredits={() => {
-                      setBillingSubTab("credit-usage");
-                      navigate("/settings/billing/credit-usage");
-                    }}
-                  />
-                )}
+                {/* Sub-tab 0: Merged Overview & Payments */}
+                {(billingSubTab === "overview" || billingSubTab === "payments" || billingSubTab === "transactions") && (
+                  <div className="space-y-8">
+                    <WorkspaceBillingOverviewTab
+                      subscription={activeOrganization?.id ? getWorkspaceSubscription(activeOrganization.id) : null}
+                      onNavigateToPlans={() => {
+                        setBillingSubTab("plans");
+                        navigate("/settings/billing/plans");
+                      }}
+                      onNavigateToCredits={() => {
+                        setBillingSubTab("credit-usage");
+                        navigate("/settings/billing/credit-usage");
+                      }}
+                      hideHeader={true}
+                    />
 
-                {/* Sub-tab 1: Plans (Scope-Based from Admin Single Source of Truth) */}
-                {billingSubTab === "plans" && (
-                  <WorkspaceBillingPlansTab />
-                )}
-
-
-          {/* Sub-tab 2: Payments */}
-          {billingSubTab === "payments" && (
-              <div className="space-y-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-[22px] font-bold text-[#111827]" style={{ fontFamily: 'DM Sans, sans-serif' }}>Payments</h2>
-                    <p className="text-sm mt-1 text-[#6B7280]" style={{ fontFamily: 'Outfit, sans-serif' }}>Manage plans, subscriptions, and payments</p>
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="space-y-6">
-                    {/* Payment Methods Header with Button */}
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-base font-bold">Payment Methods</h3>
-                      <button
-                        onClick={() => setShowAddPaymentModal(true)}
-                        className="px-4 py-2 border border-[#2563EB] text-[#2563EB] rounded-lg text-sm hover:bg-blue-50"
-                      >
-                        + Add Payment Method
-                      </button>
-                    </div>
-
-                    <div className="border border-[#E5E7EB] rounded-xl p-5">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-8 bg-[#1A1F71] rounded flex items-center justify-center text-white text-xs font-bold">
-                            VISA
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">Visa ending in 4567</p>
-                            <p className="text-xs text-[#6B7280]">Expires 12/27</p>
-                          </div>
-                        </div>
-                        <span className="px-2.5 py-0.5 bg-[#EFF6FF] text-[#2563EB] text-xs rounded-full">Default</span>
-                      </div>
-                    </div>
-
-                    {/* Billing Address Section with Edit */}
-                    <div className="flex items-center justify-between mt-8">
-                      <h3 className="text-base font-bold">Billing Address</h3>
-                      {!isEditingBillingAddress && (
-                        <button
-                          onClick={() => {
-                            setEditBillingAddress(billingAddress);
-                            setIsEditingBillingAddress(true);
-                          }}
-                          className="px-3 py-1.5 border border-[#E5E7EB] text-[#374151] rounded-lg text-sm hover:bg-gray-50"
-                        >
-                          Edit
-                        </button>
-                      )}
-                      {isEditingBillingAddress && (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => {
-                              setBillingAddress(editBillingAddress);
-                              setIsEditingBillingAddress(false);
-                              toast.success("Billing address updated successfully");
-                            }}
-                            className="px-3 py-1.5 bg-[#2563EB] text-white rounded-lg text-sm hover:bg-blue-700"
+                    {/* Merged Payment Methods & Billing Address Section */}
+                    <div className="space-y-6 pt-4">
+                      {/* Card 1: Payment Methods */}
+                      <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-6">
+                        <div className="mb-5">
+                          <h3
+                            className="text-base sm:text-lg font-bold text-slate-900"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
                           >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEditBillingAddress(billingAddress);
-                              setIsEditingBillingAddress(false);
-                            }}
-                            className="px-3 py-1.5 border border-[#E5E7EB] text-[#374151] rounded-lg text-sm hover:bg-gray-50"
-                          >
-                            Cancel
-                          </button>
+                            Payment Methods
+                          </h3>
                         </div>
-                      )}
-                    </div>
 
-                    <div className="border border-[#E5E7EB] rounded-xl p-5">
-                      {!isEditingBillingAddress ? (
-                        <div className="space-y-3">
-                          <div>
-                            <p className="text-xs font-medium text-[#6B7280] mb-1">Street Address</p>
-                            <p className="text-sm text-foreground">{billingAddress.street}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-[#6B7280] mb-1">City</p>
-                            <p className="text-sm text-foreground">{billingAddress.city}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-[#6B7280] mb-1">State / Province</p>
-                            <p className="text-sm text-foreground">{billingAddress.state}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-[#6B7280] mb-1">Postal Code</p>
-                            <p className="text-sm text-foreground">{billingAddress.postalCode}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-[#6B7280] mb-1">Country</p>
-                            <p className="text-sm text-foreground">{billingAddress.country}</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-xs font-medium text-[#6B7280] mb-1">Street Address</label>
-                            <Input
-                              value={editBillingAddress.street}
-                              onChange={(e) => setEditBillingAddress({ ...editBillingAddress, street: e.target.value })}
-                              placeholder="123 Healthcare Ave, Suite 100"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-[#6B7280] mb-1">City</label>
-                            <Input
-                              value={editBillingAddress.city}
-                              onChange={(e) => setEditBillingAddress({ ...editBillingAddress, city: e.target.value })}
-                              placeholder="San Francisco"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-[#6B7280] mb-1">State / Province</label>
-                            <Input
-                              value={editBillingAddress.state}
-                              onChange={(e) => setEditBillingAddress({ ...editBillingAddress, state: e.target.value })}
-                              placeholder="CA"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-[#6B7280] mb-1">Postal Code</label>
-                            <Input
-                              value={editBillingAddress.postalCode}
-                              onChange={(e) => setEditBillingAddress({ ...editBillingAddress, postalCode: e.target.value })}
-                              placeholder="94102"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-[#6B7280] mb-1">Country</label>
-                            <Select value={editBillingAddress.country} onValueChange={(value) => setEditBillingAddress({ ...editBillingAddress, country: value })}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {COUNTRIES.map((country) => (
-                                  <SelectItem key={country} value={country}>
-                                    {country}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Transaction History */}
-                    <h3 className="text-base font-bold mt-8">Transaction History</h3>
-                    {(() => {
-                      const txData = [
-                        { id: "tx-1", date: "May 1, 2026", description: "Professional Plan (Annual)", amount: "$1,896", status: "Paid" },
-                        { id: "tx-2", date: "Apr 1, 2026", description: "Professional Plan (Monthly)", amount: "$158", status: "Paid" },
-                        { id: "tx-3", date: "Mar 1, 2026", description: "Professional Plan (Monthly)", amount: "$158", status: "Paid" },
-                      ];
-
-                      const txColumns: TableColumn<typeof txData[0]>[] = [
-                        { key: "date", header: "Date", align: "left", render: (tx) => <span className="text-sm text-slate-700">{tx.date}</span> },
-                        { key: "description", header: "Description", align: "left", render: (tx) => <span className="text-sm font-medium text-slate-900">{tx.description}</span> },
-                        { key: "amount", header: "Amount", align: "right", render: (tx) => <span className="text-sm font-semibold text-slate-900">{tx.amount}</span> },
-                        {
-                          key: "status",
-                          header: "Status",
-                          align: "center",
-                          render: (tx) => (
-                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                              {tx.status}
-                            </span>
-                          ),
-                        },
-                        {
-                          key: "invoice",
-                          header: "Invoice",
-                          align: "right",
-                          render: () => (
+                        {savedPaymentMethods.length === 0 ? (
+                          <div className="py-8 text-center space-y-3 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                            <CreditCard className="w-8 h-8 text-slate-400 mx-auto" />
+                            <p className="text-xs text-slate-500 font-medium">No payment methods added yet.</p>
                             <button
                               type="button"
-                              onClick={() => toast.success("Invoice downloaded")}
-                              className="text-xs font-semibold text-[#2563EB] hover:underline cursor-pointer"
+                              onClick={() => setShowAddPaymentModal(true)}
+                              className="px-4 py-2 bg-[#1E293B] hover:bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-xs"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
                             >
-                              Download
+                              Add Payment Method
                             </button>
-                          ),
-                        },
-                      ];
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {savedPaymentMethods.map((pm) => (
+                              <div
+                                key={pm.id}
+                                className="border border-slate-200/90 rounded-xl p-4 sm:p-5 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-300 transition-colors"
+                              >
+                                <div className="flex items-center gap-3.5">
+                                  <div
+                                    className={`w-11 h-7 rounded flex items-center justify-center text-white text-[10px] font-black shadow-xs shrink-0 tracking-wider italic ${
+                                      pm.provider.toLowerCase() === "mastercard"
+                                        ? "bg-[#EB001B]"
+                                        : pm.provider.toLowerCase() === "amex"
+                                        ? "bg-[#006FCF]"
+                                        : pm.provider.toLowerCase() === "discover"
+                                        ? "bg-[#FF6000]"
+                                        : "bg-[#1A1F71]"
+                                    }`}
+                                  >
+                                    {pm.provider.toLowerCase() === "mastercard"
+                                      ? "MC"
+                                      : pm.provider.toLowerCase() === "amex"
+                                      ? "AMEX"
+                                      : pm.provider.toLowerCase() === "discover"
+                                      ? "DISC"
+                                      : "VISA"}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-900">
+                                      {pm.provider} ending in {pm.last4}
+                                    </p>
+                                    <p className="text-xs text-slate-500 mt-0.5">Expires {pm.expiryDate}</p>
+                                  </div>
+                                </div>
 
-                      return (
-                        <TableComponent
-                          columns={txColumns}
-                          data={txData}
-                          getRowId={(tx) => tx.id}
-                        />
-                      );
-                    })()}
+                                <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+                                  {pm.isDefault ? (
+                                    <span className="px-2.5 py-0.5 bg-slate-100 text-slate-500 text-xs font-medium rounded-md">
+                                      Default
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSavedPaymentMethods((prev) =>
+                                          prev.map((p) => ({ ...p, isDefault: p.id === pm.id }))
+                                        );
+                                        toast.success("Set as default payment method");
+                                      }}
+                                      className="text-xs font-medium text-[#1E293B] hover:underline cursor-pointer transition-colors"
+                                    >
+                                      Make Default
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSavedPaymentMethods((prev) => prev.filter((p) => p.id !== pm.id));
+                                      toast.success("Payment method removed");
+                                    }}
+                                    className="text-xs font-medium text-red-500 hover:text-red-700 cursor-pointer transition-colors"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+
+                            {/* Add Payment Method Button Below Attached Payment Methods (Right Corner) */}
+                            <div className="flex justify-end pt-2">
+                              <button
+                                type="button"
+                                onClick={() => setShowAddPaymentModal(true)}
+                                className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#1E293B] hover:text-slate-900 cursor-pointer transition-colors"
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              >
+                                <Plus className="w-4 h-4" />
+                                Add Payment Method
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Card 2: Billing Address (Max 2 rows) */}
+                      <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-6">
+                        <div className="flex items-center justify-between mb-5">
+                          <h3
+                            className="text-base sm:text-lg font-bold text-slate-900"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            Billing Address
+                          </h3>
+
+                          {!isEditingBillingAddress ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditBillingAddress(billingAddress);
+                                setIsEditingBillingAddress(true);
+                              }}
+                              className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#1E293B] hover:text-slate-900 cursor-pointer transition-colors"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                              Edit
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBillingAddress(editBillingAddress);
+                                  setIsEditingBillingAddress(false);
+                                  toast.success("Billing address updated successfully");
+                                }}
+                                className="px-3 py-1 bg-[#1E293B] text-white rounded-lg text-xs font-bold hover:bg-slate-900 cursor-pointer transition-colors"
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditBillingAddress(billingAddress);
+                                  setIsEditingBillingAddress(false);
+                                }}
+                                className="px-3 py-1 border border-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 cursor-pointer transition-colors"
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {!isEditingBillingAddress ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-4">
+                            <div>
+                              <p className="text-xs font-medium text-slate-500">Street Address</p>
+                              <p className="text-sm font-medium text-slate-900 mt-1">{billingAddress.street}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-slate-500">City</p>
+                              <p className="text-sm font-medium text-slate-900 mt-1">{billingAddress.city}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-slate-500">State / Province</p>
+                              <p className="text-sm font-medium text-slate-900 mt-1">{billingAddress.state}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-slate-500">Postal Code</p>
+                              <p className="text-sm font-medium text-slate-900 mt-1">{billingAddress.postalCode}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-slate-500">Country</p>
+                              <p className="text-sm font-medium text-slate-900 mt-1">{billingAddress.country}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-4 pt-1">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Street Address</label>
+                                <Input
+                                  value={editBillingAddress.street}
+                                  onChange={(e) => setEditBillingAddress({ ...editBillingAddress, street: e.target.value })}
+                                  placeholder="123 Healthcare Ave, Suite 100"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">City</label>
+                                <Input
+                                  value={editBillingAddress.city}
+                                  onChange={(e) => setEditBillingAddress({ ...editBillingAddress, city: e.target.value })}
+                                  placeholder="San Francisco"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">State / Province</label>
+                                <Input
+                                  value={editBillingAddress.state}
+                                  onChange={(e) => setEditBillingAddress({ ...editBillingAddress, state: e.target.value })}
+                                  placeholder="CA"
+                                />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Postal Code</label>
+                                <Input
+                                  value={editBillingAddress.postalCode}
+                                  onChange={(e) => setEditBillingAddress({ ...editBillingAddress, postalCode: e.target.value })}
+                                  placeholder="94102"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Country</label>
+                                <Select
+                                  value={editBillingAddress.country}
+                                  onValueChange={(value) => setEditBillingAddress({ ...editBillingAddress, country: value })}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {COUNTRIES.map((country) => (
+                                      <SelectItem key={country} value={country}>
+                                        {country}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Transaction History Table */}
+                      <h3 className="text-lg font-bold text-slate-900 pt-2" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Transaction History
+                      </h3>
+                      {(() => {
+                        const txData = [
+                          {
+                            id: "tx-1",
+                            transactionId: "TXN-849201",
+                            date: "May 1, 2026",
+                            category: "Plan",
+                            description: "Starter Health (Monthly)",
+                            amount: "$49",
+                            status: "Paid",
+                            invoiceId: "INV-2026-004",
+                          },
+                          {
+                            id: "tx-2",
+                            transactionId: "TXN-849182",
+                            date: "Apr 18, 2026",
+                            category: "Credit Packs",
+                            description: "10,000 Voice & Chat Credits Top-Up",
+                            amount: "$20",
+                            status: "Paid",
+                            invoiceId: "INV-2026-003",
+                          },
+                          {
+                            id: "tx-3",
+                            transactionId: "TXN-849150",
+                            date: "Apr 5, 2026",
+                            category: "Team Member Packs",
+                            description: "+5 Team Member Seats (Monthly)",
+                            amount: "$40",
+                            status: "Paid",
+                            invoiceId: "INV-2026-002",
+                          },
+                          {
+                            id: "tx-4",
+                            transactionId: "TXN-849100",
+                            date: "Apr 1, 2026",
+                            category: "Plan",
+                            description: "Starter Health (Monthly)",
+                            amount: "$49",
+                            status: "Paid",
+                            invoiceId: "INV-2026-001",
+                          },
+                        ];
+
+                        const txColumns: TableColumn<typeof txData[0]>[] = [
+                          {
+                            key: "transactionId",
+                            header: "Transaction ID",
+                            align: "left",
+                            width: "15%",
+                            minWidth: "125px",
+                            render: (tx) => (
+                              <span className="text-xs font-mono font-medium text-slate-700">{tx.transactionId}</span>
+                            ),
+                          },
+                          {
+                            key: "date",
+                            header: "Date",
+                            align: "left",
+                            width: "13%",
+                            minWidth: "105px",
+                            render: (tx) => <span className="text-xs text-slate-700">{tx.date}</span>,
+                          },
+                          {
+                            key: "category",
+                            header: "Category",
+                            align: "left",
+                            width: "16%",
+                            minWidth: "135px",
+                            render: (tx) => (
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                                  tx.category === "Plan"
+                                    ? "bg-blue-50 text-blue-700 border-blue-200/60"
+                                    : tx.category === "Credit Packs"
+                                    ? "bg-purple-50 text-purple-700 border-purple-200/60"
+                                    : "bg-emerald-50 text-emerald-700 border-emerald-200/60"
+                                }`}
+                              >
+                                {tx.category}
+                              </span>
+                            ),
+                          },
+                          {
+                            key: "description",
+                            header: "Description",
+                            align: "left",
+                            width: "24%",
+                            minWidth: "190px",
+                            render: (tx) => <span className="text-xs font-semibold text-slate-900">{tx.description}</span>,
+                          },
+                          {
+                            key: "amount",
+                            header: "Amount",
+                            align: "right",
+                            width: "10%",
+                            minWidth: "80px",
+                            render: (tx) => <span className="text-xs font-extrabold text-slate-900 font-mono">{tx.amount}</span>,
+                          },
+                          {
+                            key: "status",
+                            header: "Status",
+                            align: "center",
+                            width: "10%",
+                            minWidth: "85px",
+                            render: (tx) => (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                {tx.status}
+                              </span>
+                            ),
+                          },
+                          {
+                            key: "invoice",
+                            header: "Invoice ID",
+                            align: "left",
+                            width: "12%",
+                            minWidth: "115px",
+                            render: (tx) => (
+                              <span className="text-xs font-mono font-medium text-slate-700">{tx.invoiceId}</span>
+                            ),
+                          },
+                        ];
+
+                        const txRowActions: TableRowAction<typeof txData[0]>[] = [
+                          {
+                            label: "Download Invoice",
+                            icon: <Download className="w-3.5 h-3.5 text-slate-500" />,
+                            onClick: (tx) => {
+                              toast.success(`Downloading invoice ${tx.invoiceId}...`);
+                            },
+                          },
+                        ];
+
+                        return (
+                          <TableComponent
+                            columns={txColumns}
+                            data={txData}
+                            getRowId={(tx) => tx.id}
+                            actionIcon="menu"
+                            rowActions={txRowActions}
+                            enableSelection={false}
+                            enableColumnCustomization={true}
+                          />
+                        );
+                      })()}
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
+                )}
 
-            {/* Sub-tab 3: Credit Usage (PRD FR-13, FR-14, FR-15) */}
-            {billingSubTab === "credit-usage" && (
-              <WorkspaceBillingCreditUsageTab />
-            )}
+                {/* Sub-tab 1: Plans */}
+                {billingSubTab === "plans" && (
+                  <WorkspaceBillingPlansTab hideHeader={true} />
+                )}
+
+                {/* Sub-tab 2: Credit Usage */}
+                {billingSubTab === "credit-usage" && (
+                  <WorkspaceBillingCreditUsageTab hideHeader={true} />
+                )}
             {false && (
               <div className="space-y-0">
                 {/* Page Header */}
@@ -12745,9 +12967,8 @@ export default function Settings() {
                   <SelectContent>
                     <SelectItem value="Visa">Visa</SelectItem>
                     <SelectItem value="Mastercard">Mastercard</SelectItem>
-                    <SelectItem value="American Express">American Express</SelectItem>
+                    <SelectItem value="Amex">Amex</SelectItem>
                     <SelectItem value="Discover">Discover</SelectItem>
-                    <SelectItem value="RuPay">RuPay</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -12847,6 +13068,17 @@ export default function Settings() {
                       toast.error("Please fill in all required fields");
                       return;
                     }
+                    const cleanCardNum = newPaymentData.cardNumber.replace(/\s+/g, "");
+                    const newCard = {
+                      id: `pm-${Date.now()}`,
+                      provider: newPaymentData.provider || "Visa",
+                      last4: cleanCardNum.slice(-4) || "4567",
+                      expiryDate: newPaymentData.expiryDate || "12/28",
+                      isDefault: savedPaymentMethods.length === 0 || newPaymentData.setAsDefault,
+                    };
+                    setSavedPaymentMethods((prev) =>
+                      newCard.isDefault ? [newCard, ...prev.map((p) => ({ ...p, isDefault: false }))] : [...prev, newCard]
+                    );
                     toast.success("Payment method added successfully");
                     setShowAddPaymentModal(false);
                     setNewPaymentData({
@@ -12858,7 +13090,7 @@ export default function Settings() {
                       setAsDefault: false,
                     });
                   }}
-                  className="px-4 py-2 bg-[#2563EB] text-white rounded-lg text-sm hover:bg-blue-700"
+                  className="px-4 py-2 bg-[#1E293B] hover:bg-slate-900 text-white rounded-lg text-sm font-semibold cursor-pointer transition-colors"
                 >
                   Add Card
                 </button>

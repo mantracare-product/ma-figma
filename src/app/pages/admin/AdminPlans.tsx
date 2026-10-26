@@ -672,6 +672,16 @@ export default function AdminPlans() {
     });
   }, [plans, selectedOrg]);
 
+  // Auto-sync selectedPlanId when modal is open and available plans update
+  useEffect(() => {
+    if (isAssignModalOpen && availablePlansForSelectedOrg.length > 0) {
+      const exists = availablePlansForSelectedOrg.some((a) => a.plan.id === selectedPlanId);
+      if (!selectedPlanId || !exists) {
+        setSelectedPlanId(availablePlansForSelectedOrg[0].plan.id);
+      }
+    }
+  }, [isAssignModalOpen, availablePlansForSelectedOrg, selectedPlanId]);
+
   const handleOpenAssignModal = (orgId?: string) => {
     const targetOrgId = orgId || organizations[0]?.id || "demo";
     setSelectedOrgId(targetOrgId);
@@ -692,16 +702,17 @@ export default function AdminPlans() {
 
   const handleAssignPlanSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedOrgId || !selectedPlanId) {
+    const effectivePlanId = selectedPlanId || availablePlansForSelectedOrg[0]?.plan.id;
+    if (!selectedOrgId || !effectivePlanId) {
       toast.error("Please select both an organisation and an available plan");
       return;
     }
     const targetOrg = organizations.find((o) => o.id === selectedOrgId);
     const currency = targetOrg?.currency || "USD";
-    const updated = assignPlanToWorkspace(selectedOrgId, selectedPlanId, selectedBillingCycle, currency);
+    const updated = assignPlanToWorkspace(selectedOrgId, effectivePlanId, selectedBillingCycle, currency);
     setSubscriptions(getStoredSubscriptions());
     setIsAssignModalOpen(false);
-    toast.success(`Assigned plan "${updated.planName}" to organization! ✓`);
+    toast.success(`Assigned plan "${updated.planName}" to ${targetOrg?.name || "organization"}! ✓`);
   };
 
   // ── GLOBAL SETTINGS UPDATE (FR-5, FR-8) ──
@@ -804,7 +815,7 @@ export default function AdminPlans() {
       },
       {
         id: "seats",
-        header: "INCLUDED SEATS (FR-1)",
+        header: "INCLUDED SEATS",
         align: "left",
         width: "14%",
         render: (plan) => (
@@ -1112,7 +1123,7 @@ export default function AdminPlans() {
       },
       {
         id: "linkedFeature",
-        header: "LINKED FEATURE (FR-15)",
+        header: "LINKED FEATURE",
         align: "left",
         width: "20%",
         render: (act) => {
@@ -1143,7 +1154,7 @@ export default function AdminPlans() {
       },
       {
         id: "creditsDeducted",
-        header: "CREDITS DEDUCTED (FR-13)",
+        header: "CREDITS DEDUCTED",
         align: "left",
         width: "20%",
         render: (act) => (
@@ -1234,7 +1245,7 @@ export default function AdminPlans() {
       },
       {
         id: "planName",
-        header: "ACTIVE PLAN (FR-10)",
+        header: "ACTIVE PLAN",
         align: "left",
         width: "25%",
         render: (row) =>
@@ -1310,23 +1321,31 @@ export default function AdminPlans() {
         {/* Top Header - Portals directly into the topbar */}
         <PageHeader
           title="Plans & Credits"
-          subtitle="Admin control console for subscription tiers, included quotas, add-on packs, credit actions, and plan assignment (PRD FR-1 to FR-15)."
+          subtitle="Admin control console for subscription tiers, included quotas, add-on packs, credit actions, and plan assignment."
         />
 
-        {/* Action Bar powered by PageTopBar with sub-navigation modes, search, and quick actions */}
+        {/* Action Bar powered by PageTopBar with dropdown modes, search, and quick actions */}
         <PageTopBar
-          modes={[
-            { id: "plans", label: "Industry Plans", icon: <CreditCard className="w-3.5 h-3.5" /> },
-            { id: "credit-pricing", label: "Credit Packs & Pricing", icon: <Coins className="w-3.5 h-3.5" /> },
-            { id: "team-pricing", label: "Team Member Pricing", icon: <Users className="w-3.5 h-3.5" /> },
-            { id: "credit-actions", label: "Credit Actions (FR-13)", icon: <Zap className="w-3.5 h-3.5" /> },
-            { id: "assignment", label: "Plan Assignment (FR-10)", icon: <Building2 className="w-3.5 h-3.5" /> },
-          ]}
-          activeMode={activeTab}
-          onModeChange={(m) => {
-            setActiveTab(m as AdminBillingTab);
-            setSearchQuery("");
-          }}
+          leftElement={
+            <div className="relative">
+              <select
+                value={activeTab}
+                onChange={(e) => {
+                  setActiveTab(e.target.value as AdminBillingTab);
+                  setSearchQuery("");
+                }}
+                className="h-[36px] pl-3 pr-8 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 outline-none cursor-pointer shadow-2xs hover:border-gray-300 appearance-none"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <option value="plans">Industry Plans</option>
+                <option value="credit-pricing">Credit Packs & Pricing</option>
+                <option value="team-pricing">Team Member Pricing</option>
+                <option value="credit-actions">Credit Actions</option>
+                <option value="assignment">Plan Assignment</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          }
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder={
@@ -1486,7 +1505,7 @@ export default function AdminPlans() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Predefined Credit Packs (FR-6)
+                    Predefined Credit Packs
                   </h3>
                   <p className="text-xs text-gray-500">
                     Fixed credit bundles offered to clients next to the custom credit input. A pack cost does not have to equal credits × price per credit.
@@ -1517,7 +1536,7 @@ export default function AdminPlans() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                    FR-8 Base Rate
+                    Base Rate
                   </span>
                   <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
                     Cost Per Extra Team Member
@@ -1551,7 +1570,7 @@ export default function AdminPlans() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Predefined Team Member Packs (FR-8)
+                    Predefined Team Member Packs
                   </h3>
                   <p className="text-xs text-gray-500">
                     Fixed team member bundles (e.g. 5 members for $90) offering volume discounts for scaling organizations.
@@ -1580,7 +1599,7 @@ export default function AdminPlans() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Credit Deduction Actions &amp; Unit Rates (FR-13)
+                  Credit Deduction Actions &amp; Unit Rates
                 </h3>
                 <p className="text-xs text-gray-500">
                   Every action that consumes credits in MantraAssist. Modifying rates here immediately drives modular credit deduction across calls, SMS, workflows, and AI scribe.
@@ -1602,20 +1621,9 @@ export default function AdminPlans() {
           </div>
         )}
 
-        {/* ── TAB 5: PLAN ASSIGNMENT (FR-10) ── */}
+        {/* ── TAB 5: PLAN ASSIGNMENT ── */}
         {activeTab === "assignment" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Active Workspace Plan Assignments (FR-10)
-                </h3>
-                <p className="text-xs text-gray-500">
-                  Admins can assign any industry plan to any organisation. The assigned plan instantly becomes that organisation&apos;s active plan on the client side.
-                </p>
-              </div>
-            </div>
-
             <TableComponent<OrgAssignmentRow>
               data={filteredAssignmentRows}
               columns={assignmentColumns}
@@ -1659,8 +1667,8 @@ export default function AdminPlans() {
               <div className="flex gap-2 border-b border-gray-200 pb-1">
                 {[
                   { id: "general", label: "1. General & Quotas" },
-                  { id: "features", label: "2. Modules & Features (FR-2)" },
-                  { id: "templates", label: "3. Templates (FR-4)" },
+                  { id: "features", label: "2. Modules & Features" },
+                  { id: "templates", label: "3. Templates" },
                   { id: "pricing", label: "4. Country Pricing" },
                 ].map((t) => (
                   <button
@@ -1862,7 +1870,7 @@ export default function AdminPlans() {
                       <div>
                         <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 flex items-center gap-1.5">
                           <Layers className="w-4 h-4 text-blue-600" />
-                          <span>Assign Modules &amp; Module Features (FR-2)</span>
+                          <span>Assign Modules &amp; Module Features</span>
                         </h4>
                         <p className="text-[11px] text-gray-500">
                           Controls functional system access. An organisation with this plan only gets access to checked modules and features.
@@ -1929,7 +1937,7 @@ export default function AdminPlans() {
                     <div>
                       <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 flex items-center gap-1.5">
                         <FileText className="w-4 h-4 text-purple-600" />
-                        <span>Plan Display Content (FR-3)</span>
+                        <span>Plan Display Content</span>
                       </h4>
                       <p className="text-[11px] text-gray-500">
                         The readable marketing text shown on the client card. Adding one-by-one and editing the raw comma-separated list stay in sync.
@@ -1995,7 +2003,7 @@ export default function AdminPlans() {
                     <div>
                       <h4 className="text-xs font-bold uppercase tracking-wider text-gray-900 flex items-center gap-1.5">
                         <Workflow className="w-4 h-4 text-indigo-600" />
-                        <span>Provisioned Industry Templates (FR-4)</span>
+                        <span>Provisioned Industry Templates</span>
                       </h4>
                       <p className="text-[11px] text-gray-500">
                         Attach process, workflow, document, and web form templates provisioned automatically with this plan.
@@ -2212,7 +2220,7 @@ export default function AdminPlans() {
             <div className="p-5 border-b border-gray-200 flex items-center justify-between shrink-0 bg-gray-50/50">
               <div>
                 <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  {editingPackage ? `Edit Credit Pack: ${editingPackage.name}` : "Create Credit Pack (FR-6)"}
+                  {editingPackage ? `Edit Credit Pack: ${editingPackage.name}` : "Create Credit Pack"}
                 </h2>
                 <p className="text-xs text-gray-500">Configure fixed credit bundle and cost</p>
               </div>
@@ -2341,7 +2349,7 @@ export default function AdminPlans() {
             <div className="p-5 border-b border-gray-200 flex items-center justify-between shrink-0 bg-gray-50/50">
               <div>
                 <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  {editingTeamPack ? `Edit Team Pack: ${editingTeamPack.name}` : "Create Team Member Pack (FR-8)"}
+                  {editingTeamPack ? `Edit Team Pack: ${editingTeamPack.name}` : "Create Team Member Pack"}
                 </h2>
                 <p className="text-xs text-gray-500">Configure seat bundle and monthly cost</p>
               </div>
@@ -2535,7 +2543,7 @@ export default function AdminPlans() {
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div>
                 <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Assign Plan to Organisation (FR-10)
+                  Assign Plan to Organisation
                 </h3>
                 <p className="text-xs text-gray-500">Brings back direct plan provisioning by admins</p>
               </div>
@@ -2654,7 +2662,7 @@ export default function AdminPlans() {
                 </button>
                 <button
                   type="submit"
-                  disabled={availablePlansForSelectedOrg.length === 0 || !selectedPlanId}
+                  disabled={availablePlansForSelectedOrg.length === 0}
                   className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   Confirm &amp; Assign Plan

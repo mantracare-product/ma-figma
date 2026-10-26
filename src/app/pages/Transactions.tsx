@@ -27,7 +27,7 @@ const handleExportData = () => {
   // This function will be defined inside the component
 };
 
-export default function Transactions() {
+export default function Transactions({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [dateRange, setDateRange] = useState("Last 7 days");
@@ -46,11 +46,13 @@ export default function Transactions() {
   };
 
   return (
-    <div className="p-3 sm:p-4 space-y-2.5">
-      <PageHeader
-        title="Transactions"
-        subtitle="Track your credit usage and purchases"
-      />
+    <div className={`${hideHeader ? "space-y-4" : "p-3 sm:p-4 space-y-2.5"}`}>
+      {!hideHeader && (
+        <PageHeader
+          title="Transactions"
+          subtitle="Track your credit usage and purchases"
+        />
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">

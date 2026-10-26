@@ -54,12 +54,14 @@ interface WorkspaceBillingOverviewTabProps {
   subscription: WorkspaceSubscription | null;
   onNavigateToPlans: () => void;
   onNavigateToCredits: () => void;
+  hideHeader?: boolean;
 }
 
 export default function WorkspaceBillingOverviewTab({
   subscription: initialSub,
   onNavigateToPlans,
   onNavigateToCredits,
+  hideHeader = true,
 }: WorkspaceBillingOverviewTabProps) {
   const { activeOrganization } = useOrganization();
   const [sub, setSub] = useState<WorkspaceSubscription | null>(initialSub);
@@ -111,32 +113,76 @@ export default function WorkspaceBillingOverviewTab({
   }, [initialSub]);
 
   // Derived subscription values according to PRD FR-1, FR-11, Rule 5.3
-  const hasPlan = Boolean(sub?.planId && sub?.status === "Active");
-  const planName = sub?.planName || "Onboarding Plan";
+  const hasPlan = Boolean(
+    (sub?.planId &&
+      sub?.status === "Active" &&
+      sub?.planName !== "No Plan Assigned" &&
+      sub?.planName !== "Onboarding Plan") ||
+      (sub?.planName && sub.planName !== "No Plan Assigned")
+  );
+  const planName =
+    sub?.planName && sub.planName !== "No Plan Assigned"
+      ? sub.planName
+      : "Starter Health";
   const currencySymbol = sub?.currencySymbol || "$";
-  const planRate = sub?.amount ? `${currencySymbol}${sub.amount}` : "$0";
+  const planRate =
+    sub?.amount && sub.amount > 0 ? `${currencySymbol}${sub.amount}` : `${currencySymbol}49`;
   const isYearly = sub?.billingCycle === "yearly";
 
-  const includedSeats = sub?.includedSeats || 2;
+  const includedSeats = sub?.includedSeats ?? 5;
   const extraSeats = sub?.extraSeatsPurchased || 0;
   const totalAllowedSeats = includedSeats + extraSeats;
 
-  const planCredits = sub?.planCredits || 1000;
+  const planCredits = sub?.planCredits && sub.planCredits > 0 ? sub.planCredits : 1000;
   const addonCredits = sub?.addonCredits || 0;
-  const totalCredits = (sub?.totalCredits || planCredits + addonCredits);
+  const totalCredits = hasPlan ? (sub?.totalCredits || planCredits + addonCredits) : addonCredits;
   const consumedCredits = sub?.creditsUsed || 0;
-  const usagePercentage = Math.min(100, Math.max(0.1, (consumedCredits / Math.max(1, totalCredits)) * 100)).toFixed(1);
+  const usagePercentage =
+    totalCredits > 0
+      ? Math.min(100, Math.max(0.1, (consumedCredits / totalCredits) * 100)).toFixed(1)
+      : "0.0";
 
   // Features list from assigned plan
   const storedPlans = getStoredPlans();
   const currentPlanObj = storedPlans.find((p) => p.id === sub?.planId);
-  const features = currentPlanObj?.features || [
-    `${includedSeats} team members included at no extra charge`,
-    `${planCredits.toLocaleString()} included monthly voice & chat credits`,
-    "AI Voice Receptionist agent with 24/7 call triage",
-    "Multi-channel Chat, SMS & Call logs",
-    "Automated Appointment Scheduling & Reminders",
-  ];
+  const rawFeatures = hasPlan
+    ? currentPlanObj?.features || [
+        "AI Voice Receptionist agent",
+        "Multi-channel Chat & Call logs",
+        "Automated Scheduling & Confirmations",
+      ]
+    : [
+        "AI Voice Receptionist agent",
+        "Multi-channel Chat & Call logs",
+        "Automated Scheduling & Confirmations",
+      ];
+
+  // In the image, credits and seats are NOT in the tools row (credits has its own row)
+  const toolFeatures = rawFeatures.filter(
+    (f) =>
+      !f.toLowerCase().includes("team member") &&
+      !f.toLowerCase().includes("seat") &&
+      !f.toLowerCase().includes("credit")
+  );
+  const displayFeatures = toolFeatures.length > 0 ? toolFeatures : rawFeatures;
+
+  const isHealthcare =
+    !activeOrganization?.industryCategory ||
+    activeOrganization?.industryCategory === "Healthcare" ||
+    activeOrganization?.industry?.toLowerCase().includes("health") ||
+    planName.toLowerCase().includes("health") ||
+    planName.toLowerCase().includes("ehr");
+  const toolsLabel = isHealthcare ? "EHR tools" : "Included tools";
+
+  // Renewal date display: formatted like "June 1, 2026"
+  const renewalDisplay =
+    sub?.nextRenewalDate && sub.nextRenewalDate !== "—"
+      ? sub.nextRenewalDate
+      : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        });
 
   // Credit Purchase Handler (FR-6, FR-7, Rule 5.2)
   const handleConfirmCreditPurchase = () => {
@@ -198,51 +244,48 @@ export default function WorkspaceBillingOverviewTab({
     }
   };
 
+  const handleOpenMemberAddon = () => {
+    if (!hasPlan) {
+      toast.error("Please assign an active plan first before purchasing team member add-ons (Rule 5.1).");
+      onNavigateToPlans?.();
+      return;
+    }
+    setIsMemberAddonOpen(true);
+  };
+
+  const handleOpenCreditAddon = () => {
+    if (!hasPlan) {
+      toast.error("Please assign an active plan first before purchasing add-on credits (Rule 5.1).");
+      onNavigateToPlans?.();
+      return;
+    }
+    setIsCreditAddonOpen(true);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* ── Page Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2
-            className="text-2xl font-bold text-slate-900"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            Plan Overview
-          </h2>
-          <p
-            className="text-xs sm:text-sm text-slate-500 mt-0.5"
-            style={{ fontFamily: "DM Sans, sans-serif" }}
-          >
-            Manage included quotas, seats, and top-up add-ons for{" "}
-            <strong className="text-slate-800">{activeOrganization?.name || "your organization"}</strong>.
-          </p>
+      {!hideHeader && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2
+              className="text-2xl font-bold text-slate-900"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Plan Overview
+            </h2>
+            <p
+              className="text-xs sm:text-sm text-slate-500 mt-0.5"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              Manage included quotas, seats, and top-up add-ons for{" "}
+              <strong className="text-slate-800">{activeOrganization?.name || "your organization"}</strong>.
+            </p>
+          </div>
         </div>
+      )}
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsMemberAddonOpen(true)}
-            className="px-3.5 py-1.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>+ Add Team Members</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsCreditAddonOpen(true)}
-            className="px-3.5 py-1.5 rounded-xl bg-[#181e25] hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            <Coins className="w-3.5 h-3.5 text-amber-400" />
-            <span>+ Add Credits</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ── Warning banner if no plan assigned (FR-10, Rule 5.1) ── */}
+      {/* ── Warning banner if no plan assigned ── */}
       {!hasPlan && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -250,276 +293,154 @@ export default function WorkspaceBillingOverviewTab({
             <div>
               <p className="text-xs font-bold text-amber-900">No active plan assigned</p>
               <p className="text-[11px] text-amber-700">
-                Add-on purchases are locked until a plan is chosen or assigned by an admin (Rule 5.1).
+                Add-on purchases and quotas are locked until a plan is chosen or assigned by an admin.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onNavigateToPlans}
-            className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold cursor-pointer transition-colors"
           >
             Choose a Plan
           </button>
         </div>
       )}
 
-      {/* ── Two Column Overview Grid ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* ── Card 1: Active Plan Card (FR-11) ── */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-6 space-y-6">
-          {/* Header Row: Title & Manage Button */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <h3
-                className="text-xl font-bold text-slate-900"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {planName}
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={onNavigateToPlans}
-              className="px-4 py-1.5 rounded-full bg-[#181e25] hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              Manage
-            </button>
-          </div>
-
-          {/* Pricing Row */}
-          <div className="flex items-baseline gap-2">
+      {/* ── Active Plan Card (Using the Reference Image Layout for all Plan Content) ── */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-6 sm:p-8">
+        <div className="divide-y divide-slate-100">
+          {/* Row 1: Plan */}
+          <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span
-              className="text-4xl font-extrabold text-slate-900"
+              className="text-sm font-medium text-slate-500"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              {planRate}
+              Plan
             </span>
-            <span className="text-xs sm:text-sm text-slate-500 font-medium">
-              /{isYearly ? "year" : "month"} · includes {includedSeats} seats
-            </span>
-          </div>
-
-          {/* Seats Badge (FR-1, FR-11) */}
-          <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-blue-600" />
-              <span className="font-bold text-blue-900">Team Capacity:</span>
-            </div>
-            <span className="font-bold text-blue-950">
-              {totalAllowedSeats} allowed ({includedSeats} included + {extraSeats} extra)
+            <span
+              className="text-sm font-bold text-slate-900 text-left sm:text-right"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {planName}
             </span>
           </div>
 
-          <div className="h-px bg-slate-100" />
-
-          {/* Plan Features Section (FR-3, FR-11) */}
-          <div className="space-y-3.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500/20" />
-                <h4
-                  className="text-xs font-bold text-slate-900 uppercase tracking-wider"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  Plan Features &amp; Quotas
-                </h4>
-              </div>
-              <span className="text-[10px] text-gray-400 italic">For display &amp; access</span>
-            </div>
-
-            <ul className="space-y-2.5">
-              {features.map((feat, idx) => (
-                <li key={idx} className="flex items-center gap-2.5">
-                  <div className="w-4 h-4 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                    <Check className="w-3 h-3 stroke-[3]" />
-                  </div>
-                  <span
-                    className="text-xs text-slate-700 font-medium"
-                    style={{ fontFamily: "DM Sans, sans-serif" }}
-                  >
-                    {feat}
-                  </span>
-                </li>
-              ))}
-            </ul>
+          {/* Row 2: Team Capacity */}
+          <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span
+              className="text-sm font-medium text-slate-500"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Team Capacity
+            </span>
+            <span
+              className="text-sm font-semibold text-slate-800 text-left sm:text-right"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              {includedSeats} included
+            </span>
           </div>
-        </div>
 
-        {/* ── Card 2: Billing Summary Card (FR-11, Rule 5.3) ── */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-6 space-y-5">
-          {/* Header Row: Title, Subtitle & Action Links */}
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3
-                className="text-xl font-bold text-slate-900"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                Billing Summary
-              </h3>
-              <p
-                className="text-xs text-slate-500 mt-0.5"
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-              >
-                Subscription metrics &amp; add-on allocations
-              </p>
-            </div>
+          {/* Row 3: Add-on Team Members */}
+          <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span
+              className="text-sm font-medium text-slate-500"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Add-on Team Members
+            </span>
+            <span
+              className="text-sm font-semibold text-slate-800 text-left sm:text-right"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              +{extraSeats} extra
+            </span>
+          </div>
+
+          {/* Row 4: Plan Credits */}
+          <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span
+              className="text-sm font-medium text-slate-500"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Plan Credits
+            </span>
+            <span
+              className="text-sm font-semibold text-slate-800 text-left sm:text-right"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              {planCredits.toLocaleString()} credits / month · renewed monthly
+            </span>
+          </div>
+
+          {/* Row 5: Addon Credits */}
+          <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span
+              className="text-sm font-medium text-slate-500"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Addon Credits
+            </span>
+            <span
+              className="text-sm font-semibold text-slate-800 text-left sm:text-right"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              +{addonCredits.toLocaleString()} credits · never expire, roll over
+            </span>
+          </div>
+
+          {/* Row 6: Plan Features */}
+          <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span
+              className="text-sm font-medium text-slate-500 shrink-0"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Plan Features
+            </span>
+            <span
+              className="text-sm font-medium text-slate-800 text-left sm:text-right max-w-2xl leading-relaxed"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              {displayFeatures.join(" · ")}
+            </span>
+          </div>
+
+          {/* Row 7: Total Price at the bottom */}
+          <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span
+              className="text-sm font-medium text-slate-500"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Total Price
+            </span>
+            <span
+              className="text-sm font-bold text-slate-900 text-left sm:text-right"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {currencySymbol}{((sub?.amount || 49) + extraSeats * (globalSettings.defaultPricePerExtraMember || 20)).toLocaleString()} / {isYearly ? "year" : "month"}
+            </span>
+          </div>
+
+          {/* Footer Actions Row */}
+          <div className="pt-6 flex items-center justify-between">
             <button
               type="button"
               onClick={onNavigateToCredits}
-              className="text-xs font-bold text-blue-600 hover:underline cursor-pointer flex items-center gap-1"
-            >
-              <span>View Analytics</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
-
-          <div className="h-px bg-slate-100" />
-
-          {/* Metrics Rows (FR-11) */}
-          <div className="space-y-3.5">
-            {/* Metric 1: Plan Rate */}
-            <div className="flex items-center justify-between py-1">
-              <div>
-                <p className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Plan Rate
-                </p>
-                <p className="text-[11px] text-slate-400 font-normal">
-                  Base rate ({isYearly ? "Billed annually" : "Billed monthly"})
-                </p>
-              </div>
-              <span className="text-xs font-bold text-slate-900 font-mono" style={{ fontFamily: "Outfit, sans-serif" }}>
-                {planRate} / {isYearly ? "year" : "month"}
-              </span>
-            </div>
-
-            {/* Metric 2: Team Members Included vs. Extra */}
-            <div className="flex items-center justify-between py-1 border-t border-slate-50">
-              <div>
-                <p className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Team Members (Seats)
-                </p>
-                <p className="text-[11px] text-slate-400 font-normal">
-                  {includedSeats} included + {extraSeats} add-on
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-blue-600" />
-                <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  {totalAllowedSeats} allowed
-                </span>
-              </div>
-            </div>
-
-            {/* Metric 3: Current Plan Credits */}
-            <div className="flex items-center justify-between py-1 border-t border-slate-50">
-              <div>
-                <p className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Current Plan Credits
-                </p>
-                <p className="text-[11px] text-slate-400 font-normal">
-                  Renewed every month with plan
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Coins className="w-3.5 h-3.5 text-blue-500" />
-                <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  {planCredits.toLocaleString()}
-                </span>
-              </div>
-            </div>
-
-            {/* Metric 4: Addon Credits */}
-            <div className="flex items-center justify-between py-1 border-t border-slate-50">
-              <div>
-                <p className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Addon Credits (Balance from Top-ups)
-                </p>
-                <p className="text-[11px] text-slate-400 font-normal">
-                  Never expire, roll over month-to-month
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Coins className="w-3.5 h-3.5 text-amber-500" />
-                <span className="text-xs font-bold text-amber-700 font-mono" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  +{addonCredits.toLocaleString()}
-                </span>
-              </div>
-            </div>
-
-            {/* Metric 5: Total Credits */}
-            <div className="flex items-center justify-between py-1 border-t border-slate-50">
-              <div>
-                <p className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Total Credits
-                </p>
-                <p className="text-[11px] text-slate-400 font-normal">
-                  Plan Credits + Addon Credits
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Coins className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="text-xs font-bold text-emerald-800 font-mono" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  {totalCredits.toLocaleString()}
-                </span>
-              </div>
-            </div>
-
-            {/* Metric 6: Usage Status (FR-15 connection) */}
-            <div className="py-2 border-t border-slate-50 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Usage Status ({usagePercentage}%)
-                  </p>
-                  <p className="text-[11px] text-slate-400 font-normal">
-                    Consumed: {consumedCredits.toLocaleString()} credits
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    {consumedCredits.toLocaleString()} / {totalCredits.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-blue-600 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.max(1.5, Number(usagePercentage)))}%` }}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="h-px bg-slate-100 pt-1" />
-
-          {/* Bottom Estimated Monthly Total */}
-          <div className="flex items-center justify-between pt-1">
-            <div>
-              <p
-                className="text-xs font-bold text-slate-900"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                Estimated Monthly Total
-              </p>
-              <p className="text-[11px] text-slate-400 font-normal">
-                Base plan + recurring seats
-              </p>
-            </div>
-            <span
-              className="text-2xl font-black text-blue-600 font-mono"
+              className="text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-1 cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              {currencySymbol}
-              {(
-                (sub?.amount || 0) +
-                extraSeats * (globalSettings.defaultPricePerExtraMember || 20)
-              ).toLocaleString()}
-            </span>
+              <span>View Analytics</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={onNavigateToPlans}
+              className="px-6 py-2.5 rounded-xl bg-[#1E293B] hover:bg-slate-900 text-white text-sm font-semibold shadow-xs cursor-pointer transition-colors"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Manage Plan
+            </button>
           </div>
         </div>
       </div>

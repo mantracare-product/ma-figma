@@ -2,14 +2,18 @@
  * WorkspaceBillingPlansTab.tsx
  * Path: src/app/components/billing/WorkspaceBillingPlansTab.tsx
  *
- * Customer-facing Plans & Subscriptions view implementing PRD FR-12:
- * - Each plan displays:
- *   1. Included team members (FR-1)
- *   2. Included credits (resource allocation)
- *   3. Credit blocks (packs and custom option)
- *   4. Team member blocks (packs and custom option)
- *   5. What's Included feature list
- * - Scope-based visibility and instant plan switching.
+ * Customer-facing Plans & Subscriptions view matching reference UI:
+ * - Header: "Configure your organization", "Select your billing frequency and seat count."
+ * - Monthly / Yearly (20%) toggle
+ * - Plan cards in 4-column grid with:
+ *     - Title and description
+ *     - Price and TOTAL FOR X USER
+ *     - RESOURCE ALLOCATION box with Credits and Team Members
+ *     - WHAT'S INCLUDED feature list
+ *     - Get Started / Current Plan CTA button
+ * - Below plans in a two-column layout:
+ *     - Column 1: "Buy More Credits" card (collapsible, preset pills, custom input, monthly add-on summary, Buy Now)
+ *     - Column 2: "Add More Team Members" card (collapsible, preset pills, custom input, monthly add-on summary, Add Now)
  */
 
 import React, { useState, useEffect, useMemo } from "react";
@@ -17,21 +21,11 @@ import {
   CreditCard,
   Coins,
   Check,
-  CheckCircle2,
-  Sparkles,
-  Zap,
-  Globe,
-  Building2,
-  Clock,
-  Shield,
-  ArrowRight,
-  ChevronDown,
-  Info,
-  Calendar,
-  Layers,
-  TrendingUp,
-  Receipt,
+  ShoppingCart,
   Users,
+  ChevronDown,
+  Globe,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -45,16 +39,16 @@ import {
   getStoredTeamMemberPacks,
   getStoredGlobalBillingSettings,
   getWorkspaceSubscription,
-  updateWorkspaceSubscription,
   assignPlanToWorkspace,
-  purchaseCreditPackageForWorkspace,
+  purchaseCustomCreditsForWorkspace,
+  purchaseCustomTeamMembersForWorkspace,
   getAvailablePlansForWorkspace,
   getAvailableCreditPackagesForWorkspace,
   PLANS_BILLING_CHANGED_EVENT,
 } from "../../../lib/plansBillingStore";
 import { useOrganization } from "../../context/OrganizationContext";
 
-export default function WorkspaceBillingPlansTab() {
+export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHeader?: boolean } = {}) {
   const { activeOrganization, organizations, setActiveOrganization } = useOrganization();
 
   const [plans, setPlans] = useState<IndustryPlan[]>([]);
@@ -64,7 +58,17 @@ export default function WorkspaceBillingPlansTab() {
   const [subscription, setSubscription] = useState<WorkspaceSubscription | null>(null);
 
   // Billing interval toggle
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("yearly");
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
+
+  // Buy More Credits State
+  const [isCreditSectionOpen, setIsCreditSectionOpen] = useState(true);
+  const [selectedCreditAmount, setSelectedCreditAmount] = useState<number>(10000);
+  const [customCreditAmount, setCustomCreditAmount] = useState<number>(10000);
+
+  // Add More Team Members State
+  const [isMemberSectionOpen, setIsMemberSectionOpen] = useState(true);
+  const [selectedMemberAmount, setSelectedMemberAmount] = useState<number>(1);
+  const [customMemberAmount, setCustomMemberAmount] = useState<number>(1);
 
   // Load data from single source of truth
   const loadData = () => {
@@ -102,21 +106,51 @@ export default function WorkspaceBillingPlansTab() {
     });
   }, [plans, activeOrganization]);
 
-  // Apply Scope-based credit package filtering
-  const scopedCreditPackages = useMemo(() => {
-    return getAvailableCreditPackagesForWorkspace(creditPackages, {
-      country: activeOrganization.country || "United States",
-      currency: activeOrganization.currency || "USD",
-    });
-  }, [creditPackages, activeOrganization]);
-
-  // Handle plan selection / upgrade (FR-10, FR-12)
+  // Handle plan selection / upgrade
   const handleSelectPlan = (plan: IndustryPlan) => {
     if (!activeOrganization?.id) return;
     const currency = activeOrganization.currency || "USD";
     const updated = assignPlanToWorkspace(activeOrganization.id, plan.id, billingCycle, currency);
     setSubscription(updated);
-    toast.success(`Switched to ${plan.name} (${billingCycle}) with ${plan.includedSeats || 2} included seats! ✓`);
+    toast.success(`Switched to ${plan.name} (${billingCycle}) with ${plan.includedSeats || 1} team seats! ✓`);
+  };
+
+  // Credit calculation
+  const pricePerCredit = globalSettings?.defaultPricePerCredit || 0.04;
+  const creditCost = parseFloat((customCreditAmount * pricePerCredit).toFixed(2));
+
+  const handleBuyCredits = () => {
+    if (!activeOrganization?.id) return;
+    if (!subscription || subscription.status !== "Active" || !subscription.planId) {
+      toast.error("Please assign an active plan first before purchasing add-on credits.");
+      return;
+    }
+    if (customCreditAmount <= 0) {
+      toast.error("Please enter a valid credit amount");
+      return;
+    }
+    const updated = purchaseCustomCreditsForWorkspace(activeOrganization.id, customCreditAmount);
+    setSubscription(updated);
+    toast.success(`Purchased +${customCreditAmount.toLocaleString()} Credits! ✓`);
+  };
+
+  // Team Member calculation
+  const pricePerMember = globalSettings?.defaultPricePerExtraMember || 20;
+  const memberCost = parseFloat((customMemberAmount * pricePerMember).toFixed(2));
+
+  const handleAddMembers = () => {
+    if (!activeOrganization?.id) return;
+    if (!subscription || subscription.status !== "Active" || !subscription.planId) {
+      toast.error("Please assign an active plan first before adding extra team members.");
+      return;
+    }
+    if (customMemberAmount <= 0) {
+      toast.error("Please enter at least 1 member");
+      return;
+    }
+    const updated = purchaseCustomTeamMembersForWorkspace(activeOrganization.id, customMemberAmount);
+    setSubscription(updated);
+    toast.success(`Added +${customMemberAmount} extra team seats! ✓`);
   };
 
   const currencySymbol = scopedPlanItems[0]?.pricing.currencySymbol || "$";
@@ -124,222 +158,127 @@ export default function WorkspaceBillingPlansTab() {
   const userCategory = activeOrganization.industryCategory || "Healthcare";
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-200">
-      {/* ── Centered Hero Header ── */}
-      <div className="text-center max-w-2xl mx-auto space-y-2 pt-2 pb-2">
-        <h2
-          className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          Plans &amp; <span className="text-[#2563EB]">Subscriptions</span>
-        </h2>
-        <p
-          className="text-xs sm:text-sm text-slate-500 font-medium"
-          style={{ fontFamily: "DM Sans, sans-serif" }}
-        >
-          Included seats, feature access, and flexible add-on blocks for your organization.
-        </p>
-      </div>
-
-      {/* ── Billing Frequency Bar ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
-        <div>
-          <h3
-            className="text-base sm:text-lg font-bold text-slate-900"
+    <div className="space-y-6 animate-in fade-in duration-200">
+      {/* ── Billing Cadence Toggle (Monthly / Yearly) ── */}
+      <div className="flex justify-end">
+        <div className="inline-flex items-center p-1 bg-slate-100 rounded-full border border-slate-200/80">
+          <button
+            type="button"
+            onClick={() => setBillingCycle("monthly")}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              billingCycle === "monthly"
+                ? "bg-white text-slate-900 shadow-2xs border border-slate-200/70"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
-            Choose your billing cadence
-          </h3>
-          <p
-            className="text-xs text-slate-500 mt-0.5"
-            style={{ fontFamily: "DM Sans, sans-serif" }}
+            Monthly
+          </button>
+          <button
+            type="button"
+            onClick={() => setBillingCycle("yearly")}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              billingCycle === "yearly"
+                ? "bg-white text-slate-900 shadow-2xs border border-slate-200/70"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+            style={{ fontFamily: "Outfit, sans-serif" }}
           >
-            Annual billing saves 20% on all plans. Extra add-on blocks can be added anytime.
-          </p>
-        </div>
-
-        {/* Monthly / Yearly Toggle */}
-        <div className="flex items-center gap-3">
-          <div className="inline-flex p-1 bg-slate-100 rounded-2xl border border-slate-200/80">
-            <button
-              type="button"
-              onClick={() => setBillingCycle("monthly")}
-              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                billingCycle === "monthly"
-                  ? "bg-white text-slate-900 shadow-xs border border-slate-200/70"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              Monthly
-            </button>
-            <button
-              type="button"
-              onClick={() => setBillingCycle("yearly")}
-              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                billingCycle === "yearly"
-                  ? "bg-[#181e25] text-white shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <span>Yearly</span>
-              <span className="text-[10px] text-emerald-400 font-extrabold">20% OFF</span>
-            </button>
-          </div>
+            <span>Yearly</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-slate-200 text-[#1E293B]">
+              20%
+            </span>
+          </button>
         </div>
       </div>
 
-      {/* ── Plan Cards Grid (FR-12: Seats, Credits, Blocks, Features) ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+      {/* ── Plan Cards Grid (3 Columns: 3 in One Row on Desktop) ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
         {scopedPlanItems.map(({ plan, pricing }) => {
           const isYearly = billingCycle === "yearly";
           const isCurrentPlan = subscription?.planId === plan.id && subscription?.billingCycle === billingCycle;
-          const isCurrentPlanDifferentCycle = subscription?.planId === plan.id && subscription?.billingCycle !== billingCycle;
           const displayPrice = isYearly ? pricing.yearlyPrice : pricing.monthlyPrice;
-          const displayCadence = isYearly ? "/year" : "/month";
           const credits = isYearly ? plan.yearlyCredits : plan.monthlyCredits;
-          const includedSeats = plan.includedSeats || 2;
+          const includedSeats = plan.includedSeats || (plan.tier === "Starter" ? 1 : plan.tier === "Professional" ? 5 : 20);
 
           return (
             <div
               key={plan.id}
-              className={`bg-white rounded-2xl border transition-all duration-200 p-5 flex flex-col justify-between relative shadow-2xs hover:shadow-md ${
+              className={`bg-white rounded-[28px] border-2 transition-all duration-200 p-7 flex flex-col justify-between relative shadow-2xs hover:shadow-md ${
                 isCurrentPlan
-                  ? "border-blue-600 ring-2 ring-blue-600/10"
-                  : isCurrentPlanDifferentCycle
-                  ? "border-indigo-300 ring-1 ring-indigo-300/30"
-                  : plan.isPopular
-                  ? "border-blue-400 ring-1 ring-blue-400/20"
-                  : "border-slate-200/90"
+                  ? "border-[#1E293B] shadow-[0_6px_24px_rgba(30,41,59,0.14)] ring-1 ring-[#1E293B]/10"
+                  : "border-slate-200/85 hover:border-slate-300"
               }`}
             >
-              {/* Badges */}
-              {isCurrentPlan ? (
-                <span className="absolute -top-3 left-5 px-3 py-0.5 bg-blue-600 text-white text-[10px] font-bold rounded-full shadow-xs">
-                  ✓ Current Plan
-                </span>
-              ) : isCurrentPlanDifferentCycle ? (
-                <span className="absolute -top-3 left-5 px-3 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold rounded-full shadow-xs">
-                  Active on {subscription?.billingCycle === "yearly" ? "Yearly" : "Monthly"}
-                </span>
-              ) : plan.isPopular ? (
-                <span className="absolute -top-3 left-5 px-3 py-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px] font-bold rounded-full shadow-xs">
-                  ★ Most Popular
-                </span>
-              ) : null}
-
-              <div className="space-y-4 pt-1">
-                {/* Plan Title & Subtitle */}
+              <div className="space-y-4">
+                {/* Plan Title */}
                 <div>
-                  <h4
-                    className="text-lg font-bold text-slate-900"
+                  <h3
+                    className="text-2xl font-bold text-slate-900 tracking-tight"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     {plan.name}
-                  </h4>
+                  </h3>
                   <p
-                    className="text-xs text-slate-500 mt-1 min-h-[34px] leading-relaxed"
+                    className="text-sm text-slate-500 mt-1 min-h-[36px] leading-relaxed"
                     style={{ fontFamily: "DM Sans, sans-serif" }}
                   >
                     {plan.description}
                   </p>
                 </div>
 
-                {/* Price Display */}
+                {/* Price Block */}
                 <div>
-                  <div className="flex items-baseline gap-1.5">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-bold text-slate-900">{pricing.currencySymbol}</span>
                     <span
-                      className="text-3xl sm:text-4xl font-extrabold text-slate-900"
+                      className="text-4xl font-extrabold text-slate-900 tracking-tight"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      {pricing.currencySymbol}
                       {displayPrice.toLocaleString()}
                     </span>
-                    <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-                      {displayCadence}
+                    <span className="text-sm text-slate-500 font-medium ml-1">
+                      /{isYearly ? "yr" : "mo"}
                     </span>
                   </div>
-                  {isYearly ? (
-                    <div className="mt-1.5 space-y-0.5">
-                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
-                        BILLED ANNUALLY • {pricing.currencySymbol}{pricing.yearlyPrice.toLocaleString()}/YEAR
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-medium">
-                        Approx. {pricing.currencySymbol}{Math.round(pricing.yearlyPrice / 12)}/month · 20% annual discount
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="mt-1.5 space-y-0.5">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        BILLED MONTHLY • {pricing.currencySymbol}{pricing.monthlyPrice.toLocaleString()}/MONTH
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-medium">
-                        Flexible month-to-month billing
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* FR-12: Included Team Members Display */}
-                <div className="bg-blue-50/70 rounded-xl p-3 border border-blue-200/60 text-left space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-blue-900">
-                    <Users className="w-3.5 h-3.5 text-blue-600" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">
-                      INCLUDED TEAM MEMBERS
-                    </span>
-                  </div>
-                  <span
-                    className="text-xs font-extrabold text-blue-950 block"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {includedSeats} Seats Included at No Extra Charge
-                  </span>
-                </div>
-
-                {/* FR-12: Resource Allocation (Included Credits) */}
-                <div className="bg-amber-50/70 rounded-xl p-3 border border-amber-200/60 text-left space-y-0.5">
-                  <div className="flex items-center gap-1.5 text-amber-900">
-                    <Coins className="w-3.5 h-3.5 text-amber-600" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">
-                      RESOURCE ALLOCATION
-                    </span>
-                  </div>
-                  <span
-                    className="text-xs font-extrabold text-amber-950 block"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {credits.toLocaleString()} credits / {billingCycle === "yearly" ? "yr" : "mo"}
-                  </span>
-                </div>
-
-                {/* FR-12: Add-on Blocks Info */}
-                <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-100 text-[11px] text-gray-600 space-y-1">
-                  <p className="font-bold text-gray-800">Add-on Blocks Available:</p>
-                  <p className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                    <span>Credits: Packs or custom from {pricing.currencySymbol}{globalSettings.defaultPricePerCredit}/ea</span>
-                  </p>
-                  <p className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
-                    <span>Seats: Packs or custom at {pricing.currencySymbol}{globalSettings.defaultPricePerExtraMember}/member</span>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1.5">
+                    TOTAL FOR {includedSeats} {includedSeats === 1 ? "USER" : "USERS"}
                   </p>
                 </div>
 
-                {/* What's Included Features */}
-                <div className="space-y-2 pt-2 border-t border-slate-100">
+                {/* Resource Allocation Box */}
+                <div className="bg-[#f8fafc] border border-slate-100 rounded-2xl p-4.5 space-y-1.5 mt-5">
                   <p
-                    className="text-[10px] font-bold uppercase tracking-wider text-slate-400"
+                    className="text-[10px] font-bold text-slate-400 uppercase tracking-wider"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    RESOURCE ALLOCATION
+                  </p>
+                  <p
+                    className="text-base font-bold text-slate-900"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {credits.toLocaleString()} credits
+                  </p>
+                  <p className="text-sm font-semibold text-slate-600">
+                    {includedSeats} team member{includedSeats > 1 ? "s" : ""}
+                  </p>
+                </div>
+
+                {/* WHAT'S INCLUDED Feature List */}
+                <div className="space-y-3 pt-2">
+                  <p
+                    className="text-[11px] font-bold text-slate-400 uppercase tracking-wider"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     WHAT&apos;S INCLUDED
                   </p>
-                  <ul className="space-y-2 text-xs text-slate-700">
+                  <ul className="space-y-2.5">
                     {plan.features.map((feature, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5 stroke-[2.5]" />
+                      <li key={idx} className="flex items-start gap-2.5">
+                        <Check className="w-4 h-4 text-[#1E293B] shrink-0 mt-0.5 stroke-[2.5]" />
                         <span
-                          className="text-[11px] leading-relaxed text-slate-700 font-medium"
+                          className="text-sm text-slate-700 font-medium leading-relaxed"
                           style={{ fontFamily: "DM Sans, sans-serif" }}
                         >
                           {feature}
@@ -350,38 +289,25 @@ export default function WorkspaceBillingPlansTab() {
                 </div>
               </div>
 
-              {/* Action Button */}
-              <div className="pt-5 mt-5 border-t border-slate-100">
+              {/* Bottom CTA Button */}
+              <div className="pt-6 mt-6 border-t border-slate-100">
                 {isCurrentPlan ? (
                   <button
                     type="button"
                     disabled
-                    className="w-full py-2 bg-blue-50 text-blue-700 rounded-xl text-xs font-bold cursor-default border border-blue-200 text-center"
+                    className="w-full py-3.5 rounded-full text-sm font-bold bg-[#1E293B] text-white cursor-default text-center shadow-xs flex items-center justify-center gap-1.5"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
-                    ✓ Your Current Plan
-                  </button>
-                ) : isCurrentPlanDifferentCycle ? (
-                  <button
-                    type="button"
-                    onClick={() => handleSelectPlan(plan)}
-                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs text-center"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    Switch to {isYearly ? `Yearly (${pricing.currencySymbol}${pricing.yearlyPrice.toLocaleString()}/yr)` : `Monthly (${pricing.currencySymbol}${pricing.monthlyPrice.toLocaleString()}/mo)`}
+                    <span>✓ Current Plan</span>
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={() => handleSelectPlan(plan)}
-                    className={`w-full py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs ${
-                      plan.isPopular
-                        ? "bg-blue-600 hover:bg-blue-700 text-white"
-                        : "bg-[#181e25] hover:bg-black text-white"
-                    }`}
+                    className="w-full py-3.5 rounded-full text-sm font-bold bg-[#1E293B] hover:bg-slate-900 text-white cursor-pointer transition-all shadow-xs text-center"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
-                    Choose {plan.tier} ({pricing.currencySymbol}{displayPrice.toLocaleString()}{displayCadence})
+                    Get Started
                   </button>
                 )}
               </div>
@@ -391,63 +317,289 @@ export default function WorkspaceBillingPlansTab() {
       </div>
 
       {scopedPlanItems.length === 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3 shadow-2xs">
-          <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+        <div className="bg-white rounded-[28px] border border-slate-200 p-10 text-center space-y-3 shadow-2xs">
+          <div className="w-12 h-12 rounded-full bg-slate-100 text-[#1E293B] flex items-center justify-center mx-auto">
             <CreditCard className="w-6 h-6" />
           </div>
           <h4 className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
             No Plans Configured Yet
           </h4>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
-            All plans have been cleared. New plans can be designed in the Admin Console (Plans &amp; Credits &gt; Create Industry Plan).
+            All plans have been cleared. New plans can be created in Admin Console (Plans &amp; Credits &gt; Create Industry Plan).
           </p>
         </div>
       )}
 
-      {/* ── Scope Intelligence Banner ── */}
-      <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-slate-50 border border-blue-200/80 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs">
-        <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-            <Globe className="w-4 h-4" />
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-blue-900 uppercase tracking-wider">
-                Admin Scope Filtering Active
-              </span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                Admin Scope: {userCategory}
-              </span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                Country: {userCountry} ({activeOrganization.currency || "USD"})
-              </span>
+      {/* ── Two Column Add-ons Layout (Sidebar Highlighter #1E293B Theme with Lever) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 items-start">
+        {/* Column 1: Buy More Credits */}
+        <div className={`bg-white rounded-[28px] border border-slate-200/90 p-6 sm:p-7 shadow-2xs transition-all duration-200 ${isCreditSectionOpen ? "space-y-6 sm:space-y-7" : ""}`}>
+          {/* Header with Cart icon and Chevron toggle (entire row clickable) */}
+          <button
+            type="button"
+            onClick={() => setIsCreditSectionOpen(!isCreditSectionOpen)}
+            className="w-full flex items-center justify-between text-left cursor-pointer transition-colors group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-slate-100 text-[#1E293B] flex items-center justify-center shrink-0 group-hover:bg-slate-200 transition-colors">
+                <ShoppingCart className="w-5 h-5 text-[#1E293B]" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 group-hover:text-black transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Buy More Credits
+                </h3>
+                <p className="text-xs text-slate-500">Add voice and AI credits directly to your organization</p>
+              </div>
             </div>
-            <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
-              Showing plans configured for <strong className="text-slate-900">{activeOrganization.name}</strong>. Rates calibrated in <strong className="text-slate-900">{currencySymbol} ({activeOrganization.currency || "USD"})</strong>.
-            </p>
-          </div>
+            <div className="p-2 text-slate-400 group-hover:text-slate-700 rounded-xl group-hover:bg-slate-100 transition-colors shrink-0">
+              <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isCreditSectionOpen ? "rotate-180" : ""}`} />
+            </div>
+          </button>
+
+          {isCreditSectionOpen && (
+            <div className="space-y-4 animate-in fade-in duration-150 pt-1">
+              {/* Preset options */}
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-slate-700 leading-none" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Quick Select Credits
+                </label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-0.5">
+                  {[10000, 25000, 50000, 100000, 250000, 500000].map((amt) => {
+                    const isSelected = selectedCreditAmount === amt;
+                    return (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCreditAmount(amt);
+                          setCustomCreditAmount(amt);
+                        }}
+                        className={`py-2 rounded-full text-xs font-bold transition-all cursor-pointer border text-center ${
+                          isSelected
+                            ? "border-[#1E293B] bg-[#1E293B] text-white shadow-2xs"
+                            : "border-slate-200/90 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {amt >= 1000 ? `${amt / 1000}K` : amt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom Value with Lever (Range Slider) */}
+              <div className="bg-[#f8fafc] rounded-2xl p-4.5 border border-slate-100 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Custom Amount
+                    </span>
+                    <p className="text-[11px] text-slate-400">Drag lever or type value below</p>
+                  </div>
+                  <div className="flex items-center border border-slate-200 rounded-xl px-3 py-1.5 bg-white shadow-2xs">
+                    <input
+                      type="number"
+                      min={1000}
+                      max={500000}
+                      step={1000}
+                      value={customCreditAmount}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseInt(e.target.value) || 0);
+                        setCustomCreditAmount(val);
+                        setSelectedCreditAmount(val);
+                      }}
+                      className="w-24 text-xs font-bold text-slate-900 outline-none text-right pr-1"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    />
+                    <span className="text-[11px] text-slate-400 font-semibold">credits</span>
+                  </div>
+                </div>
+
+                {/* Lever Slider */}
+                <div className="pt-1">
+                  <input
+                    type="range"
+                    min={1000}
+                    max={500000}
+                    step={1000}
+                    value={customCreditAmount}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setCustomCreditAmount(val);
+                      setSelectedCreditAmount(val);
+                    }}
+                    className="w-full h-2.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#1E293B]"
+                  />
+                </div>
+              </div>
+
+              {/* Summary Box */}
+              <div className="bg-[#f8fafc] rounded-2xl p-4.5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <span className="text-xs text-slate-400 font-medium block">Monthly add-on</span>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="text-3xl font-extrabold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      ${creditCost.toFixed(2)}
+                    </span>
+                    <span className="text-xs text-slate-500 font-medium">/ month</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 mt-1 block">
+                    {customCreditAmount.toLocaleString()} credits · billed monthly · cancel anytime
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleBuyCredits}
+                  className="px-7 py-3 rounded-full bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold cursor-pointer transition-colors shadow-xs shrink-0 text-center"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  Buy Now
+                </button>
+              </div>
+
+              {/* Footer note */}
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Credits are added to your org wallet immediately after purchase and never expire. Charged to your default payment method on file.
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Quick Workspace Switcher */}
-        <div className="shrink-0 flex items-center gap-2 bg-white/90 p-1.5 rounded-xl border border-blue-200/60 shadow-2xs">
-          <span className="text-[11px] font-bold text-gray-500 pl-2">Switch Workspace:</span>
-          <select
-            value={activeOrganization.id}
-            onChange={(e) => {
-              const selected = organizations.find((o) => o.id === e.target.value);
-              if (selected) {
-                setActiveOrganization(selected);
-                toast.info(`Switched to ${selected.name}`);
-              }
-            }}
-            className="text-xs font-semibold bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg px-2.5 py-1 text-gray-800 cursor-pointer focus:outline-none"
+        {/* Column 2: Add More Team Members (Sidebar Highlighter #1E293B Theme with Lever) */}
+        <div className={`bg-white rounded-[28px] border border-slate-200/90 p-6 sm:p-7 shadow-2xs transition-all duration-200 ${isMemberSectionOpen ? "space-y-6 sm:space-y-7" : ""}`}>
+          {/* Header with Users icon and Chevron toggle (entire row clickable) */}
+          <button
+            type="button"
+            onClick={() => setIsMemberSectionOpen(!isMemberSectionOpen)}
+            className="w-full flex items-center justify-between text-left cursor-pointer transition-colors group"
           >
-            {organizations.map((org) => (
-              <option key={org.id} value={org.id}>
-                {org.name} [{org.industryCategory || "General"} · {org.country || "US"}]
-              </option>
-            ))}
-          </select>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-slate-100 text-[#1E293B] flex items-center justify-center shrink-0 group-hover:bg-slate-200 transition-colors">
+                <Users className="w-5 h-5 text-[#1E293B]" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 group-hover:text-black transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Add More Team Members
+                </h3>
+                <p className="text-xs text-slate-500">Expand team seats with instant access</p>
+              </div>
+            </div>
+            <div className="p-2 text-slate-400 group-hover:text-slate-700 rounded-xl group-hover:bg-slate-100 transition-colors shrink-0">
+              <ChevronDown className={`w-5 h-5 transition-transform duration-200 ${isMemberSectionOpen ? "rotate-180" : ""}`} />
+            </div>
+          </button>
+
+          {isMemberSectionOpen && (
+            <div className="space-y-4 animate-in fade-in duration-150 pt-1">
+              {/* Preset options */}
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-slate-700 leading-none" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Quick Select Team Seats
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5">
+                  {[1, 3, 5, 10].map((amt) => {
+                    const isSelected = selectedMemberAmount === amt;
+                    return (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => {
+                          setSelectedMemberAmount(amt);
+                          setCustomMemberAmount(amt);
+                        }}
+                        className={`py-2 rounded-full text-xs font-bold transition-all cursor-pointer border text-center ${
+                          isSelected
+                            ? "border-[#1E293B] bg-[#1E293B] text-white shadow-2xs"
+                            : "border-slate-200/90 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        +{amt} {amt === 1 ? "Member" : "Members"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom Value with Lever (Range Slider) */}
+              <div className="bg-[#f8fafc] rounded-2xl p-4.5 border border-slate-100 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Custom Seats
+                    </span>
+                    <p className="text-[11px] text-slate-400">Drag lever or type value below</p>
+                  </div>
+                  <div className="flex items-center border border-slate-200 rounded-xl px-3 py-1.5 bg-white shadow-2xs">
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      step={1}
+                      value={customMemberAmount}
+                      onChange={(e) => {
+                        const val = Math.max(1, parseInt(e.target.value) || 1);
+                        setCustomMemberAmount(val);
+                        setSelectedMemberAmount(val);
+                      }}
+                      className="w-16 text-xs font-bold text-slate-900 outline-none text-right pr-1"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    />
+                    <span className="text-[11px] text-slate-400 font-semibold">seats</span>
+                  </div>
+                </div>
+
+                {/* Lever Slider */}
+                <div className="pt-1">
+                  <input
+                    type="range"
+                    min={1}
+                    max={50}
+                    step={1}
+                    value={customMemberAmount}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setCustomMemberAmount(val);
+                      setSelectedMemberAmount(val);
+                    }}
+                    className="w-full h-2.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#1E293B]"
+                  />
+                </div>
+              </div>
+
+              {/* Summary Box */}
+              <div className="bg-[#f8fafc] rounded-2xl p-4.5 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <span className="text-xs text-slate-400 font-medium block">Monthly add-on</span>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="text-3xl font-extrabold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      ${memberCost.toFixed(2)}
+                    </span>
+                    <span className="text-xs text-slate-500 font-medium">/ month</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 mt-1 block">
+                    +{customMemberAmount} extra team seats · billed monthly · cancel anytime
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddMembers}
+                  className="px-7 py-3 rounded-full bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold cursor-pointer transition-colors shadow-xs shrink-0 text-center"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  Add Now
+                </button>
+              </div>
+
+              {/* Footer note */}
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Team seats are allocated immediately and allow new user invites to this workspace. Charged to your default payment method on file.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
