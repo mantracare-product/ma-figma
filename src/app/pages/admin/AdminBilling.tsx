@@ -163,9 +163,13 @@ export default function AdminBilling() {
       nextRenewalDate: new Date(Date.now() + (targetCycle === "monthly" ? 30 : 365) * 86400000).toISOString().slice(0, 10),
       startDate: existingSub?.startDate || new Date().toISOString().slice(0, 10),
       userCount: existingSub?.userCount || 1,
-      totalCredits: (existingSub?.totalCredits || 0) + includedCredits,
+      includedSeats: chosenPlan.includedSeats || (chosenPlan.tier === "Starter" ? 2 : chosenPlan.tier === "Professional" ? 5 : 20),
+      extraSeatsPurchased: existingSub?.extraSeatsPurchased || 0,
+      planCredits: includedCredits,
+      addonCredits: existingSub?.addonCredits || 0,
+      totalCredits: includedCredits + (existingSub?.addonCredits || 0),
       creditsUsed: existingSub?.creditsUsed || 0,
-      creditsRemaining: (existingSub?.creditsRemaining || 0) + includedCredits,
+      creditsRemaining: includedCredits + (existingSub?.addonCredits || 0) - (existingSub?.creditsUsed || 0),
       recentPackages: existingSub?.recentPackages || [],
     };
 

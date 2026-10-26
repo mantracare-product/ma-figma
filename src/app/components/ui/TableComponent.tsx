@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Settings as SettingsIcon,
   MoreVertical,
+  Menu,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -63,6 +64,7 @@ export interface TableComponentProps<T> {
   onRowClick?: (row: T) => void;
   tableId?: string;
   renderFooter?: (orderedVisibleColumns: TableColumn<T>[]) => React.ReactNode;
+  actionIcon?: "dots" | "menu";
 }
 
 export function TableComponent<T>({
@@ -83,6 +85,7 @@ export function TableComponent<T>({
   pagination = true,
   onRowClick,
   renderFooter,
+  actionIcon = "dots",
 }: TableComponentProps<T>) {
   const getColId = (c: TableColumn<T>): string => c.id || c.key || c.header;
 
@@ -532,7 +535,11 @@ export function TableComponent<T>({
                               title="Actions"
                               aria-label="Actions"
                             >
-                              <MoreVertical className="w-3.5 h-3.5" />
+                              {actionIcon === "menu" ? (
+                                <Menu className="w-3.5 h-3.5 text-gray-400" />
+                              ) : (
+                                <MoreVertical className="w-3.5 h-3.5" />
+                              )}
                             </button>
 
                             {openActionRowId === rowId && (

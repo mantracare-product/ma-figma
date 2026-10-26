@@ -195,6 +195,7 @@ export const router = createBrowserRouter([
             children: [
               { path: "settings", Component: Settings },
               { path: "settings/:tab", Component: Settings },
+              { path: "settings/:tab/:subtab", Component: Settings },
               { path: "settings/billing/:subtab", Component: Settings },
               { path: "settings/team/:id", Component: ManageTeamMember },
               { path: "billing", Component: Settings },

@@ -23,6 +23,9 @@ import OrganizationLocationsSection from "../components/settings/OrganizationLoc
 import MemberLocationScheduleTab from "../components/settings/MemberLocationScheduleTab";
 import ReceptionSettingsTab from "../components/reception/ReceptionSettingsTab";
 import WorkspaceBillingPlansTab from "../components/billing/WorkspaceBillingPlansTab";
+import WorkspaceBillingOverviewTab from "../components/billing/WorkspaceBillingOverviewTab";
+import WorkspaceBillingCreditUsageTab from "../components/billing/WorkspaceBillingCreditUsageTab";
+import { getWorkspaceSubscription } from "../../lib/plansBillingStore";
 import MailboxAccountsSection from "../components/settings/MailboxAccountsSection";
 import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
 import { getStoredServices, updateService, onServicesChanged, Service } from "../../lib/servicesStore";
@@ -684,7 +687,7 @@ export default function Settings() {
   const { tab: urlTab, subtab: urlSubtab } = useParams<{ tab?: string; subtab?: string }>();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("organization");
-  const [billingSubTab, setBillingSubTab] = useState<"plans" | "payments" | "credit-usage">("plans");
+  const [billingSubTab, setBillingSubTab] = useState<"overview" | "plans" | "payments" | "credit-usage">("overview");
   const [billingExpanded, setBillingExpanded] = useState(true);
   const [selectedLanguage, setSelectedLanguage] = useState("English");
 
@@ -739,20 +742,66 @@ export default function Settings() {
   const [editBillingAddress, setEditBillingAddress] = useState(billingAddress);
 
   useEffect(() => {
-    const queryTab = searchParams.get("tab");
+    const path = location.pathname.toLowerCase();
+    const queryTab = searchParams.get("tab")?.toLowerCase();
+
+    // 1. First check if current route or query is for Billing
+    const isBilling =
+      path.startsWith("/settings/billing") ||
+      path.startsWith("/billing") ||
+      path === "/settings/plans" ||
+      path === "/settings/payments" ||
+      path === "/settings/payment" ||
+      path === "/settings/credit-usage" ||
+      urlTab === "billing" ||
+      urlTab === "plans" ||
+      urlTab === "payments" ||
+      urlTab === "payment" ||
+      urlTab === "credit-usage" ||
+      urlTab === "overview" ||
+      queryTab === "billing" ||
+      queryTab === "plans" ||
+      queryTab === "payments" ||
+      queryTab === "payment" ||
+      queryTab === "credit-usage" ||
+      queryTab === "overview";
+
+    if (isBilling) {
+      setActiveTab("billing");
+
+      // Extract subtab from urlSubtab, query, or path
+      let sub = urlSubtab || searchParams.get("sub") || "";
+      if (!sub) {
+        if (path.includes("/plans") || urlTab === "plans" || queryTab === "plans") {
+          sub = "plans";
+        } else if (path.includes("/payment") || urlTab === "payments" || urlTab === "payment" || queryTab === "payments" || queryTab === "payment") {
+          sub = "payments";
+        } else if (path.includes("/credit-usage") || urlTab === "credit-usage" || queryTab === "credit-usage") {
+          sub = "credit-usage";
+        } else {
+          sub = "overview";
+        }
+      }
+
+      if (sub === "plans") {
+        setBillingSubTab("plans");
+      } else if (sub === "payments" || sub === "payment") {
+        setBillingSubTab("payments");
+      } else if (sub === "credit-usage") {
+        setBillingSubTab("credit-usage");
+      } else {
+        setBillingSubTab("overview");
+      }
+      return;
+    }
+
+    // 2. Other settings tabs
     const rawTab = urlTab || queryTab || "organization";
 
     if (rawTab === "organization") {
       setActiveTab("organization");
     } else if (rawTab === "team" || rawTab === "users") {
       setActiveTab("users");
-    } else if (rawTab === "billing" || rawTab === "plans" || rawTab === "payments" || rawTab === "credit-usage") {
-      setActiveTab("billing");
-      if (rawTab === "plans" || rawTab === "payments" || rawTab === "credit-usage") {
-        setBillingSubTab(rawTab);
-      } else if (urlSubtab === "payments" || urlSubtab === "credit-usage" || urlSubtab === "plans") {
-        setBillingSubTab(urlSubtab);
-      }
     } else if (rawTab === "voices" || rawTab === "voice-config") {
       setActiveTab("voice-config");
       const sub = searchParams.get("sub") || urlSubtab;
@@ -775,7 +824,7 @@ export default function Settings() {
     } else {
       setActiveTab(rawTab);
     }
-  }, [urlTab, urlSubtab, searchParams]);
+  }, [urlTab, urlSubtab, searchParams, location.pathname]);
 
   useEffect(() => {
     try {
@@ -4888,12 +4937,27 @@ export default function Settings() {
             )}
 
             {/* Unified Billing & Subscription Page */}
-            {(activeTab === "billing" || ["plans", "payments", "credit-usage"].includes(activeTab)) && (
+            {(activeTab === "billing" || ["overview", "plans", "payments", "payment", "credit-usage"].includes(activeTab)) && (
               <div className="space-y-6">
                 {/* Billing Top Sub-Tabs Navigation */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 border-b border-slate-200 pb-3">
 
                   <div className="inline-flex p-1 bg-slate-100 rounded-2xl border border-slate-200/80 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBillingSubTab("overview");
+                        navigate("/settings/billing/overview");
+                      }}
+                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        billingSubTab === "overview"
+                          ? "bg-[#181e25] text-white shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      Overview
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -4913,7 +4977,7 @@ export default function Settings() {
                       type="button"
                       onClick={() => {
                         setBillingSubTab("payments");
-                        navigate("/settings/billing/payments");
+                        navigate("/settings/billing/payment");
                       }}
                       className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                         billingSubTab === "payments"
@@ -4922,7 +4986,7 @@ export default function Settings() {
                       }`}
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      Payments
+                      Payment
                     </button>
                     <button
                       type="button"
@@ -4941,6 +5005,21 @@ export default function Settings() {
                     </button>
                   </div>
                 </div>
+
+                {/* Sub-tab 0: Overview (Plan Overview Matching Reference Design) */}
+                {billingSubTab === "overview" && (
+                  <WorkspaceBillingOverviewTab
+                    subscription={activeOrganization?.id ? getWorkspaceSubscription(activeOrganization.id) : null}
+                    onNavigateToPlans={() => {
+                      setBillingSubTab("plans");
+                      navigate("/settings/billing/plans");
+                    }}
+                    onNavigateToCredits={() => {
+                      setBillingSubTab("credit-usage");
+                      navigate("/settings/billing/credit-usage");
+                    }}
+                  />
+                )}
 
                 {/* Sub-tab 1: Plans (Scope-Based from Admin Single Source of Truth) */}
                 {billingSubTab === "plans" && (
@@ -5156,8 +5235,11 @@ export default function Settings() {
               </div>
             )}
 
-            {/* Sub-tab 3: Credit Usage */}
+            {/* Sub-tab 3: Credit Usage (PRD FR-13, FR-14, FR-15) */}
             {billingSubTab === "credit-usage" && (
+              <WorkspaceBillingCreditUsageTab />
+            )}
+            {false && (
               <div className="space-y-0">
                 {/* Page Header */}
                 <div className="mb-4">

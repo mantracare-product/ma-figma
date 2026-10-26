@@ -7,6 +7,8 @@
  * MantraAssist reads from here and applies Scope-Based Visibility rules.
  */
 
+import type { ScopingRule } from "../app/context/FieldRegistryContext";
+
 export type PlanTier = "Starter" | "Professional" | "Custom";
 
 export interface CountryPricing {
@@ -17,19 +19,32 @@ export interface CountryPricing {
   yearlyPrice: number;
 }
 
+export interface PlanLinkedTemplate {
+  id: string;
+  type: "process" | "workflow" | "document" | "webform";
+  name: string;
+  industry: string;
+  category?: string;
+}
+
 export interface IndustryPlan {
   id: string;
   name: string;
   tier: PlanTier;
   targetCategory: string; // "Global" or specific category e.g. "Wellness & Lifestyle", "Real Estate", "Healthcare", "IT/Tech"
+  scopingRules?: ScopingRule[]; // Unified Admin Scope rules (category, industries, locations)
   description: string;
+  includedSeats?: number; // FR-1: Number of seats (team members) allowed with plan at no extra charge
   monthlyCredits: number;
   yearlyCredits: number;
   isActive: boolean;
   isPopular: boolean;
   isInternalStaffOnly: boolean;
-  features: string[];
-  linkedProcessTemplates: string[];
+  features: string[]; // FR-3: Marketing display text
+  modules?: string[]; // FR-2: Assigned module IDs
+  moduleFeatures?: Record<string, string[]>; // FR-2: Features included under each assigned module
+  linkedTemplates?: PlanLinkedTemplate[]; // FR-4: Templates by type and industry
+  linkedProcessTemplates: string[]; // Legacy process IDs
   countryPricing: CountryPricing[];
   createdAt: string;
   updatedAt: string;
@@ -51,6 +66,45 @@ export interface CreditPackage {
   createdAt: string;
 }
 
+export interface TeamMemberPack {
+  id: string;
+  name: string;
+  members: number;
+  totalPrice: number;
+  currencySymbol: string;
+  country?: string;
+  badge?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface GlobalBillingSettings {
+  defaultPricePerCredit: number; // FR-5: Base price per credit for custom credit amounts
+  defaultPricePerExtraMember: number; // FR-8: Base price per extra team member
+  currencySymbol: string;
+}
+
+export interface CreditAction {
+  id: string;
+  name: string;
+  unitLabel: string; // e.g. "per minute", "per message", "per execution"
+  creditsDeducted: number;
+  linkedFeature: "Calls" | "SMS" | "Email" | "Workflows" | "AI Scribe";
+  description?: string;
+}
+
+export interface CreditDeductionLog {
+  id: string;
+  workspaceId: string;
+  actionId: string;
+  actionName: string;
+  linkedFeature: "Calls" | "SMS" | "Email" | "Workflows" | "AI Scribe";
+  units: number;
+  creditsDeducted: number;
+  timestamp: string;
+  details?: string;
+}
+
 export interface WorkspaceSubscription {
   workspaceId: string;
   planId: string;
@@ -60,12 +114,16 @@ export interface WorkspaceSubscription {
   amount: number;
   currency: string;
   currencySymbol: string;
-  status: "Active" | "Past Due" | "Canceled" | "Trial";
+  status: "Active" | "Past Due" | "Canceled" | "Trial" | "Inactive" | "Unassigned";
   nextRenewalDate: string;
   startDate: string;
-  userCount: number;
-  totalCredits: number;
-  creditsUsed: number;
+  userCount: number; // Total active users
+  includedSeats?: number; // FR-1, FR-11: Seats from plan
+  extraSeatsPurchased?: number; // FR-9: Additional seats purchased via packs or custom
+  planCredits?: number; // Renewed monthly with plan
+  addonCredits?: number; // Permanent add-on credits from topups/packs
+  totalCredits: number; // planCredits + addonCredits
+  creditsUsed: number; // Total consumed in cycle
   creditsRemaining: number;
   lastCreditTopupDate?: string;
   recentPackages?: Array<{
@@ -76,11 +134,23 @@ export interface WorkspaceSubscription {
     currencySymbol: string;
     purchasedAt: string;
   }>;
+  recentMemberPacks?: Array<{
+    packId: string;
+    packName: string;
+    members: number;
+    amount: number;
+    currencySymbol: string;
+    purchasedAt: string;
+  }>;
 }
 
-export const PLANS_STORAGE_KEY = "mantra_admin_industry_plans_v1";
+export const PLANS_STORAGE_KEY = "mantra_admin_industry_plans_v2";
 export const CREDIT_PACKAGES_STORAGE_KEY = "mantra_admin_credit_packages_v1";
-export const SUBSCRIPTIONS_STORAGE_KEY = "mantra_workspace_subscriptions_v1";
+export const TEAM_MEMBER_PACKS_STORAGE_KEY = "mantra_admin_team_member_packs_v1";
+export const GLOBAL_BILLING_SETTINGS_KEY = "mantra_global_billing_settings_v1";
+export const CREDIT_ACTIONS_STORAGE_KEY = "mantra_admin_credit_actions_v1";
+export const CREDIT_DEDUCTION_LOGS_KEY = "mantra_credit_deduction_logs_v1";
+export const SUBSCRIPTIONS_STORAGE_KEY = "mantra_workspace_subscriptions_v2";
 export const PLANS_BILLING_CHANGED_EVENT = "mantra_plans_billing_changed";
 
 export const SUPPORTED_COUNTRIES = [
@@ -104,272 +174,7 @@ export const DEFAULT_COUNTRY_PRICING: CountryPricing[] = [
   { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 45, yearlyPrice: 432 },
 ];
 
-export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
-  {
-    id: "plan-global-starter",
-    name: "Global Starter",
-    tier: "Starter",
-    targetCategory: "Global",
-    description: "Essential AI receptionist, telephony, and core intake workflows for single-practitioner teams.",
-    monthlyCredits: 500,
-    yearlyCredits: 6000,
-    isActive: true,
-    isPopular: false,
-    isInternalStaffOnly: false,
-    features: [
-      "1 AI Voice Receptionist agent",
-      "500 Included Voice & Chat Credits / mo",
-      "Standard Website Chat Widget",
-      "Basic Appointment & Calendar Scheduling",
-      "Email & SMS Client Confirmations",
-      "Standard Support (48h turnaround)",
-    ],
-    linkedProcessTemplates: ["proc-1", "proc-2"],
-    countryPricing: [
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 49, yearlyPrice: 470 },
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 3999, yearlyPrice: 38390 },
-      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 39, yearlyPrice: 375 },
-      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 65, yearlyPrice: 624 },
-      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 75, yearlyPrice: 720 },
-      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 45, yearlyPrice: 432 },
-    ],
-    createdAt: "2026-01-10T10:00:00Z",
-    updatedAt: "2026-03-01T12:00:00Z",
-  },
-  {
-    id: "plan-global-pro",
-    name: "Global Professional",
-    tier: "Professional",
-    targetCategory: "Global",
-    description: "Complete conversational intelligence, CRM sync, and advanced multi-agent workflows for growing teams.",
-    monthlyCredits: 2000,
-    yearlyCredits: 24000,
-    isActive: true,
-    isPopular: true,
-    isInternalStaffOnly: false,
-    features: [
-      "3 AI Voice Receptionists with Accent Matching",
-      "2,000 Voice & Chat Credits / mo included",
-      "Multi-channel WhatsApp & Two-Way SMS Hub",
-      "Automated Appointment & EHR Booking",
-      "Custom Intake Forms & Document Generation",
-      "Live Call Transfer & Round-Robin Escalation",
-      "Priority 24/7 Slack & Phone Support",
-    ],
-    linkedProcessTemplates: ["proc-1", "proc-3", "proc-4"],
-    countryPricing: [
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 149, yearlyPrice: 1430 },
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 11999, yearlyPrice: 115190 },
-      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 119, yearlyPrice: 1142 },
-      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 199, yearlyPrice: 1910 },
-      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 229, yearlyPrice: 2198 },
-      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 139, yearlyPrice: 1334 },
-    ],
-    createdAt: "2026-01-10T10:00:00Z",
-    updatedAt: "2026-03-01T12:00:00Z",
-  },
-  {
-    id: "plan-global-enterprise",
-    name: "Global Enterprise Custom",
-    tier: "Custom",
-    targetCategory: "Global",
-    description: "Dedicated AI models, bespoke telephony rate cards, SLA guarantees, and enterprise multi-location support.",
-    monthlyCredits: 10000,
-    yearlyCredits: 120000,
-    isActive: true,
-    isPopular: false,
-    isInternalStaffOnly: false,
-    features: [
-      "Unlimited AI Receptionists & Custom Personas",
-      "Custom Voice Cloning & Tone Fine-Tuning",
-      "10,000 Included Voice & Call Credits / mo",
-      "Dedicated Enterprise Account Manager & 99.9% SLA",
-      "Custom EHR / CRM Deep API Integration",
-      "HIPAA BAA & SOC2 Type II Certified",
-      "Custom Telephony & Wholesale Rates",
-    ],
-    linkedProcessTemplates: ["proc-1", "proc-2", "proc-3", "proc-4"],
-    countryPricing: [
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 499, yearlyPrice: 4790 },
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 39999, yearlyPrice: 383990 },
-      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 399, yearlyPrice: 3830 },
-      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 649, yearlyPrice: 6230 },
-      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 749, yearlyPrice: 7190 },
-      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 469, yearlyPrice: 4500 },
-    ],
-    createdAt: "2026-01-10T10:00:00Z",
-    updatedAt: "2026-03-01T12:00:00Z",
-  },
-
-  // ── INDUSTRY TARGETED PLANS ──
-  {
-    id: "plan-wellness-pro",
-    name: "Wellness Studio Growth",
-    tier: "Professional",
-    targetCategory: "Wellness & Lifestyle",
-    description: "Designed for Yoga Studios, Fitness Gyms, and Nutritionists with class bookings and diet check-ins.",
-    monthlyCredits: 1800,
-    yearlyCredits: 21600,
-    isActive: true,
-    isPopular: true,
-    isInternalStaffOnly: false,
-    features: [
-      "Studio AI Voice Receptionist with Class Schedule Sync",
-      "1,800 Voice & Chat Credits / mo included",
-      "Nutrition & Fitness Intake Forms Integration",
-      "WhatsApp Class Reminders & Cancellation Fillers",
-      "Member Check-in & Pass Renewal Triggers",
-    ],
-    linkedProcessTemplates: ["proc-wellness-1"],
-    countryPricing: [
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 129, yearlyPrice: 1238 },
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 9999, yearlyPrice: 95990 },
-      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 99, yearlyPrice: 950 },
-      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 169, yearlyPrice: 1622 },
-      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 199, yearlyPrice: 1910 },
-      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 119, yearlyPrice: 1142 },
-    ],
-    createdAt: "2026-02-15T09:00:00Z",
-    updatedAt: "2026-03-05T14:30:00Z",
-  },
-  {
-    id: "plan-realestate-pro",
-    name: "Real Estate Deal Accelerator",
-    tier: "Professional",
-    targetCategory: "Real Estate",
-    description: "Engineered for Real Estate Brokerages & Property Managers with 24/7 buyer pre-qualification.",
-    monthlyCredits: 2500,
-    yearlyCredits: 30000,
-    isActive: true,
-    isPopular: true,
-    isInternalStaffOnly: false,
-    features: [
-      "24/7 Property Showing & Tour Scheduler AI",
-      "2,500 Voice & SMS Credits / mo included",
-      "MLS / Property Listing Auto-Lookup",
-      "Buyer Pre-Qualification & Budget Screening",
-      "Instant Lead Routing to Available On-Duty Agents",
-    ],
-    linkedProcessTemplates: ["proc-re-1"],
-    countryPricing: [
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 169, yearlyPrice: 1622 },
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 13499, yearlyPrice: 129590 },
-      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 135, yearlyPrice: 1296 },
-      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 219, yearlyPrice: 2102 },
-      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 259, yearlyPrice: 2486 },
-      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 155, yearlyPrice: 1488 },
-    ],
-    createdAt: "2026-02-18T11:00:00Z",
-    updatedAt: "2026-03-10T16:00:00Z",
-  },
-  {
-    id: "plan-healthcare-pro",
-    name: "Healthcare Practice Suite",
-    tier: "Professional",
-    targetCategory: "Healthcare",
-    description: "Specialized for Medical Clinics, Dentists, and Specialists with HIPAA-aware triage and claims verify.",
-    monthlyCredits: 3000,
-    yearlyCredits: 36000,
-    isActive: true,
-    isPopular: true,
-    isInternalStaffOnly: false,
-    features: [
-      "Clinical AI Receptionist (HIPAA Compliant & Scribe Linked)",
-      "3,000 Voice & Scribe Credits / mo included",
-      "Insurance Eligibility & CMS-1500 Verification",
-      "Patient Pre-Registration & Medical History Forms",
-      "Doctor Rota Scheduling & Urgent Care Call Routing",
-    ],
-    linkedProcessTemplates: ["proc-1", "proc-hc-claims"],
-    countryPricing: [
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 179, yearlyPrice: 1718 },
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 14499, yearlyPrice: 139190 },
-      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 145, yearlyPrice: 1392 },
-      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 239, yearlyPrice: 2294 },
-      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 279, yearlyPrice: 2678 },
-      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 165, yearlyPrice: 1584 },
-    ],
-    createdAt: "2026-02-01T08:00:00Z",
-    updatedAt: "2026-03-12T10:00:00Z",
-  },
-  {
-    id: "plan-it-starter",
-    name: "IT & MSP Dispatch Desk",
-    tier: "Starter",
-    targetCategory: "IT/Tech",
-    description: "Built for IT Managed Services, SaaS, and Helpdesks with ticket triage and on-call engineer dispatch.",
-    monthlyCredits: 800,
-    yearlyCredits: 9600,
-    isActive: true,
-    isPopular: false,
-    isInternalStaffOnly: false,
-    features: [
-      "Helpdesk Tier-1 Incident Triage AI Voice Bot",
-      "800 Voice & Chat Credits / mo included",
-      "Automated JIRA / Zendesk Ticket Creation",
-      "Emergency On-Call Escalation Tree",
-      "Status Page Outage Notification System",
-    ],
-    linkedProcessTemplates: ["proc-it-1"],
-    countryPricing: [
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 69, yearlyPrice: 662 },
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 5499, yearlyPrice: 52790 },
-      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 55, yearlyPrice: 528 },
-      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 89, yearlyPrice: 854 },
-      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 105, yearlyPrice: 1008 },
-      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 65, yearlyPrice: 624 },
-    ],
-    createdAt: "2026-02-20T10:00:00Z",
-    updatedAt: "2026-03-08T15:00:00Z",
-  },
-
-  // ── TEST FLAGS (INTERNAL & INACTIVE) ──
-  {
-    id: "plan-internal-staff-beta",
-    name: "Internal Staff Alpha VIP",
-    tier: "Custom",
-    targetCategory: "Global",
-    description: "Internal-only staff sandbox tier with uncapped voice minutes for internal development and QA.",
-    monthlyCredits: 50000,
-    yearlyCredits: 600000,
-    isActive: true,
-    isPopular: false,
-    isInternalStaffOnly: true, // MUST NEVER APPEAR IN CUSTOMER MANTRAASSIST APP
-    features: [
-      "Staff Internal Sandbox Only",
-      "Uncapped LiveKit / Cartesia streaming limits",
-      "Beta experimental voice agents",
-    ],
-    linkedProcessTemplates: [],
-    countryPricing: [
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
-      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 0, yearlyPrice: 0 },
-    ],
-    createdAt: "2026-01-01T00:00:00Z",
-    updatedAt: "2026-01-01T00:00:00Z",
-  },
-  {
-    id: "plan-inactive-legacy",
-    name: "Legacy 2024 Starter (Deprecated)",
-    tier: "Starter",
-    targetCategory: "Global",
-    description: "Grandfathered plan from 2024. Deactivated for all new customer signups.",
-    monthlyCredits: 200,
-    yearlyCredits: 2400,
-    isActive: false, // MUST NEVER APPEAR IN CUSTOMER MANTRAASSIST APP
-    isPopular: false,
-    isInternalStaffOnly: false,
-    features: ["Legacy voice assistant only"],
-    linkedProcessTemplates: [],
-    countryPricing: [
-      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 29, yearlyPrice: 278 },
-      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 2399, yearlyPrice: 23000 },
-    ],
-    createdAt: "2024-06-01T00:00:00Z",
-    updatedAt: "2025-01-01T00:00:00Z",
-  },
-];
+export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [];
 
 export const INITIAL_CREDIT_PACKAGES: CreditPackage[] = [
   {
@@ -534,100 +339,355 @@ export const INITIAL_CREDIT_PACKAGES: CreditPackage[] = [
   },
 ];
 
-export const INITIAL_WORKSPACE_SUBSCRIPTIONS: Record<string, WorkspaceSubscription> = {
-  demo: {
-    workspaceId: "demo",
-    planId: "plan-healthcare-pro",
-    planName: "Healthcare Practice Suite",
-    tier: "Professional",
-    billingCycle: "yearly",
-    amount: 1718,
-    currency: "USD",
-    currencySymbol: "$",
-    status: "Active",
-    nextRenewalDate: "2027-01-15",
-    startDate: "2026-01-15",
-    userCount: 2,
-    totalCredits: 3500,
-    creditsUsed: 1240,
-    creditsRemaining: 2260,
-    recentPackages: [
-      {
-        packageId: "cred-pkg-500-us",
-        packageName: "500 Credits Booster",
-        credits: 500,
-        amount: 25,
-        currencySymbol: "$",
-        purchasedAt: "2026-02-10T14:22:00Z",
-      },
+export const AVAILABLE_PLAN_MODULES = [
+  {
+    id: "clients",
+    name: "Clients & Contacts (CRM)",
+    features: [
+      "Contact Management & History",
+      "Custom Profile Sections & Fields",
+      "Tagging & Smart Lists",
+      "Patient Intake & Questionnaire Bindings",
     ],
   },
-  "1": {
-    workspaceId: "1",
-    planId: "plan-healthcare-pro",
-    planName: "Healthcare Practice Suite",
-    tier: "Professional",
-    billingCycle: "monthly",
-    amount: 179,
-    currency: "USD",
-    currencySymbol: "$",
-    status: "Active",
-    nextRenewalDate: "2026-04-15",
-    startDate: "2026-01-15",
-    userCount: 3,
-    totalCredits: 3000,
-    creditsUsed: 2150,
-    creditsRemaining: 850,
+  {
+    id: "telephony",
+    name: "AI Receptionist & Telephony",
+    features: [
+      "24/7 AI Voice Answering Agent",
+      "Inbound & Outbound Calling",
+      "Live Call Transfer & Escalation",
+      "Missed Call Instant Callback",
+      "Voicemail Transcription",
+    ],
   },
-  "2": {
-    workspaceId: "2",
-    planId: "plan-global-starter",
-    planName: "Global Starter",
-    tier: "Starter",
-    billingCycle: "monthly",
-    amount: 49,
-    currency: "USD",
-    currencySymbol: "$",
-    status: "Active",
-    nextRenewalDate: "2026-04-01",
-    startDate: "2026-02-01",
-    userCount: 1,
-    totalCredits: 500,
-    creditsUsed: 380,
-    creditsRemaining: 120,
+  {
+    id: "appointments",
+    name: "Appointments & Calendar",
+    features: [
+      "Online Booking Widget",
+      "Google & Outlook Calendar 2-Way Sync",
+      "Automated SMS/Email Reminders",
+      "Doctor / Provider Rota Scheduling",
+    ],
   },
-  "3": {
-    workspaceId: "3",
-    planId: "plan-global-pro",
-    planName: "Global Professional",
-    tier: "Professional",
-    billingCycle: "yearly",
-    amount: 1430,
-    currency: "USD",
-    currencySymbol: "$",
-    status: "Active",
-    nextRenewalDate: "2026-11-20",
-    startDate: "2025-11-20",
-    userCount: 5,
-    totalCredits: 4000,
-    creditsUsed: 2890,
-    creditsRemaining: 1110,
+  {
+    id: "messaging",
+    name: "Multi-Channel Messaging",
+    features: [
+      "Two-Way SMS Messaging",
+      "WhatsApp Business API Integration",
+      "Email Marketing & Notification Hub",
+      "Shared Team Inbox",
+    ],
   },
+  {
+    id: "workflows",
+    name: "Workflows & Automations",
+    features: [
+      "Visual Flow Builder",
+      "Stage Entry Automated Triggers",
+      "Cross-Entity Lifecycle Movement",
+      "Webhooks & External Integrations",
+    ],
+  },
+  {
+    id: "documents",
+    name: "Documents & Web Forms",
+    features: [
+      "Fillable Docx / PDF Generation",
+      "Patient Registration Web Forms",
+      "E-Signature Capture",
+      "EHR Document Vault",
+    ],
+  },
+  {
+    id: "billing",
+    name: "Invoicing & Revenue",
+    features: [
+      "Digital Invoicing & Receipts",
+      "Stripe / Razorpay Payment Links",
+      "Insurance Claim Filing (CMS 1500)",
+      "Financial Transaction Logs",
+    ],
+  },
+  {
+    id: "scribe",
+    name: "AI Scribe & Clinical Notes",
+    features: [
+      "Real-time Clinical Audio Transcription",
+      "SOAP Note Auto-Generation",
+      "Diagnostic Code Suggestions (ICD-10)",
+    ],
+  },
+];
+
+export const PLAN_AVAILABLE_TEMPLATES: PlanLinkedTemplate[] = [
+  // Process Templates
+  { id: "proc-1", type: "process", name: "New Leads & Intake Pipeline", industry: "All", category: "Global" },
+  { id: "proc-2", type: "process", name: "Standard Client Onboarding", industry: "All", category: "Global" },
+  { id: "proc-hc-claims", type: "process", name: "Treatment & Insurance Claim Journey", industry: "Healthcare", category: "Healthcare" },
+  { id: "proc-re-1", type: "process", name: "Property Tour & Offer Pipeline", industry: "Real Estate", category: "Real Estate" },
+  { id: "proc-it-1", type: "process", name: "Incident Triage & Engineer Dispatch", industry: "IT/Tech", category: "IT/Tech" },
+  { id: "proc-wellness-1", type: "process", name: "Class Booking & Nutrition Check-in", industry: "Wellness & Lifestyle", category: "Wellness & Lifestyle" },
+
+  // Workflow Templates
+  { id: "wf-callback", type: "workflow", name: "Instant Missed Call Auto-Callback", industry: "All", category: "Global" },
+  { id: "wf-reminder", type: "workflow", name: "24-Hour Appointment SMS Reminder", industry: "All", category: "Global" },
+  { id: "wf-hc-triage", type: "workflow", name: "Emergency Patient Triage & Doctor Escalation", industry: "Healthcare", category: "Healthcare" },
+  { id: "wf-re-lead", type: "workflow", name: "MLS Buyer Pre-Qualification Alert", industry: "Real Estate", category: "Real Estate" },
+  { id: "wf-dunning", type: "workflow", name: "Overdue Invoice Dunning Escalation", industry: "All", category: "Global" },
+
+  // Document Templates
+  { id: "doc-rx", type: "document", name: "Prescription & Medication Order", industry: "Healthcare", category: "Healthcare" },
+  { id: "doc-hipaa", type: "document", name: "HIPAA Patient Intake & Consent Form", industry: "Healthcare", category: "Healthcare" },
+  { id: "doc-broker", type: "document", name: "Residential Buyer Broker Agreement", industry: "Real Estate", category: "Real Estate" },
+  { id: "doc-nda", type: "document", name: "General Services Agreement & Mutual NDA", industry: "All", category: "Global" },
+
+  // Web Form Templates
+  { id: "form-patient-reg", type: "webform", name: "New Patient Online Registration Form", industry: "Healthcare", category: "Healthcare" },
+  { id: "form-showing", type: "webform", name: "Property Showing Schedule Request", industry: "Real Estate", category: "Real Estate" },
+  { id: "form-intake", type: "webform", name: "General Client Intake Questionnaire", industry: "All", category: "Global" },
+  { id: "form-it-ticket", type: "webform", name: "IT Support Incident Ticket Form", industry: "IT/Tech", category: "IT/Tech" },
+];
+
+export const INITIAL_TEAM_MEMBER_PACKS: TeamMemberPack[] = [
+  {
+    id: "team-pack-2",
+    name: "2 Team Members Pack",
+    members: 2,
+    totalPrice: 36,
+    currencySymbol: "$",
+    badge: "Starter Booster",
+    isActive: true,
+    createdAt: "2026-01-15T10:00:00Z",
+  },
+  {
+    id: "team-pack-5",
+    name: "5 Team Members Pack",
+    members: 5,
+    totalPrice: 90,
+    currencySymbol: "$",
+    badge: "Most Popular (Save 10%)",
+    isActive: true,
+    createdAt: "2026-01-15T10:00:00Z",
+  },
+  {
+    id: "team-pack-10",
+    name: "10 Team Members Scale",
+    members: 10,
+    totalPrice: 160,
+    currencySymbol: "$",
+    badge: "Best Value (Save 20%)",
+    isActive: true,
+    createdAt: "2026-01-15T10:00:00Z",
+  },
+  {
+    id: "team-pack-25",
+    name: "25 Enterprise Seats",
+    members: 25,
+    totalPrice: 375,
+    currencySymbol: "$",
+    badge: "Enterprise (Save 25%)",
+    isActive: true,
+    createdAt: "2026-01-15T10:00:00Z",
+  },
+];
+
+export const INITIAL_GLOBAL_BILLING_SETTINGS: GlobalBillingSettings = {
+  defaultPricePerCredit: 0.05, // FR-5: $0.05 per credit
+  defaultPricePerExtraMember: 20, // FR-8: $20 per member per month
+  currencySymbol: "$",
 };
+
+export const INITIAL_CREDIT_ACTIONS: CreditAction[] = [
+  {
+    id: "act-call-out",
+    name: "Outbound Calls Made (per minute)",
+    unitLabel: "per minute",
+    creditsDeducted: 1,
+    linkedFeature: "Calls",
+    description: "Deducted per minute of active outbound call by AI receptionist or staff",
+  },
+  {
+    id: "act-call-in",
+    name: "Calls received (per minute)",
+    unitLabel: "per minute",
+    creditsDeducted: 2,
+    linkedFeature: "Calls",
+    description: "Deducted per minute of inbound AI voice answering and triage",
+  },
+  {
+    id: "act-call-callback",
+    name: "Missed Call Callback",
+    unitLabel: "per callback",
+    creditsDeducted: 3,
+    linkedFeature: "Calls",
+    description: "Automated instant voice dial out to recover lost missed caller",
+  },
+  {
+    id: "act-sms-sent",
+    name: "SMS Sent",
+    unitLabel: "per message",
+    creditsDeducted: 1,
+    linkedFeature: "SMS",
+    description: "Standard outgoing transactional or reminder SMS message",
+  },
+  {
+    id: "act-email-sent",
+    name: "Email Sent",
+    unitLabel: "per email",
+    creditsDeducted: 1,
+    linkedFeature: "Email",
+    description: "Appointment confirmation or document notification email",
+  },
+  {
+    id: "act-workflow-exec",
+    name: "Workflow Execution",
+    unitLabel: "per execution",
+    creditsDeducted: 1,
+    linkedFeature: "Workflows",
+    description: "Execution of an automated stage entry action or pipeline rule",
+  },
+  {
+    id: "act-scribe-min",
+    name: "AI Scribe Transcription",
+    unitLabel: "per minute",
+    creditsDeducted: 2,
+    linkedFeature: "AI Scribe",
+    description: "Real-time clinical audio transcription and SOAP note synthesis",
+  },
+];
+
+export const INITIAL_CREDIT_DEDUCTION_LOGS: CreditDeductionLog[] = [
+  {
+    id: "deduct-1",
+    workspaceId: "demo",
+    actionId: "act-call-in",
+    actionName: "Calls received (per minute)",
+    linkedFeature: "Calls",
+    units: 4,
+    creditsDeducted: 8,
+    timestamp: "2026-03-20T14:30:00Z",
+    details: "4-minute inbound patient consultation intake call",
+  },
+  {
+    id: "deduct-2",
+    workspaceId: "demo",
+    actionId: "act-call-out",
+    actionName: "Outbound Calls Made (per minute)",
+    linkedFeature: "Calls",
+    units: 3,
+    creditsDeducted: 3,
+    timestamp: "2026-03-20T15:10:00Z",
+    details: "3-minute outbound treatment plan review call",
+  },
+  {
+    id: "deduct-3",
+    workspaceId: "demo",
+    actionId: "act-call-callback",
+    actionName: "Missed Call Callback",
+    linkedFeature: "Calls",
+    units: 1,
+    creditsDeducted: 3,
+    timestamp: "2026-03-20T16:45:00Z",
+    details: "Automated missed call recovery for caller +1 (415) 892-1200",
+  },
+  {
+    id: "deduct-4",
+    workspaceId: "demo",
+    actionId: "act-sms-sent",
+    actionName: "SMS Sent",
+    linkedFeature: "SMS",
+    units: 5,
+    creditsDeducted: 5,
+    timestamp: "2026-03-21T09:00:00Z",
+    details: "5 appointment confirmation SMS notifications",
+  },
+  {
+    id: "deduct-5",
+    workspaceId: "demo",
+    actionId: "act-workflow-exec",
+    actionName: "Workflow Execution",
+    linkedFeature: "Workflows",
+    units: 2,
+    creditsDeducted: 2,
+    timestamp: "2026-03-21T11:20:00Z",
+    details: "2 automated stage-entry pipeline movements",
+  },
+  {
+    id: "deduct-6",
+    workspaceId: "demo",
+    actionId: "act-call-in",
+    actionName: "Calls received (per minute)",
+    linkedFeature: "Calls",
+    units: 400,
+    creditsDeducted: 800,
+    timestamp: "2026-03-15T12:00:00Z",
+    details: "Monthly cumulative AI receptionist answering (400 minutes)",
+  },
+  {
+    id: "deduct-7",
+    workspaceId: "demo",
+    actionId: "act-sms-sent",
+    actionName: "SMS Sent",
+    linkedFeature: "SMS",
+    units: 250,
+    creditsDeducted: 250,
+    timestamp: "2026-03-16T12:00:00Z",
+    details: "Monthly cumulative two-way patient chat & reminder SMS",
+  },
+  {
+    id: "deduct-8",
+    workspaceId: "demo",
+    actionId: "act-email-sent",
+    actionName: "Email Sent",
+    linkedFeature: "Email",
+    units: 100,
+    creditsDeducted: 100,
+    timestamp: "2026-03-17T12:00:00Z",
+    details: "Monthly cumulative intake packet & bill emails",
+  },
+  {
+    id: "deduct-9",
+    workspaceId: "demo",
+    actionId: "act-workflow-exec",
+    actionName: "Workflow Execution",
+    linkedFeature: "Workflows",
+    units: 69,
+    creditsDeducted: 69,
+    timestamp: "2026-03-18T12:00:00Z",
+    details: "Monthly cumulative automated lifecycle actions",
+  },
+];
+
+export const INITIAL_WORKSPACE_SUBSCRIPTIONS: Record<string, WorkspaceSubscription> = {};
 
 // ── GETTERS & SETTERS ──
 
 export function getStoredPlans(): IndustryPlan[] {
   try {
+    if (typeof window !== "undefined" && localStorage.getItem("mantra_admin_industry_plans_v1")) {
+      localStorage.removeItem("mantra_admin_industry_plans_v1");
+    }
     const raw = localStorage.getItem(PLANS_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(INITIAL_INDUSTRY_PLANS));
-      return INITIAL_INDUSTRY_PLANS;
+      localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify([]));
+      return [];
     }
     return JSON.parse(raw);
   } catch (err) {
     console.error("Error reading plans:", err);
-    return INITIAL_INDUSTRY_PLANS;
+    return [];
+  }
+}
+
+export function clearAllStoredPlans(): void {
+  try {
+    localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify([]));
+    window.dispatchEvent(new CustomEvent(PLANS_BILLING_CHANGED_EVENT, { detail: { type: "plans_cleared" } }));
+  } catch (err) {
+    console.error("Error clearing plans:", err);
   }
 }
 
@@ -705,6 +765,10 @@ export function deleteCreditPackage(id: string): void {
 
 export function getStoredSubscriptions(): Record<string, WorkspaceSubscription> {
   try {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("mantra_workspace_subscriptions");
+      localStorage.removeItem("mantra_workspace_subscriptions_v1");
+    }
     const raw = localStorage.getItem(SUBSCRIPTIONS_STORAGE_KEY);
     if (!raw) {
       localStorage.setItem(SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify(INITIAL_WORKSPACE_SUBSCRIPTIONS));
@@ -717,28 +781,41 @@ export function getStoredSubscriptions(): Record<string, WorkspaceSubscription> 
   }
 }
 
+export function clearAllStoredSubscriptions(): void {
+  try {
+    localStorage.setItem(SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify({}));
+    window.dispatchEvent(new CustomEvent(PLANS_BILLING_CHANGED_EVENT, { detail: { type: "subscriptions_cleared" } }));
+  } catch (err) {
+    console.error("Error clearing subscriptions:", err);
+  }
+}
+
 export function getWorkspaceSubscription(workspaceId: string): WorkspaceSubscription {
   const subs = getStoredSubscriptions();
   if (subs[workspaceId]) {
     return subs[workspaceId];
   }
-  // Fallback default subscription
+  // Default unassigned subscription state when no plan has been assigned yet
   return {
     workspaceId,
-    planId: "plan-global-starter",
-    planName: "Global Starter",
+    planId: "",
+    planName: "No Plan Assigned",
     tier: "Starter",
     billingCycle: "monthly",
-    amount: 49,
+    amount: 0,
     currency: "USD",
     currencySymbol: "$",
-    status: "Active",
-    nextRenewalDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-    startDate: new Date().toISOString().slice(0, 10),
-    userCount: 1,
-    totalCredits: 500,
+    status: "Inactive",
+    nextRenewalDate: "—",
+    startDate: "—",
+    userCount: 0,
+    includedSeats: 0,
+    extraSeatsPurchased: 0,
+    planCredits: 0,
+    addonCredits: 0,
+    totalCredits: 0,
     creditsUsed: 0,
-    creditsRemaining: 500,
+    creditsRemaining: 0,
   };
 }
 
@@ -788,6 +865,7 @@ export function purchaseCreditPackageForWorkspace(workspaceId: string, pkg: Cred
 export interface WorkspaceScope {
   id?: string;
   industryCategory?: string; // e.g. "Healthcare", "Wellness & Lifestyle", "Real Estate", "IT/Tech"
+  industry?: string; // e.g. "Dental Clinic", "Cardiology"
   country?: string; // e.g. "United States", "India", "United Kingdom", "Canada"
   currency?: string; // e.g. "USD", "INR", "GBP", "EUR"
 }
@@ -818,7 +896,31 @@ export function getAvailablePlansForWorkspace(
       // Rule 2: Must NOT be internal staff only
       if (plan.isInternalStaffOnly) return false;
 
-      // Rule 3: Category scope match
+      // Rule 3: Admin Scope match (scoping rules take precedence if present)
+      if (plan.scopingRules && plan.scopingRules.length > 0) {
+        return plan.scopingRules.some((rule) => {
+          const ruleCat = (rule.industryCategory || "").trim().toLowerCase();
+          const matchCat = !ruleCat || ruleCat === "all" || ruleCat === "*" || (targetCategory && ruleCat === targetCategory);
+          if (!matchCat) return false;
+
+          const inds = (rule.industries || []).filter((i) => i && i !== "All" && i !== "*");
+          if (inds.length > 0 && scope.industry) {
+            const targetInd = scope.industry.trim().toLowerCase();
+            const matchInd = inds.some((ind) => ind.trim().toLowerCase() === targetInd);
+            if (!matchInd) return false;
+          }
+
+          const locs = (rule.locations || []).filter((l) => l && l !== "All" && l !== "*");
+          if (locs.length > 0) {
+            const matchLoc = locs.some((loc) => loc.trim().toLowerCase() === targetCountry);
+            if (!matchLoc) return false;
+          }
+
+          return true;
+        });
+      }
+
+      // Fallback: Category scope match
       const planCategory = (plan.targetCategory || "Global").trim().toLowerCase();
       if (planCategory === "global") return true;
       if (targetCategory && planCategory === targetCategory) return true;
@@ -880,3 +982,313 @@ export function getAvailableCreditPackagesForWorkspace(
     (p) => p.country.toLowerCase().includes("united states") || p.currency === "USD"
   );
 }
+
+// ── TEAM MEMBER PACKS STORE ──
+
+export function getStoredTeamMemberPacks(): TeamMemberPack[] {
+  try {
+    const raw = localStorage.getItem(TEAM_MEMBER_PACKS_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(TEAM_MEMBER_PACKS_STORAGE_KEY, JSON.stringify(INITIAL_TEAM_MEMBER_PACKS));
+      return INITIAL_TEAM_MEMBER_PACKS;
+    }
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error("Error reading team member packs:", err);
+    return INITIAL_TEAM_MEMBER_PACKS;
+  }
+}
+
+export function saveTeamMemberPack(pack: TeamMemberPack): void {
+  try {
+    const packs = getStoredTeamMemberPacks();
+    const idx = packs.findIndex((p) => p.id === pack.id);
+    let next: TeamMemberPack[];
+    if (idx >= 0) {
+      next = [...packs];
+      next[idx] = pack;
+    } else {
+      next = [pack, ...packs];
+    }
+    localStorage.setItem(TEAM_MEMBER_PACKS_STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent(PLANS_BILLING_CHANGED_EVENT, { detail: { type: "team_pack_saved", pack } }));
+  } catch (err) {
+    console.error("Error saving team member pack:", err);
+  }
+}
+
+export function deleteTeamMemberPack(id: string): void {
+  try {
+    const packs = getStoredTeamMemberPacks();
+    const next = packs.filter((p) => p.id !== id);
+    localStorage.setItem(TEAM_MEMBER_PACKS_STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent(PLANS_BILLING_CHANGED_EVENT, { detail: { type: "team_pack_deleted", id } }));
+  } catch (err) {
+    console.error("Error deleting team member pack:", err);
+  }
+}
+
+// ── GLOBAL BILLING SETTINGS (FR-5, FR-8) ──
+
+export function getStoredGlobalBillingSettings(): GlobalBillingSettings {
+  try {
+    const raw = localStorage.getItem(GLOBAL_BILLING_SETTINGS_KEY);
+    if (!raw) {
+      localStorage.setItem(GLOBAL_BILLING_SETTINGS_KEY, JSON.stringify(INITIAL_GLOBAL_BILLING_SETTINGS));
+      return INITIAL_GLOBAL_BILLING_SETTINGS;
+    }
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error("Error reading global billing settings:", err);
+    return INITIAL_GLOBAL_BILLING_SETTINGS;
+  }
+}
+
+export function saveGlobalBillingSettings(settings: GlobalBillingSettings): void {
+  try {
+    localStorage.setItem(GLOBAL_BILLING_SETTINGS_KEY, JSON.stringify(settings));
+    window.dispatchEvent(new CustomEvent(PLANS_BILLING_CHANGED_EVENT, { detail: { type: "global_settings_saved", settings } }));
+  } catch (err) {
+    console.error("Error saving global billing settings:", err);
+  }
+}
+
+// ── CREDIT ACTIONS STORE (FR-13, FR-14) ──
+
+export function getStoredCreditActions(): CreditAction[] {
+  try {
+    const raw = localStorage.getItem(CREDIT_ACTIONS_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(CREDIT_ACTIONS_STORAGE_KEY, JSON.stringify(INITIAL_CREDIT_ACTIONS));
+      return INITIAL_CREDIT_ACTIONS;
+    }
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error("Error reading credit actions:", err);
+    return INITIAL_CREDIT_ACTIONS;
+  }
+}
+
+export function saveCreditAction(action: CreditAction): void {
+  try {
+    const actions = getStoredCreditActions();
+    const idx = actions.findIndex((a) => a.id === action.id);
+    let next: CreditAction[];
+    if (idx >= 0) {
+      next = [...actions];
+      next[idx] = action;
+    } else {
+      next = [action, ...actions];
+    }
+    localStorage.setItem(CREDIT_ACTIONS_STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent(PLANS_BILLING_CHANGED_EVENT, { detail: { type: "credit_action_saved", action } }));
+  } catch (err) {
+    console.error("Error saving credit action:", err);
+  }
+}
+
+export function deleteCreditAction(id: string): void {
+  try {
+    const actions = getStoredCreditActions();
+    const next = actions.filter((a) => a.id !== id);
+    localStorage.setItem(CREDIT_ACTIONS_STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent(PLANS_BILLING_CHANGED_EVENT, { detail: { type: "credit_action_deleted", id } }));
+  } catch (err) {
+    console.error("Error deleting credit action:", err);
+  }
+}
+
+// ── CREDIT DEDUCTION LOGS & EXECUTION (FR-14, FR-15) ──
+
+export function getStoredCreditDeductionLogs(workspaceId?: string): CreditDeductionLog[] {
+  try {
+    const raw = localStorage.getItem(CREDIT_DEDUCTION_LOGS_KEY);
+    const allLogs: CreditDeductionLog[] = raw ? JSON.parse(raw) : INITIAL_CREDIT_DEDUCTION_LOGS;
+    if (!workspaceId) return allLogs;
+    return allLogs.filter((l) => l.workspaceId === workspaceId || l.workspaceId === "demo");
+  } catch (err) {
+    console.error("Error reading deduction logs:", err);
+    return INITIAL_CREDIT_DEDUCTION_LOGS;
+  }
+}
+
+export function recordCreditDeduction(
+  workspaceId: string,
+  actionId: string,
+  units: number = 1
+): { deducted: number; remaining: number; log: CreditDeductionLog } {
+  const actions = getStoredCreditActions();
+  const action = actions.find((a) => a.id === actionId) || {
+    id: actionId,
+    name: "General Activity",
+    creditsDeducted: 1,
+    unitLabel: "per unit",
+    linkedFeature: "Calls" as const,
+  };
+
+  const totalDeducted = Math.max(1, Math.round(action.creditsDeducted * units));
+  const sub = getWorkspaceSubscription(workspaceId);
+  const newUsed = (sub.creditsUsed || 0) + totalDeducted;
+  const newRemaining = Math.max(0, (sub.creditsRemaining || 0) - totalDeducted);
+
+  const newLog: CreditDeductionLog = {
+    id: `deduct-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    workspaceId,
+    actionId: action.id,
+    actionName: action.name,
+    linkedFeature: action.linkedFeature,
+    units,
+    creditsDeducted: totalDeducted,
+    timestamp: new Date().toISOString(),
+    details: `${units} ${action.unitLabel} (${action.name})`,
+  };
+
+  try {
+    const allLogs = getStoredCreditDeductionLogs();
+    const nextLogs = [newLog, ...allLogs];
+    localStorage.setItem(CREDIT_DEDUCTION_LOGS_KEY, JSON.stringify(nextLogs));
+  } catch (err) {
+    console.error("Error logging deduction:", err);
+  }
+
+  updateWorkspaceSubscription(workspaceId, {
+    creditsUsed: newUsed,
+    creditsRemaining: newRemaining,
+  });
+
+  return { deducted: totalDeducted, remaining: newRemaining, log: newLog };
+}
+
+// ── PLAN ASSIGNMENT (FR-10) ──
+
+export function assignPlanToWorkspace(
+  workspaceId: string,
+  planId: string,
+  billingCycle: "monthly" | "yearly" = "monthly",
+  currency: string = "USD"
+): WorkspaceSubscription {
+  const plans = getStoredPlans();
+  const existing = getWorkspaceSubscription(workspaceId);
+  const targetPlan = plans.find((p) => p.id === planId);
+  if (!targetPlan) {
+    return existing;
+  }
+  const countryPricing =
+    targetPlan.countryPricing?.find((cp) => cp.currency === currency) ||
+    targetPlan.countryPricing?.[0] ||
+    DEFAULT_COUNTRY_PRICING[0];
+
+  const amount = billingCycle === "yearly" ? countryPricing.yearlyPrice : countryPricing.monthlyPrice;
+  const planCredits = billingCycle === "yearly" ? targetPlan.yearlyCredits : targetPlan.monthlyCredits;
+
+  const updated: WorkspaceSubscription = {
+    ...existing,
+    planId: targetPlan.id,
+    planName: targetPlan.name,
+    tier: targetPlan.tier,
+    billingCycle,
+    amount,
+    currency: countryPricing.currency,
+    currencySymbol: countryPricing.currencySymbol,
+    status: "Active",
+    includedSeats: targetPlan.includedSeats || (targetPlan.tier === "Starter" ? 2 : targetPlan.tier === "Professional" ? 5 : 20),
+    planCredits,
+    totalCredits: planCredits + (existing.addonCredits || 0),
+    creditsRemaining: planCredits + (existing.addonCredits || 0) - (existing.creditsUsed || 0),
+    nextRenewalDate: new Date(Date.now() + (billingCycle === "yearly" ? 365 : 30) * 86400000).toISOString().slice(0, 10),
+  };
+
+  updateWorkspaceSubscription(workspaceId, updated);
+  return updated;
+}
+
+// ── ADD-ON PURCHASES (FR-7, FR-9) ──
+
+export function purchaseCustomCreditsForWorkspace(workspaceId: string, credits: number): WorkspaceSubscription {
+  const settings = getStoredGlobalBillingSettings();
+  const sub = getWorkspaceSubscription(workspaceId);
+  const cost = parseFloat((credits * settings.defaultPricePerCredit).toFixed(2));
+
+  const updatedAddon = (sub.addonCredits || 0) + credits;
+  const updatedTotal = (sub.totalCredits || 0) + credits;
+  const updatedRemaining = (sub.creditsRemaining || 0) + credits;
+
+  const recentPackages = [
+    {
+      packageId: `custom-cred-${Date.now()}`,
+      packageName: `Custom Top-Up (${credits.toLocaleString()} Credits)`,
+      credits,
+      amount: cost,
+      currencySymbol: settings.currencySymbol,
+      purchasedAt: new Date().toISOString(),
+    },
+    ...(sub.recentPackages || []),
+  ];
+
+  const updated: WorkspaceSubscription = {
+    ...sub,
+    addonCredits: updatedAddon,
+    totalCredits: updatedTotal,
+    creditsRemaining: updatedRemaining,
+    lastCreditTopupDate: new Date().toISOString(),
+    recentPackages,
+  };
+
+  updateWorkspaceSubscription(workspaceId, updated);
+  return updated;
+}
+
+export function purchaseTeamMemberPackForWorkspace(workspaceId: string, pack: TeamMemberPack): WorkspaceSubscription {
+  const sub = getWorkspaceSubscription(workspaceId);
+  const updatedExtraSeats = (sub.extraSeatsPurchased || 0) + pack.members;
+
+  const recentMemberPacks = [
+    {
+      packId: pack.id,
+      packName: pack.name,
+      members: pack.members,
+      amount: pack.totalPrice,
+      currencySymbol: pack.currencySymbol,
+      purchasedAt: new Date().toISOString(),
+    },
+    ...(sub.recentMemberPacks || []),
+  ];
+
+  const updated: WorkspaceSubscription = {
+    ...sub,
+    extraSeatsPurchased: updatedExtraSeats,
+    recentMemberPacks,
+  };
+
+  updateWorkspaceSubscription(workspaceId, updated);
+  return updated;
+}
+
+export function purchaseCustomTeamMembersForWorkspace(workspaceId: string, memberCount: number): WorkspaceSubscription {
+  const settings = getStoredGlobalBillingSettings();
+  const sub = getWorkspaceSubscription(workspaceId);
+  const cost = parseFloat((memberCount * settings.defaultPricePerExtraMember).toFixed(2));
+  const updatedExtraSeats = (sub.extraSeatsPurchased || 0) + memberCount;
+
+  const recentMemberPacks = [
+    {
+      packId: `custom-members-${Date.now()}`,
+      packName: `Custom Seats (${memberCount} Extra Members)`,
+      members: memberCount,
+      amount: cost,
+      currencySymbol: settings.currencySymbol,
+      purchasedAt: new Date().toISOString(),
+    },
+    ...(sub.recentMemberPacks || []),
+  ];
+
+  const updated: WorkspaceSubscription = {
+    ...sub,
+    extraSeatsPurchased: updatedExtraSeats,
+    recentMemberPacks,
+  };
+
+  updateWorkspaceSubscription(workspaceId, updated);
+  return updated;
+}
+
