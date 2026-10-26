@@ -405,7 +405,7 @@ export default function WebsiteWidgetSettingsTab({
         <div className="lg:col-span-5 space-y-5 sticky top-4 self-start max-h-[calc(100vh-32px)] overflow-y-auto pr-0.5">
           {/* Widget Card Container */}
           <div
-            className={`rounded-2xl border border-[#E2E8F0] shadow-lg overflow-hidden transition-all ${config.themeMode === "dark" ? "bg-slate-900 text-white" : "bg-white text-gray-900"
+            className={`rounded-2xl border border-[#E2E8F0] shadow-lg overflow-hidden transition-all max-w-[380px] w-full mx-auto lg:mx-0 ${config.themeMode === "dark" ? "bg-slate-900 text-white" : "bg-white text-gray-900"
               }`}
           >
             {/* Widget Top Bar */}
@@ -587,7 +587,7 @@ export default function WebsiteWidgetSettingsTab({
 
           {/* ── Choose Position Grid Mockup (ai-chat-module parity) ── */}
           {matchesPosition && (
-            <div id="setting-position" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-3 shadow-xs">
+            <div id="setting-position" className="scroll-mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-5 space-y-3 shadow-xs max-w-[380px] w-full mx-auto lg:mx-0">
               <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#1E293B] flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
                   <Sliders className="w-4 h-4 text-[#1456f0]" />
@@ -657,7 +657,7 @@ export default function WebsiteWidgetSettingsTab({
         </div>
 
         {/* ── Right Column: Configuration Settings (Separated Cards) ── */}
-        <div className="lg:col-span-7 space-y-5">
+        <div className="lg:col-span-7 space-y-5 min-w-0">
           {/* Search Results Feedback Banner */}
           {q && (
             <div className="bg-blue-50/80 border border-blue-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs animate-in fade-in">
@@ -717,7 +717,7 @@ export default function WebsiteWidgetSettingsTab({
                 <label className="block text-[11px] font-bold text-[#475569] uppercase tracking-wider mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
                   Widget Primary Color
                 </label>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center flex-wrap gap-2.5">
                   {PRESET_COLORS.map((c) => (
                     <button
                       key={c}
@@ -913,7 +913,7 @@ export default function WebsiteWidgetSettingsTab({
                   {config.enablePreChatForm && (
                     <div className="space-y-4 pt-1">
                       {/* Form Fields: Full Name, Email, Phone, Requirement */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-2.5">
                         <label className="flex items-center gap-2 text-xs text-[#1E293B] p-2.5 border border-[#E2E8F0] rounded-xl cursor-pointer bg-slate-50/50 hover:bg-slate-50 transition-colors">
                           <input
                             type="checkbox"
@@ -996,19 +996,19 @@ export default function WebsiteWidgetSettingsTab({
 
                           <div className="space-y-2">
                             {(config.requirements || []).map((req, idx) => (
-                              <div key={req.id || idx} className="flex items-center gap-2">
+                              <div key={req.id || idx} className="flex items-center gap-2 min-w-0">
                                 <input
                                   type="text"
                                   value={req.label}
                                   onChange={(e) => handleUpdateRequirement(idx, "label", e.target.value)}
                                   placeholder="Requirement Option (e.g. Booking)"
-                                  className="flex-1 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                                  className="flex-1 min-w-0 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
                                 />
-                                <span className="text-xs text-[#94a3b8] font-mono">→</span>
+                                <span className="text-xs text-[#94a3b8] font-mono shrink-0">→</span>
                                 <select
                                   value={req.processId}
                                   onChange={(e) => handleUpdateRequirement(idx, "processId", e.target.value)}
-                                  className="flex-1 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
+                                  className="flex-1 min-w-0 text-xs border border-[#E2E8F0] rounded-xl p-2 bg-white text-[#1E293B] font-medium outline-none focus:border-[#1456f0]"
                                 >
                                   {processes.map((p) => (
                                     <option key={p.id} value={p.id}>
@@ -1020,7 +1020,7 @@ export default function WebsiteWidgetSettingsTab({
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveRequirement(idx)}
-                                    className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer transition-colors"
+                                    className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer transition-colors shrink-0"
                                     title="Remove requirement"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />

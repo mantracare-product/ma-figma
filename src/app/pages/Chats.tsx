@@ -2123,11 +2123,7 @@ export default function Chats() {
                         channelFilter === "companion" ? "text-[#2563EB] font-bold bg-blue-50/60" : "text-[#1E293B]"
                       }`}
                     >
-                      <div className="flex items-center gap-1.5">
-                        <Bot className="w-3.5 h-3.5 text-[#2563EB]" />
-                        <span>Companion</span>
-                        <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-blue-100 text-blue-700">Client</span>
-                      </div>
+                      <span>Companion</span>
                       {channelFilter === "companion" && <Check className="w-3.5 h-3.5 text-[#2563EB]" />}
                     </button>
                   </div>
@@ -2162,23 +2158,6 @@ export default function Chats() {
                     <span>Templates</span>
                   </button>
                 </div>
-              )}
-
-              {/* Clean Gear Settings Button for Website and Companion */}
-              {(channelFilter === "website" || channelFilter === "companion") && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (channelFilter === "website") setShowWebsiteSettingsDrawer(true);
-                    else setShowCompanionSettingsDrawer(true);
-                  }}
-                  className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-bold text-slate-700 flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                  title={channelFilter === "website" ? "Website Widget Settings" : "Companion Settings"}
-                >
-                  <Settings className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Settings</span>
-                </button>
               )}
 
               {/* Phone Number Selector: For WhatsApp and SMS */}
@@ -3326,14 +3305,15 @@ export default function Chats() {
 
       </div>
 
-      {/* ── Slim Side Drawer: Website Widget Settings ── */}
+      {/* ── Side Drawer: Website Widget Settings ── */}
       <DrawerShell
         isOpen={showWebsiteSettingsDrawer}
         onClose={() => setShowWebsiteSettingsDrawer(false)}
         title="Website Widget Settings"
         subtitle="Configure chat widget design, working hours, and requirement mapping."
         icon={<Globe className="w-4 h-4 text-[#6366F1]" />}
-        width="max-w-2xl sm:max-w-3xl"
+        width="w-full max-w-5xl xl:max-w-[1140px]"
+        bodyClassName="p-5 sm:p-6 overflow-y-auto overflow-x-hidden"
         zIndex={600}
         footer={
           <div className="flex items-center justify-end gap-2 w-full">
@@ -3358,14 +3338,12 @@ export default function Chats() {
           </div>
         }
       >
-        <div className="p-4">
-          <WebsiteWidgetSettingsTab
-            registerSaveHandler={(fn) => {
-              widgetSettingsSaveRef.current = fn;
-            }}
-            onNavigateToInbox={() => setShowWebsiteSettingsDrawer(false)}
-          />
-        </div>
+        <WebsiteWidgetSettingsTab
+          registerSaveHandler={(fn) => {
+            widgetSettingsSaveRef.current = fn;
+          }}
+          onNavigateToInbox={() => setShowWebsiteSettingsDrawer(false)}
+        />
       </DrawerShell>
 
       {/* ── Slim Side Drawer: Companion Care Bot Settings ── */}

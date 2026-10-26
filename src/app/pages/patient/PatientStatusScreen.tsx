@@ -25,6 +25,7 @@ import {
   Pill,
   Check,
   RotateCcw,
+  Bot,
 } from "lucide-react";
 import { Client, getStoredClients, CLIENTS_STORE_EVENT } from "../../../lib/clientsStore";
 import { appointmentService, Appointment } from "../../../lib/appointmentService";
@@ -797,6 +798,17 @@ export default function PatientStatusScreen() {
           }
           right={totalBalanceDue > 0 ? "Pay" : "Invoices"}
           onClick={() => navigate(totalBalanceDue > 0 ? "/patient/pay" : "/patient/bill")}
+        />
+
+        {/* Care Bot Assistant Row */}
+        <QuietRow
+          icon={<Bot className="w-4 h-4" />}
+          iconBg="#eff6ff"
+          iconColor="#2563eb"
+          title="Care Bot"
+          subtitle="24/7 Clinical AI Assistant & questions"
+          right="Chat"
+          onClick={() => navigate("/patient/care-bot")}
         />
       </QuietList>
 

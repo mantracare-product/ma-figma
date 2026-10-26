@@ -60,11 +60,23 @@ function notifyConfigChanged() {
 export function getCompanionWidgetConfig(): CompanionWidgetConfig {
   try {
     const raw = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
-    if (!raw) return DEFAULT_COMPANION_CONFIG;
+    const fallbackAvatar =
+      typeof window !== "undefined"
+        ? localStorage.getItem("companion_bot_avatar") ||
+          localStorage.getItem("active_bot_avatar") ||
+          ""
+        : "";
+    if (!raw) {
+      return {
+        ...DEFAULT_COMPANION_CONFIG,
+        avatarUrl: fallbackAvatar,
+      };
+    }
     const parsed = JSON.parse(raw);
     return {
       ...DEFAULT_COMPANION_CONFIG,
       ...parsed,
+      avatarUrl: parsed.avatarUrl || fallbackAvatar || "",
       enableRequirementSelect: parsed.enableRequirementSelect !== undefined ? parsed.enableRequirementSelect : true,
       requirements: Array.isArray(parsed.requirements) && parsed.requirements.length > 0
         ? parsed.requirements
@@ -85,8 +97,24 @@ export function saveCompanionWidgetConfig(config: CompanionWidgetConfig): void {
         requireAuthBypass: true,
         updatedAt: new Date().toISOString(),
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      } catch (err) {
+        console.warn("Storage quota warning for companionWidgetConfig", err);
+      }
+      try {
+        if (config.avatarUrl) {
+          localStorage.setItem("companion_bot_avatar", config.avatarUrl);
+        } else {
+          localStorage.removeItem("companion_bot_avatar");
+        }
+      } catch (err) {
+        console.warn("Storage quota warning for companion_bot_avatar", err);
+      }
       notifyConfigChanged();
+      window.dispatchEvent(new CustomEvent("companion_avatar_updated", { detail: config.avatarUrl || "" }));
     }
-  } catch {}
+  } catch (err) {
+    console.error("saveCompanionWidgetConfig error:", err);
+  }
 }
