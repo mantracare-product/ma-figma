@@ -1386,6 +1386,39 @@ export function getWorkspaceSubscription(workspaceId: string): WorkspaceSubscrip
   const subs = getStoredSubscriptions();
   const existing = subs[workspaceId];
   if (existing && existing.planId && existing.status === "Active") {
+    // Sanitize legacy combined multi-plan names to single active plan
+    if (existing.planName && existing.planName.includes(" + ")) {
+      const primaryPlanName = existing.activePlans?.[0]?.planName || existing.planName.split(" + ")[0].trim();
+      const plans = getStoredPlans();
+      const matched = plans.find((p) => p.name.toLowerCase() === primaryPlanName.toLowerCase() || p.id === existing.planId);
+      existing.planName = matched?.name || primaryPlanName;
+      if (matched) {
+        existing.planId = matched.id;
+        existing.tier = matched.tier;
+        existing.includedSeats = matched.includedSeats || (matched.tier === "Starter" ? 2 : matched.tier === "Professional" ? 5 : 20);
+        existing.planCredits = matched.monthlyCredits || 1000;
+        existing.totalCredits = existing.planCredits + (existing.addonCredits || 0);
+        existing.creditsRemaining = Math.max(0, existing.totalCredits - (existing.creditsUsed || 0));
+      }
+      existing.activePlans = existing.planId ? [{
+        planId: existing.planId,
+        planName: existing.planName,
+        category: matched?.category || "AI Receptionist",
+        tier: existing.tier,
+        billingCycle: existing.billingCycle,
+        amount: existing.amount,
+        currency: existing.currency,
+        currencySymbol: existing.currencySymbol,
+        includedSeats: existing.includedSeats,
+        monthlyCredits: existing.planCredits,
+      }] : [];
+      subs[workspaceId] = existing;
+      try {
+        localStorage.setItem(SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify(subs));
+      } catch (err) {
+        console.error("Error storing sanitized subscription:", err);
+      }
+    }
     return existing;
   }
 
@@ -1773,16 +1806,13 @@ export function recordCreditDeduction(
 
 export function getSubscriptionDisplayPlanName(sub: WorkspaceSubscription | null | undefined): string {
   if (!sub) return "No Plan Assigned";
-  if (sub.activePlans && sub.activePlans.length > 0) {
-    return sub.activePlans.map((p) => p.planName).join(" + ");
-  }
   if (sub.planName && sub.planName !== "No Plan Assigned") {
     return sub.planName;
   }
   if ((sub.tier || "").toLowerCase() === "free" || sub.amount === 0) {
     return "Free Plan";
   }
-  return "Starter Health";
+  return "AI Clinic Receptionist Starter";
 }
 
 export function assignPlanToWorkspace(
@@ -1807,60 +1837,36 @@ export function assignPlanToWorkspace(
   const planSeats = targetPlan.includedSeats || (targetPlan.tier === "Starter" ? 2 : targetPlan.tier === "Professional" ? 5 : 20);
   const planCategory = targetPlan.category || "AI Receptionist";
 
-  // Multi-category rule: User can have one plan from each category at a time
-  let activePlans: ActivePlanItem[] = existing.activePlans ? [...existing.activePlans] : [];
-  if (activePlans.length === 0 && existing.planId && existing.tier !== "Free") {
-    const prevPlan = plans.find((p) => p.id === existing.planId);
-    activePlans.push({
-      planId: existing.planId,
-      planName: existing.planName,
-      category: prevPlan?.category || "AI Receptionist",
-      tier: existing.tier,
-      billingCycle: existing.billingCycle,
-      amount: existing.amount,
-      currency: existing.currency,
-      currencySymbol: existing.currencySymbol,
-      includedSeats: existing.includedSeats,
-      monthlyCredits: existing.planCredits,
-    });
-  }
-
-  // Replace existing plan in the same category (1 plan per category rule)
-  activePlans = activePlans.filter((p) => (p.category || "").toLowerCase() !== planCategory.toLowerCase());
-  activePlans.push({
+  // Single Active Plan Rule: User can only have one active plan at a time
+  const updated: WorkspaceSubscription = {
+    ...existing,
+    activePlans: [
+      {
+        planId: targetPlan.id,
+        planName: targetPlan.name,
+        category: planCategory,
+        tier: targetPlan.tier,
+        billingCycle,
+        amount,
+        currency: countryPricing.currency,
+        currencySymbol: countryPricing.currencySymbol,
+        includedSeats: planSeats,
+        monthlyCredits: planCredits,
+        yearlyCredits: targetPlan.yearlyCredits,
+      },
+    ],
     planId: targetPlan.id,
     planName: targetPlan.name,
-    category: planCategory,
     tier: targetPlan.tier,
     billingCycle,
     amount,
     currency: countryPricing.currency,
     currencySymbol: countryPricing.currencySymbol,
-    includedSeats: planSeats,
-    monthlyCredits: planCredits,
-    yearlyCredits: targetPlan.yearlyCredits,
-  });
-
-  const totalIncludedSeats = activePlans.reduce((sum, p) => sum + (p.includedSeats || 2), 0);
-  const totalPlanCredits = activePlans.reduce((sum, p) => sum + (p.monthlyCredits || 1000), 0);
-  const totalAmount = activePlans.reduce((sum, p) => sum + (p.amount || 0), 0);
-  const combinedPlanName = activePlans.map((p) => p.planName).join(" + ");
-
-  const updated: WorkspaceSubscription = {
-    ...existing,
-    activePlans,
-    planId: targetPlan.id,
-    planName: combinedPlanName,
-    tier: targetPlan.tier,
-    billingCycle,
-    amount: totalAmount,
-    currency: countryPricing.currency,
-    currencySymbol: countryPricing.currencySymbol,
     status: "Active",
-    includedSeats: totalIncludedSeats,
-    planCredits: totalPlanCredits,
-    totalCredits: totalPlanCredits + (existing.addonCredits || 0),
-    creditsRemaining: Math.max(0, totalPlanCredits + (existing.addonCredits || 0) - (existing.creditsUsed || 0)),
+    includedSeats: planSeats,
+    planCredits,
+    totalCredits: planCredits + (existing.addonCredits || 0),
+    creditsRemaining: Math.max(0, planCredits + (existing.addonCredits || 0) - (existing.creditsUsed || 0)),
     nextRenewalDate: new Date(Date.now() + (billingCycle === "yearly" ? 365 : 30) * 86400000).toISOString().slice(0, 10),
   };
 
@@ -1895,12 +1901,11 @@ export function saveStoredCart(workspaceId: string, items: CartItem[]): void {
 
 export function addToCart(workspaceId: string, item: Omit<CartItem, "id">): CartItem[] {
   const current = getStoredCart(workspaceId);
-  // If adding a plan of a specific category, replace any other plan of that same category currently in the cart
+  // Single active plan rule: Adding a plan replaces any existing plan in the cart,
+  // while preserving credit packs and team member seats
   let next: CartItem[];
-  if (item.type === "plan" && item.category) {
-    next = current.filter(
-      (ci) => !(ci.type === "plan" && (ci.category || "").toLowerCase() === (item.category || "").toLowerCase())
-    );
+  if (item.type === "plan") {
+    next = current.filter((ci) => ci.type !== "plan");
   } else {
     next = [...current];
   }
@@ -1932,25 +1937,7 @@ export function checkoutCart(workspaceId: string): WorkspaceSubscription {
   }
 
   const existing = getWorkspaceSubscription(workspaceId);
-  const plans = getStoredPlans();
-  let activePlans: ActivePlanItem[] = existing.activePlans ? [...existing.activePlans] : [];
-
-  // If existing has a single active plan not yet in activePlans, initialize activePlans with it
-  if (activePlans.length === 0 && existing.planId && existing.tier !== "Free") {
-    const currentPlan = plans.find((p) => p.id === existing.planId);
-    activePlans.push({
-      planId: existing.planId,
-      planName: existing.planName,
-      category: currentPlan?.category || "AI Receptionist",
-      tier: existing.tier,
-      billingCycle: existing.billingCycle,
-      amount: existing.amount,
-      currency: existing.currency,
-      currencySymbol: existing.currencySymbol,
-      includedSeats: existing.includedSeats,
-      monthlyCredits: existing.planCredits,
-    });
-  }
+  const planItem = cart.find((item) => item.type === "plan" && item.planId);
 
   let additionalAddonCredits = 0;
   let additionalExtraSeats = 0;
@@ -1958,23 +1945,7 @@ export function checkoutCart(workspaceId: string): WorkspaceSubscription {
   const recentMemberPacks = [...(existing.recentMemberPacks || [])];
 
   for (const item of cart) {
-    if (item.type === "plan" && item.planId) {
-      const planCategory = item.category || "AI Receptionist";
-      // One plan from each category at a time: replace existing in this category
-      activePlans = activePlans.filter((p) => (p.category || "").toLowerCase() !== planCategory.toLowerCase());
-      activePlans.push({
-        planId: item.planId,
-        planName: item.title,
-        category: planCategory,
-        tier: item.planTier || "Starter",
-        billingCycle: item.billingCycle || "monthly",
-        amount: item.price,
-        currency: item.currency,
-        currencySymbol: item.currencySymbol,
-        includedSeats: item.members || 2,
-        monthlyCredits: item.credits || 1000,
-      });
-    } else if (item.type === "credit_pack" || item.type === "custom_credits") {
+    if (item.type === "credit_pack" || item.type === "custom_credits") {
       const credits = item.credits || 0;
       additionalAddonCredits += credits;
       recentPackages.unshift({
@@ -1999,33 +1970,76 @@ export function checkoutCart(workspaceId: string): WorkspaceSubscription {
     }
   }
 
-  // Calculate aggregated plan values
-  const totalIncludedSeats = activePlans.reduce((sum, p) => sum + (p.includedSeats || 2), 0) || (existing.includedSeats || 2);
-  const totalPlanCredits = activePlans.reduce((sum, p) => sum + (p.monthlyCredits || 1000), 0) || (existing.planCredits || 1000);
-  const totalPlanAmount = activePlans.reduce((sum, p) => sum + (p.amount || 0), 0);
-  const combinedPlanName = activePlans.map((p) => p.planName).join(" + ");
+  let updated: WorkspaceSubscription;
 
-  const updated: WorkspaceSubscription = {
-    ...existing,
-    activePlans,
-    planId: activePlans[0]?.planId || existing.planId,
-    planName: combinedPlanName || existing.planName,
-    tier: activePlans[0]?.tier || existing.tier,
-    amount: totalPlanAmount,
-    includedSeats: totalIncludedSeats,
-    extraSeatsPurchased: (existing.extraSeatsPurchased || 0) + additionalExtraSeats,
-    planCredits: totalPlanCredits,
-    addonCredits: (existing.addonCredits || 0) + additionalAddonCredits,
-    totalCredits: totalPlanCredits + (existing.addonCredits || 0) + additionalAddonCredits,
-    creditsRemaining: Math.max(
-      0,
-      totalPlanCredits + (existing.addonCredits || 0) + additionalAddonCredits - (existing.creditsUsed || 0)
-    ),
-    recentPackages,
-    recentMemberPacks,
-    lastCreditTopupDate: additionalAddonCredits > 0 ? new Date().toISOString() : existing.lastCreditTopupDate,
-    status: "Active",
-  };
+  if (planItem && planItem.planId) {
+    const plans = getStoredPlans();
+    const targetPlan = plans.find((p) => p.id === planItem.planId);
+    const planSeats =
+      planItem.members ||
+      targetPlan?.includedSeats ||
+      (planItem.planTier === "Starter" ? 2 : planItem.planTier === "Professional" ? 5 : 20);
+    const planCredits =
+      planItem.credits ||
+      (planItem.billingCycle === "yearly" ? targetPlan?.yearlyCredits : targetPlan?.monthlyCredits) ||
+      1000;
+
+    updated = {
+      ...existing,
+      activePlans: [
+        {
+          planId: planItem.planId,
+          planName: planItem.title,
+          category: planItem.category || targetPlan?.category || "AI Receptionist",
+          tier: planItem.planTier || targetPlan?.tier || "Starter",
+          billingCycle: planItem.billingCycle || "monthly",
+          amount: planItem.price,
+          currency: planItem.currency,
+          currencySymbol: planItem.currencySymbol,
+          includedSeats: planSeats,
+          monthlyCredits: planCredits,
+        },
+      ],
+      planId: planItem.planId,
+      planName: planItem.title,
+      tier: planItem.planTier || targetPlan?.tier || "Starter",
+      billingCycle: planItem.billingCycle || "monthly",
+      amount: planItem.price,
+      currency: planItem.currency,
+      currencySymbol: planItem.currencySymbol,
+      status: "Active",
+      includedSeats: planSeats,
+      extraSeatsPurchased: (existing.extraSeatsPurchased || 0) + additionalExtraSeats,
+      planCredits,
+      addonCredits: (existing.addonCredits || 0) + additionalAddonCredits,
+      totalCredits: planCredits + (existing.addonCredits || 0) + additionalAddonCredits,
+      creditsRemaining: Math.max(
+        0,
+        planCredits + (existing.addonCredits || 0) + additionalAddonCredits - (existing.creditsUsed || 0)
+      ),
+      recentPackages,
+      recentMemberPacks,
+      lastCreditTopupDate: additionalAddonCredits > 0 ? new Date().toISOString() : existing.lastCreditTopupDate,
+      nextRenewalDate: new Date(
+        Date.now() + (planItem.billingCycle === "yearly" ? 365 : 30) * 86400000
+      ).toISOString().slice(0, 10),
+    };
+  } else {
+    // Only credits or seats purchased without a plan
+    updated = {
+      ...existing,
+      extraSeatsPurchased: (existing.extraSeatsPurchased || 0) + additionalExtraSeats,
+      addonCredits: (existing.addonCredits || 0) + additionalAddonCredits,
+      totalCredits: (existing.planCredits || 0) + (existing.addonCredits || 0) + additionalAddonCredits,
+      creditsRemaining: Math.max(
+        0,
+        (existing.planCredits || 0) + (existing.addonCredits || 0) + additionalAddonCredits - (existing.creditsUsed || 0)
+      ),
+      recentPackages,
+      recentMemberPacks,
+      lastCreditTopupDate: additionalAddonCredits > 0 ? new Date().toISOString() : existing.lastCreditTopupDate,
+    };
+  }
 
   updateWorkspaceSubscription(workspaceId, updated);
   clearCart(workspaceId);

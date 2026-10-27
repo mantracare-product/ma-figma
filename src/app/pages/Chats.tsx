@@ -79,6 +79,7 @@ import WebmailView, { EmailFolder } from "../components/chats/WebmailView";
 import EmailTemplateDrawer, { EmailTemplate } from "../components/chats/EmailTemplateDrawer";
 import EmailBlacklistDrawer from "../components/chats/EmailBlacklistDrawer";
 import MailboxIntegrationDrawer from "../components/chats/MailboxIntegrationDrawer";
+import EmailAgentWorkflowView from "../components/chats/EmailAgentWorkflowView";
 export type Message = ConvMessage;
 export type Conversation = ConvConversation;
 import PageHeader from "../components/layout/PageHeader";
@@ -819,6 +820,16 @@ export default function Chats() {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get("tab");
     const actionParam = params.get("action");
+    const channelParam = params.get("channel");
+    const subModeParam = params.get("subMode");
+
+    if (channelParam === "email" || tabParam === "email" || subModeParam === "agent" || tabParam === "agent") {
+      setChannelFilter("email");
+      if (subModeParam === "agent" || tabParam === "agent") {
+        setEmailSubMode("agent");
+      }
+    }
+
     if (tabParam === "templates") {
       setActiveTab("templates");
       if (actionParam === "create") {
@@ -827,6 +838,9 @@ export default function Chats() {
     }
     else if (tabParam === "campaigns") setActiveTab("campaigns");
     else if (tabParam === "chatbot" && LEGACY_CHATBOT_MODULE_ENABLED) setActiveTab("chatbot");
+    else if (tabParam === "agent" || subModeParam === "agent") {
+      setActiveTab("chats");
+    }
     else setActiveTab("chats");
   }, [location.search]);
 
@@ -1159,7 +1173,18 @@ export default function Chats() {
     setActiveTab("chats");
   };
 
-  const handleSubModeChange = (mode: "inbox" | "templates") => {
+  const [emailSubMode, setEmailSubMode] = useState<"inbox" | "templates" | "agent">("inbox");
+
+  const handleSubModeChange = (mode: "inbox" | "templates" | "agent") => {
+    if (channelFilter === "email") {
+      setEmailSubMode(mode);
+      if (mode === "templates") {
+        setActiveTab("templates");
+      } else {
+        setActiveTab("chats");
+      }
+      return;
+    }
     if (mode === "inbox") {
       setActiveTab("chats");
     } else if (mode === "templates") {
@@ -1168,9 +1193,13 @@ export default function Chats() {
   };
 
   const subMode = useMemo(() => {
-    if ((channelFilter === "whatsapp" || channelFilter === "email") && activeTab === "templates") return "templates";
+    if (channelFilter === "email") {
+      if (activeTab === "templates") return "templates";
+      return emailSubMode;
+    }
+    if (channelFilter === "whatsapp" && activeTab === "templates") return "templates";
     return "inbox";
-  }, [channelFilter, activeTab]);
+  }, [channelFilter, activeTab, emailSubMode]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -2242,6 +2271,19 @@ export default function Chats() {
                     >
                       <span>Templates</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSubModeChange("agent")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        subMode === "agent"
+                          ? "bg-[#0F172A] text-white shadow-2xs font-bold"
+                          : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${subMode === "agent" ? "text-amber-400" : "text-[#1456f0]"}`} />
+                      <span>Email Agent</span>
+                    </button>
                   </div>
 
                   {/* If Mail is selected, ask to choose account, sync button & folders dropdown */}
@@ -2526,13 +2568,24 @@ export default function Chats() {
                     <button
                       type="button"
                       onClick={() => {
+                        handleSubModeChange("agent");
+                        setShowEmailGearMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50/60 transition-colors flex items-center gap-2 text-slate-700 hover:text-[#1456f0] cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-[#1456f0]" />
+                      <span>Email agent settings</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
                         setShowMailboxIntegrationDrawer(true);
                         setShowEmailGearMenu(false);
                       }}
                       className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 text-slate-700 cursor-pointer"
                     >
                       <Settings className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Email settings</span>
+                      <span>Mailbox connection</span>
                     </button>
                     <button
                       type="button"
@@ -2568,14 +2621,24 @@ export default function Chats() {
         {/* ── Main Content Area Below Topbar ── */}
         {activeTab === "chats" && (
           channelFilter === "email" ? (
-            <WebmailView
-              searchQuery={emailSearch}
-              activeFolder={activeEmailFolder}
-              onFolderChange={setActiveEmailFolder}
-              onUnreadCountChange={setEmailUnreadCount}
-              onOpenMailboxSettings={() => setShowMailboxIntegrationDrawer(true)}
-              onOpenCrmSettings={() => setShowMailboxIntegrationDrawer(true)}
-            />
+            subMode === "agent" ? (
+              <EmailAgentWorkflowView
+                onOpenCampaignTemplates={() => handleSubModeChange("templates")}
+                onOpenWebmailCompose={() => {
+                  handleSubModeChange("inbox");
+                  window.dispatchEvent(new CustomEvent("open-webmail-compose"));
+                }}
+              />
+            ) : (
+              <WebmailView
+                searchQuery={emailSearch}
+                activeFolder={activeEmailFolder}
+                onFolderChange={setActiveEmailFolder}
+                onUnreadCountChange={setEmailUnreadCount}
+                onOpenMailboxSettings={() => handleSubModeChange("agent")}
+                onOpenCrmSettings={() => handleSubModeChange("agent")}
+              />
+            )
           ) : (
           <div className="flex gap-5 sm:gap-6 h-[calc(100vh-230px)] min-h-[620px]">
             {/* ── Left Side Panel: Contacts List (Separate Div / Card) ── */}

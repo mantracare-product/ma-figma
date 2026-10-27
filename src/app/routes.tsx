@@ -1,5 +1,5 @@
 import { lazy, Suspense, ComponentType } from "react";
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import MainLayout from "./components/layout/MainLayout";
 import AdminLayout from "./components/layout/AdminLayout";
@@ -205,6 +205,8 @@ export const router = createBrowserRouter([
           { path: "services", Component: Services },
           { path: "appointments", Component: Appointments },
           { path: "chats", Component: Chats },
+          { path: "email-agent", element: <Navigate to="/chats?channel=email&subMode=agent" replace /> },
+          { path: "agents/email-agent", element: <Navigate to="/chats?channel=email&subMode=agent" replace /> },
           { path: "profile", Component: Profile },
           { path: "guide", Component: GuidePageRoute },
           { path: "guide/:slug", Component: GuidePageRoute },

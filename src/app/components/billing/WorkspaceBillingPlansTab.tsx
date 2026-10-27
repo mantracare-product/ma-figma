@@ -290,9 +290,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch pt-3">
         {scopedPlanItems.map(({ plan, pricing }) => {
           const isYearly = billingCycle === "yearly";
-          const isCurrentPlan =
-            (subscription?.activePlans && subscription.activePlans.some((p) => p.planId === plan.id)) ||
-            (subscription?.planId === plan.id && subscription?.billingCycle === billingCycle);
+          const isCurrentPlan = subscription?.planId === plan.id;
           const inCartItem = cartItems.find((ci) => ci.type === "plan" && ci.planId === plan.id);
           const displayPrice = isYearly ? pricing.yearlyPrice : pricing.monthlyPrice;
           const credits = isYearly ? plan.yearlyCredits : plan.monthlyCredits;
@@ -425,7 +423,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
                     <Check className="w-4 h-4 stroke-[3]" />
-                    <span>Active in {planCategory}</span>
+                    <span>Active Plan</span>
                   </button>
                 ) : inCartItem ? (
                   <button
@@ -873,7 +871,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                   <div className="bg-slate-100/90 border border-slate-200/80 rounded-xl p-3 flex items-start gap-2.5">
                     <Sparkles className="w-4 h-4 text-[#1E293B] shrink-0 mt-0.5" />
                     <p className="text-[11px] text-slate-700 leading-relaxed">
-                      <strong>Multi-Category Subscription:</strong> You can hold 1 active plan per category at a time. All items will be activated immediately upon checkout.
+                      <strong>Single Active Plan:</strong> Any plan in your cart will become your active organization plan upon checkout. Credit packs and team seats will be added immediately.
                     </p>
                   </div>
 

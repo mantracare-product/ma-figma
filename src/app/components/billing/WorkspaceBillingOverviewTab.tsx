@@ -312,7 +312,7 @@ export default function WorkspaceBillingOverviewTab({
               className="text-sm font-medium text-slate-500 pt-0.5"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              {sub?.activePlans && sub.activePlans.length > 1 ? "Plans" : "Plan"}
+              Plan
             </span>
             <div className="flex flex-col sm:items-end gap-1.5">
               <span
