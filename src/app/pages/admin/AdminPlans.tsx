@@ -56,7 +56,11 @@ import {
   CreditAction,
   PlanLinkedTemplate,
   PlanTier,
+  PLAN_CATEGORIES,
+  PlanCategory,
   CountryPricing,
+  CountryPackagePrice,
+  getDefaultPackageCountryPricing,
   getStoredPlans,
   clearAllStoredPlans,
   savePlan,
@@ -90,11 +94,13 @@ import PageTopBar from "../../components/layout/PageTopBar";
 import { AdminScopingRulesEditor } from "./components/AdminScopingRulesEditor";
 import type { ScopingRule } from "../../context/FieldRegistryContext";
 
-type AdminBillingTab = "plans" | "credit-pricing" | "team-pricing" | "credit-actions" | "assignment";
+type AdminBillingTab = "plans" | "packed-pricing" | "credit-actions" | "assignment" | "credit-pricing" | "team-pricing";
+type PackedPricingMode = "team" | "credits";
 
 export default function AdminPlans() {
   const { organizations } = useOrganization();
   const [activeTab, setActiveTab] = useState<AdminBillingTab>("plans");
+  const [packedPricingMode, setPackedPricingMode] = useState<PackedPricingMode>("team");
 
   // Stores
   const [plans, setPlans] = useState<IndustryPlan[]>([]);
@@ -118,6 +124,7 @@ export default function AdminPlans() {
   // Plan Form State (FR-1, FR-2, FR-3, FR-4)
   const [planForm, setPlanForm] = useState<Omit<IndustryPlan, "id" | "createdAt" | "updatedAt">>({
     name: "",
+    category: "AI Receptionist",
     tier: "Starter",
     targetCategory: "Global",
     scopingRules: [],
@@ -160,6 +167,7 @@ export default function AdminPlans() {
     isActive: true,
     isInternalStaffOnly: false,
     badge: "",
+    countryPricing: getDefaultPackageCountryPricing(45),
   });
 
   // Team Member Pack Drawer State
@@ -172,6 +180,7 @@ export default function AdminPlans() {
     currencySymbol: "$",
     badge: "",
     isActive: true,
+    countryPricing: getDefaultPackageCountryPricing(90),
   });
 
   // Credit Action Edit Modal State
@@ -298,6 +307,7 @@ export default function AdminPlans() {
     ];
     setPlanForm({
       name: "",
+      category: "AI Receptionist",
       tier: "Starter",
       targetCategory: "Global",
       scopingRules: [],
@@ -328,6 +338,7 @@ export default function AdminPlans() {
     setEditingPlan(plan);
     setPlanForm({
       name: plan.name,
+      category: plan.category || "AI Receptionist",
       tier: plan.tier,
       targetCategory: plan.targetCategory,
       scopingRules: plan.scopingRules ? [...plan.scopingRules] : (plan.targetCategory && plan.targetCategory !== "Global" ? [{
@@ -542,6 +553,7 @@ export default function AdminPlans() {
       isActive: true,
       isInternalStaffOnly: false,
       badge: "Popular",
+      countryPricing: getDefaultPackageCountryPricing(45),
     });
     setIsCreditDrawerOpen(true);
   };
@@ -559,8 +571,50 @@ export default function AdminPlans() {
       isActive: pkg.isActive,
       isInternalStaffOnly: pkg.isInternalStaffOnly,
       badge: pkg.badge || "",
+      countryPricing:
+        pkg.countryPricing && pkg.countryPricing.length > 0
+          ? [...pkg.countryPricing]
+          : getDefaultPackageCountryPricing(pkg.totalPrice),
     });
     setIsCreditDrawerOpen(true);
+  };
+
+  const handleUpdateCreditPackageCountryPrice = (index: number, price: number) => {
+    setPackageForm((prev) => {
+      const nextPricing = [...(prev.countryPricing || [])];
+      nextPricing[index] = { ...nextPricing[index], price };
+      return { ...prev, countryPricing: nextPricing };
+    });
+  };
+
+  const handleAddCreditPackageCountryPrice = (countryName: string) => {
+    const found = SUPPORTED_COUNTRIES.find((c) => c.country === countryName);
+    if (!found) return;
+    if ((packageForm.countryPricing || []).some((cp) => cp.country === countryName)) {
+      toast.info(`${countryName} is already in the pricing table`);
+      return;
+    }
+    const newEntry: CountryPackagePrice = {
+      country: found.country,
+      currency: found.currency,
+      currencySymbol: found.symbol,
+      price: Math.round(packageForm.totalPrice * 1.0),
+    };
+    setPackageForm((prev) => ({
+      ...prev,
+      countryPricing: [...(prev.countryPricing || []), newEntry],
+    }));
+  };
+
+  const handleRemoveCreditPackageCountryPrice = (countryName: string) => {
+    if ((packageForm.countryPricing || []).length <= 1) {
+      toast.error("Must maintain at least one country price");
+      return;
+    }
+    setPackageForm((prev) => ({
+      ...prev,
+      countryPricing: (prev.countryPricing || []).filter((cp) => cp.country !== countryName),
+    }));
   };
 
   const handleSavePackageSubmit = (e: React.FormEvent) => {
@@ -598,6 +652,7 @@ export default function AdminPlans() {
       currencySymbol: "$",
       badge: "Most Popular",
       isActive: true,
+      countryPricing: getDefaultPackageCountryPricing(90),
     });
     setIsTeamPackDrawerOpen(true);
   };
@@ -611,8 +666,50 @@ export default function AdminPlans() {
       currencySymbol: pack.currencySymbol,
       badge: pack.badge || "",
       isActive: pack.isActive,
+      countryPricing:
+        pack.countryPricing && pack.countryPricing.length > 0
+          ? [...pack.countryPricing]
+          : getDefaultPackageCountryPricing(pack.totalPrice),
     });
     setIsTeamPackDrawerOpen(true);
+  };
+
+  const handleUpdateTeamPackCountryPrice = (index: number, price: number) => {
+    setTeamPackForm((prev) => {
+      const nextPricing = [...(prev.countryPricing || [])];
+      nextPricing[index] = { ...nextPricing[index], price };
+      return { ...prev, countryPricing: nextPricing };
+    });
+  };
+
+  const handleAddTeamPackCountryPrice = (countryName: string) => {
+    const found = SUPPORTED_COUNTRIES.find((c) => c.country === countryName);
+    if (!found) return;
+    if ((teamPackForm.countryPricing || []).some((cp) => cp.country === countryName)) {
+      toast.info(`${countryName} is already in the pricing table`);
+      return;
+    }
+    const newEntry: CountryPackagePrice = {
+      country: found.country,
+      currency: found.currency,
+      currencySymbol: found.symbol,
+      price: Math.round(teamPackForm.totalPrice * 1.0),
+    };
+    setTeamPackForm((prev) => ({
+      ...prev,
+      countryPricing: [...(prev.countryPricing || []), newEntry],
+    }));
+  };
+
+  const handleRemoveTeamPackCountryPrice = (countryName: string) => {
+    if ((teamPackForm.countryPricing || []).length <= 1) {
+      toast.error("Must maintain at least one country price");
+      return;
+    }
+    setTeamPackForm((prev) => ({
+      ...prev,
+      countryPricing: (prev.countryPricing || []).filter((cp) => cp.country !== countryName),
+    }));
   };
 
   const handleSaveTeamPackSubmit = (e: React.FormEvent) => {
@@ -736,10 +833,7 @@ export default function AdminPlans() {
         align: "left",
         width: "22%",
         render: (plan) => (
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded bg-blue-50 border border-blue-200/80 text-blue-600 flex items-center justify-center shrink-0">
-              <CreditCard className="w-3.5 h-3.5 text-blue-600" />
-            </div>
+          <div className="flex items-center gap-2 flex-wrap">
             <span
               onClick={() => handleOpenEditPlan(plan)}
               className="font-semibold text-gray-900 text-xs sm:text-[13px] hover:text-blue-600 transition-colors cursor-pointer"
@@ -747,7 +841,24 @@ export default function AdminPlans() {
             >
               {plan.name}
             </span>
+            {(plan.isPopular === true || (plan.isPopular as any) === "true") && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                <Sparkles className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />
+                Popular
+              </span>
+            )}
           </div>
+        ),
+      },
+      {
+        id: "planCategory",
+        header: "CATEGORY",
+        align: "left",
+        width: "14%",
+        render: (plan) => (
+          <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+            {plan.category || "AI Receptionist"}
+          </span>
         ),
       },
       {
@@ -758,11 +869,13 @@ export default function AdminPlans() {
         render: (plan) => {
           const t = (plan.tier || "").toUpperCase();
           const colorClass =
-            t === "CUSTOM"
-              ? "bg-amber-100/70 text-amber-700 border-amber-200"
+            t === "FREE"
+              ? "bg-emerald-100/70 text-emerald-700 border-emerald-200"
               : t === "PROFESSIONAL"
               ? "bg-indigo-100/70 text-indigo-700 border-indigo-200"
-              : "bg-blue-100/70 text-blue-700 border-blue-200";
+              : t === "STARTER"
+              ? "bg-blue-100/70 text-blue-700 border-blue-200"
+              : "bg-amber-100/70 text-amber-700 border-amber-200";
           return (
             <span
               className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider border uppercase ${colorClass}`}
@@ -819,10 +932,9 @@ export default function AdminPlans() {
         align: "left",
         width: "14%",
         render: (plan) => (
-          <div className="flex items-center gap-1.5 text-xs text-slate-800 font-bold">
-            <Users className="w-3.5 h-3.5 text-blue-600" />
-            <span>{plan.includedSeats || 2} Seats</span>
-          </div>
+          <span className="text-xs text-slate-800 font-bold">
+            {plan.includedSeats || 2} Seats
+          </span>
         ),
       },
       {
@@ -909,37 +1021,14 @@ export default function AdminPlans() {
         id: "name",
         header: "PACKAGE NAME",
         align: "left",
-        width: "24%",
+        width: "26%",
         render: (pkg) => (
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded bg-amber-50 border border-amber-200/80 text-amber-600 flex items-center justify-center shrink-0">
-              <Coins className="w-3.5 h-3.5 text-amber-600" />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span
-                onClick={() => handleOpenEditPackage(pkg)}
-                className="font-semibold text-gray-900 text-xs sm:text-[13px] hover:text-blue-600 transition-colors cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {pkg.name}
-              </span>
-              {pkg.badge && (
-                <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-full">
-                  {pkg.badge}
-                </span>
-              )}
-            </div>
-          </div>
-        ),
-      },
-      {
-        id: "country",
-        header: "COUNTRY / CURRENCY",
-        align: "left",
-        width: "20%",
-        render: (pkg) => (
-          <span className="text-xs text-gray-700 font-medium">
-            {pkg.country} ({pkg.currency})
+          <span
+            onClick={() => handleOpenEditPackage(pkg)}
+            className="font-semibold text-gray-900 text-xs sm:text-[13px] hover:text-blue-600 transition-colors cursor-pointer"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            {pkg.name}
           </span>
         ),
       },
@@ -949,14 +1038,14 @@ export default function AdminPlans() {
         align: "left",
         width: "18%",
         render: (pkg) => (
-          <span className="font-bold text-gray-900 text-xs">
+          <span className="font-semibold text-gray-900 text-xs">
             +{pkg.credits.toLocaleString()} credits
           </span>
         ),
       },
       {
         id: "totalPrice",
-        header: "PACK COST (FIXED)",
+        header: "PACK COST (USD)",
         align: "left",
         width: "18%",
         render: (pkg) => (
@@ -966,10 +1055,24 @@ export default function AdminPlans() {
         ),
       },
       {
+        id: "countryPricing",
+        header: "COUNTRY RATES",
+        align: "left",
+        width: "24%",
+        render: (pkg) => {
+          const count = pkg.countryPricing?.length || 0;
+          return (
+            <span className="text-xs text-gray-600 font-medium">
+              {count > 0 ? `${count} countries (US, IN, UK...)` : "Standard USD"}
+            </span>
+          );
+        },
+      },
+      {
         id: "status",
         header: "STATUS",
         align: "left",
-        width: "10%",
+        width: "14%",
         render: (pkg) => (
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
@@ -1011,45 +1114,33 @@ export default function AdminPlans() {
         id: "name",
         header: "PACK NAME",
         align: "left",
-        width: "30%",
+        width: "28%",
         render: (pack) => (
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded bg-purple-50 border border-purple-200/80 text-purple-600 flex items-center justify-center shrink-0">
-              <Users className="w-3.5 h-3.5 text-purple-600" />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span
-                onClick={() => handleOpenEditTeamPack(pack)}
-                className="font-semibold text-gray-900 text-xs sm:text-[13px] hover:text-blue-600 transition-colors cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {pack.name}
-              </span>
-              {pack.badge && (
-                <span className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded-full">
-                  {pack.badge}
-                </span>
-              )}
-            </div>
-          </div>
+          <span
+            onClick={() => handleOpenEditTeamPack(pack)}
+            className="font-semibold text-gray-900 text-xs sm:text-[13px] hover:text-blue-600 transition-colors cursor-pointer"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            {pack.name}
+          </span>
         ),
       },
       {
         id: "members",
         header: "EXTRA SEATS",
         align: "left",
-        width: "20%",
+        width: "18%",
         render: (pack) => (
-          <span className="font-bold text-gray-900 text-xs">
-            +{pack.members} Team Members
+          <span className="font-semibold text-gray-900 text-xs">
+            +{pack.members} Seats
           </span>
         ),
       },
       {
         id: "price",
-        header: "PACK COST",
+        header: "PACK COST (USD)",
         align: "left",
-        width: "20%",
+        width: "18%",
         render: (pack) => (
           <span className="font-bold text-gray-900 text-xs font-mono">
             {pack.currencySymbol}{pack.totalPrice.toLocaleString()} / mo
@@ -1057,10 +1148,24 @@ export default function AdminPlans() {
         ),
       },
       {
+        id: "countryPricing",
+        header: "COUNTRY RATES",
+        align: "left",
+        width: "22%",
+        render: (pack) => {
+          const count = pack.countryPricing?.length || 0;
+          return (
+            <span className="text-xs text-gray-600 font-medium">
+              {count > 0 ? `${count} countries (US, IN, UK...)` : "Standard USD"}
+            </span>
+          );
+        },
+      },
+      {
         id: "status",
         header: "STATUS",
         align: "left",
-        width: "15%",
+        width: "14%",
         render: (pack) => (
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
@@ -1102,48 +1207,27 @@ export default function AdminPlans() {
         id: "name",
         header: "ACTION EVENT",
         align: "left",
-        width: "35%",
+        width: "40%",
         render: (act) => (
-          <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0">
-              <Zap className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <p
-                onClick={() => handleOpenEditAction(act)}
-                className="text-xs font-bold text-gray-900 hover:text-blue-600 transition-colors cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {act.name}
-              </p>
-              {act.description && <p className="text-[11px] text-gray-500 line-clamp-1">{act.description}</p>}
-            </div>
-          </div>
+          <span
+            onClick={() => handleOpenEditAction(act)}
+            className="font-semibold text-gray-900 text-xs sm:text-[13px] hover:text-blue-600 transition-colors cursor-pointer"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            {act.name}
+          </span>
         ),
       },
       {
         id: "linkedFeature",
         header: "LINKED FEATURE",
         align: "left",
-        width: "20%",
-        render: (act) => {
-          const colors: Record<string, string> = {
-            Calls: "bg-blue-50 text-blue-700 border-blue-200",
-            SMS: "bg-emerald-50 text-emerald-700 border-emerald-200",
-            Email: "bg-indigo-50 text-indigo-700 border-indigo-200",
-            Workflows: "bg-purple-50 text-purple-700 border-purple-200",
-            "AI Scribe": "bg-amber-50 text-amber-700 border-amber-200",
-          };
-          return (
-            <span
-              className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                colors[act.linkedFeature] || "bg-gray-100 text-gray-700"
-              }`}
-            >
-              {act.linkedFeature}
-            </span>
-          );
-        },
+        width: "22%",
+        render: (act) => (
+          <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+            {act.linkedFeature}
+          </span>
+        ),
       },
       {
         id: "unitLabel",
@@ -1156,11 +1240,10 @@ export default function AdminPlans() {
         id: "creditsDeducted",
         header: "CREDITS DEDUCTED",
         align: "left",
-        width: "20%",
+        width: "18%",
         render: (act) => (
-          <span className="inline-flex items-center gap-1 text-xs font-black text-slate-900 font-mono bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
-            <Coins className="w-3 h-3 text-amber-500" />
-            <span>{act.creditsDeducted} credit{act.creditsDeducted > 1 ? "s" : ""}</span>
+          <span className="text-xs font-bold text-slate-900 font-mono">
+            {act.creditsDeducted} {act.creditsDeducted === 1 ? "credit" : "credits"}
           </span>
         ),
       },
@@ -1327,23 +1410,84 @@ export default function AdminPlans() {
         {/* Action Bar powered by PageTopBar with dropdown modes, search, and quick actions */}
         <PageTopBar
           leftElement={
-            <div className="relative">
-              <select
-                value={activeTab}
-                onChange={(e) => {
-                  setActiveTab(e.target.value as AdminBillingTab);
-                  setSearchQuery("");
-                }}
-                className="h-[36px] pl-3 pr-8 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 outline-none cursor-pointer shadow-2xs hover:border-gray-300 appearance-none"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <option value="plans">Industry Plans</option>
-                <option value="credit-pricing">Credit Packs & Pricing</option>
-                <option value="team-pricing">Team Member Pricing</option>
-                <option value="credit-actions">Credit Actions</option>
-                <option value="assignment">Plan Assignment</option>
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <select
+                  value={
+                    activeTab === "credit-pricing" || activeTab === "team-pricing"
+                      ? "packed-pricing"
+                      : activeTab
+                  }
+                  onChange={(e) => {
+                    setActiveTab(e.target.value as AdminBillingTab);
+                    setSearchQuery("");
+                  }}
+                  className="h-[36px] pl-3 pr-8 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 outline-none cursor-pointer shadow-2xs hover:border-gray-300 appearance-none"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <option value="plans">Industry Plans</option>
+                  <option value="packed-pricing">Packed Pricing</option>
+                  <option value="credit-actions">Credit Actions</option>
+                  <option value="assignment">Plan Assignment</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+
+              {(activeTab === "packed-pricing" || activeTab === "credit-pricing" || activeTab === "team-pricing") && (
+                <div className="inline-flex items-center p-0.5 bg-gray-100 border border-gray-200 rounded-xl gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPackedPricingMode("team");
+                      setSearchQuery("");
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      packedPricingMode === "team"
+                        ? "bg-white text-gray-900 shadow-2xs font-bold"
+                        : "text-gray-500 hover:text-gray-900 hover:bg-white/50"
+                    }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Team Member</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                        packedPricingMode === "team"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-gray-200/80 text-gray-600"
+                      }`}
+                    >
+                      {filteredTeamPacks.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPackedPricingMode("credits");
+                      setSearchQuery("");
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      packedPricingMode === "credits"
+                        ? "bg-white text-gray-900 shadow-2xs font-bold"
+                        : "text-gray-500 hover:text-gray-900 hover:bg-white/50"
+                    }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Coins className="w-3.5 h-3.5" />
+                    <span>Credits</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                        packedPricingMode === "credits"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-gray-200/80 text-gray-600"
+                      }`}
+                    >
+                      {filteredPackages.length}
+                    </span>
+                  </button>
+                </div>
+              )}
             </div>
           }
           searchQuery={searchQuery}
@@ -1351,10 +1495,10 @@ export default function AdminPlans() {
           searchPlaceholder={
             activeTab === "plans"
               ? "Search plans by name or admin scope..."
-              : activeTab === "credit-pricing"
-              ? "Search credit packs..."
-              : activeTab === "team-pricing"
-              ? "Search team member packs..."
+              : activeTab === "packed-pricing" || activeTab === "credit-pricing" || activeTab === "team-pricing"
+              ? packedPricingMode === "credits"
+                ? "Search credit packs..."
+                : "Search team member packs..."
               : activeTab === "credit-actions"
               ? "Search credit action items..."
               : "Search organizations or plans..."
@@ -1421,18 +1565,18 @@ export default function AdminPlans() {
                   icon: <Plus className="w-3.5 h-3.5 stroke-[2.5]" />,
                   onClick: handleOpenCreatePlan,
                 }
-              : activeTab === "credit-pricing"
-              ? {
-                  label: "Create Credit Pack",
-                  icon: <Plus className="w-3.5 h-3.5 stroke-[2.5]" />,
-                  onClick: handleOpenCreatePackage,
-                }
-              : activeTab === "team-pricing"
-              ? {
-                  label: "Create Team Pack",
-                  icon: <Plus className="w-3.5 h-3.5 stroke-[2.5]" />,
-                  onClick: handleOpenCreateTeamPack,
-                }
+              : activeTab === "packed-pricing" || activeTab === "credit-pricing" || activeTab === "team-pricing"
+              ? packedPricingMode === "credits"
+                ? {
+                    label: "Create Credit Pack",
+                    icon: <Plus className="w-3.5 h-3.5 stroke-[2.5]" />,
+                    onClick: handleOpenCreatePackage,
+                  }
+                : {
+                    label: "Create Team Pack",
+                    icon: <Plus className="w-3.5 h-3.5 stroke-[2.5]" />,
+                    onClick: handleOpenCreateTeamPack,
+                  }
               : activeTab === "assignment"
               ? {
                   label: "Assign Plan",
@@ -1463,133 +1607,114 @@ export default function AdminPlans() {
           </div>
         )}
 
-        {/* ── TAB 2: CREDIT PACKS & PRICING (FR-5, FR-6) ── */}
-        {activeTab === "credit-pricing" && (
+        {/* ── TAB 2: PACKED PRICING (MODES: TEAM MEMBER & CREDITS) ── */}
+        {(activeTab === "packed-pricing" || activeTab === "credit-pricing" || activeTab === "team-pricing") && (
           <div className="space-y-6">
-            {/* Global Per-Credit Price Card (FR-5) */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                    FR-5 Base Rate
-                  </span>
-                  <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Price Per Custom Credit
-                  </h3>
-                </div>
-                <p className="text-xs text-gray-500 max-w-xl">
-                  The admin sets one cost per credit. It is the base unit price charged whenever a customer purchases a custom number of credits (e.g. 2,500 credits × $0.05 = $125).
-                </p>
-              </div>
+            {packedPricingMode === "team" && (
+              <div className="space-y-6 animate-in fade-in duration-150">
+                {/* Global Per-Member Rate Card (FR-8) */}
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                        Base Rate
+                      </span>
+                      <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Cost Per Extra Team Member
+                      </h3>
+                    </div>
+                    <p className="text-xs text-gray-500 max-w-xl">
+                      Monthly price charged per additional seat beyond included plan members.
+                    </p>
+                  </div>
 
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5">
-                  <span className="text-sm font-bold text-gray-700">{globalSettings.currencySymbol}</span>
-                  <input
-                    type="number"
-                    step={0.005}
-                    min={0.001}
-                    value={globalSettings.defaultPricePerCredit}
-                    onChange={(e) =>
-                      handleSaveGlobalPricing(parseFloat(e.target.value) || 0.05, globalSettings.defaultPricePerExtraMember)
-                    }
-                    className="w-20 bg-transparent text-sm font-bold text-gray-900 outline-none font-mono"
-                  />
-                  <span className="text-xs text-gray-400">/ credit</span>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5">
+                      <span className="text-sm font-bold text-gray-700">{globalSettings.currencySymbol}</span>
+                      <input
+                        type="number"
+                        step={1}
+                        min={1}
+                        value={globalSettings.defaultPricePerExtraMember}
+                        onChange={(e) =>
+                          handleSaveGlobalPricing(globalSettings.defaultPricePerCredit, parseFloat(e.target.value) || 20)
+                        }
+                        className="w-20 bg-transparent text-sm font-bold text-gray-900 outline-none font-mono"
+                      />
+                      <span className="text-xs text-gray-400">/ member / mo</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Credit Packs Table (FR-6) */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
+                {/* Team Member Packs Table */}
                 <div>
-                  <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Predefined Credit Packs
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    Fixed credit bundles offered to clients next to the custom credit input. A pack cost does not have to equal credits × price per credit.
-                  </p>
-                </div>
-              </div>
-
-              <TableComponent<CreditPackage>
-                data={filteredPackages}
-                columns={packageColumns}
-                getRowId={(pkg) => pkg.id}
-                rowActions={packageRowActions}
-                actionIcon="menu"
-                enableSelection={false}
-                defaultRowsPerPage={20}
-                emptyMessage="No credit packs created yet."
-                tableId="admin-credit-packages-table"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ── TAB 3: TEAM MEMBER PRICING (FR-8, FR-9) ── */}
-        {activeTab === "team-pricing" && (
-          <div className="space-y-6">
-            {/* Global Per-Member Rate Card (FR-8) */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                    Base Rate
-                  </span>
-                  <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Cost Per Extra Team Member
-                  </h3>
-                </div>
-                <p className="text-xs text-gray-500 max-w-xl">
-                  Base monthly price charged whenever a customer adds custom individual seats beyond the plan&apos;s included team members (e.g. 3 extra members × $20 = $60/mo).
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5">
-                  <span className="text-sm font-bold text-gray-700">{globalSettings.currencySymbol}</span>
-                  <input
-                    type="number"
-                    step={1}
-                    min={1}
-                    value={globalSettings.defaultPricePerExtraMember}
-                    onChange={(e) =>
-                      handleSaveGlobalPricing(globalSettings.defaultPricePerCredit, parseFloat(e.target.value) || 20)
-                    }
-                    className="w-20 bg-transparent text-sm font-bold text-gray-900 outline-none font-mono"
+                  <TableComponent<TeamMemberPack>
+                    data={filteredTeamPacks}
+                    columns={teamPackColumns}
+                    getRowId={(p) => p.id}
+                    rowActions={teamPackRowActions}
+                    actionIcon="menu"
+                    enableSelection={false}
+                    defaultRowsPerPage={20}
+                    emptyMessage="No team member packs configured."
+                    tableId="admin-team-packs-table"
                   />
-                  <span className="text-xs text-gray-400">/ member / mo</span>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Team Member Packs Table */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
+            {packedPricingMode === "credits" && (
+              <div className="space-y-6 animate-in fade-in duration-150">
+                {/* Global Per-Credit Price Card (FR-5) */}
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                        Base Rate
+                      </span>
+                      <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Price Per Custom Credit
+                      </h3>
+                    </div>
+                    <p className="text-xs text-gray-500 max-w-xl">
+                      Base price charged per credit for custom credit purchases.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5">
+                      <span className="text-sm font-bold text-gray-700">{globalSettings.currencySymbol}</span>
+                      <input
+                        type="number"
+                        step={0.005}
+                        min={0.001}
+                        value={globalSettings.defaultPricePerCredit}
+                        onChange={(e) =>
+                          handleSaveGlobalPricing(parseFloat(e.target.value) || 0.05, globalSettings.defaultPricePerExtraMember)
+                        }
+                        className="w-20 bg-transparent text-sm font-bold text-gray-900 outline-none font-mono"
+                      />
+                      <span className="text-xs text-gray-400">/ credit</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Credit Packs Table (FR-6) */}
                 <div>
-                  <h3 className="text-base font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Predefined Team Member Packs
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    Fixed team member bundles (e.g. 5 members for $90) offering volume discounts for scaling organizations.
-                  </p>
+                  <TableComponent<CreditPackage>
+                    data={filteredPackages}
+                    columns={packageColumns}
+                    getRowId={(pkg) => pkg.id}
+                    rowActions={packageRowActions}
+                    actionIcon="menu"
+                    enableSelection={false}
+                    defaultRowsPerPage={20}
+                    emptyMessage="No credit packs created yet."
+                    tableId="admin-credit-packages-table"
+                  />
                 </div>
               </div>
-
-              <TableComponent<TeamMemberPack>
-                data={filteredTeamPacks}
-                columns={teamPackColumns}
-                getRowId={(p) => p.id}
-                rowActions={teamPackRowActions}
-                actionIcon="menu"
-                enableSelection={false}
-                defaultRowsPerPage={20}
-                emptyMessage="No team member packs configured."
-                tableId="admin-team-packs-table"
-              />
-            </div>
+            )}
           </div>
         )}
 
@@ -1602,7 +1727,7 @@ export default function AdminPlans() {
                   Credit Deduction Actions &amp; Unit Rates
                 </h3>
                 <p className="text-xs text-gray-500">
-                  Every action that consumes credits in MantraAssist. Modifying rates here immediately drives modular credit deduction across calls, SMS, workflows, and AI scribe.
+                  Credit deduction rates for voice calls, SMS, workflows, and AI services.
                 </p>
               </div>
             </div>
@@ -1713,9 +1838,25 @@ export default function AdminPlans() {
                         onChange={(e) => setPlanForm({ ...planForm, tier: e.target.value as PlanTier })}
                         className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
                       >
+                        <option value="Free">Free (Onboarding)</option>
                         <option value="Starter">Starter</option>
                         <option value="Professional">Professional</option>
                         <option value="Custom">Custom</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Category *</label>
+                      <select
+                        value={planForm.category || "AI Receptionist"}
+                        onChange={(e) => setPlanForm({ ...planForm, category: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold"
+                      >
+                        {PLAN_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
@@ -2216,13 +2357,13 @@ export default function AdminPlans() {
       {/* ── CREATE / EDIT CREDIT PACKAGE DRAWER ── */}
       {isCreditDrawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-200">
+          <div className="w-full max-w-xl bg-white h-full shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-200">
             <div className="p-5 border-b border-gray-200 flex items-center justify-between shrink-0 bg-gray-50/50">
               <div>
                 <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
                   {editingPackage ? `Edit Credit Pack: ${editingPackage.name}` : "Create Credit Pack"}
                 </h2>
-                <p className="text-xs text-gray-500">Configure fixed credit bundle and cost</p>
+                <p className="text-xs text-gray-500">Configure fixed credit bundle, costs, and country rates</p>
               </div>
               <button
                 type="button"
@@ -2246,30 +2387,6 @@ export default function AdminPlans() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Country / Currency *</label>
-                <select
-                  value={packageForm.country}
-                  onChange={(e) => {
-                    const countryName = e.target.value;
-                    const found = SUPPORTED_COUNTRIES.find((c) => c.country === countryName);
-                    setPackageForm({
-                      ...packageForm,
-                      country: countryName,
-                      currency: found ? found.currency : "USD",
-                      currencySymbol: found ? found.symbol : "$",
-                    });
-                  }}
-                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
-                >
-                  {SUPPORTED_COUNTRIES.map((c) => (
-                    <option key={c.country} value={c.country}>
-                      {c.country} ({c.currency} {c.symbol})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Credits Included *</label>
@@ -2284,15 +2401,15 @@ export default function AdminPlans() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Pack Total Cost ({packageForm.currency}) *</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Base Cost (USD $) *</label>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-gray-500 font-bold">{packageForm.currencySymbol}</span>
+                    <span className="text-gray-500 font-bold">$</span>
                     <input
                       type="number"
                       step={0.01}
                       value={packageForm.totalPrice}
                       onChange={(e) => setPackageForm({ ...packageForm, totalPrice: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold font-mono"
                     />
                   </div>
                 </div>
@@ -2307,6 +2424,82 @@ export default function AdminPlans() {
                   placeholder="e.g. Most Popular, Save 15%"
                   className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm"
                 />
+              </div>
+
+              {/* Country-wise Pricing Table */}
+              <div className="pt-3 border-t border-gray-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Country-wise Pricing</span>
+                    </h4>
+                    <p className="text-[11px] text-gray-500">
+                      Workspaces automatically see pricing in their localized currency
+                    </p>
+                  </div>
+
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleAddCreditPackageCountryPrice(e.target.value);
+                        e.target.value = "";
+                      }
+                    }}
+                    className="px-2 py-1 text-xs font-bold border border-blue-300 text-blue-700 rounded-lg bg-blue-50 cursor-pointer"
+                  >
+                    <option value="">+ Add Country</option>
+                    {SUPPORTED_COUNTRIES.map((c) => (
+                      <option key={c.country} value={c.country}>
+                        {c.country} ({c.currency})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-gray-50 text-gray-600 font-semibold border-b border-gray-200">
+                      <tr>
+                        <th className="p-2.5">Country / Currency</th>
+                        <th className="p-2.5">Pack Cost</th>
+                        <th className="p-2.5 w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {(packageForm.countryPricing || []).map((cp, idx) => (
+                        <tr key={cp.country}>
+                          <td className="p-2.5 font-semibold text-gray-800">
+                            {cp.country} ({cp.currency} {cp.currencySymbol})
+                          </td>
+                          <td className="p-2.5">
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-500 font-bold">{cp.currencySymbol}</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={cp.price}
+                                onChange={(e) =>
+                                  handleUpdateCreditPackageCountryPrice(idx, parseFloat(e.target.value) || 0)
+                                }
+                                className="w-24 px-2 py-1 bg-white border border-gray-200 rounded text-xs font-semibold font-mono"
+                              />
+                            </div>
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCreditPackageCountryPrice(cp.country)}
+                              className="text-gray-400 hover:text-red-600 p-1 rounded cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               <div className="pt-2">
@@ -2333,7 +2526,7 @@ export default function AdminPlans() {
               <button
                 type="submit"
                 form="pkg-form"
-                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
               >
                 {editingPackage ? "Save Pack" : "Create Credit Pack"}
               </button>
@@ -2345,13 +2538,13 @@ export default function AdminPlans() {
       {/* ── CREATE / EDIT TEAM MEMBER PACK DRAWER ── */}
       {isTeamPackDrawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-200">
+          <div className="w-full max-w-xl bg-white h-full shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-200">
             <div className="p-5 border-b border-gray-200 flex items-center justify-between shrink-0 bg-gray-50/50">
               <div>
                 <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
                   {editingTeamPack ? `Edit Team Pack: ${editingTeamPack.name}` : "Create Team Member Pack"}
                 </h2>
-                <p className="text-xs text-gray-500">Configure seat bundle and monthly cost</p>
+                <p className="text-xs text-gray-500">Configure seat bundle, monthly cost, and country rates</p>
               </div>
               <button
                 type="button"
@@ -2388,15 +2581,15 @@ export default function AdminPlans() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Total Monthly Cost *</label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Base Monthly Cost (USD $) *</label>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-gray-500 font-bold">{teamPackForm.currencySymbol}</span>
+                    <span className="text-gray-500 font-bold">$</span>
                     <input
                       type="number"
                       step={1}
                       value={teamPackForm.totalPrice}
                       onChange={(e) => setTeamPackForm({ ...teamPackForm, totalPrice: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold font-mono"
                     />
                   </div>
                 </div>
@@ -2413,13 +2606,89 @@ export default function AdminPlans() {
                 />
               </div>
 
+              {/* Country-wise Pricing Table */}
+              <div className="pt-3 border-t border-gray-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Country-wise Pricing</span>
+                    </h4>
+                    <p className="text-[11px] text-gray-500">
+                      Workspaces automatically see pricing in their localized currency
+                    </p>
+                  </div>
+
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleAddTeamPackCountryPrice(e.target.value);
+                        e.target.value = "";
+                      }
+                    }}
+                    className="px-2 py-1 text-xs font-bold border border-blue-300 text-blue-700 rounded-lg bg-blue-50 cursor-pointer"
+                  >
+                    <option value="">+ Add Country</option>
+                    {SUPPORTED_COUNTRIES.map((c) => (
+                      <option key={c.country} value={c.country}>
+                        {c.country} ({c.currency})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-gray-50 text-gray-600 font-semibold border-b border-gray-200">
+                      <tr>
+                        <th className="p-2.5">Country / Currency</th>
+                        <th className="p-2.5">Pack Cost / mo</th>
+                        <th className="p-2.5 w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {(teamPackForm.countryPricing || []).map((cp, idx) => (
+                        <tr key={cp.country}>
+                          <td className="p-2.5 font-semibold text-gray-800">
+                            {cp.country} ({cp.currency} {cp.currencySymbol})
+                          </td>
+                          <td className="p-2.5">
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-500 font-bold">{cp.currencySymbol}</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={cp.price}
+                                onChange={(e) =>
+                                  handleUpdateTeamPackCountryPrice(idx, parseFloat(e.target.value) || 0)
+                                }
+                                className="w-24 px-2 py-1 bg-white border border-gray-200 rounded text-xs font-semibold font-mono"
+                              />
+                            </div>
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTeamPackCountryPrice(cp.country)}
+                              className="text-gray-400 hover:text-red-600 p-1 rounded cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               <div className="pt-2">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={teamPackForm.isActive}
                     onChange={(e) => setTeamPackForm({ ...teamPackForm, isActive: e.target.checked })}
-                    className="w-4 h-4 text-purple-600 rounded border-gray-300"
+                    className="w-4 h-4 text-blue-600 rounded border-gray-300"
                   />
                   <span className="text-xs font-bold text-gray-900">Active (Visible in client add seats drawer)</span>
                 </label>
@@ -2437,7 +2706,7 @@ export default function AdminPlans() {
               <button
                 type="submit"
                 form="team-form"
-                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
               >
                 {editingTeamPack ? "Save Pack" : "Create Team Pack"}
               </button>
@@ -2486,7 +2755,7 @@ export default function AdminPlans() {
                     min={1}
                     value={actionForm.creditsDeducted}
                     onChange={(e) => setActionForm({ ...actionForm, creditsDeducted: parseInt(e.target.value) || 1 })}
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-amber-600 font-mono"
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-900 font-mono"
                   />
                 </div>
 

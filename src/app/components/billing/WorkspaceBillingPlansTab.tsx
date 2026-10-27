@@ -22,10 +22,16 @@ import {
   Coins,
   Check,
   ShoppingCart,
+  ShoppingBag,
   Users,
   ChevronDown,
   Globe,
   Sparkles,
+  Trash2,
+  X,
+  Layers,
+  AlertCircle,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -34,6 +40,9 @@ import {
   TeamMemberPack,
   GlobalBillingSettings,
   WorkspaceSubscription,
+  CartItem,
+  PLAN_CATEGORIES,
+  PlanCategory,
   getStoredPlans,
   getStoredCreditPackages,
   getStoredTeamMemberPacks,
@@ -44,7 +53,13 @@ import {
   purchaseCustomTeamMembersForWorkspace,
   getAvailablePlansForWorkspace,
   getAvailableCreditPackagesForWorkspace,
+  getStoredCart,
+  addToCart,
+  removeFromCart,
+  clearCart,
+  checkoutCart,
   PLANS_BILLING_CHANGED_EVENT,
+  CART_CHANGED_EVENT,
 } from "../../../lib/plansBillingStore";
 import { useOrganization } from "../../context/OrganizationContext";
 
@@ -56,6 +71,13 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
   const [teamPacks, setTeamPacks] = useState<TeamMemberPack[]>([]);
   const [globalSettings, setGlobalSettings] = useState<GlobalBillingSettings>(getStoredGlobalBillingSettings());
   const [subscription, setSubscription] = useState<WorkspaceSubscription | null>(null);
+
+  // Category filter state ("All", "AI Receptionist", "AI Scribe", "EHR", "RCM")
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
+
+  // Cart modal/slide-over state
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
   // Billing interval toggle
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
@@ -78,6 +100,7 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
     setGlobalSettings(getStoredGlobalBillingSettings());
     if (activeOrganization?.id) {
       setSubscription(getWorkspaceSubscription(activeOrganization.id));
+      setCartItems(getStoredCart(activeOrganization.id));
     }
   };
 
@@ -85,26 +108,56 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
     loadData();
     const handleSync = () => loadData();
     window.addEventListener(PLANS_BILLING_CHANGED_EVENT, handleSync);
+    window.addEventListener(CART_CHANGED_EVENT, handleSync);
     window.addEventListener("organizationChanged", handleSync);
     window.addEventListener("storage", handleSync);
     window.addEventListener("focus", handleSync);
     return () => {
       window.removeEventListener(PLANS_BILLING_CHANGED_EVENT, handleSync);
+      window.removeEventListener(CART_CHANGED_EVENT, handleSync);
       window.removeEventListener("organizationChanged", handleSync);
       window.removeEventListener("storage", handleSync);
       window.removeEventListener("focus", handleSync);
     };
   }, [activeOrganization?.id]);
 
-  // Apply Scope-based visibility filtering
+  // Tier positioning order: Starter (1) > Professional (2) > Custom (3)
+  const TIER_ORDER: Record<string, number> = {
+    starter: 1,
+    professional: 2,
+    custom: 3,
+  };
+
+  // Apply Scope-based visibility filtering & Tier positioning
   const scopedPlanItems = useMemo(() => {
-    return getAvailablePlansForWorkspace(plans, {
+    const available = getAvailablePlansForWorkspace(plans, {
       id: activeOrganization.id,
       industryCategory: activeOrganization.industryCategory,
       country: activeOrganization.country || "United States",
       currency: activeOrganization.currency || "USD",
     });
-  }, [plans, activeOrganization]);
+
+    // 1. Free plan is an onboarding plan and is NOT shown on the plans page
+    let visiblePlans = available.filter(
+      ({ plan }) => (plan.tier || "").toLowerCase() !== "free"
+    );
+
+    // Filter by selected category ("All", "AI Receptionist", "AI Scribe", "EHR", "RCM")
+    if (selectedCategory && selectedCategory !== "All") {
+      visiblePlans = visiblePlans.filter(
+        ({ plan }) => (plan.category || "").toLowerCase() === selectedCategory.toLowerCase()
+      );
+    }
+
+    // 2. Tier decides the positioning of the cards: Starter > Professional > Enterprise > Custom
+    return visiblePlans.sort((a, b) => {
+      const tierA = (a.plan.tier || "").toLowerCase();
+      const tierB = (b.plan.tier || "").toLowerCase();
+      const orderA = TIER_ORDER[tierA] ?? 99;
+      const orderB = TIER_ORDER[tierB] ?? 99;
+      return orderA - orderB;
+    });
+  }, [plans, activeOrganization, selectedCategory]);
 
   // Handle plan selection / upgrade
   const handleSelectPlan = (plan: IndustryPlan) => {
@@ -159,47 +212,99 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      {/* ── Billing Cadence Toggle (Monthly / Yearly) ── */}
-      <div className="flex justify-end">
-        <div className="inline-flex items-center p-1 bg-slate-100 rounded-full border border-slate-200/80">
-          <button
-            type="button"
-            onClick={() => setBillingCycle("monthly")}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
-              billingCycle === "monthly"
-                ? "bg-white text-slate-900 shadow-2xs border border-slate-200/70"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
+      {/* ── Control Bar: Categories Filter (before Monthly/Yearly) + Cadence Toggle + Cart ── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-1">
+        {/* Categories selector pills placed BEFORE monthly / yearly */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+          <span
+            className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
-            Monthly
-          </button>
+            Category:
+          </span>
+          {["All", ...PLAN_CATEGORIES].map((cat) => {
+            const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  isSelected
+                    ? "bg-[#1E293B] text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {cat}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right side: Billing Interval Toggle and Cart Button */}
+        <div className="flex items-center gap-2.5 self-end md:self-auto shrink-0">
+          <div className="inline-flex items-center p-1 bg-slate-100 rounded-full border border-slate-200/80">
+            <button
+              type="button"
+              onClick={() => setBillingCycle("monthly")}
+              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                billingCycle === "monthly"
+                  ? "bg-white text-slate-900 shadow-2xs border border-slate-200/70"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              onClick={() => setBillingCycle("yearly")}
+              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                billingCycle === "yearly"
+                  ? "bg-white text-slate-900 shadow-2xs border border-slate-200/70"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <span>Yearly</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-slate-200 text-[#1E293B]">
+                20%
+              </span>
+            </button>
+          </div>
+
+          {/* Cart Drawer Trigger */}
           <button
             type="button"
-            onClick={() => setBillingCycle("yearly")}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              billingCycle === "yearly"
-                ? "bg-white text-slate-900 shadow-2xs border border-slate-200/70"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
+            onClick={() => setIsCartOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white border border-slate-200/90 hover:border-slate-300 text-slate-700 hover:text-slate-900 shadow-2xs text-xs font-bold transition-all cursor-pointer"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
-            <span>Yearly</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-slate-200 text-[#1E293B]">
-              20%
-            </span>
+            <ShoppingCart className="w-4 h-4 text-[#1E293B]" />
+            <span>Cart</span>
+            {cartItems.length > 0 && (
+              <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-extrabold flex items-center justify-center shrink-0">
+                {cartItems.length}
+              </span>
+            )}
           </button>
         </div>
       </div>
 
       {/* ── Plan Cards Grid (3 Columns: 3 in One Row on Desktop) ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch pt-3">
         {scopedPlanItems.map(({ plan, pricing }) => {
           const isYearly = billingCycle === "yearly";
-          const isCurrentPlan = subscription?.planId === plan.id && subscription?.billingCycle === billingCycle;
+          const isCurrentPlan =
+            (subscription?.activePlans && subscription.activePlans.some((p) => p.planId === plan.id)) ||
+            (subscription?.planId === plan.id && subscription?.billingCycle === billingCycle);
+          const inCartItem = cartItems.find((ci) => ci.type === "plan" && ci.planId === plan.id);
           const displayPrice = isYearly ? pricing.yearlyPrice : pricing.monthlyPrice;
           const credits = isYearly ? plan.yearlyCredits : plan.monthlyCredits;
           const includedSeats = plan.includedSeats || (plan.tier === "Starter" ? 1 : plan.tier === "Professional" ? 5 : 20);
+          const isPopular = plan.isPopular === true || (plan.isPopular as any) === "true";
+          const planCategory = plan.category || "AI Receptionist";
 
           return (
             <div
@@ -207,12 +312,32 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
               className={`bg-white rounded-[28px] border-2 transition-all duration-200 p-7 flex flex-col justify-between relative shadow-2xs hover:shadow-md ${
                 isCurrentPlan
                   ? "border-[#1E293B] shadow-[0_6px_24px_rgba(30,41,59,0.14)] ring-1 ring-[#1E293B]/10"
+                  : isPopular
+                  ? "border-[#1E293B] shadow-[0_6px_24px_rgba(30,41,59,0.10)]"
                   : "border-slate-200/85 hover:border-slate-300"
               }`}
             >
+              {/* Highlight as Popular - Ribbon on Pricing Card */}
+              {isPopular && (
+                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10">
+                  <span
+                    className="inline-flex items-center gap-1.5 px-4 py-1 rounded-full text-[11px] font-bold bg-[#1E293B] text-white shadow-md border border-slate-700 tracking-wider uppercase whitespace-nowrap"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                    Popular
+                  </span>
+                </div>
+              )}
+
               <div className="space-y-4">
-                {/* Plan Title */}
+                {/* Category Badge & Plan Title */}
                 <div>
+                  <div className="mb-2">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 tracking-wide uppercase">
+                      {planCategory}
+                    </span>
+                  </div>
                   <h3
                     className="text-2xl font-bold text-slate-900 tracking-tight"
                     style={{ fontFamily: "Outfit, sans-serif" }}
@@ -229,21 +354,39 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
 
                 {/* Price Block */}
                 <div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-bold text-slate-900">{pricing.currencySymbol}</span>
-                    <span
-                      className="text-4xl font-extrabold text-slate-900 tracking-tight"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      {displayPrice.toLocaleString()}
-                    </span>
-                    <span className="text-sm text-slate-500 font-medium ml-1">
-                      /{isYearly ? "yr" : "mo"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1.5">
-                    TOTAL FOR {includedSeats} {includedSeats === 1 ? "USER" : "USERS"}
-                  </p>
+                  {(plan.tier || "").toLowerCase() === "custom" ? (
+                    <div>
+                      <div className="flex items-baseline gap-1">
+                        <span
+                          className="text-4xl font-extrabold text-slate-900 tracking-tight"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          Custom
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1.5">
+                        TOTAL FOR {includedSeats} {includedSeats === 1 ? "USER" : "USERS"}
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-bold text-slate-900">{pricing.currencySymbol}</span>
+                        <span
+                          className="text-4xl font-extrabold text-slate-900 tracking-tight"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {displayPrice.toLocaleString()}
+                        </span>
+                        <span className="text-sm text-slate-500 font-medium ml-1">
+                          /{isYearly ? "yr" : "mo"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1.5">
+                        TOTAL FOR {includedSeats} {includedSeats === 1 ? "USER" : "USERS"}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Resource Allocation Box */}
@@ -295,20 +438,58 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                   <button
                     type="button"
                     disabled
-                    className="w-full py-3.5 rounded-full text-sm font-bold bg-[#1E293B] text-white cursor-default text-center shadow-xs flex items-center justify-center gap-1.5"
+                    className="w-full py-3.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default text-center flex items-center justify-center gap-1.5 shadow-2xs"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
-                    <span>✓ Current Plan</span>
+                    <Check className="w-4 h-4 stroke-[3]" />
+                    <span>Active in {planCategory}</span>
                   </button>
-                ) : (
+                ) : inCartItem ? (
                   <button
                     type="button"
-                    onClick={() => handleSelectPlan(plan)}
-                    className="w-full py-3.5 rounded-full text-sm font-bold bg-[#1E293B] hover:bg-slate-900 text-white cursor-pointer transition-all shadow-xs text-center"
+                    onClick={() => setIsCartOpen(true)}
+                    className="w-full py-3.5 rounded-full text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 cursor-pointer text-center flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
-                    Get Started
+                    <ShoppingCart className="w-4 h-4" />
+                    <span>In Cart (Review &amp; Pay)</span>
                   </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!activeOrganization?.id) return;
+                        addToCart(activeOrganization.id, {
+                          type: "plan",
+                          title: plan.name,
+                          price: displayPrice,
+                          currency: pricing.currency,
+                          currencySymbol: pricing.currencySymbol,
+                          billingCycle,
+                          category: planCategory,
+                          planId: plan.id,
+                          planTier: plan.tier,
+                          credits,
+                          members: includedSeats,
+                        });
+                        toast.success(`Added ${plan.name} (${planCategory}) to cart! ✓`);
+                      }}
+                      className="flex-1 py-3 rounded-full text-xs font-bold bg-white hover:bg-slate-50 text-[#1E293B] border border-slate-300 hover:border-slate-400 cursor-pointer transition-all shadow-2xs flex items-center justify-center gap-1.5"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <ShoppingCart className="w-3.5 h-3.5" />
+                      <span>Add to Cart</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectPlan(plan)}
+                      className="flex-1 py-3 rounded-full text-xs font-bold bg-[#1E293B] hover:bg-slate-900 text-white cursor-pointer transition-all shadow-xs text-center"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {(plan.tier || "").toLowerCase() === "custom" ? "Contact Us" : "Subscribe"}
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -449,14 +630,36 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                   </span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleBuyCredits}
-                  className="px-7 py-3 rounded-full bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold cursor-pointer transition-colors shadow-xs shrink-0 text-center"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  Buy Now
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!activeOrganization?.id) return;
+                      addToCart(activeOrganization.id, {
+                        type: "custom_credits",
+                        title: `${customCreditAmount.toLocaleString()} Voice & AI Credits`,
+                        price: creditCost,
+                        currency: activeOrganization.currency || "USD",
+                        currencySymbol: currencySymbol,
+                        credits: customCreditAmount,
+                      });
+                      toast.success(`Added ${customCreditAmount.toLocaleString()} Credits to Cart! ✓`);
+                    }}
+                    className="px-5 py-3 rounded-full bg-white hover:bg-slate-50 text-[#1E293B] border border-slate-300 text-xs font-bold cursor-pointer transition-colors shadow-2xs text-center flex items-center gap-1.5"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5" />
+                    <span>Add to Cart</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBuyCredits}
+                    className="px-6 py-3 rounded-full bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold cursor-pointer transition-colors shadow-xs shrink-0 text-center"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Buy Now
+                  </button>
+                </div>
               </div>
 
               {/* Footer note */}
@@ -584,14 +787,36 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
                   </span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleAddMembers}
-                  className="px-7 py-3 rounded-full bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold cursor-pointer transition-colors shadow-xs shrink-0 text-center"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  Add Now
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!activeOrganization?.id) return;
+                      addToCart(activeOrganization.id, {
+                        type: "custom_seats",
+                        title: `+${customMemberAmount} Extra Team Seats`,
+                        price: memberCost,
+                        currency: "USD",
+                        currencySymbol: "$",
+                        members: customMemberAmount,
+                      });
+                      toast.success(`Added +${customMemberAmount} Team Seats to Cart! ✓`);
+                    }}
+                    className="px-5 py-3 rounded-full bg-white hover:bg-slate-50 text-[#1E293B] border border-slate-300 text-xs font-bold cursor-pointer transition-colors shadow-2xs text-center flex items-center gap-1.5"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5" />
+                    <span>Add to Cart</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddMembers}
+                    className="px-6 py-3 rounded-full bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold cursor-pointer transition-colors shadow-xs text-center"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Add Now
+                  </button>
+                </div>
               </div>
 
               {/* Footer note */}
@@ -602,6 +827,212 @@ export default function WorkspaceBillingPlansTab({ hideHeader = true }: { hideHe
           )}
         </div>
       </div>
+
+      {/* ── Cart Drawer / Slide-Over Modal ── */}
+      {isCartOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsCartOpen(false)}
+          />
+
+          {/* Drawer panel */}
+          <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-250">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <ShoppingCart className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Your Billing Cart
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {cartItems.length} {cartItems.length === 1 ? "item" : "items"} selected for checkout
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCartOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body: Items List */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {cartItems.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
+                  <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center">
+                    <ShoppingBag className="w-8 h-8" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Your cart is empty
+                  </h4>
+                  <p className="text-xs text-slate-500 max-w-xs">
+                    Add plans across categories (AI Scribe, AI Receptionist, EHR, RCM) or top-up credits to pay together in a single checkout.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsCartOpen(false)}
+                    className="mt-2 px-5 py-2 rounded-full bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold cursor-pointer transition-colors"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Browse Plans
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="bg-blue-50/70 border border-blue-200/60 rounded-xl p-3 flex items-start gap-2.5">
+                    <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-blue-800 leading-relaxed">
+                      <strong>Multi-Category Subscription:</strong> You can hold 1 active plan per category at a time. All items will be activated immediately upon checkout.
+                    </p>
+                  </div>
+
+                  {cartItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs hover:border-slate-300 transition-all flex items-start justify-between gap-3"
+                    >
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              item.type === "plan"
+                                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                : item.type === "custom_credits" || item.type === "credit_pack"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-purple-50 text-purple-700 border border-purple-200"
+                            }`}
+                          >
+                            {item.type === "plan" ? item.category || "Plan" : item.type.replace("_", " ")}
+                          </span>
+                          {item.billingCycle && (
+                            <span className="text-[10px] text-slate-400 font-semibold capitalize">
+                              {item.billingCycle}
+                            </span>
+                          )}
+                        </div>
+
+                        <h5 className="text-sm font-bold text-slate-900 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {item.title}
+                        </h5>
+
+                        <div className="text-[11px] text-slate-500 space-y-0.5">
+                          {item.credits && (
+                            <p className="flex items-center gap-1">
+                              <Coins className="w-3 h-3 text-amber-500" />
+                              <span>{item.credits.toLocaleString()} Credits</span>
+                            </p>
+                          )}
+                          {item.members && (
+                            <p className="flex items-center gap-1">
+                              <Users className="w-3 h-3 text-blue-500" />
+                              <span>{item.members} Team {item.members === 1 ? "Member" : "Members"}</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end justify-between self-stretch shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!activeOrganization?.id) return;
+                            const next = removeFromCart(activeOrganization.id, item.id);
+                            setCartItems(next);
+                            toast.info(`Removed ${item.title} from cart.`);
+                          }}
+                          className="p-1 rounded-md text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer"
+                          title="Remove item"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+
+                        <div className="text-right">
+                          <span className="text-sm font-extrabold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            {item.currencySymbol || "$"}{item.price.toFixed(2)}
+                          </span>
+                          {item.billingCycle && (
+                            <span className="text-[10px] text-slate-400 block font-medium">
+                              /{item.billingCycle === "yearly" ? "yr" : "mo"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            {cartItems.length > 0 && (
+              <div className="p-6 border-t border-slate-100 bg-slate-50/70 space-y-3">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>Subtotal ({cartItems.length} items)</span>
+                    <span className="font-semibold text-slate-800">
+                      {cartItems[0]?.currencySymbol || "$"}
+                      {cartItems.reduce((sum, item) => sum + (item.price || 0), 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>Estimated Tax</span>
+                    <span className="font-semibold text-slate-800">$0.00</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 block uppercase tracking-wider">Total Due Today</span>
+                      <span className="text-xl font-extrabold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {cartItems[0]?.currencySymbol || "$"}
+                        {cartItems.reduce((sum, item) => sum + (item.price || 0), 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!activeOrganization?.id) return;
+                        clearCart(activeOrganization.id);
+                        setCartItems([]);
+                        toast.info("Cleared all items from cart.");
+                      }}
+                      className="text-xs text-slate-400 hover:text-rose-600 font-semibold cursor-pointer transition-colors"
+                    >
+                      Clear Cart
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!activeOrganization?.id) return;
+                    const count = cartItems.length;
+                    const total = cartItems.reduce((sum, item) => sum + (item.price || 0), 0);
+                    const updatedSub = checkoutCart(activeOrganization.id);
+                    setSubscription(updatedSub);
+                    setCartItems([]);
+                    setIsCartOpen(false);
+                    toast.success(`Payment successful ($${total.toFixed(2)})! All ${count} items have been activated. ✓`);
+                  }}
+                  className="w-full py-3.5 rounded-full bg-[#1E293B] hover:bg-slate-900 text-white text-xs font-bold cursor-pointer transition-all shadow-md flex items-center justify-center gap-2"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <CreditCard className="w-4 h-4 text-blue-300" />
+                  <span>Pay &amp; Activate All (${cartItems.reduce((sum, item) => sum + (item.price || 0), 0).toFixed(2)})</span>
+                  <ArrowRight className="w-4 h-4 ml-1" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

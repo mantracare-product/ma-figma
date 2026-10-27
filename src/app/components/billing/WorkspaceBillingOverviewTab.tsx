@@ -45,7 +45,9 @@ import {
   purchaseCustomCreditsForWorkspace,
   purchaseTeamMemberPackForWorkspace,
   purchaseCustomTeamMembersForWorkspace,
+  getPackageLocalizedPrice,
   getWorkspaceSubscription,
+  getSubscriptionDisplayPlanName,
   PLANS_BILLING_CHANGED_EVENT,
 } from "../../../lib/plansBillingStore";
 import { useOrganization } from "../../context/OrganizationContext";
@@ -113,27 +115,21 @@ export default function WorkspaceBillingOverviewTab({
   }, [initialSub]);
 
   // Derived subscription values according to PRD FR-1, FR-11, Rule 5.3
+  const isFreePlan = (sub?.tier || "").toLowerCase() === "free" || sub?.amount === 0;
   const hasPlan = Boolean(
-    (sub?.planId &&
-      sub?.status === "Active" &&
-      sub?.planName !== "No Plan Assigned" &&
-      sub?.planName !== "Onboarding Plan") ||
+    sub?.status === "Active" ||
       (sub?.planName && sub.planName !== "No Plan Assigned")
   );
-  const planName =
-    sub?.planName && sub.planName !== "No Plan Assigned"
-      ? sub.planName
-      : "Starter Health";
+  const planName = getSubscriptionDisplayPlanName(sub);
   const currencySymbol = sub?.currencySymbol || "$";
-  const planRate =
-    sub?.amount && sub.amount > 0 ? `${currencySymbol}${sub.amount}` : `${currencySymbol}49`;
+  const planRate = isFreePlan ? "Free ($0)" : `${currencySymbol}${sub?.amount || 49}`;
   const isYearly = sub?.billingCycle === "yearly";
 
-  const includedSeats = sub?.includedSeats ?? 5;
+  const includedSeats = sub?.includedSeats ?? (isFreePlan ? 1 : 5);
   const extraSeats = sub?.extraSeatsPurchased || 0;
   const totalAllowedSeats = includedSeats + extraSeats;
 
-  const planCredits = sub?.planCredits && sub.planCredits > 0 ? sub.planCredits : 1000;
+  const planCredits = sub?.planCredits && sub.planCredits > 0 ? sub.planCredits : (isFreePlan ? 500 : 1000);
   const addonCredits = sub?.addonCredits || 0;
   const totalCredits = hasPlan ? (sub?.totalCredits || planCredits + addonCredits) : addonCredits;
   const consumedCredits = sub?.creditsUsed || 0;
@@ -311,19 +307,34 @@ export default function WorkspaceBillingOverviewTab({
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-6 sm:p-8">
         <div className="divide-y divide-slate-100">
           {/* Row 1: Plan */}
-          <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="py-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
             <span
-              className="text-sm font-medium text-slate-500"
+              className="text-sm font-medium text-slate-500 pt-0.5"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              Plan
+              {sub?.activePlans && sub.activePlans.length > 1 ? "Plans" : "Plan"}
             </span>
-            <span
-              className="text-sm font-bold text-slate-900 text-left sm:text-right"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              {planName}
-            </span>
+            <div className="flex flex-col sm:items-end gap-1.5">
+              <span
+                className="text-sm font-bold text-slate-900 text-left sm:text-right"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {planName}
+              </span>
+              {sub?.activePlans && sub.activePlans.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                  {sub.activePlans.map((ap) => (
+                    <span
+                      key={ap.planId}
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                      <strong className="font-bold">{ap.category || "Plan"}:</strong> {ap.planName}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Row 2: Team Capacity */}
@@ -418,7 +429,11 @@ export default function WorkspaceBillingOverviewTab({
               className="text-sm font-bold text-slate-900 text-left sm:text-right"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              {currencySymbol}{((sub?.amount || 49) + extraSeats * (globalSettings.defaultPricePerExtraMember || 20)).toLocaleString()} / {isYearly ? "year" : "month"}
+              {(sub?.tier || "").toLowerCase() === "custom"
+                ? "Custom"
+                : isFreePlan && extraSeats === 0
+                ? "Free ($0) / month"
+                : `${currencySymbol}${(((sub?.amount || 0)) + extraSeats * (globalSettings.defaultPricePerExtraMember || 20)).toLocaleString()} / ${isYearly ? "year" : "month"}`}
             </span>
           </div>
 
@@ -439,7 +454,7 @@ export default function WorkspaceBillingOverviewTab({
               className="px-6 py-2.5 rounded-xl bg-[#1E293B] hover:bg-slate-900 text-white text-sm font-semibold shadow-xs cursor-pointer transition-colors"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              Manage Plan
+              {isFreePlan ? "Upgrade Plan" : "Manage Plan"}
             </button>
           </div>
         </div>
@@ -494,6 +509,7 @@ export default function WorkspaceBillingOverviewTab({
               <div className="space-y-2.5 max-h-64 overflow-y-auto">
                 {creditPackages.map((pkg) => {
                   const isSelected = selectedCreditPackId === pkg.id;
+                  const loc = getPackageLocalizedPrice(pkg, activeOrganization?.country, activeOrganization?.currency);
                   return (
                     <div
                       key={pkg.id}
@@ -514,12 +530,12 @@ export default function WorkspaceBillingOverviewTab({
                           )}
                         </div>
                         <p className="text-[11px] text-gray-500 font-mono mt-0.5">
-                          +{pkg.credits.toLocaleString()} credits ({pkg.currencySymbol}{pkg.pricePerCredit}/credit)
+                          +{pkg.credits.toLocaleString()} credits ({loc.currencySymbol}{(loc.price / pkg.credits).toFixed(3)}/credit)
                         </p>
                       </div>
 
                       <span className="text-sm font-extrabold text-gray-900 font-mono">
-                        {pkg.currencySymbol}{pkg.totalPrice}
+                        {loc.currencySymbol}{loc.price.toLocaleString()}
                       </span>
                     </div>
                   );
@@ -625,6 +641,7 @@ export default function WorkspaceBillingOverviewTab({
               <div className="space-y-2.5 max-h-64 overflow-y-auto">
                 {teamPacks.map((pack) => {
                   const isSelected = selectedMemberPackId === pack.id;
+                  const loc = getPackageLocalizedPrice(pack, activeOrganization?.country, activeOrganization?.currency);
                   return (
                     <div
                       key={pack.id}
@@ -650,7 +667,7 @@ export default function WorkspaceBillingOverviewTab({
                       </div>
 
                       <span className="text-sm font-extrabold text-gray-900 font-mono">
-                        {pack.currencySymbol}{pack.totalPrice} / mo
+                        {loc.currencySymbol}{loc.price.toLocaleString()} / mo
                       </span>
                     </div>
                   );

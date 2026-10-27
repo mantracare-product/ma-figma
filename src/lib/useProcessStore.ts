@@ -111,6 +111,7 @@ export interface Stage {
   color?: string;
   systemCategory?: string; // e.g. "booked", "completed", "draft", "paid", "verified"
   isSystemCategoryRequired?: boolean; // Required system categories cannot be deleted
+  isPredefined?: boolean; // Predefined stages cannot be deleted
   aiSettings?: AISettings;
   stageType?: string;
   selectedInboundNumbers?: string[];
@@ -394,6 +395,8 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
         status: "active",
         color: "#3B82F6",
         systemCategory: "booked",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
         stageCategory: "in_progress",
         stagePosition: "initial",
         isInitial: true,
@@ -418,6 +421,8 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
         status: "active",
         color: "#8B5CF6",
         systemCategory: "reminder",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
         stageCategory: "in_progress",
         stagePosition: "intermediate",
         workflowSteps: [
@@ -439,6 +444,8 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
         status: "active",
         color: "#10B981",
         systemCategory: "completed",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
         stageCategory: "success",
         stagePosition: "final",
         isFinal: true,
@@ -464,6 +471,8 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
         status: "active",
         color: "#F59E0B",
         systemCategory: "rescheduled",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
         stageCategory: "lost",
         stagePosition: "final",
         isFinal: true,
@@ -489,6 +498,8 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
         status: "active",
         color: "#64748B",
         systemCategory: "no_show",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
         stageCategory: "lost",
         stagePosition: "final",
         isFinal: true,
@@ -519,6 +530,8 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
         status: "active",
         color: "#64748B",
         systemCategory: "draft",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
         stageCategory: "in_progress",
         stagePosition: "initial",
         isInitial: true,
@@ -543,6 +556,8 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
         status: "active",
         color: "#3B82F6",
         systemCategory: "payment_recorded",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
         stageCategory: "in_progress",
         stagePosition: "intermediate",
         workflowSteps: [
@@ -566,6 +581,8 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
         status: "active",
         color: "#10B981",
         systemCategory: "paid",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
         stageCategory: "success",
         stagePosition: "final",
         isFinal: true,
@@ -591,6 +608,8 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
         status: "active",
         color: "#EF4444",
         systemCategory: "overdue",
+        isSystemCategoryRequired: true,
+        isPredefined: true,
         stageCategory: "lost",
         stagePosition: "final",
         isFinal: true,
@@ -620,6 +639,8 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
       description: "Initial intake and active engagement",
       status: "active",
       color: "#3B82F6",
+      isPredefined: true,
+      isSystemCategoryRequired: true,
       stageCategory: "in_progress",
       stagePosition: "initial",
       isInitial: true,
@@ -630,6 +651,8 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
       description: "Successful outcome reached (Won)",
       status: "active",
       color: "#10B981",
+      isPredefined: true,
+      isSystemCategoryRequired: true,
       stageCategory: "success",
       stagePosition: "final",
       isFinal: true,
@@ -641,6 +664,8 @@ export function createDefaultStagesForEntity(entityType: EntityType, processIdPr
       description: "Unsuccessful or lost engagement (Lost)",
       status: "active",
       color: "#EF4444",
+      isPredefined: true,
+      isSystemCategoryRequired: true,
       stageCategory: "lost",
       stagePosition: "final",
       isFinal: true,
@@ -732,6 +757,54 @@ export function isRequiredSystemCategory(entityType: EntityType | undefined, cat
   return requiredList.includes(category.toLowerCase().trim());
 }
 
+export function isPredefinedStage(stage: Stage | null | undefined, entityType?: EntityType | string): boolean {
+  if (!stage) return false;
+  if (stage.isPredefined || stage.isSystemCategoryRequired) return true;
+  if (stage.workflowSteps?.some((ws) => ws.isFixed || ws.isFixedAction)) return true;
+
+  const nameLower = (stage.name || "").trim().toLowerCase();
+  const ent = (entityType || "client").toLowerCase();
+
+  if (ent === "appointment") {
+    if (["booked", "reminder", "completed", "reschedule", "no show", "no-show"].includes(nameLower)) {
+      return true;
+    }
+  }
+  if (ent === "invoice") {
+    if (["draft", "payment recorded", "paid", "overdue"].includes(nameLower)) {
+      return true;
+    }
+  }
+  if (ent === "process" || ent === "client") {
+    if (["stage 1", "stage 2", "stage 3"].includes(nameLower)) {
+      return true;
+    }
+  }
+
+  // Fallback: If stage name matches any predefined name across appointment/invoice/process
+  if (
+    [
+      "booked",
+      "reminder",
+      "completed",
+      "reschedule",
+      "no show",
+      "no-show",
+      "draft",
+      "payment recorded",
+      "paid",
+      "overdue",
+      "stage 1",
+      "stage 2",
+      "stage 3",
+    ].includes(nameLower)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function isStageDeletable(process: Process, stageId: string): { deletable: boolean; reason?: string } {
   if (!process?.stages) return { deletable: false, reason: "Process has no stages" };
   const stage = process.stages.find((s) => s.id === stageId);
@@ -741,7 +814,11 @@ export function isStageDeletable(process: Process, stageId: string): { deletable
     return { deletable: false, reason: "A process must have at least one stage" };
   }
 
-  // Stages can be deleted by user per prompt requirements
+  // Predefined stages cannot be deleted
+  if (isPredefinedStage(stage, process.entityType)) {
+    return { deletable: false, reason: "Predefined workflow stages cannot be deleted" };
+  }
+
   return { deletable: true };
 }
 

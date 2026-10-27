@@ -54,6 +54,7 @@ import {
   EntityType,
   isRequiredSystemCategory,
   isStageDeletable,
+  isPredefinedStage,
   DEFAULT_ENTITY_PROCESSES,
   createDefaultStagesForEntity,
 } from "../../lib/useProcessStore";
@@ -85,6 +86,7 @@ export interface Stage {
   color?: string;
   systemCategory?: string;
   isSystemCategoryRequired?: boolean;
+  isPredefined?: boolean;
   isInitial?: boolean;
   isFinal?: boolean;
   isFinalStage?: boolean;
@@ -458,17 +460,19 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
               >
                 <Edit className="w-3 h-3" />
               </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove(stage.id);
-                }}
-                className="p-1 rounded-md transition-all text-white/80 hover:text-rose-200 hover:bg-rose-500/30 cursor-pointer"
-                title="Delete stage"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
+              {!isPredefinedStage(stage) && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(stage.id);
+                  }}
+                  className="p-1 rounded-md transition-all text-white/80 hover:text-rose-200 hover:bg-rose-500/30 cursor-pointer"
+                  title="Delete stage"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
             </div>
           </>
         )}
@@ -749,7 +753,7 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
             <Edit className="w-3.5 h-3.5" />
           </button>
         )}
-        {onRemove && (
+        {onRemove && !isPredefinedStage(stage) && (
           <button
             type="button"
             onClick={(e) => {
@@ -4460,8 +4464,8 @@ export default function Process() {
                           </button>
                         )}
 
-                        {stage.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stage.systemCategory) ? (
-                          <Tooltip text="Required stage cannot be deleted">
+                        {stage.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stage.systemCategory) || isPredefinedStage(stage, selectedProcessData?.entityType) ? (
+                          <Tooltip text="Predefined stage cannot be deleted">
                             <Button
                               variant="outline"
                               size="sm"
@@ -5819,7 +5823,7 @@ export default function Process() {
           }}
           title="Delete Stage"
           footer={
-            stageToDelete && (stageToDelete.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stageToDelete.systemCategory)) ? (
+            stageToDelete && (stageToDelete.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stageToDelete.systemCategory) || isPredefinedStage(stageToDelete, selectedProcessData?.entityType)) ? (
               <Button
                 variant="outline"
                 onClick={() => {
@@ -5849,7 +5853,7 @@ export default function Process() {
             )
           }
         >
-          {stageToDelete && (stageToDelete.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stageToDelete.systemCategory)) ? (
+          {stageToDelete && (stageToDelete.isSystemCategoryRequired || isRequiredSystemCategory(selectedProcessData?.entityType, stageToDelete.systemCategory) || isPredefinedStage(stageToDelete, selectedProcessData?.entityType)) ? (
             <div className="space-y-4 text-center py-2">
               <div className="flex items-center justify-center">
                 <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center border border-amber-200">
@@ -5858,11 +5862,10 @@ export default function Process() {
               </div>
               <div className="space-y-2">
                 <h4 className="text-base font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                  Required System Stage
+                  Predefined Workflow Stage
                 </h4>
                 <p className="text-xs text-gray-500 max-w-sm mx-auto leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                  The stage <span className="font-semibold text-gray-800">"{stageToDelete.name}"</span> fulfills the required system category
-                  {stageToDelete.systemCategory ? ` "${stageToDelete.systemCategory}"` : ""} for {selectedProcessData?.entityType || "this"} workflows and cannot be deleted.
+                  The stage <span className="font-semibold text-gray-800">"{stageToDelete.name}"</span> is a predefined system stage for {selectedProcessData?.entityType || "this"} workflows and cannot be deleted.
                 </p>
                 <p className="text-[11px] text-gray-400">
                   You can rename, recolor, or reorder this stage at any time.

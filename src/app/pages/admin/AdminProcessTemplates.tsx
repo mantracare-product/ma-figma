@@ -66,6 +66,8 @@ import {
   EntityType,
   DEFAULT_ENTITY_PROCESSES,
   createDefaultStagesForEntity,
+  isStageDeletable,
+  isPredefinedStage,
 } from "../../../lib/useProcessStore";
 import ProcessProductsServicesCard from "../../components/process/ProcessProductsServicesCard";
 
@@ -91,6 +93,7 @@ export interface Stage {
   color?: string;
   systemCategory?: string;
   isSystemCategoryRequired?: boolean;
+  isPredefined?: boolean;
   isInitial?: boolean;
   isFinal?: boolean;
   isFinalStage?: boolean;
@@ -470,17 +473,19 @@ const ChevronStageItem: React.FC<ChevronStageItemProps> = ({
               >
                 <Edit className="w-3 h-3" />
               </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove(stage.id);
-                }}
-                className="p-1 rounded-md transition-all text-white/80 hover:text-rose-200 hover:bg-rose-500/30 cursor-pointer"
-                title="Delete stage"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
+              {!isPredefinedStage(stage) && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(stage.id);
+                  }}
+                  className="p-1 rounded-md transition-all text-white/80 hover:text-rose-200 hover:bg-rose-500/30 cursor-pointer"
+                  title="Delete stage"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
             </div>
           </>
         )}
@@ -674,7 +679,7 @@ const SidebarDraggableStage: React.FC<SidebarDraggableStageProps> = ({
             <Edit className="w-3.5 h-3.5" />
           </button>
         )}
-        {onRemove && (
+        {onRemove && !isPredefinedStage(stage) && (
           <button
             type="button"
             onClick={(e) => {
@@ -3094,6 +3099,17 @@ export default function AdminProcessTemplates() {
   const handleDeleteStage = () => {
     if (!stageToDelete || !selectedProcess) return;
 
+    const proc = processes.find((p) => p.id === selectedProcess);
+    if (proc) {
+      const check = isStageDeletable(proc, stageToDelete.id);
+      if (!check.deletable) {
+        toast.error(check.reason || "This stage cannot be deleted");
+        setShowDeleteStageModal(false);
+        setStageToDelete(null);
+        return;
+      }
+    }
+
     setProcesses(
       processes.map((p) =>
         p.id === selectedProcess
@@ -4093,19 +4109,32 @@ export default function AdminProcessTemplates() {
                           </button>
                         )}
 
-                        <Tooltip text="Delete Stage">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-9 w-9 p-0 hover:bg-red-50 hover:border-red-200"
-                            onClick={() => {
-                              setStageToDelete(stage);
-                              setShowDeleteStageModal(true);
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </Tooltip>
+                        {stage.isSystemCategoryRequired || isPredefinedStage(stage, selectedProcessData?.entityType) ? (
+                          <Tooltip text="Predefined stage cannot be deleted">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled
+                              className="opacity-50 cursor-not-allowed text-gray-400 h-9 w-9 p-0"
+                            >
+                              <Lock className="w-4 h-4 text-gray-400" />
+                            </Button>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip text="Delete Stage">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-9 w-9 p-0 hover:bg-red-50 hover:border-red-200"
+                              onClick={() => {
+                                setStageToDelete(stage);
+                                setShowDeleteStageModal(true);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </Tooltip>
+                        )}
                       </div>
                     </div>
 
@@ -5482,7 +5511,7 @@ export default function AdminProcessTemplates() {
           }}
           title="Delete Stage"
           footer={
-            <>
+            stageToDelete && (stageToDelete.isSystemCategoryRequired || isPredefinedStage(stageToDelete, selectedProcessData?.entityType)) ? (
               <Button
                 variant="outline"
                 onClick={() => {
@@ -5490,33 +5519,65 @@ export default function AdminProcessTemplates() {
                   setStageToDelete(null);
                 }}
               >
-                Cancel
+                Close
               </Button>
-              <Button variant="destructive" onClick={handleDeleteStage}>
-                Delete Stage
-              </Button>
-            </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeleteStageModal(false);
+                    setStageToDelete(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleDeleteStage}>
+                  Delete Stage
+                </Button>
+              </>
+            )
           }
         >
-          <div className="space-y-4">
-            {/* Warning Icon */}
-            <div className="flex items-center justify-center">
-              <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
-                <AlertCircle className="w-8 h-8 text-destructive" />
+          {stageToDelete && (stageToDelete.isSystemCategoryRequired || isPredefinedStage(stageToDelete, selectedProcessData?.entityType)) ? (
+            <div className="space-y-4 text-center py-2">
+              <div className="flex items-center justify-center">
+                <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center border border-amber-200">
+                  <Lock className="w-8 h-8 text-amber-600" />
+                </div>
               </div>
-            </div>
-
-            {/* Main Message */}
-            <div className="text-center space-y-2">
-              <p className="text-base" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                Are you sure you want to delete this stage?
-              </p>
-              <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4">
-                <p className="font-semibold text-destructive" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                  {stageToDelete?.name}
+              <div className="space-y-2">
+                <h4 className="text-base font-bold text-gray-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  Predefined Workflow Stage
+                </h4>
+                <p className="text-xs text-gray-500 max-w-sm mx-auto leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  The stage <span className="font-semibold text-gray-800">"{stageToDelete.name}"</span> is a predefined system stage for {selectedProcessData?.entityType || "this"} workflows and cannot be deleted.
+                </p>
+                <p className="text-[11px] text-gray-400">
+                  You can rename, recolor, or reorder this stage at any time.
                 </p>
               </div>
             </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Warning Icon */}
+              <div className="flex items-center justify-center">
+                <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
+                  <AlertCircle className="w-8 h-8 text-destructive" />
+                </div>
+              </div>
+
+              {/* Main Message */}
+              <div className="text-center space-y-2">
+                <p className="text-base" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                  Are you sure you want to delete this stage?
+                </p>
+                <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4">
+                  <p className="font-semibold text-destructive" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    {stageToDelete?.name}
+                  </p>
+                </div>
+              </div>
 
             {/* Warning Details */}
             <div className="bg-warning/5 border border-warning/20 rounded-xl p-4">
@@ -5533,7 +5594,8 @@ export default function AdminProcessTemplates() {
               </div>
             </div>
           </div>
-        </Modal>
+        )}
+      </Modal>
 
         {/* How Process Works Modal — shared component */}
         <HowItWorksModal

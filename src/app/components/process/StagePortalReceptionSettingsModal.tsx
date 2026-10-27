@@ -520,28 +520,6 @@ export default function StagePortalReceptionSettingsModal({
               </div>
             </div>
 
-            {/* Quick Token Pills */}
-            <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Quick Tokens:</span>
-              {[
-                "client.name",
-                "appointment.date",
-                "appointment.time",
-                "invoice.total",
-                "stage.name",
-              ].map((tok) => (
-                <button
-                  key={tok}
-                  type="button"
-                  onClick={() => handleInsertSingleToken(tok)}
-                  className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-blue-50 hover:text-blue-600 border border-slate-200 text-[10px] font-mono text-slate-600 transition-colors cursor-pointer"
-                  title={`Click to insert {{${tok}}}`}
-                >
-                  +{`{{${tok}}}`}
-                </button>
-              ))}
-            </div>
-
             {/* Editor Block (Template Builder style) */}
             <div className="rounded-xl border border-slate-200 overflow-hidden shadow-xs bg-white">
               {editorTab === "html" ? (

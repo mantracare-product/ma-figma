@@ -621,7 +621,8 @@ export default function PatientStatusScreen() {
                     }
                     className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-blue-500/25 active:scale-[0.99]"
                   >
-                    <span>Stage Details &amp; Guidance</span>
+                    <FileText className="w-4 h-4" />
+                    <span>View Details</span>
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 )}
@@ -712,7 +713,8 @@ export default function PatientStatusScreen() {
                               }
                               className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-[0.99]"
                             >
-                              <span>Details</span>
+                              <FileText className="w-3.5 h-3.5" />
+                              <span>View Details</span>
                               <ChevronRight className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -812,13 +814,16 @@ export default function PatientStatusScreen() {
         />
       </QuietList>
 
-      {/* ── STAGE CONTENT DRAWER (Slide-Out Guidance & Consent) ── */}
+      {/* ── STAGE CONTENT DRAWER (Slide-Out Guidance & Details) ── */}
       <StageContentDrawer
         isOpen={Boolean(drawerTarget)}
         onClose={() => setDrawerTarget(null)}
         stage={drawerTarget?.stage || null}
         processName={drawerTarget?.processName || "Patient Care Journey"}
+        client={activeClient}
         clientName={activeClient.name}
+        appointment={todayAppt}
+        invoice={matchedInvoice}
         doctorName={todayAppt?.employeeName || activeClient.responsible || "Dr. Rajesh Patel"}
         roomName={roomDisplay || orgName}
         onConsentSigned={handleConsentSaved}

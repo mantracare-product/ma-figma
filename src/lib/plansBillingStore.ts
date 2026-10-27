@@ -9,7 +9,7 @@
 
 import type { ScopingRule } from "../app/context/FieldRegistryContext";
 
-export type PlanTier = "Starter" | "Professional" | "Custom";
+export type PlanTier = "Free" | "Starter" | "Professional" | "Custom";
 
 export interface CountryPricing {
   country: string;
@@ -27,9 +27,19 @@ export interface PlanLinkedTemplate {
   category?: string;
 }
 
+export const PLAN_CATEGORIES = [
+  "AI Receptionist",
+  "AI Scribe",
+  "EHR",
+  "RCM",
+] as const;
+
+export type PlanCategory = (typeof PLAN_CATEGORIES)[number];
+
 export interface IndustryPlan {
   id: string;
   name: string;
+  category?: PlanCategory | string; // Category: AI Scribe, AI Receptionist, EHR, RCM
   tier: PlanTier;
   targetCategory: string; // "Global" or specific category e.g. "Wellness & Lifestyle", "Real Estate", "Healthcare", "IT/Tech"
   scopingRules?: ScopingRule[]; // Unified Admin Scope rules (category, industries, locations)
@@ -50,6 +60,13 @@ export interface IndustryPlan {
   updatedAt: string;
 }
 
+export interface CountryPackagePrice {
+  country: string;
+  currency: string;
+  currencySymbol: string;
+  price: number;
+}
+
 export interface CreditPackage {
   id: string;
   name: string;
@@ -63,6 +80,7 @@ export interface CreditPackage {
   isInternalStaffOnly: boolean;
   targetCategory?: string; // Optional: "Global" or industry
   badge?: string; // e.g. "Popular", "Best Value"
+  countryPricing?: CountryPackagePrice[]; // Multi-currency localized pricing
   createdAt: string;
 }
 
@@ -75,6 +93,7 @@ export interface TeamMemberPack {
   country?: string;
   badge?: string;
   isActive: boolean;
+  countryPricing?: CountryPackagePrice[]; // Multi-currency localized pricing
   createdAt: string;
 }
 
@@ -105,6 +124,20 @@ export interface CreditDeductionLog {
   details?: string;
 }
 
+export interface ActivePlanItem {
+  planId: string;
+  planName: string;
+  category: PlanCategory | string;
+  tier: PlanTier;
+  billingCycle: "monthly" | "yearly";
+  amount: number;
+  currency: string;
+  currencySymbol: string;
+  includedSeats?: number;
+  monthlyCredits?: number;
+  yearlyCredits?: number;
+}
+
 export interface WorkspaceSubscription {
   workspaceId: string;
   planId: string;
@@ -118,6 +151,7 @@ export interface WorkspaceSubscription {
   nextRenewalDate: string;
   startDate: string;
   userCount: number; // Total active users
+  activePlans?: ActivePlanItem[]; // Multi-category subscription: 1 active plan per category (AI Receptionist, AI Scribe, EHR, RCM)
   includedSeats?: number; // FR-1, FR-11: Seats from plan
   extraSeatsPurchased?: number; // FR-9: Additional seats purchased via packs or custom
   planCredits?: number; // Renewed monthly with plan
@@ -144,6 +178,24 @@ export interface WorkspaceSubscription {
   }>;
 }
 
+export interface CartItem {
+  id: string;
+  type: "plan" | "credit_pack" | "custom_credits" | "team_pack" | "custom_seats";
+  title: string;
+  subtitle?: string;
+  category?: PlanCategory | string;
+  planId?: string;
+  planTier?: PlanTier;
+  billingCycle?: "monthly" | "yearly";
+  credits?: number;
+  members?: number;
+  price: number;
+  currencySymbol: string;
+  currency: string;
+}
+
+export const CART_STORAGE_KEY = "mantra_billing_cart_v2";
+export const CART_CHANGED_EVENT = "mantra_cart_changed";
 export const PLANS_STORAGE_KEY = "mantra_admin_industry_plans_v2";
 export const CREDIT_PACKAGES_STORAGE_KEY = "mantra_admin_credit_packages_v1";
 export const TEAM_MEMBER_PACKS_STORAGE_KEY = "mantra_admin_team_member_packs_v1";
@@ -174,7 +226,325 @@ export const DEFAULT_COUNTRY_PRICING: CountryPricing[] = [
   { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 45, yearlyPrice: 432 },
 ];
 
-export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [];
+export function getDefaultPackageCountryPricing(baseUSDPrice: number): CountryPackagePrice[] {
+  const roundedUSD = Math.round(baseUSDPrice);
+  return [
+    { country: "United States", currency: "USD", currencySymbol: "$", price: roundedUSD },
+    { country: "India", currency: "INR", currencySymbol: "₹", price: Math.round(baseUSDPrice * 80) },
+    { country: "United Kingdom", currency: "GBP", currencySymbol: "£", price: Math.max(1, Math.round(baseUSDPrice * 0.8)) },
+    { country: "Canada", currency: "CAD", currencySymbol: "C$", price: Math.round(baseUSDPrice * 1.35) },
+    { country: "Australia", currency: "AUD", currencySymbol: "A$", price: Math.round(baseUSDPrice * 1.5) },
+    { country: "Germany", currency: "EUR", currencySymbol: "€", price: Math.max(1, Math.round(baseUSDPrice * 0.92)) },
+  ];
+}
+
+export function getPackageLocalizedPrice(
+  pkg: { totalPrice: number; currencySymbol?: string; countryPricing?: CountryPackagePrice[] },
+  targetCountry?: string,
+  targetCurrency?: string
+): { price: number; currencySymbol: string; currency: string } {
+  if (pkg.countryPricing && pkg.countryPricing.length > 0) {
+    if (targetCountry) {
+      const match = pkg.countryPricing.find((cp) => cp.country.toLowerCase() === targetCountry.toLowerCase());
+      if (match) {
+        return { price: match.price, currencySymbol: match.currencySymbol, currency: match.currency };
+      }
+    }
+    if (targetCurrency) {
+      const matchCurr = pkg.countryPricing.find((cp) => cp.currency.toLowerCase() === targetCurrency.toLowerCase());
+      if (matchCurr) {
+        return { price: matchCurr.price, currencySymbol: matchCurr.currencySymbol, currency: matchCurr.currency };
+      }
+    }
+    const defaultCP = pkg.countryPricing[0];
+    return { price: defaultCP.price, currencySymbol: defaultCP.currencySymbol, currency: defaultCP.currency };
+  }
+  return { price: pkg.totalPrice, currencySymbol: pkg.currencySymbol || "$", currency: "USD" };
+}
+
+export const INITIAL_INDUSTRY_PLANS: IndustryPlan[] = [
+  {
+    id: "plan-ai-rec-starter",
+    name: "AI Voice Receptionist Starter",
+    category: "AI Receptionist",
+    tier: "Starter",
+    targetCategory: "Global",
+    description: "24/7 autonomous AI voice receptionist for inbound calls and appointments.",
+    includedSeats: 2,
+    monthlyCredits: 1000,
+    yearlyCredits: 12000,
+    isActive: true,
+    isPopular: false,
+    isInternalStaffOnly: false,
+    features: [
+      "2 team members included",
+      "1,000 Voice & Chat Credits / mo",
+      "24/7 AI Voice Answering Agent",
+      "Real-time Call logs & SMS Triage",
+      "Automated Scheduling & Booking",
+    ],
+    modules: ["telephony", "clients", "appointments"],
+    moduleFeatures: {
+      telephony: ["24/7 AI Voice Answering Agent", "Inbound Calling"],
+    },
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 49, yearlyPrice: 470 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 3999, yearlyPrice: 38390 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 39, yearlyPrice: 375 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 65, yearlyPrice: 624 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 75, yearlyPrice: 720 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 45, yearlyPrice: 432 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "plan-ai-rec-pro",
+    name: "AI Voice Receptionist Pro",
+    category: "AI Receptionist",
+    tier: "Professional",
+    targetCategory: "Global",
+    description: "Multi-line outbound dialing, intelligent triage rules, and team call transfers.",
+    includedSeats: 5,
+    monthlyCredits: 3000,
+    yearlyCredits: 36000,
+    isActive: true,
+    isPopular: true,
+    isInternalStaffOnly: false,
+    features: [
+      "5 team members included",
+      "3,000 Voice & Chat Credits / mo",
+      "AI Voice Receptionist + Outbound Calling",
+      "Smart Routing & Automated Follow-ups",
+      "Priority VIP Call Queues",
+    ],
+    modules: ["telephony", "clients", "appointments"],
+    moduleFeatures: {
+      telephony: ["24/7 AI Voice Answering Agent", "Inbound & Outbound Calling", "Smart Routing"],
+    },
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 99, yearlyPrice: 950 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 7999, yearlyPrice: 76790 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 79, yearlyPrice: 758 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 135, yearlyPrice: 1296 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 150, yearlyPrice: 1440 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 90, yearlyPrice: 864 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "plan-ai-scribe-starter",
+    name: "AI Clinical Scribe Starter",
+    category: "AI Scribe",
+    tier: "Starter",
+    targetCategory: "Global",
+    description: "Real-time clinical consultation audio capture and instant SOAP note drafting.",
+    includedSeats: 2,
+    monthlyCredits: 1200,
+    yearlyCredits: 14400,
+    isActive: true,
+    isPopular: false,
+    isInternalStaffOnly: false,
+    features: [
+      "2 providers included",
+      "1,200 Audio Transcription Credits / mo",
+      "Instant SOAP Note synthesis",
+      "EHR-ready copy & export",
+    ],
+    modules: ["scribe"],
+    moduleFeatures: {},
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 59, yearlyPrice: 566 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 4799, yearlyPrice: 46070 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 47, yearlyPrice: 450 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 79, yearlyPrice: 758 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 89, yearlyPrice: 854 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 55, yearlyPrice: 528 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "plan-ai-scribe-pro",
+    name: "AI Clinical Scribe Pro",
+    category: "AI Scribe",
+    tier: "Professional",
+    targetCategory: "Global",
+    description: "Unlimited clinical dictations, multi-specialty templates, and direct EHR sync.",
+    includedSeats: 5,
+    monthlyCredits: 4000,
+    yearlyCredits: 48000,
+    isActive: true,
+    isPopular: true,
+    isInternalStaffOnly: false,
+    features: [
+      "5 providers included",
+      "4,000 Audio Transcription Credits / mo",
+      "Multi-specialty SOAP Templates",
+      "ICD-10 & CPT code suggestions",
+      "Direct EHR Chart Insertion",
+    ],
+    modules: ["scribe"],
+    moduleFeatures: {},
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 119, yearlyPrice: 1142 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 9599, yearlyPrice: 92150 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 95, yearlyPrice: 912 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 159, yearlyPrice: 1526 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 179, yearlyPrice: 1718 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 110, yearlyPrice: 1056 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "plan-ehr-starter",
+    name: "Cloud EHR Essentials",
+    category: "EHR",
+    tier: "Starter",
+    targetCategory: "Global",
+    description: "Core digital health records, patient demographics, and appointment scheduling.",
+    includedSeats: 3,
+    monthlyCredits: 1500,
+    yearlyCredits: 18000,
+    isActive: true,
+    isPopular: false,
+    isInternalStaffOnly: false,
+    features: [
+      "3 team members included",
+      "1,500 System & Notification Credits / mo",
+      "Patient Demographics & Medical History",
+      "Online Booking Widget & Reminders",
+    ],
+    modules: ["clients", "appointments"],
+    moduleFeatures: {},
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 79, yearlyPrice: 758 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 6399, yearlyPrice: 61430 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 63, yearlyPrice: 604 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 105, yearlyPrice: 1008 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 119, yearlyPrice: 1142 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 72, yearlyPrice: 691 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "plan-ehr-pro",
+    name: "Integrated EHR Suite",
+    category: "EHR",
+    tier: "Professional",
+    targetCategory: "Global",
+    description: "Full clinical charting, e-prescriptions, lab integrations, and digital intake forms.",
+    includedSeats: 8,
+    monthlyCredits: 5000,
+    yearlyCredits: 60000,
+    isActive: true,
+    isPopular: true,
+    isInternalStaffOnly: false,
+    features: [
+      "8 team members included",
+      "5,000 System Credits / mo",
+      "Clinical Charting & E-Prescriptions",
+      "Lab Orders & Digital Intake Forms",
+      "Secure Document Vault",
+    ],
+    modules: ["clients", "appointments", "forms"],
+    moduleFeatures: {},
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 149, yearlyPrice: 1430 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 11999, yearlyPrice: 115190 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 119, yearlyPrice: 1142 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 199, yearlyPrice: 1910 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 225, yearlyPrice: 2160 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 138, yearlyPrice: 1324 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "plan-rcm-starter",
+    name: "RCM Billing & Claims Starter",
+    category: "RCM",
+    tier: "Starter",
+    targetCategory: "Global",
+    description: "Automated claim submission, eligibility checks, and patient invoicing.",
+    includedSeats: 3,
+    monthlyCredits: 1500,
+    yearlyCredits: 18000,
+    isActive: true,
+    isPopular: false,
+    isInternalStaffOnly: false,
+    features: [
+      "3 billers included",
+      "1,500 Billing & Claims Credits / mo",
+      "Automated Clearinghouse Submission",
+      "Patient Statements & Online Payments",
+    ],
+    modules: ["billing"],
+    moduleFeatures: {},
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 69, yearlyPrice: 662 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 5599, yearlyPrice: 53750 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 55, yearlyPrice: 528 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 92, yearlyPrice: 883 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 105, yearlyPrice: 1008 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 64, yearlyPrice: 614 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "plan-rcm-pro",
+    name: "Full Revenue Cycle Suite",
+    category: "RCM",
+    tier: "Professional",
+    targetCategory: "Global",
+    description: "End-to-end denial management, automated ERA posting, and financial analytics.",
+    includedSeats: 6,
+    monthlyCredits: 4500,
+    yearlyCredits: 54000,
+    isActive: true,
+    isPopular: true,
+    isInternalStaffOnly: false,
+    features: [
+      "6 billers included",
+      "4,500 Billing Credits / mo",
+      "Denial Management & Auto-ERA Posting",
+      "Advanced Revenue & Aging Analytics",
+      "Automated Patient Collections",
+    ],
+    modules: ["billing"],
+    moduleFeatures: {},
+    linkedTemplates: [],
+    linkedProcessTemplates: [],
+    countryPricing: [
+      { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 139, yearlyPrice: 1334 },
+      { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 11199, yearlyPrice: 107510 },
+      { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 111, yearlyPrice: 1065 },
+      { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 185, yearlyPrice: 1776 },
+      { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 210, yearlyPrice: 2016 },
+      { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 128, yearlyPrice: 1228 },
+    ],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  },
+];
 
 export const INITIAL_CREDIT_PACKAGES: CreditPackage[] = [
   {
@@ -672,13 +1042,28 @@ export function getStoredPlans(): IndustryPlan[] {
     }
     const raw = localStorage.getItem(PLANS_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify([]));
-      return [];
+      localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(INITIAL_INDUSTRY_PLANS));
+      return INITIAL_INDUSTRY_PLANS;
     }
-    return JSON.parse(raw);
+    const parsed: IndustryPlan[] = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(INITIAL_INDUSTRY_PLANS));
+      return INITIAL_INDUSTRY_PLANS;
+    }
+    // Guarantee category is populated for every plan
+    const updated = parsed.map((p) => {
+      if (p.category) return p;
+      const lower = p.name.toLowerCase();
+      let cat: PlanCategory = "AI Receptionist";
+      if (lower.includes("scribe")) cat = "AI Scribe";
+      else if (lower.includes("ehr") || lower.includes("chart") || lower.includes("record")) cat = "EHR";
+      else if (lower.includes("rcm") || lower.includes("billing") || lower.includes("claim")) cat = "RCM";
+      return { ...p, category: cat };
+    });
+    return updated;
   } catch (err) {
     console.error("Error reading plans:", err);
-    return [];
+    return INITIAL_INDUSTRY_PLANS;
   }
 }
 
@@ -723,11 +1108,15 @@ export function deletePlan(id: string): void {
 export function getStoredCreditPackages(): CreditPackage[] {
   try {
     const raw = localStorage.getItem(CREDIT_PACKAGES_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(CREDIT_PACKAGES_STORAGE_KEY, JSON.stringify(INITIAL_CREDIT_PACKAGES));
-      return INITIAL_CREDIT_PACKAGES;
-    }
-    return JSON.parse(raw);
+    let list: CreditPackage[] = raw ? JSON.parse(raw) : INITIAL_CREDIT_PACKAGES;
+    list = list.map((pkg) => ({
+      ...pkg,
+      countryPricing:
+        pkg.countryPricing && pkg.countryPricing.length > 0
+          ? pkg.countryPricing
+          : getDefaultPackageCountryPricing(pkg.totalPrice),
+    }));
+    return list;
   } catch (err) {
     console.error("Error reading credit packages:", err);
     return INITIAL_CREDIT_PACKAGES;
@@ -790,33 +1179,80 @@ export function clearAllStoredSubscriptions(): void {
   }
 }
 
+export const DEFAULT_FREE_PLAN: IndustryPlan = {
+  id: "plan-free-onboarding",
+  name: "Free Plan",
+  category: "AI Receptionist",
+  tier: "Free",
+  targetCategory: "Global",
+  description: "Complimentary onboarding tier for newly created accounts to explore AI features.",
+  includedSeats: 1,
+  monthlyCredits: 500,
+  yearlyCredits: 6000,
+  isActive: true,
+  isPopular: false,
+  isInternalStaffOnly: false,
+  features: [
+    "1 team member included",
+    "500 included Voice & Chat Credits / mo",
+    "AI Voice Receptionist agent (Trial)",
+    "Multi-channel Chat & Call logs",
+    "Automated Scheduling & Confirmations",
+  ],
+  linkedProcessTemplates: [],
+  countryPricing: [
+    { country: "United States", currency: "USD", currencySymbol: "$", monthlyPrice: 0, yearlyPrice: 0 },
+    { country: "India", currency: "INR", currencySymbol: "₹", monthlyPrice: 0, yearlyPrice: 0 },
+    { country: "United Kingdom", currency: "GBP", currencySymbol: "£", monthlyPrice: 0, yearlyPrice: 0 },
+    { country: "Canada", currency: "CAD", currencySymbol: "C$", monthlyPrice: 0, yearlyPrice: 0 },
+    { country: "Australia", currency: "AUD", currencySymbol: "A$", monthlyPrice: 0, yearlyPrice: 0 },
+    { country: "Germany", currency: "EUR", currencySymbol: "€", monthlyPrice: 0, yearlyPrice: 0 },
+  ],
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+};
+
 export function getWorkspaceSubscription(workspaceId: string): WorkspaceSubscription {
   const subs = getStoredSubscriptions();
-  if (subs[workspaceId]) {
-    return subs[workspaceId];
+  const existing = subs[workspaceId];
+  if (existing && existing.planId && existing.status === "Active") {
+    return existing;
   }
-  // Default unassigned subscription state when no plan has been assigned yet
-  return {
+
+  // When a new user / workspace is created, overview shows the values of the Free onboarding plan
+  const plans = getStoredPlans();
+  const freePlan = plans.find((p) => (p.tier || "").toLowerCase() === "free" && p.isActive) || DEFAULT_FREE_PLAN;
+
+  const defaultFreeSub: WorkspaceSubscription = {
     workspaceId,
-    planId: "",
-    planName: "No Plan Assigned",
-    tier: "Starter",
+    planId: freePlan.id,
+    planName: freePlan.name,
+    tier: "Free",
     billingCycle: "monthly",
     amount: 0,
     currency: "USD",
     currencySymbol: "$",
-    status: "Inactive",
-    nextRenewalDate: "—",
-    startDate: "—",
-    userCount: 0,
-    includedSeats: 0,
-    extraSeatsPurchased: 0,
-    planCredits: 0,
-    addonCredits: 0,
-    totalCredits: 0,
-    creditsUsed: 0,
-    creditsRemaining: 0,
+    status: "Active",
+    nextRenewalDate: "Free (No Expiration)",
+    startDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    userCount: 1,
+    includedSeats: freePlan.includedSeats || 1,
+    extraSeatsPurchased: existing?.extraSeatsPurchased || 0,
+    planCredits: freePlan.monthlyCredits || 500,
+    addonCredits: existing?.addonCredits || 0,
+    totalCredits: (freePlan.monthlyCredits || 500) + (existing?.addonCredits || 0),
+    creditsUsed: existing?.creditsUsed || 0,
+    creditsRemaining: Math.max(0, (freePlan.monthlyCredits || 500) + (existing?.addonCredits || 0) - (existing?.creditsUsed || 0)),
   };
+
+  subs[workspaceId] = defaultFreeSub;
+  try {
+    localStorage.setItem(SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify(subs));
+  } catch (err) {
+    console.error("Error storing default free subscription:", err);
+  }
+
+  return defaultFreeSub;
 }
 
 export function updateWorkspaceSubscription(workspaceId: string, updates: Partial<WorkspaceSubscription>): void {
@@ -988,11 +1424,15 @@ export function getAvailableCreditPackagesForWorkspace(
 export function getStoredTeamMemberPacks(): TeamMemberPack[] {
   try {
     const raw = localStorage.getItem(TEAM_MEMBER_PACKS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(TEAM_MEMBER_PACKS_STORAGE_KEY, JSON.stringify(INITIAL_TEAM_MEMBER_PACKS));
-      return INITIAL_TEAM_MEMBER_PACKS;
-    }
-    return JSON.parse(raw);
+    let list: TeamMemberPack[] = raw ? JSON.parse(raw) : INITIAL_TEAM_MEMBER_PACKS;
+    list = list.map((pack) => ({
+      ...pack,
+      countryPricing:
+        pack.countryPricing && pack.countryPricing.length > 0
+          ? pack.countryPricing
+          : getDefaultPackageCountryPricing(pack.totalPrice),
+    }));
+    return list;
   } catch (err) {
     console.error("Error reading team member packs:", err);
     return INITIAL_TEAM_MEMBER_PACKS;
@@ -1159,7 +1599,21 @@ export function recordCreditDeduction(
   return { deducted: totalDeducted, remaining: newRemaining, log: newLog };
 }
 
-// ── PLAN ASSIGNMENT (FR-10) ──
+// ── PLAN ASSIGNMENT (FR-10) WITH MULTI-CATEGORY SUPPORT ──
+
+export function getSubscriptionDisplayPlanName(sub: WorkspaceSubscription | null | undefined): string {
+  if (!sub) return "No Plan Assigned";
+  if (sub.activePlans && sub.activePlans.length > 0) {
+    return sub.activePlans.map((p) => p.planName).join(" + ");
+  }
+  if (sub.planName && sub.planName !== "No Plan Assigned") {
+    return sub.planName;
+  }
+  if ((sub.tier || "").toLowerCase() === "free" || sub.amount === 0) {
+    return "Free Plan";
+  }
+  return "Starter Health";
+}
 
 export function assignPlanToWorkspace(
   workspaceId: string,
@@ -1180,25 +1634,231 @@ export function assignPlanToWorkspace(
 
   const amount = billingCycle === "yearly" ? countryPricing.yearlyPrice : countryPricing.monthlyPrice;
   const planCredits = billingCycle === "yearly" ? targetPlan.yearlyCredits : targetPlan.monthlyCredits;
+  const planSeats = targetPlan.includedSeats || (targetPlan.tier === "Starter" ? 2 : targetPlan.tier === "Professional" ? 5 : 20);
+  const planCategory = targetPlan.category || "AI Receptionist";
 
-  const updated: WorkspaceSubscription = {
-    ...existing,
+  // Multi-category rule: User can have one plan from each category at a time
+  let activePlans: ActivePlanItem[] = existing.activePlans ? [...existing.activePlans] : [];
+  if (activePlans.length === 0 && existing.planId && existing.tier !== "Free") {
+    const prevPlan = plans.find((p) => p.id === existing.planId);
+    activePlans.push({
+      planId: existing.planId,
+      planName: existing.planName,
+      category: prevPlan?.category || "AI Receptionist",
+      tier: existing.tier,
+      billingCycle: existing.billingCycle,
+      amount: existing.amount,
+      currency: existing.currency,
+      currencySymbol: existing.currencySymbol,
+      includedSeats: existing.includedSeats,
+      monthlyCredits: existing.planCredits,
+    });
+  }
+
+  // Replace existing plan in the same category (1 plan per category rule)
+  activePlans = activePlans.filter((p) => (p.category || "").toLowerCase() !== planCategory.toLowerCase());
+  activePlans.push({
     planId: targetPlan.id,
     planName: targetPlan.name,
+    category: planCategory,
     tier: targetPlan.tier,
     billingCycle,
     amount,
     currency: countryPricing.currency,
     currencySymbol: countryPricing.currencySymbol,
+    includedSeats: planSeats,
+    monthlyCredits: planCredits,
+    yearlyCredits: targetPlan.yearlyCredits,
+  });
+
+  const totalIncludedSeats = activePlans.reduce((sum, p) => sum + (p.includedSeats || 2), 0);
+  const totalPlanCredits = activePlans.reduce((sum, p) => sum + (p.monthlyCredits || 1000), 0);
+  const totalAmount = activePlans.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const combinedPlanName = activePlans.map((p) => p.planName).join(" + ");
+
+  const updated: WorkspaceSubscription = {
+    ...existing,
+    activePlans,
+    planId: targetPlan.id,
+    planName: combinedPlanName,
+    tier: targetPlan.tier,
+    billingCycle,
+    amount: totalAmount,
+    currency: countryPricing.currency,
+    currencySymbol: countryPricing.currencySymbol,
     status: "Active",
-    includedSeats: targetPlan.includedSeats || (targetPlan.tier === "Starter" ? 2 : targetPlan.tier === "Professional" ? 5 : 20),
-    planCredits,
-    totalCredits: planCredits + (existing.addonCredits || 0),
-    creditsRemaining: planCredits + (existing.addonCredits || 0) - (existing.creditsUsed || 0),
+    includedSeats: totalIncludedSeats,
+    planCredits: totalPlanCredits,
+    totalCredits: totalPlanCredits + (existing.addonCredits || 0),
+    creditsRemaining: Math.max(0, totalPlanCredits + (existing.addonCredits || 0) - (existing.creditsUsed || 0)),
     nextRenewalDate: new Date(Date.now() + (billingCycle === "yearly" ? 365 : 30) * 86400000).toISOString().slice(0, 10),
   };
 
   updateWorkspaceSubscription(workspaceId, updated);
+  return updated;
+}
+
+// ── BILLING CART STORE & CHECKOUT ENGINE ──
+
+export function getStoredCart(workspaceId: string): CartItem[] {
+  try {
+    const raw = localStorage.getItem(`${CART_STORAGE_KEY}_${workspaceId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+export function saveStoredCart(workspaceId: string, items: CartItem[]): void {
+  try {
+    localStorage.setItem(`${CART_STORAGE_KEY}_${workspaceId}`, JSON.stringify(items));
+    window.dispatchEvent(
+      new CustomEvent(CART_CHANGED_EVENT, { detail: { workspaceId, items } })
+    );
+    window.dispatchEvent(
+      new CustomEvent(PLANS_BILLING_CHANGED_EVENT, { detail: { type: "cart_updated", workspaceId } })
+    );
+  } catch (err) {
+    console.error("Error saving cart:", err);
+  }
+}
+
+export function addToCart(workspaceId: string, item: Omit<CartItem, "id">): CartItem[] {
+  const current = getStoredCart(workspaceId);
+  // If adding a plan of a specific category, replace any other plan of that same category currently in the cart
+  let next: CartItem[];
+  if (item.type === "plan" && item.category) {
+    next = current.filter(
+      (ci) => !(ci.type === "plan" && (ci.category || "").toLowerCase() === (item.category || "").toLowerCase())
+    );
+  } else {
+    next = [...current];
+  }
+
+  const newItem: CartItem = {
+    ...item,
+    id: `cart-item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+  };
+  next.push(newItem);
+  saveStoredCart(workspaceId, next);
+  return next;
+}
+
+export function removeFromCart(workspaceId: string, itemId: string): CartItem[] {
+  const current = getStoredCart(workspaceId);
+  const next = current.filter((ci) => ci.id !== itemId);
+  saveStoredCart(workspaceId, next);
+  return next;
+}
+
+export function clearCart(workspaceId: string): void {
+  saveStoredCart(workspaceId, []);
+}
+
+export function checkoutCart(workspaceId: string): WorkspaceSubscription {
+  const cart = getStoredCart(workspaceId);
+  if (cart.length === 0) {
+    return getWorkspaceSubscription(workspaceId);
+  }
+
+  const existing = getWorkspaceSubscription(workspaceId);
+  const plans = getStoredPlans();
+  let activePlans: ActivePlanItem[] = existing.activePlans ? [...existing.activePlans] : [];
+
+  // If existing has a single active plan not yet in activePlans, initialize activePlans with it
+  if (activePlans.length === 0 && existing.planId && existing.tier !== "Free") {
+    const currentPlan = plans.find((p) => p.id === existing.planId);
+    activePlans.push({
+      planId: existing.planId,
+      planName: existing.planName,
+      category: currentPlan?.category || "AI Receptionist",
+      tier: existing.tier,
+      billingCycle: existing.billingCycle,
+      amount: existing.amount,
+      currency: existing.currency,
+      currencySymbol: existing.currencySymbol,
+      includedSeats: existing.includedSeats,
+      monthlyCredits: existing.planCredits,
+    });
+  }
+
+  let additionalAddonCredits = 0;
+  let additionalExtraSeats = 0;
+  const recentPackages = [...(existing.recentPackages || [])];
+  const recentMemberPacks = [...(existing.recentMemberPacks || [])];
+
+  for (const item of cart) {
+    if (item.type === "plan" && item.planId) {
+      const planCategory = item.category || "AI Receptionist";
+      // One plan from each category at a time: replace existing in this category
+      activePlans = activePlans.filter((p) => (p.category || "").toLowerCase() !== planCategory.toLowerCase());
+      activePlans.push({
+        planId: item.planId,
+        planName: item.title,
+        category: planCategory,
+        tier: item.planTier || "Starter",
+        billingCycle: item.billingCycle || "monthly",
+        amount: item.price,
+        currency: item.currency,
+        currencySymbol: item.currencySymbol,
+        includedSeats: item.members || 2,
+        monthlyCredits: item.credits || 1000,
+      });
+    } else if (item.type === "credit_pack" || item.type === "custom_credits") {
+      const credits = item.credits || 0;
+      additionalAddonCredits += credits;
+      recentPackages.unshift({
+        packageId: item.id,
+        packageName: item.title,
+        credits,
+        amount: item.price,
+        currencySymbol: item.currencySymbol,
+        purchasedAt: new Date().toISOString(),
+      });
+    } else if (item.type === "team_pack" || item.type === "custom_seats") {
+      const members = item.members || 0;
+      additionalExtraSeats += members;
+      recentMemberPacks.unshift({
+        packId: item.id,
+        packName: item.title,
+        members,
+        amount: item.price,
+        currencySymbol: item.currencySymbol,
+        purchasedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  // Calculate aggregated plan values
+  const totalIncludedSeats = activePlans.reduce((sum, p) => sum + (p.includedSeats || 2), 0) || (existing.includedSeats || 2);
+  const totalPlanCredits = activePlans.reduce((sum, p) => sum + (p.monthlyCredits || 1000), 0) || (existing.planCredits || 1000);
+  const totalPlanAmount = activePlans.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const combinedPlanName = activePlans.map((p) => p.planName).join(" + ");
+
+  const updated: WorkspaceSubscription = {
+    ...existing,
+    activePlans,
+    planId: activePlans[0]?.planId || existing.planId,
+    planName: combinedPlanName || existing.planName,
+    tier: activePlans[0]?.tier || existing.tier,
+    amount: totalPlanAmount,
+    includedSeats: totalIncludedSeats,
+    extraSeatsPurchased: (existing.extraSeatsPurchased || 0) + additionalExtraSeats,
+    planCredits: totalPlanCredits,
+    addonCredits: (existing.addonCredits || 0) + additionalAddonCredits,
+    totalCredits: totalPlanCredits + (existing.addonCredits || 0) + additionalAddonCredits,
+    creditsRemaining: Math.max(
+      0,
+      totalPlanCredits + (existing.addonCredits || 0) + additionalAddonCredits - (existing.creditsUsed || 0)
+    ),
+    recentPackages,
+    recentMemberPacks,
+    lastCreditTopupDate: additionalAddonCredits > 0 ? new Date().toISOString() : existing.lastCreditTopupDate,
+    status: "Active",
+  };
+
+  updateWorkspaceSubscription(workspaceId, updated);
+  clearCart(workspaceId);
   return updated;
 }
 
