@@ -48,16 +48,15 @@ import AddForwardingRuleModal from "./AddForwardingRuleModal";
 interface EmailAgentWorkflowViewProps {
   onOpenCampaignTemplates?: () => void;
   onOpenWebmailCompose?: () => void;
+  inDrawer?: boolean;
 }
 
 export default function EmailAgentWorkflowView({
   onOpenCampaignTemplates,
   onOpenWebmailCompose,
+  inDrawer = false,
 }: EmailAgentWorkflowViewProps) {
   const { config, updateConfig } = useEmailAgentStore();
-
-  // Top Tabs: "agent" vs "campaigns"
-  const [topTab, setTopTab] = useState<"agent" | "campaigns">("agent");
 
   // Step 1: Label creation form state
   const [newLabelName, setNewLabelName] = useState("");
@@ -293,40 +292,10 @@ export default function EmailAgentWorkflowView({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 pb-20 text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
-      {/* ── Top Pill Switcher: [Email agent] | [Campaign templates] ── */}
-      <div className="flex items-center justify-between pt-1">
-        <div className="inline-flex items-center p-1 bg-slate-100 rounded-full border border-gray-200 shadow-2xs">
-          <button
-            type="button"
-            onClick={() => setTopTab("agent")}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
-              topTab === "agent"
-                ? "bg-[#0F172A] text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
-            }`}
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            Email agent
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setTopTab("campaigns");
-              onOpenCampaignTemplates?.();
-            }}
-            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-              topTab === "campaigns"
-                ? "bg-[#0F172A] text-white shadow-xs font-bold"
-                : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
-            }`}
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            Campaign templates
-          </button>
-        </div>
-      </div>
-
+    <div
+      className={`w-full mx-auto space-y-6 ${inDrawer ? "pb-8 max-w-full" : "max-w-6xl pb-20"} text-slate-800`}
+      style={{ fontFamily: "DM Sans, sans-serif" }}
+    >
       {/* ── Main Layout: Left Pipeline Steps (70%) + Right Mailbox Card (30%) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Title & 4 Pipeline Steps */}

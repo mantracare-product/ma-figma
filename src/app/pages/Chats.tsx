@@ -79,7 +79,9 @@ import WebmailView, { EmailFolder } from "../components/chats/WebmailView";
 import EmailTemplateDrawer, { EmailTemplate } from "../components/chats/EmailTemplateDrawer";
 import EmailBlacklistDrawer from "../components/chats/EmailBlacklistDrawer";
 import MailboxIntegrationDrawer from "../components/chats/MailboxIntegrationDrawer";
-import EmailAgentWorkflowView from "../components/chats/EmailAgentWorkflowView";
+import EmailAgentDrawer from "../components/chats/EmailAgentDrawer";
+import EmailAgentRulesView from "../components/chats/EmailAgentRulesView";
+import { useEmailAgentStore } from "../../lib/emailAgentStore";
 export type Message = ConvMessage;
 export type Conversation = ConvConversation;
 import PageHeader from "../components/layout/PageHeader";
@@ -840,6 +842,7 @@ export default function Chats() {
     else if (tabParam === "chatbot" && LEGACY_CHATBOT_MODULE_ENABLED) setActiveTab("chatbot");
     else if (tabParam === "agent" || subModeParam === "agent") {
       setActiveTab("chats");
+      setEmailSubMode("agent");
     }
     else setActiveTab("chats");
   }, [location.search]);
@@ -945,15 +948,54 @@ export default function Chats() {
 
   const [showBlacklistDrawer, setShowBlacklistDrawer] = useState(false);
   const [showMailboxIntegrationDrawer, setShowMailboxIntegrationDrawer] = useState(false);
+  const [showEmailAgentDrawer, setShowEmailAgentDrawer] = useState(false);
+
+  // Email Agent filter and search in topbar
+  const { config: emailAgentConfig } = useEmailAgentStore();
+  const [emailAgentFilter, setEmailAgentFilter] = useState<"all" | "active" | "custom" | "templates">("all");
+  const [emailAgentSearch, setEmailAgentSearch] = useState("");
+  const [showAgentFilterDropdown, setShowAgentFilterDropdown] = useState(false);
+  const agentFilterDropdownRef = useRef<HTMLDivElement>(null);
+
+  const emailAgentCounts = useMemo(() => {
+    const all = [
+      ...emailAgentConfig.step1Labels.customLabels,
+      ...emailAgentConfig.step1Labels.predefinedLabels,
+    ];
+    const active = all.filter((l) => l.enabled !== false).length;
+    const custom = emailAgentConfig.step1Labels.customLabels.length;
+    const templates = emailAgentConfig.step1Labels.predefinedLabels.length;
+    return { all: all.length, active, custom, templates };
+  }, [emailAgentConfig.step1Labels]);
+
+  const emailAgentFilterLabel = useMemo(() => {
+    switch (emailAgentFilter) {
+      case "active":
+        return `Active (${emailAgentCounts.active})`;
+      case "custom":
+        return `Custom (${emailAgentCounts.custom})`;
+      case "templates":
+        return `Templates (${emailAgentCounts.templates})`;
+      default:
+        return `All Rules (${emailAgentCounts.all})`;
+    }
+  }, [emailAgentFilter, emailAgentCounts]);
 
   useEffect(() => {
     const handleOpenMailbox = () => setShowMailboxIntegrationDrawer(true);
     const handleOpenBlacklist = () => setShowBlacklistDrawer(true);
+    const handleOpenEmailAgent = () => {
+      setChannelFilter("email");
+      setEmailSubMode("agent");
+      setActiveTab("chats");
+    };
     window.addEventListener("open-mailbox-integration-settings", handleOpenMailbox);
     window.addEventListener("open-webmail-blacklist", handleOpenBlacklist);
+    window.addEventListener("open-email-agent-settings", handleOpenEmailAgent);
     return () => {
       window.removeEventListener("open-mailbox-integration-settings", handleOpenMailbox);
       window.removeEventListener("open-webmail-blacklist", handleOpenBlacklist);
+      window.removeEventListener("open-email-agent-settings", handleOpenEmailAgent);
     };
   }, []);
 
@@ -1173,9 +1215,9 @@ export default function Chats() {
     setActiveTab("chats");
   };
 
-  const [emailSubMode, setEmailSubMode] = useState<"inbox" | "templates" | "agent">("inbox");
+  const [emailSubMode, setEmailSubMode] = useState<"inbox" | "agent" | "templates">("inbox");
 
-  const handleSubModeChange = (mode: "inbox" | "templates" | "agent") => {
+  const handleSubModeChange = (mode: "inbox" | "agent" | "templates") => {
     if (channelFilter === "email") {
       setEmailSubMode(mode);
       if (mode === "templates") {
@@ -1212,6 +1254,7 @@ export default function Chats() {
         setShowViewFilterDropdown(false);
         setShowEmailGearMenu(false);
         setShowEmailFolderDropdown(false);
+        setShowAgentFilterDropdown(false);
       }
     };
     const handleClickOutside = (e: MouseEvent) => {
@@ -1233,6 +1276,9 @@ export default function Chats() {
       }
       if (emailFolderDropdownRef.current && !emailFolderDropdownRef.current.contains(e.target as Node)) {
         setShowEmailFolderDropdown(false);
+      }
+      if (agentFilterDropdownRef.current && !agentFilterDropdownRef.current.contains(e.target as Node)) {
+        setShowAgentFilterDropdown(false);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -2243,7 +2289,7 @@ export default function Chats() {
                 </div>
               )}
 
-              {/* Email Channel Navigation: First ask Mail vs Templates, then ask for account & folders if Mail */}
+              {/* Email Channel Navigation: Mails | Agent | Template */}
               {channelFilter === "email" && (
                 <>
                   <div className="inline-flex items-center p-0.5 bg-muted/60 border border-border/80 rounded-xl gap-0.5 shrink-0">
@@ -2257,7 +2303,19 @@ export default function Chats() {
                       }`}
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      <span>Mail</span>
+                      <span>Mails</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSubModeChange("agent")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center transition-all cursor-pointer ${
+                        subMode === "agent"
+                          ? "bg-white text-[#1E293B] shadow-2xs font-bold"
+                          : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <span>Agent</span>
                     </button>
                     <button
                       type="button"
@@ -2269,22 +2327,96 @@ export default function Chats() {
                       }`}
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      <span>Templates</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSubModeChange("agent")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                        subMode === "agent"
-                          ? "bg-[#0F172A] text-white shadow-2xs font-bold"
-                          : "text-slate-500 hover:text-[#1E293B] hover:bg-white/50"
-                      }`}
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <Sparkles className={`w-3.5 h-3.5 ${subMode === "agent" ? "text-amber-400" : "text-[#1456f0]"}`} />
-                      <span>Email Agent</span>
+                      <span>Template</span>
                     </button>
                   </div>
+
+                  {/* Email Agent Filter Dropdown in Topbar */}
+                  {subMode === "agent" && (
+                    <div className="relative shrink-0" ref={agentFilterDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAgentFilterDropdown((prev) => !prev);
+                          setShowNumberFilterDropdown(false);
+                          setShowEmailFolderDropdown(false);
+                          setShowViewFilterDropdown(false);
+                          setShowChannelDropdown(false);
+                        }}
+                        className="h-[36px] px-3 bg-white hover:bg-slate-50 border border-border rounded-xl text-xs font-semibold text-[#1E293B] flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                        title="Filter Rules"
+                      >
+                        <Filter className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{emailAgentFilterLabel}</span>
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 text-[#94a3b8] transition-transform ${
+                            showAgentFilterDropdown ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+
+                      {showAgentFilterDropdown && (
+                        <div
+                          className="absolute left-0 mt-1 w-48 bg-white border border-border rounded-xl shadow-xl z-50 py-1 space-y-0.5 text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEmailAgentFilter("all");
+                              setShowAgentFilterDropdown(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                              emailAgentFilter === "all" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                            }`}
+                          >
+                            <span>All Rules</span>
+                            <span className="text-slate-400 font-mono text-[11px]">({emailAgentCounts.all})</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEmailAgentFilter("active");
+                              setShowAgentFilterDropdown(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                              emailAgentFilter === "active" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                            }`}
+                          >
+                            <span>Active</span>
+                            <span className="text-slate-400 font-mono text-[11px]">({emailAgentCounts.active})</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEmailAgentFilter("custom");
+                              setShowAgentFilterDropdown(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                              emailAgentFilter === "custom" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                            }`}
+                          >
+                            <span>Custom</span>
+                            <span className="text-slate-400 font-mono text-[11px]">({emailAgentCounts.custom})</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEmailAgentFilter("templates");
+                              setShowAgentFilterDropdown(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2 flex items-center justify-between hover:bg-muted transition-colors cursor-pointer ${
+                              emailAgentFilter === "templates" ? "text-[#1456f0] font-bold bg-blue-50/60" : "text-[#1E293B]"
+                            }`}
+                          >
+                            <span>Templates</span>
+                            <span className="text-slate-400 font-mono text-[11px]">({emailAgentCounts.templates})</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* If Mail is selected, ask to choose account, sync button & folders dropdown */}
                   {subMode === "inbox" && (
@@ -2446,6 +2578,8 @@ export default function Chats() {
             channelFilter === "email"
               ? subMode === "templates"
                 ? emailTemplateSearch
+                : subMode === "agent"
+                ? emailAgentSearch
                 : emailSearch
               : subMode === "templates"
               ? templateSearch
@@ -2455,6 +2589,8 @@ export default function Chats() {
             channelFilter === "email"
               ? subMode === "templates"
                 ? setEmailTemplateSearch
+                : subMode === "agent"
+                ? setEmailAgentSearch
                 : setEmailSearch
               : subMode === "templates"
               ? setTemplateSearch
@@ -2464,6 +2600,8 @@ export default function Chats() {
             channelFilter === "email"
               ? subMode === "templates"
                 ? "Search email templates (name, subject, body)..."
+                : subMode === "agent"
+                ? "Search rules, drafting prompt, email..."
                 : "Search emails (from, subject, body)..."
               : subMode === "templates"
               ? "Search templates..."
@@ -2497,13 +2635,23 @@ export default function Chats() {
                       setShowEmailTemplateDrawer(true);
                     },
                   }
-                : {
+                : subMode === "agent"
+                ? {
+                    label: "Add Rule",
+                    icon: <Plus className="w-4 h-4" />,
+                    onClick: () => {
+                      window.dispatchEvent(new CustomEvent("open-add-label-rule-drawer"));
+                    },
+                  }
+                : subMode === "inbox"
+                ? {
                     label: "Compose Email",
                     icon: <Plus className="w-4 h-4" />,
                     onClick: () => {
                       window.dispatchEvent(new CustomEvent("open-webmail-compose"));
                     },
                   }
+                : undefined
               : subMode === "templates"
               ? {
                   label: "New Template",
@@ -2515,7 +2663,7 @@ export default function Chats() {
               : undefined
           }
           afterPrimaryAction={
-            channelFilter === "email" && subMode === "inbox" ? (
+            channelFilter === "email" ? (
               <div className="relative shrink-0" ref={emailGearMenuRef}>
                 <button
                   type="button"
@@ -2568,17 +2716,6 @@ export default function Chats() {
                     <button
                       type="button"
                       onClick={() => {
-                        handleSubModeChange("agent");
-                        setShowEmailGearMenu(false);
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50/60 transition-colors flex items-center gap-2 text-slate-700 hover:text-[#1456f0] cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-[#1456f0]" />
-                      <span>Email agent settings</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
                         setShowMailboxIntegrationDrawer(true);
                         setShowEmailGearMenu(false);
                       }}
@@ -2622,12 +2759,9 @@ export default function Chats() {
         {activeTab === "chats" && (
           channelFilter === "email" ? (
             subMode === "agent" ? (
-              <EmailAgentWorkflowView
-                onOpenCampaignTemplates={() => handleSubModeChange("templates")}
-                onOpenWebmailCompose={() => {
-                  handleSubModeChange("inbox");
-                  window.dispatchEvent(new CustomEvent("open-webmail-compose"));
-                }}
+              <EmailAgentRulesView
+                searchQuery={emailAgentSearch}
+                filterType={emailAgentFilter}
               />
             ) : (
               <WebmailView
@@ -3640,6 +3774,21 @@ export default function Chats() {
       <MailboxIntegrationDrawer
         isOpen={showMailboxIntegrationDrawer}
         onClose={() => setShowMailboxIntegrationDrawer(false)}
+      />
+
+      {/* ── Side Drawer: Email Agent Settings ── */}
+      <EmailAgentDrawer
+        isOpen={showEmailAgentDrawer}
+        onClose={() => setShowEmailAgentDrawer(false)}
+        onOpenCampaignTemplates={() => {
+          setShowEmailAgentDrawer(false);
+          handleSubModeChange("templates");
+        }}
+        onOpenWebmailCompose={() => {
+          setShowEmailAgentDrawer(false);
+          handleSubModeChange("inbox");
+          window.dispatchEvent(new CustomEvent("open-webmail-compose"));
+        }}
       />
 
       <HowItWorksModal

@@ -40,6 +40,8 @@ import {
   Eye,
   Sparkles,
   User,
+  UserPlus,
+  AlertCircle,
   Shield,
   Layers,
   Clock,
@@ -49,8 +51,10 @@ import { Drawer } from "../ui/drawer";
 import { Modal } from "../ui/Modal";
 import { TableComponent, TableColumn, TableBulkAction, TableRowAction } from "../ui/TableComponent";
 import { toast } from "sonner";
-import { getStoredClients } from "../../../lib/clientsStore";
+import { getStoredClients, addOrUpdateClient } from "../../../lib/clientsStore";
 import { getContactCategories } from "../../../lib/contactCategoriesStore";
+import { useEmailAgentStore } from "../../../lib/emailAgentStore";
+import { getStoredProcesses } from "../../../lib/useProcessStore";
 import DocumentSelectFieldsModal from "../ui/DocumentSelectFieldsModal";
 
 export interface EmailAttachment {
@@ -75,6 +79,28 @@ export interface EmailItem {
   folder: "inbox" | "drafts" | "sent" | "spam" | "trash";
   crmLinked?: boolean;
   attachments?: EmailAttachment[];
+  labels?: string[];
+}
+
+export function getLabelBadgeColor(labelName?: string): string {
+  switch (labelName?.toLowerCase().trim()) {
+    case "needs reply":
+      return "bg-rose-50 text-rose-700 border-rose-200";
+    case "awaiting reply":
+      return "bg-blue-50 text-blue-700 border-blue-200";
+    case "meeting update":
+      return "bg-cyan-50 text-cyan-700 border-cyan-200";
+    case "fyi":
+      return "bg-amber-50 text-amber-700 border-amber-200";
+    case "marketing":
+      return "bg-purple-50 text-purple-700 border-purple-200";
+    case "notification":
+      return "bg-orange-50 text-orange-700 border-orange-200";
+    case "resolved":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    default:
+      return "bg-slate-100 text-slate-700 border-slate-200";
+  }
 }
 
 export interface EmailSignature {
@@ -112,175 +138,190 @@ const DEFAULT_SIGNATURES: EmailSignature[] = [
 const INITIAL_EMAILS: EmailItem[] = [
   {
     id: "em-1",
-    fromName: "Google",
-    fromEmail: "no-reply@accounts.google.com",
-    subject: "Security alert",
-    preview: "A new sign-in on Windows device was detected for your account.",
-    body: "Hi Navodya,\n\nA new sign-in on Windows device was detected for your account navodya@mantra.care.\n\nTime: Today, 15:30 IST\nDevice: Windows 11 Chrome\nLocation: New Delhi, India\n\nIf this was you, you don't need to do anything. If this wasn't you, please secure your account immediately.",
-    time: "15:30",
+    fromName: "Dr. Rachel Adams",
+    fromEmail: "r.adams@stjudehealth.org",
+    subject: "Patient Consultation Schedule & Intake Updates for Tomorrow",
+    preview: "Reviewing intake questionnaires for 4 new patients scheduled for morning slots. Please confirm room 3B is ready.",
+    body: "Hi Navodya,\n\nI have reviewed the incoming intake assessments for the four patient consults scheduled for tomorrow morning:\n1. Sarah Jenkins (10:00 AM) - Anxiety & Sleep disorder evaluation\n2. Michael Chang (11:00 AM) - Post-cardiology follow-up\n3. David Miller (1:30 PM) - Routine wellness check\n4. Emily Rodriguez (2:30 PM) - Initial therapy intake\n\nPlease ensure clinical room 3B has the updated diagnostic equipment synced with EHR.\n\nBest regards,\nDr. Rachel Adams\nClinical Director, St. Jude Health",
+    time: "3:30 PM",
     fullDate: "Today at 3:30 PM",
     isUnread: true,
-    avatarColor: "bg-[#0F9D58] text-white",
-    avatarLetter: "G",
+    avatarColor: "bg-[#0284C7] text-white",
+    avatarLetter: "RA",
     folder: "inbox",
+    labels: ["Needs Reply"],
   },
   {
     id: "em-2",
-    fromName: "Rime",
-    fromEmail: "team@rime.io",
-    subject: "[Rime] How to run a successful pilot",
-    preview: "Learn the step-by-step framework our top customers use to launch enterprise pilots.",
-    body: "Hi team,\n\nRunning an enterprise pilot shouldn't feel like a shot in the dark. In this guide, we break down:\n1. Setting mutual success metrics before kickoff\n2. Selecting the right champion and department cohort\n3. Weekly cadence checkpoints and review dashboards\n\nCheck out the full framework in our documentation portal.",
-    time: "15:22",
-    fullDate: "Today at 3:22 PM",
+    fromName: "Marcus Vance",
+    fromEmail: "marcus.vance@gmail.com",
+    subject: "Question regarding insurance coverage & copay for therapy sessions",
+    preview: "Hi team, I submitted my intake form yesterday and wanted to check if Aetna copays apply to tele-psychiatry.",
+    body: "Hello Mantra Care Team,\n\nI submitted my online registration and intake questionnaire yesterday. Before our first session on Thursday, could someone please verify whether my Aetna Open Access plan covers the 45-minute tele-psychiatry sessions?\n\nMy policy number is AET-9482014 and group number is 88412.\n\nThank you for your assistance,\nMarcus Vance\n(555) 349-8201",
+    time: "2:15 PM",
+    fullDate: "Today at 2:15 PM",
     isUnread: true,
-    avatarColor: "bg-[#6366F1] text-white",
-    avatarLetter: "R",
+    avatarColor: "bg-[#EA580C] text-white",
+    avatarLetter: "MV",
     folder: "inbox",
+    labels: ["Needs Reply"],
   },
   {
     id: "em-3",
-    fromName: "Mantracare",
-    fromEmail: "care@mantracare.com",
-    subject: "Meet your Therapist/ Psychologist",
-    preview: "Your session with Dr. Ananya Sharma has been scheduled for tomorrow.",
-    body: "Hello Navodya,\n\nYour consultation session has been confirmed.\n\nProvider: Dr. Ananya Sharma (Clinical Psychologist)\nDate: Tomorrow, Oct 22\nTime: 11:00 AM - 11:45 AM\nMode: Video consultation\n\nPlease ensure your camera and microphone are tested prior to joining.",
-    time: "11:46",
-    fullDate: "Today at 11:46 AM",
+    fromName: "Dr. Ananya Sharma",
+    fromEmail: "ananya.sharma@mantra.care",
+    subject: "Rescheduling consultation slot for patient Sarah Jenkins",
+    preview: "Patient requested to move tomorrow's 11:00 AM session to 3:00 PM due to an urgent conflict.",
+    body: "Hi Team,\n\nSarah Jenkins contacted my office requesting to move tomorrow's session from 11:00 AM to 3:00 PM.\n\nI have an opening at 3:00 PM. Could you please update her appointment status in the calendar and send her the revised meeting link?\n\nWarm regards,\nDr. Ananya Sharma, Ph.D.\nLicensed Clinical Psychologist",
+    time: "1:45 PM",
+    fullDate: "Today at 1:45 PM",
     isUnread: true,
-    avatarColor: "bg-[#EA580C] text-white",
-    avatarLetter: "M",
+    avatarColor: "bg-[#06B6D4] text-white",
+    avatarLetter: "AS",
     folder: "inbox",
-    attachments: [
-      { id: "att-1", name: "Consultation_Prep_Guide.pdf", size: "340 KB", type: "application/pdf" },
-      { id: "att-2", name: "Patient_Intake_Assessment.docx", size: "128 KB", type: "application/docx" },
-    ],
+    labels: ["Meeting Update"],
   },
   {
     id: "em-4",
-    fromName: "Mantracare",
-    fromEmail: "auth@mantracare.com",
-    subject: "MantraCare verification code",
-    preview: "Your single-use login verification code is 849-201.",
-    body: "Your verification code is: 849-201\n\nThis code will expire in 10 minutes. Please do not share this code with anyone.",
-    time: "9:37",
-    fullDate: "Today at 9:37 AM",
+    fromName: "Jessica Miller (Care Coordinator)",
+    fromEmail: "jessica.m@mantra.care",
+    subject: "Follow-up on post-operative care guidelines - Michael Chang",
+    preview: "We shared the rehabilitation packet with Michael and are awaiting his medication confirmation.",
+    body: "Hello,\n\nFollowing up on Michael Chang's discharge summary. The physical therapy exercises and wound care instructions were emailed yesterday. We are awaiting his pharmacy confirmation for the prescribed eye drops.\n\nWill update the EHR once received.\n\nJessica Miller\nPatient Care Coordinator",
+    time: "11:20 AM",
+    fullDate: "Today at 11:20 AM",
     isUnread: false,
-    avatarColor: "bg-[#EA580C] text-white",
-    avatarLetter: "M",
+    avatarColor: "bg-[#6366F1] text-white",
+    avatarLetter: "JM",
     folder: "inbox",
+    labels: ["Awaiting Reply"],
   },
   {
     id: "em-5",
-    fromName: "McKenzie Anderson",
-    fromEmail: "m.anderson@acmecapital.com",
-    subject: "Compare Top tools before 2027",
-    preview: "Here is our quarterly evaluation benchmarking top CRM and telehealth platforms.",
-    body: "Hi Navodya,\n\nFollowing up on our strategy discussion last week. We reviewed 12 market offerings across patient intake, automated scheduling, and EHR bi-directional sync.\n\nLet's connect this Friday to go over our scoring matrix.\n\nBest,\nMcKenzie",
-    time: "3:27",
-    fullDate: "Today at 3:27 AM",
+    fromName: "LabCorp Diagnostics",
+    fromEmail: "results@labcorp.com",
+    subject: "Diagnostic Pathology & Blood Panel Results - Confidential",
+    preview: "Comprehensive metabolic panel and lipid profile results are now ready for review in physician portal.",
+    body: "Confidential Clinical Notification:\n\nDiagnostic specimen results for Patient ID #MC-77412 (Order #ORD-88291) have been finalized by the pathology lab.\n\nTests Performed:\n- Comprehensive Metabolic Panel (CMP-14)\n- Lipid Profile & HbA1c\n- Thyroid Stimulating Hormone (TSH)\n\nPlease log in to LabCorp Physician Link to view and sign off on the full laboratory report.",
+    time: "10:05 AM",
+    fullDate: "Today at 10:05 AM",
     isUnread: true,
-    avatarColor: "bg-[#84CC16] text-white",
-    avatarLetter: "MA",
+    avatarColor: "bg-[#F59E0B] text-white",
+    avatarLetter: "LC",
     folder: "inbox",
+    labels: ["FYI"],
+    attachments: [
+      { id: "att-1", name: "Comprehensive_Metabolic_Panel_MC77412.pdf", size: "412 KB", type: "application/pdf" },
+      { id: "att-2", name: "Lipid_Profile_Summary.pdf", size: "235 KB", type: "application/pdf" },
+    ],
   },
   {
     id: "em-6",
-    fromName: "Fred from Fireflies.ai",
-    fromEmail: "fred@fireflies.ai",
-    subject: "Free unlimited dictation, now on your phone",
-    preview: "Record, transcribe, and summarize meetings on iOS and Android seamlessly.",
-    body: "Hey there,\n\nWe're excited to introduce on-the-go dictation right from your mobile device. Tap record during hospital rounds or patient consults and get structured notes instantly in your inbox.\n\nDownload the mobile update today.",
-    time: "2:20",
-    fullDate: "Today at 2:20 AM",
+    fromName: "David Chen",
+    fromEmail: "dchen.patient@outlook.com",
+    subject: "Urgent: Refill authorization request for Sertraline 50mg",
+    preview: "My local CVS pharmacy indicated the refill authorization requires physician signature before tonight.",
+    body: "Dear Mantra Care Clinic,\n\nI went to pick up my regular prescription for Sertraline 50mg (30-day supply) at CVS Pharmacy #4821 on Main Street, but the pharmacist noted that the prior authorization needs renewal from Dr. Sharma.\n\nI have only 2 tablets remaining. Could the clinic please fax or transmit electronic approval to the pharmacy?\n\nPharmacy Phone: (555) 782-9900\nRx Number: 849201-B\n\nThank you,\nDavid Chen",
+    time: "8:50 AM",
+    fullDate: "Today at 8:50 AM",
     isUnread: true,
-    avatarColor: "bg-[#3B82F6] text-white",
-    avatarLetter: "F",
+    avatarColor: "bg-[#E11D48] text-white",
+    avatarLetter: "DC",
     folder: "inbox",
+    labels: ["Needs Reply"],
   },
   {
     id: "em-7",
-    fromName: "Commure",
-    fromEmail: "events@commure.com",
-    subject: "You're invited: Coffee with Commure on October 29",
-    preview: "Join health system leaders for breakfast and clinical workflow discussions.",
-    body: "Dear Colleague,\n\nYou're invited to an executive coffee roundtable exploring AI-driven clinical documentation and front-office automation.\n\nDate: October 29, 2026\nTime: 8:30 AM - 10:00 AM\nVenue: The Innovation Hub / Virtual Stream\n\nRSVP to reserve your seat.",
+    fromName: "Mantra Care Health System",
+    fromEmail: "calendar@mantra.care",
+    subject: "Bi-weekly Clinical Staff & Peer Review Meeting Confirmation",
+    preview: "Your calendar invitation has been confirmed for Friday, Oct 24 at 9:00 AM in Boardroom B.",
+    body: "Meeting Confirmation:\n\nEvent: Bi-weekly Clinical Peer Review & Complex Case Discussion\nDate: Friday, Oct 24, 2026\nTime: 9:00 AM - 10:30 AM EST\nLocation: Boardroom B & Video Conference Link\nChair: Dr. Rachel Adams\n\nAgenda items include cross-department intake throughput, EHR documentation templates, and telehealth compliance standards.",
     time: "Oct 20",
-    fullDate: "Oct 20 at 4:15 PM",
-    isUnread: true,
-    avatarColor: "bg-[#8B5CF6] text-white",
-    avatarLetter: "C",
+    fullDate: "Oct 20 at 4:30 PM",
+    isUnread: false,
+    avatarColor: "bg-[#06B6D4] text-white",
+    avatarLetter: "MC",
     folder: "inbox",
+    labels: ["Meeting Update"],
   },
   {
     id: "em-8",
-    fromName: "Team Software Advice",
-    fromEmail: "news@softwareadvice.com",
-    subject: "83% regret their software choice—here's why",
-    preview: "Unclear vendor roadmaps and integration bottlenecks cause the biggest pain.",
-    body: "New Research Report:\n\nOur survey of over 1,500 healthcare administrators uncovered why EHR and patient portal migrations hit snags, and how to future-proof your tech stack before signing multi-year agreements.",
+    fromName: "St. Jude Medical Billing",
+    fromEmail: "claims@stjudebilling.com",
+    subject: "Superbill & Claims Adjudication Statement #MB-94820",
+    preview: "Itemized superbill with diagnostic ICD-10 coding and CPT procedural breakdown attached.",
+    body: "Dear Provider Team,\n\nAttached is the weekly adjudication summary and itemized superbill batch #MB-94820 covering commercial payer reimbursements processed through clearinghouse.\n\nTotal Claims Settled: 42\nTotal Amount Disbursed: $14,250.00\nPending Payer Reviews: 2\n\nContact the billing department for line-item explanations.",
     time: "Oct 20",
-    fullDate: "Oct 20 at 1:40 PM",
-    isUnread: true,
-    avatarColor: "bg-[#EAB308] text-white",
-    avatarLetter: "TS",
+    fullDate: "Oct 20 at 2:15 PM",
+    isUnread: false,
+    avatarColor: "bg-[#F59E0B] text-white",
+    avatarLetter: "SJ",
     folder: "inbox",
+    labels: ["FYI"],
+    attachments: [
+      { id: "att-3", name: "Superbill_Adjudication_MB94820.pdf", size: "185 KB", type: "application/pdf" },
+    ],
   },
   {
     id: "em-9",
-    fromName: "Rime",
-    fromEmail: "team@rime.io",
-    subject: "[Rime] Dedicated slack channel",
-    preview: "Your VIP priority support channel has been provisioned.",
-    body: "Navodya,\n\nWe have created a shared Slack channel with your engineering leads. Click below to join and receive real-time answers to technical questions.",
+    fromName: "HealthTech Global Summit",
+    fromEmail: "summit@healthtechglobal.org",
+    subject: "Speaker Invitation: Keynote on AI Automation in Clinical Triage",
+    preview: "We would be honored to have Mantra Care present your frontdesk AI agent case study at the annual summit.",
+    body: "Dear Mantra Care Leadership,\n\nWe would like to formally invite your clinical operations team to deliver a keynote session at the upcoming HealthTech Global Conference in Chicago.\n\nSession Track: Front-office Automation & Intelligent Triage in Outpatient Clinics\nAudience: 1,200+ Healthcare Executives and Medical Directors\n\nPlease let us know if your team is available to participate.",
     time: "Oct 20",
-    fullDate: "Oct 20 at 11:10 AM",
+    fullDate: "Oct 20 at 11:00 AM",
     isUnread: false,
-    avatarColor: "bg-[#6366F1] text-white",
-    avatarLetter: "R",
+    avatarColor: "bg-[#8B5CF6] text-white",
+    avatarLetter: "HT",
     folder: "inbox",
+    labels: ["Marketing"],
   },
   {
     id: "em-10",
-    fromName: "Linktree",
-    fromEmail: "updates@linktr.ee",
-    subject: "Insights to take you further 🚀",
-    preview: "Discover new conversion analytics and engagement trends for your clinical links.",
-    body: "Here is your weekly recap for October. Over 4,200 unique patients visited your booking link, resulting in a 24% conversion rate to completed appointments.",
-    time: "Oct 20",
-    fullDate: "Oct 20 at 9:00 AM",
+    fromName: "AWS HealthLake Security",
+    fromEmail: "security-alerts@aws.amazon.com",
+    subject: "HIPAA Compliance & Encryption Audit Quarterly Summary",
+    preview: "Automated zero-trust infrastructure audit completed with 100% adherence to PHI guidelines.",
+    body: "AWS Security & Compliance Alert:\n\nThe quarterly automated audit for your HealthLake FHIR data stores and HIPAA-compliant S3 buckets was completed successfully.\n\nAudit Findings: Zero vulnerabilities detected\nEncryption: KMS customer-managed keys active\nAccess Logs: Stored in immutable audit vault\n\nNo administrative intervention is required.",
+    time: "Oct 19",
+    fullDate: "Oct 19 at 9:15 AM",
     isUnread: false,
-    avatarColor: "bg-[#10B981] text-white",
-    avatarLetter: "L",
+    avatarColor: "bg-[#F97316] text-white",
+    avatarLetter: "AW",
     folder: "inbox",
+    labels: ["Notification"],
   },
   {
     id: "em-11",
-    fromName: "Deepgram Speak",
-    fromEmail: "events@deepgram.com",
-    subject: "10 days to Deepgram Speak '26",
-    preview: "Register now to hear keynote sessions on next-gen streaming voice AI.",
-    body: "Save your spot for our annual developer summit on voice AI in patient care.",
-    time: "Oct 20",
-    fullDate: "Oct 20 at 8:15 AM",
+    fromName: "Emma Watson",
+    fromEmail: "emma.watson@gmail.com",
+    subject: "Inquiry on couples counseling availability and weekend slots",
+    preview: "Hello, my partner and I are looking for licensed marriage and family therapists with evening availability.",
+    body: "Hello Mantra Care,\n\nMy partner and I are looking to start couples counseling. We both work during standard business hours, so we are seeking therapists who have appointments available either after 6:00 PM on weekdays or on Saturday mornings.\n\nCould you please let us know which providers currently have openings and what the preliminary intake process entails?\n\nThank you,\nEmma Watson",
+    time: "Oct 18",
+    fullDate: "Oct 18 at 5:40 PM",
     isUnread: false,
-    avatarColor: "bg-[#EC4899] text-white",
-    avatarLetter: "DS",
+    avatarColor: "bg-[#E11D48] text-white",
+    avatarLetter: "EW",
     folder: "inbox",
+    labels: ["Needs Reply"],
   },
   {
     id: "em-12",
-    fromName: "ChatGPT",
-    fromEmail: "updates@openai.com",
-    subject: "Turn your hook into a caption",
-    preview: "Introducing advanced formatting and system instruction presets in GPT-5.",
-    body: "Explore our latest reasoning models tailored for medical summaries and clinical guidelines.",
+    fromName: "Care Desk Resolutions",
+    fromEmail: "support-resolutions@mantra.care",
+    subject: "Resolved: Ticket #TK-8492 - Prescription portal password reset",
+    preview: "Patient confirmed successful authentication and access to telehealth appointments and pharmacy history.",
+    body: "Case Closed Notification:\n\nTicket ID: #TK-8492\nSubject: Patient portal login & biometric authentication reset\nRequester: David Chen\nStatus: Closed & Resolved\nResolution Summary: Assisted patient in resetting two-factor authentication and verified active session on Mantra Care mobile client.",
     time: "Oct 18",
-    fullDate: "Oct 18 at 6:45 PM",
+    fullDate: "Oct 18 at 3:10 PM",
     isUnread: false,
-    avatarColor: "bg-[#06B6D4] text-white",
-    avatarLetter: "CG",
+    avatarColor: "bg-[#10B981] text-white",
+    avatarLetter: "CD",
     folder: "inbox",
+    labels: ["Resolved"],
   },
 ];
 
@@ -304,7 +345,21 @@ export default function WebmailView({
   onOpenCrmSettings,
 }: WebmailViewProps) {
   // Master state
-  const [emails, setEmails] = useState<EmailItem[]>(INITIAL_EMAILS);
+  const [emails, setEmails] = useState<EmailItem[]>(() => {
+    try {
+      const stored = localStorage.getItem("mantra_webmail_emails_v3");
+      return stored ? JSON.parse(stored) : INITIAL_EMAILS;
+    } catch {
+      return INITIAL_EMAILS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("mantra_webmail_emails_v3", JSON.stringify(emails));
+    } catch {}
+  }, [emails]);
+
   const [internalActiveFolder, setInternalActiveFolder] = useState<EmailFolder>("inbox");
   const activeFolder = propActiveFolder !== undefined ? propActiveFolder : internalActiveFolder;
   const setActiveFolder = (f: EmailFolder) => {
@@ -316,6 +371,70 @@ export default function WebmailView({
   // Drawer & Modals state
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [activeEmailForDrawer, setActiveEmailForDrawer] = useState<EmailItem | null>(null);
+
+  // Email Agent rules & labels
+  const { config: emailAgentConfig } = useEmailAgentStore();
+  const allAgentLabels = useMemo(() => {
+    return [
+      ...(emailAgentConfig.step1Labels?.customLabels || []),
+      ...(emailAgentConfig.step1Labels?.predefinedLabels || []),
+    ];
+  }, [emailAgentConfig]);
+
+  // CRM Entity Creation Modal State
+  const allProcesses = useMemo(() => getStoredProcesses(), []);
+  const [isCreateEntityModalOpen, setIsCreateEntityModalOpen] = useState(false);
+  const [createEntityTargetEmail, setCreateEntityTargetEmail] = useState<EmailItem | null>(null);
+  const [entityFormType, setEntityFormType] = useState<"Contact" | "Lead" | "Patient" | "Deal">("Contact");
+  const [entityFormName, setEntityFormName] = useState("");
+  const [entityFormEmail, setEntityFormEmail] = useState("");
+  const [entityFormProcessId, setEntityFormProcessId] = useState("");
+  const [entityFormStage, setEntityFormStage] = useState("");
+
+  const selectedEntityProcess = useMemo(() => {
+    return allProcesses.find((p) => p.id === entityFormProcessId) || allProcesses[0] || null;
+  }, [allProcesses, entityFormProcessId]);
+
+  const availableEntityStages = useMemo(() => {
+    return selectedEntityProcess ? selectedEntityProcess.stages : [];
+  }, [selectedEntityProcess]);
+
+  const handleOpenCreateEntityModal = (email: EmailItem) => {
+    setCreateEntityTargetEmail(email);
+    setEntityFormName(email.fromName || "");
+    setEntityFormEmail(email.fromEmail || "");
+
+    const primaryLabel = email.labels && email.labels.length > 0 ? email.labels[0].toLowerCase() : "";
+    const matched = allAgentLabels.find(
+      (l) => l.name.toLowerCase() === primaryLabel || l.id.toLowerCase() === primaryLabel
+    );
+
+    setEntityFormType(matched?.entityType || "Contact");
+    const procId = matched?.processId || allProcesses[0]?.id || "";
+    setEntityFormProcessId(procId);
+    const matchedProc = allProcesses.find((p) => p.id === procId) || allProcesses[0];
+    setEntityFormStage(matched?.stageName || matchedProc?.stages[0]?.name || "Confirmed");
+    setIsCreateEntityModalOpen(true);
+  };
+
+  const handleConfirmCreateEntity = () => {
+    if (!entityFormName.trim()) {
+      toast.error("Please enter a contact name");
+      return;
+    }
+    const procName = selectedEntityProcess?.name || "Appointment Scheduling";
+    const newClient = addOrUpdateClient({
+      name: entityFormName.trim(),
+      email: entityFormEmail.trim(),
+      contactType: entityFormType,
+      source: "Email Inquiry",
+      processes: [procName],
+      stage: entityFormStage || "Confirmed",
+      status: "Active",
+    });
+    toast.success(`${entityFormType} "${newClient.name}" created successfully in CRM`);
+    setIsCreateEntityModalOpen(false);
+  };
 
   const [isComposeModalOpen, setIsComposeModalOpen] = useState(false);
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
@@ -781,8 +900,43 @@ export default function WebmailView({
       );
     }
     setActiveEmailForDrawer(email);
-    const sigText = defaultSignature ? `\n\n--\n${defaultSignature.body}` : "";
-    setReplyBody(sigText);
+
+    // Match label rule
+    const primaryLabel = email.labels && email.labels.length > 0 ? email.labels[0].toLowerCase() : "";
+    const matched = allAgentLabels.find(
+      (l) => l.name.toLowerCase() === primaryLabel || l.id.toLowerCase() === primaryLabel
+    );
+
+    // Pick signature
+    let sigToUse = defaultSignature;
+    if (matched?.assignedSignatureId && matched.assignedSignatureId !== "none") {
+      const foundSig = signatures.find((s) => s.id === matched.assignedSignatureId);
+      if (foundSig) sigToUse = foundSig;
+    }
+    const sigText = sigToUse ? `\n\n--\n${sigToUse.body}` : "";
+
+    // Set reply content: if handoff, manual reply required; if draft enabled, populate AI draft
+    if (matched?.handoffEnabled) {
+      // Handoff active: physician/staff need to reply
+      setReplyBody(sigText ? `${sigText.trimStart()}` : "");
+    } else if (matched?.autoDraftEnabled !== false) {
+      let draftText = "";
+      if (email.id === "em-1" || email.fromName.toLowerCase().includes("rachel adams")) {
+        draftText = `Hi Dr. Adams,\n\nThank you for the intake updates for tomorrow's patient consults. I have reviewed the schedule for Sarah Jenkins, Michael Chang, David Miller, and Emily Rodriguez.\n\nClinical room 3B is prepared and diagnostic equipment is synced with the EHR.`;
+      } else if (email.id === "em-6" || email.fromName.toLowerCase().includes("david chen")) {
+        draftText = `Dear David,\n\nWe have received your urgent prescription refill request for Sertraline 50mg. Dr. Sharma has been alerted and will transmit the electronic prior authorization to CVS Pharmacy #4821 this morning.\n\nPlease allow 2-3 hours for the pharmacy system to update.`;
+      } else if (email.id === "em-7" || email.subject.toLowerCase().includes("peer review")) {
+        draftText = `Hi Team,\n\nConfirming attendance for the Bi-weekly Clinical Peer Review this Friday at 9:00 AM. I have added the agenda items to my preparation notes.`;
+      } else if (matched?.draftingRule) {
+        draftText = `Hi ${email.fromName.split(" ")[0]},\n\nThank you for reaching out. In response to your message regarding "${email.subject}", we are reviewing the request and will follow up with full details shortly.`;
+      } else {
+        draftText = `Hi ${email.fromName.split(" ")[0]},\n\nThank you for reaching out to Mantra Care. We have received your message regarding "${email.subject}" and will get back to you shortly.`;
+      }
+      setReplyBody(`${draftText}${sigText}`);
+    } else {
+      setReplyBody(sigText ? `${sigText.trimStart()}` : "");
+    }
+
     setIsDrawerOpen(true);
   };
 
@@ -1061,7 +1215,7 @@ export default function WebmailView({
       id: "from",
       header: "From",
       align: "left",
-      width: "220px",
+      width: "180px",
       render: (email) => (
         <span
           className={`truncate text-xs ${
@@ -1076,25 +1230,54 @@ export default function WebmailView({
       id: "subject",
       header: "Subject & Preview",
       align: "left",
-      render: (email) => (
-        <div className="flex items-center gap-2 max-w-2xl truncate">
-          <span
-            className={`truncate ${
-              email.isUnread ? "font-bold text-[#1E293B]" : "font-medium text-gray-900"
-            }`}
-          >
-            {email.subject}
-          </span>
-          {email.attachments && email.attachments.length > 0 && (
-            <span title={`${email.attachments.length} attachment(s)`} className="inline-flex items-center">
-              <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+      render: (email) => {
+        return (
+          <div className="flex items-center gap-2 max-w-2xl truncate">
+            <span
+              className={`truncate ${
+                email.isUnread ? "font-bold text-[#1E293B]" : "font-medium text-gray-900"
+              }`}
+            >
+              {email.subject}
             </span>
-          )}
-          <span className="text-gray-400 font-normal truncate hidden sm:inline">
-            — {email.preview}
-          </span>
-        </div>
-      ),
+            {email.attachments && email.attachments.length > 0 && (
+              <span title={`${email.attachments.length} attachment(s)`} className="inline-flex items-center shrink-0">
+                <Paperclip className="w-3.5 h-3.5 text-gray-400" />
+              </span>
+            )}
+            <span className="text-gray-400 font-normal truncate hidden sm:inline">
+              — {email.preview}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      id: "label",
+      header: "Label",
+      align: "left",
+      width: "135px",
+      render: (email) => {
+        const emailLabels = email.labels || [];
+        if (emailLabels.length === 0) {
+          return <span className="text-slate-400 text-xs italic">—</span>;
+        }
+        return (
+          <div className="flex flex-wrap items-center gap-1">
+            {emailLabels.map((lbl) => (
+              <span
+                key={lbl}
+                className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 ${getLabelBadgeColor(
+                  lbl
+                )}`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {lbl}
+              </span>
+            ))}
+          </div>
+        );
+      },
     },
     {
       id: "date",
@@ -1136,6 +1319,13 @@ export default function WebmailView({
   ];
 
   const emailRowActions: TableRowAction<EmailItem>[] = [
+    {
+      label: "Create Contact",
+      icon: <UserPlus className="w-3.5 h-3.5 text-blue-600" />,
+      onClick: (email) => {
+        handleOpenCreateEntityModal(email);
+      },
+    },
     {
       label: "Mark as read",
       icon: <Check className="w-3.5 h-3.5 text-blue-600" />,
@@ -1248,6 +1438,16 @@ export default function WebmailView({
     },
   ];
 
+  const activeMatchedRule = useMemo(() => {
+    if (!activeEmailForDrawer || !activeEmailForDrawer.labels || activeEmailForDrawer.labels.length === 0) return null;
+    const target = activeEmailForDrawer.labels[0].toLowerCase();
+    return (
+      allAgentLabels.find(
+        (l) => l.name.toLowerCase() === target || l.id.toLowerCase() === target
+      ) || null
+    );
+  }, [activeEmailForDrawer, allAgentLabels]);
+
   return (
     <>
       <TableComponent<EmailItem>
@@ -1304,6 +1504,15 @@ export default function WebmailView({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {activeEmailForDrawer.labels?.map((lbl) => (
+                    <span
+                      key={lbl}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getLabelBadgeColor(lbl)}`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {lbl}
+                    </span>
+                  ))}
                   <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-200">
                     INBOX
                   </span>
@@ -1321,24 +1530,12 @@ export default function WebmailView({
               <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => toast.success(`Linked to CRM: ${activeEmailForDrawer.subject}`)}
-                  className="px-2.5 py-1 rounded-lg border border-gray-200 bg-white hover:bg-slate-50 text-xs font-semibold text-gray-700 flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                  onClick={() => handleOpenCreateEntityModal(activeEmailForDrawer)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
-                  <span className="text-[#1456f0]">⚡</span> CRM Link
-                </button>
-                <button
-                  type="button"
-                  onClick={() => toast.success(`Task created: Follow up on ${activeEmailForDrawer.fromName}`)}
-                  className="px-2.5 py-1 rounded-lg border border-gray-200 bg-white hover:bg-slate-50 text-xs font-semibold text-gray-700 flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                >
-                  <CheckSquare className="w-3.5 h-3.5 text-[#10b981]" /> Create Task
-                </button>
-                <button
-                  type="button"
-                  onClick={() => toast.success(`Calendar event created: ${activeEmailForDrawer.subject}`)}
-                  className="px-2.5 py-1 rounded-lg border border-gray-200 bg-white hover:bg-slate-50 text-xs font-semibold text-gray-700 flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                >
-                  <Calendar className="w-3.5 h-3.5 text-amber-500" /> Schedule Event
+                  <UserPlus className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Create Contact</span>
                 </button>
               </div>
             </div>
@@ -1405,6 +1602,53 @@ export default function WebmailView({
                   Replying to: <span className="font-semibold text-gray-800">{activeEmailForDrawer.fromEmail}</span>
                 </span>
               </div>
+
+              {/* Status Banner: Handoff vs AI Draft */}
+              {activeMatchedRule?.handoffEnabled ? (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/90 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-amber-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Handoff Active: Need to Reply
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-md bg-amber-200/70 text-amber-800 text-[10px] font-bold">
+                        Manual Response Needed
+                      </span>
+                    </div>
+                    <p className="text-amber-800/90 text-[11px]">
+                      {activeMatchedRule.handoffReason || "This email requires direct clinician or staff attention."}
+                      {activeMatchedRule.forwardTo && (
+                        <span> Forwarded to: <strong className="font-mono">{activeMatchedRule.forwardTo}</strong>.</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              ) : activeMatchedRule?.autoDraftEnabled !== false ? (
+                <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200/80 text-xs flex items-start justify-between gap-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <Sparkles className="w-4 h-4 text-[#1456f0] mt-0.5 shrink-0" />
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          AI Draft Ready
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 text-[10px] font-bold">
+                          {activeMatchedRule?.name || "Auto-Draft"}
+                        </span>
+                      </div>
+                      <p className="text-slate-600 text-[11px]">
+                        {activeMatchedRule?.draftingRule
+                          ? `Instructions applied: "${activeMatchedRule.draftingRule}"`
+                          : "AI response prepared according to clinical communication standards."}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-medium text-slate-400 font-mono shrink-0">
+                    Pre-filled draft
+                  </span>
+                </div>
+              ) : null}
 
               {/* Formatting Toolbar */}
               <div className="flex items-center gap-1 border-b border-gray-100 pb-2 text-slate-500">
@@ -2357,6 +2601,144 @@ export default function WebmailView({
         subtitle="Insert placeholder variables into your email message"
         tokenFormat="double_curly"
       />
+
+      {/* ── CREATE CRM ENTITY MODAL ── */}
+      <Modal
+        isOpen={isCreateEntityModalOpen}
+        onClose={() => setIsCreateEntityModalOpen(false)}
+        maxWidth="md"
+        title={
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
+              <UserPlus className="w-4 h-4 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Create CRM Record
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Choose entity type and pipeline stage for this contact
+              </p>
+            </div>
+          </div>
+        }
+        footer={
+          <div className="flex items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={() => setIsCreateEntityModalOpen(false)}
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmCreateEntity}
+              className="px-5 py-2 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Create {entityFormType}</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="p-5 space-y-4 text-xs font-sans">
+          {/* Entity Type Selection */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              Select Entity Type
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {(["Contact", "Lead", "Patient", "Deal"] as const).map((ent) => (
+                <button
+                  type="button"
+                  key={ent}
+                  onClick={() => setEntityFormType(ent)}
+                  className={`py-2 px-2 rounded-xl text-xs font-bold transition-all text-center cursor-pointer border ${
+                    entityFormType === ent
+                      ? "bg-[#1E293B] text-white border-[#1E293B] shadow-2xs"
+                      : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {ent}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Contact Details */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Full Name
+              </label>
+              <input
+                type="text"
+                value={entityFormName}
+                onChange={(e) => setEntityFormName(e.target.value)}
+                placeholder="e.g. Dr. Rachel Adams"
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-primary font-medium text-slate-900 shadow-2xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={entityFormEmail}
+                onChange={(e) => setEntityFormEmail(e.target.value)}
+                placeholder="e.g. r.adams@stjudehealth.org"
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-primary font-medium text-slate-900 shadow-2xs"
+              />
+            </div>
+          </div>
+
+          {/* Process and Stage Selection */}
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Assign Process (Workflow)
+              </label>
+              <select
+                value={entityFormProcessId}
+                onChange={(e) => {
+                  const newProcId = e.target.value;
+                  setEntityFormProcessId(newProcId);
+                  const proc = allProcesses.find((p) => p.id === newProcId);
+                  setEntityFormStage(proc?.stages[0]?.name || "Confirmed");
+                }}
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-primary font-medium text-slate-800 shadow-2xs cursor-pointer truncate"
+              >
+                {allProcesses.map((proc) => (
+                  <option key={proc.id} value={proc.id}>
+                    {proc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Assign Stage
+              </label>
+              <select
+                value={entityFormStage}
+                onChange={(e) => setEntityFormStage(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-primary font-medium text-slate-800 shadow-2xs cursor-pointer truncate"
+              >
+                {availableEntityStages.map((stage) => (
+                  <option key={stage.id} value={stage.name}>
+                    {stage.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </>
   );
 }
